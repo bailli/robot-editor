@@ -1,0 +1,31 @@
+{
+  "name": "robot",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "golden": "python3 -I tools/export_golden.py",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm test --workspaces",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@trivago/prettier-plugin-sort-imports": "6.0.2",
+    "@types/node": "22.20.5",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2"
+  }
+}
