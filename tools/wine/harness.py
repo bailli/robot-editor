@@ -34,8 +34,9 @@ GAME_DIR = os.path.join(PREFIX, "drive_c", "robot")
 EXE = os.path.join(ROOT, "reference", "GameOfRobot.exe")
 WINE_BIN = "/opt/wine-stable/bin"
 
-# Episode buttons on the start screen, relative to the game window (640x454 client).
-EPISODE_BUTTONS = {e: (148, 143 + 51 * e) for e in range(5)}
+# Episode buttons on the start screen, in screen coordinates of the 1024x768 Wine virtual
+# desktop (which centres the game window).
+EPISODE_BUTTONS = {e: (340, 313 + 51 * e) for e in range(5)}
 
 
 def env(display=None):
@@ -106,25 +107,31 @@ def changed_fraction(a, b):
     return sum(1 for i in range(0, len(a), 3) if a[i:i + 3] != b[i:i + 3]) / (len(a) // 3)
 
 
-def advance(display, window, key, what, tries=3, timeout=4.0, min_change=0.02):
-    """Hold `key` until the window visibly changes (a menu, dialog or banner opens or
-    closes); the game drops some key presses. Small changes like a blinking menu
-    highlight do not count."""
+def advance(display, window, action, what, tries=3, timeout=4.0, min_change=0.02):
+    """Repeat `action` until the window visibly changes (a menu, dialog or banner opens
+    or closes): the game drops some key presses and clicks. Small changes like a
+    blinking menu highlight do not count. `action` is a key name or a callable."""
+    if isinstance(action, str):
+        key = action
+        action = lambda: hold(display, key, 0.3)  # noqa: E731
     before = grab(display, window)
     for _ in range(tries):
-        hold(display, key, 0.3)
+        action()
         deadline = time.time() + timeout
         while time.time() < deadline:
             time.sleep(0.5)
             if changed_fraction(before, grab(display, window)) >= min_change:
                 time.sleep(1)  # let the new screen settle
                 return
-    raise RuntimeError(f"no reaction to {key} ({what})")
+    raise RuntimeError(f"no reaction ({what})")
 
 
-def click(display, window, x, y):
-    geo = dict(line.split("=") for line in xdo(display, "getwindowgeometry", "--shell", window).splitlines())
-    xdo(display, "mousemove", str(int(geo["X"]) + x), str(int(geo["Y"]) + y), "click", "1")
+def click(display, x, y):
+    """Press the left button at screen coordinates, held briefly like keys."""
+    xdo(display, "mousemove", str(x), str(y))
+    xdo(display, "mousedown", "1")
+    time.sleep(0.3)
+    xdo(display, "mouseup", "1")
 
 
 def screenshot_dir():
@@ -161,8 +168,8 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
         window = xdo(display, "search", "--sync", "--name", "The Game of Robot").splitlines()[0]
         time.sleep(3)
         capture("start")
-        click(display, window, *EPISODE_BUTTONS[episode])
-        time.sleep(3)
+        advance(display, window, lambda: click(display, *EPISODE_BUTTONS[episode]),
+                f"choose episode {episode}", timeout=6.0)
         capture("title")
         # The game polls the keyboard, also in its own menus and dialogs, and sometimes
         # drops a press: each step holds Return until the screen reacts.
@@ -170,21 +177,36 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
         # starts. (F4, its shortcut, closes the game under Wine.)
         advance(display, window, "Return", "open the title menu")
         advance(display, window, "Return", "start the game")
-        capture("name")
-        advance(display, window, "Return", "accept the (empty) player name")
-        capture("banner")
-        advance(display, window, "Return", "close the room-name banner")
+        # Then Return until nothing reacts: closes the player-name dialog (shown when an
+        # episode is started for the first time) and the room-name banner.
+        closed = 0
+        while closed < 4:
+            capture(f"overlay{closed}")
+            try:
+                advance(display, window, "Return", "close a dialog", tries=2, timeout=3.0)
+            except RuntimeError:
+                break
+            closed += 1
+        if closed == 0:
+            raise RuntimeError("neither a name dialog nor a room banner appeared")
         time.sleep(wait)
         for key in keys:
             hold(display, key, 0.3)
             time.sleep(0.5)
         capture("room")
-        xdo(display, "key", "ctrl+alt+p")
-        deadline = time.time() + 10
         files = []
-        while time.time() < deadline and not files:
-            time.sleep(0.5)
-            files = [f for d in screenshot_dir() for f in glob.glob(os.path.join(d, "*", "Screenshots", "*.png"))]
+        for _ in range(3):  # Ctrl+Alt+P: the game's screenshot command; held like all keys
+            for key in ("ctrl", "alt", "p"):
+                xdo(display, "keydown", key)
+            time.sleep(0.3)
+            for key in ("p", "alt", "ctrl"):
+                xdo(display, "keyup", key)
+            deadline = time.time() + 4
+            while time.time() < deadline and not files:
+                time.sleep(0.5)
+                files = [f for d in screenshot_dir() for f in glob.glob(os.path.join(d, "*", "Screenshots", "*.png"))]
+            if files:
+                break
         capture("after-screenshot")
         if not files:
             raise RuntimeError("the game wrote no screenshot")

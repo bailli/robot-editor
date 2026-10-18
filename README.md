@@ -36,6 +36,11 @@ start room: palette indices, so comparisons are exact.
 The prefix does not link into `$HOME` and has no `Z:` drive. Actors (hero, robots) and
 animated tiles differ from a static render by nature.
 
+`python3 tools/wine/take_shots.py` takes the start-room screenshots of all episodes into
+`shots/` (not committed) and records in `shots.json` (committed) where our renderer
+still differs from the game. The tests compare against these screenshots when present
+and fail whenever that set of cells changes.
+
 ## Scripts
 
 - `pnpm check` – typecheck, lint, format check and tests

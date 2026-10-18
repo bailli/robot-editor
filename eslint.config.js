@@ -14,6 +14,7 @@ export default defineConfig(
     "renders/",
     "resources/",
     "scenes/",
+    "shots/",
     "shapes/",
     "texts/",
   ]),

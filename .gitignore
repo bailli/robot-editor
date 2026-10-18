@@ -13,3 +13,4 @@ renders/
 
 # Wine harness: prefix with a copy of the game, screenshots
 .wine/
+shots/
