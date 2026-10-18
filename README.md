@@ -29,10 +29,10 @@ start room: palette indices, so comparisons are exact.
 
     python3 tools/wine/harness.py setup                  # once: sandboxed prefix in .wine/
     python3 tools/wine/harness.py shot 1 .wine/ep1.png    # episode 1 start room
-    python3 tools/compare_shot.py 1 43 .wine/ep1.png --ignore 15,11,25,14
+    python3 tools/compare_shot.py 1 43 .wine/ep1.png
 
-The prefix does not link into `$HOME` and has no `Z:` drive. The screenshot still shows
-the room-name banner (ignore its cells) and the actors at their start positions.
+The prefix does not link into `$HOME` and has no `Z:` drive. Actors (hero, robots) and
+animated tiles differ from a static render by nature.
 
 ## Scripts
 

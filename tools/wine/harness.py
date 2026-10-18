@@ -11,10 +11,9 @@ game's palette indices. --exe runs a different (e.g. patched) copy of the game; 
 is how long to wait in the room before the screenshot; --keys presses keys (held
 briefly, the game polls the keyboard) before it; --keep leaves the game running.
 
-What the screenshot shows: the room as drawn when it was entered, with the actors
-(hero, robots) at their start positions, the status line in row 0 and the room-name
-banner in the middle. The banner could not be closed under Wine yet, so compare
-tools must ignore its cells (compare_shot.py --ignore).
+What the screenshot shows: the start room with the status line in row 0 and the
+actors (hero, robots) wherever they are at that moment; animated tiles may show any
+frame. The harness closes the name dialog and the room-name banner first.
 
 Requires Wine (WineHQ packages install to /opt/wine-stable), Xvfb and xdotool.
 The prefix is sandboxed: user folders are real directories inside the prefix instead
@@ -96,6 +95,33 @@ def hold(display, key, seconds):
     xdo(display, "keyup", key)
 
 
+def grab(display, window):
+    """Raw pixels of the game window (to notice whether an input had an effect)."""
+    return run("import", "-window", window, "rgb:-", display=display, capture_output=True).stdout
+
+
+def changed_fraction(a, b):
+    if len(a) != len(b) or not a:
+        return 1.0
+    return sum(1 for i in range(0, len(a), 3) if a[i:i + 3] != b[i:i + 3]) / (len(a) // 3)
+
+
+def advance(display, window, key, what, tries=3, timeout=4.0, min_change=0.02):
+    """Hold `key` until the window visibly changes (a menu, dialog or banner opens or
+    closes); the game drops some key presses. Small changes like a blinking menu
+    highlight do not count."""
+    before = grab(display, window)
+    for _ in range(tries):
+        hold(display, key, 0.3)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            time.sleep(0.5)
+            if changed_fraction(before, grab(display, window)) >= min_change:
+                time.sleep(1)  # let the new screen settle
+                return
+    raise RuntimeError(f"no reaction to {key} ({what})")
+
+
 def click(display, window, x, y):
     geo = dict(line.split("=") for line in xdo(display, "getwindowgeometry", "--shell", window).splitlines())
     xdo(display, "mousemove", str(int(geo["X"]) + x), str(int(geo["Y"]) + y), "click", "1")
@@ -138,24 +164,16 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
         click(display, window, *EPISODE_BUTTONS[episode])
         time.sleep(3)
         capture("title")
+        # The game polls the keyboard, also in its own menus and dialogs, and sometimes
+        # drops a press: each step holds Return until the screen reacts.
         # Title screen: Return opens the game menu with "Spielstart" selected, Return
         # starts. (F4, its shortcut, closes the game under Wine.)
-        xdo(display, "key", "Return")
-        time.sleep(1)
-        xdo(display, "key", "Return")
-        time.sleep(2)
+        advance(display, window, "Return", "open the title menu")
+        advance(display, window, "Return", "start the game")
         capture("name")
-        xdo(display, "type", "--delay", "50", "harness")
-        xdo(display, "key", "Return")
-        # Without this input the saved screenshot still contains the name dialog; with it
-        # only the room-name banner remains. Found by experiment, not yet minimised.
-        time.sleep(3)
-        for key in ("Up", "Down", "Left", "Right"):
-            hold(display, key, 1.0)
-        time.sleep(1)
-        xdo(display, "key", "space")
-        time.sleep(1.5)
-        xdo(display, "key", "Escape")
+        advance(display, window, "Return", "accept the (empty) player name")
+        capture("banner")
+        advance(display, window, "Return", "close the room-name banner")
         time.sleep(wait)
         for key in keys:
             hold(display, key, 0.3)
