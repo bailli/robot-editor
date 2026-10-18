@@ -9,7 +9,6 @@ export default defineConfig(
     "**/node_modules/",
     "**/dist/",
     ".wine/",
-    "golden/",
     "reference/",
     "renders/",
     "resources/",
