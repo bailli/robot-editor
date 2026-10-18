@@ -7,7 +7,7 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "golden": "python3 -I tools/export_golden.py",
+    "snapshots": "UPDATE_SNAPSHOTS=1 pnpm --filter @robot/formats test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",

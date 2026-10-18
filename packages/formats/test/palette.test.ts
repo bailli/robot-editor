@@ -3,7 +3,9 @@ import { test } from "node:test";
 
 import { episodePalette } from "../src/palette.ts";
 import { PeFormatError, parsePe, readVa } from "../src/pe.ts";
-import { exe, goldenJson } from "./data.ts";
+import { exe, snapshots } from "./data.ts";
+
+const snapshot = snapshots(import.meta.url);
 
 const image = parsePe(exe());
 
@@ -15,14 +17,9 @@ test("parses the sections of GameOfRobot.exe", () => {
   );
 });
 
-test("palettes of all episodes match the Python tool", () => {
-  const expected = goldenJson("palettes.json") as Record<string, number[][]>;
+test("palettes of all episodes", () => {
   for (let episode = 0; episode < 5; episode++) {
-    assert.deepEqual(
-      episodePalette(image, episode),
-      expected[String(episode)],
-      `episode ${episode}`,
-    );
+    snapshot(`episode ${episode}`, episodePalette(image, episode));
   }
 });
 

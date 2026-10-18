@@ -9,7 +9,7 @@ import {
   readResources,
   replaceResource,
 } from "../src/resources.ts";
-import { assertBytesEqual, exe, resources } from "./data.ts";
+import { assertBytesEqual, exe, extracted } from "./data.ts";
 
 const all = readResources(parsePe(exe()));
 
@@ -52,20 +52,28 @@ test("lists all resources of GameOfRobot.exe", () => {
   });
 });
 
-test("raw resources are byte-identical to the 7-Zip extraction", () => {
-  let compared = 0;
-  for (const r of all) {
-    const type = folder(r);
-    if (type === undefined) continue; // icons, bitmaps, strings, version: converted by 7-Zip
-    const expected = resources(type).find(
-      (e) => e.id === String(r.name) && e.language === String(r.language),
-    );
-    assert.ok(expected, `${type}/${r.name} missing in resources/`);
-    assertBytesEqual(r.data, expected.data, `${type}/${r.name}`);
-    compared++;
-  }
-  assert.equal(compared, 78);
-});
+const SEVEN_ZIP_HINT = "resources/ is missing (optional, see README)";
+
+test(
+  "raw resources are byte-identical to the 7-Zip extraction",
+  {
+    skip: extracted("SCENE") ? false : SEVEN_ZIP_HINT,
+  },
+  () => {
+    let compared = 0;
+    for (const r of all) {
+      const type = folder(r);
+      if (type === undefined) continue; // icons, bitmaps, strings, version: converted by 7-Zip
+      const expected = extracted(type)?.find(
+        (e) => e.id === String(r.name) && e.language === r.language,
+      );
+      assert.ok(expected, `${type}/${r.name} missing in resources/`);
+      assertBytesEqual(r.data, expected.data, `${type}/${r.name}`);
+      compared++;
+    }
+    assert.equal(compared, 78);
+  },
+);
 
 test("findResource finds named and numeric types, optionally by language", () => {
   const scene = findResource(all, "SCENE", 1104);

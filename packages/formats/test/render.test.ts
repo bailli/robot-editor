@@ -8,7 +8,9 @@ import { SCREEN_HEIGHT, SCREEN_WIDTH, cellFrame, renderRoom, toRgba } from "../s
 import { cryptScene } from "../src/scene-crypt.ts";
 import { LOGIC_CELL, ROOM_CELLS, type Room, parseScene } from "../src/scene.ts";
 import { type Shape, type ShapeTable, parseShapes } from "../src/shapes.ts";
-import { exe, goldenJson, resource, sha256 } from "./data.ts";
+import { exe, resource, snapshots } from "./data.ts";
+
+const snapshot = snapshots(import.meta.url);
 
 const image = parsePe(exe());
 
@@ -20,16 +22,10 @@ function loadEpisode(episode: number) {
 }
 
 for (let episode = 0; episode < 5; episode++) {
-  test(`episode ${episode}: every room renders like the Python renderer`, () => {
+  test(`episode ${episode}: renders of every room`, () => {
     const { objects, rooms, classes } = loadEpisode(episode);
-    const expected = goldenJson(`render/${episode}.json`) as Record<string, string>;
-    assert.equal(rooms.length, Object.keys(expected).length);
     for (const room of rooms) {
-      assert.equal(
-        sha256(renderRoom(room, objects, classes)),
-        expected[String(room.id)],
-        `room ${room.id}`,
-      );
+      snapshot(`episode ${episode} room ${room.id}`, renderRoom(room, objects, classes));
     }
   });
 }

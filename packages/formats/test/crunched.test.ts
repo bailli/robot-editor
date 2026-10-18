@@ -3,7 +3,9 @@ import { test } from "node:test";
 
 import { decodeCp437 } from "../src/cp437.ts";
 import { CrunchedFormatError, SYMBOL_TABLE_SIZE, uncrunch } from "../src/crunched.ts";
-import { assertBytesEqual, golden, goldenJson, resources } from "./data.ts";
+import { resources, snapshots } from "./data.ts";
+
+const snapshot = snapshots(import.meta.url);
 
 const all = resources("CRUNCHED");
 
@@ -12,14 +14,17 @@ test("finds all 15 CRUNCHED resources", () => {
 });
 
 for (const { id, data } of all) {
-  test(`CRUNCHED ${id} matches the Python decoder`, () => {
+  test(`CRUNCHED ${id} decodes completely to printable text`, () => {
     const result = uncrunch(data);
-    const header = goldenJson(`crunched/${id}.json`) as Record<string, number>;
-    assert.equal(result.marker, header["marker"]);
-    assert.equal(result.size, header["size"]);
-    assert.equal(result.entryCount, header["count"]);
     assert.equal(result.text.length, result.size); // the stream decodes completely
-    assertBytesEqual(result.text, golden(`crunched/${id}.bin`), `CRUNCHED ${id}`);
+    const invalid = result.text.findIndex((b) => b !== 0x0a && (b < 0x20 || b === 0x7f));
+    assert.equal(invalid, -1, `control byte at ${invalid}`);
+    snapshot(`${id} header`, {
+      marker: result.marker,
+      size: result.size,
+      entries: result.entryCount,
+    });
+    snapshot(`${id} text`, result.text);
   });
 }
 

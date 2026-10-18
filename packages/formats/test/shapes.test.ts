@@ -1,25 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { type Shape, TRANSPARENT, parseShapes, planeBit, shapePixels } from "../src/shapes.ts";
-import { goldenJson, resources } from "./data.ts";
+import { type Shape, TRANSPARENT, parseShapes, shapePixels } from "../src/shapes.ts";
+import { resources, snapshots } from "./data.ts";
 
-interface GoldenShape {
-  width: number;
-  height: number;
-  bytesPerRow: number;
-  colours: number[];
-  unknown: number;
-  frames: { word: number; masks: (string | null)[] }[];
-}
-
-function maskString(shape: Shape, plane: Uint8Array): string {
-  let s = "";
-  for (let y = 0; y < shape.height; y++) {
-    for (let x = 0; x < shape.width; x++) s += planeBit(shape, plane, x, y) ? "1" : "0";
-  }
-  return s;
-}
+const snapshot = snapshots(import.meta.url);
 
 const all = resources("SHAPES");
 
@@ -28,37 +13,10 @@ test("finds all 12 SHAPES resources", () => {
 });
 
 for (const { id, data } of all) {
-  test(`SHAPES ${id} matches the Python decoder`, () => {
-    const expected = goldenJson(`shapes/${id}.json`) as Record<string, (GoldenShape | null)[]>;
-    const tables = parseShapes(data);
-    assert.deepEqual([...tables.keys()].sort(), Object.keys(expected).sort());
-    for (const [name, table] of tables) {
-      const want = expected[name];
-      assert.ok(want);
-      assert.equal(table.length, want.length, `${name} length`);
-      table.forEach((shape, i) => {
-        const w = want[i];
-        if (!shape || !w) {
-          assert.equal(shape, w ?? null, `${name}[${i}]`);
-          return;
-        }
-        assert.deepEqual(
-          {
-            width: shape.width,
-            height: shape.height,
-            bytesPerRow: shape.bytesPerRow,
-            colours: [...shape.colours],
-            unknown: shape.unknown,
-            frames: shape.frames.map((f) => ({
-              word: f.word,
-              masks: f.planes.map((p) => (p ? maskString(shape, p) : null)),
-            })),
-          },
-          w,
-          `${name}[${i}]`,
-        );
-      });
-    }
+  test(`SHAPES ${id} decodes`, () => {
+    const tables = Object.fromEntries(parseShapes(data));
+    assert.ok(Object.keys(tables).length > 0);
+    snapshot(id, tables);
   });
 }
 

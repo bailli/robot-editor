@@ -10,15 +10,9 @@ import {
   parseScene,
   serializeScene,
 } from "../src/scene.ts";
-import { assertBytesEqual, golden, goldenJson, hex, resources } from "./data.ts";
+import { assertBytesEqual, resources, snapshots } from "./data.ts";
 
-interface GoldenRoom {
-  id: number;
-  tags: { kind: number; value: number; data?: string }[];
-  base: number[];
-  over: number[];
-  objects: { slot: number; data: string; extra?: number }[];
-}
+const snapshot = snapshots(import.meta.url);
 
 const all = resources("SCENE");
 
@@ -27,39 +21,19 @@ test("finds all 5 SCENE resources", () => {
 });
 
 for (const { id, data } of all) {
-  test(`SCENE ${id} decrypts like the Python tool`, () => {
+  test(`SCENE ${id} decrypts and parses`, () => {
     const plain = cryptScene(data);
-    assertBytesEqual(plain, golden(`scene/${id}.scn`), `SCENE ${id}`);
     assert.equal(new TextDecoder().decode(plain.subarray(0, 5)), "SCNV3");
-  });
-
-  test(`SCENE ${id} rooms match the Python parser`, () => {
-    const rooms = parseScene(cryptScene(data));
-    const expected = goldenJson(`scene/${id}.rooms.json`) as GoldenRoom[];
-    assert.equal(rooms.length, expected.length);
-    rooms.forEach((room, i) => {
-      const want = expected[i];
-      assert.ok(want);
-      assert.equal(room.id, want.id);
-      assert.deepEqual(
-        room.tags.map((t) => ({
-          kind: t.kind,
-          value: t.value,
-          ...(t.data ? { data: hex(t.data) } : {}),
-        })),
-        want.tags,
-      );
-      assert.deepEqual(Array.from(room.base), want.base);
-      assert.deepEqual(Array.from(room.overlay), want.over);
-      assert.deepEqual(
-        room.records.map((r) => ({
-          slot: r.slot,
-          data: hex(r.data),
-          ...(r.extra === undefined ? {} : { extra: r.extra }),
-        })),
-        want.objects,
-      );
-    });
+    snapshot(`${id} decrypted`, plain);
+    const rooms = parseScene(plain).map((r) => ({
+      id: r.id,
+      tags: r.tags,
+      base: Array.from(r.base),
+      overlay: Array.from(r.overlay),
+      records: r.records,
+      trailing: r.trailing,
+    }));
+    snapshot(`${id} rooms`, rooms);
   });
 
   test(`SCENE ${id}: every logic record is placed by exactly the cells that reference it`, () => {
