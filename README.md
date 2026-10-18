@@ -21,6 +21,19 @@ The game itself and everything derived from it are not part of this repository.
   (resources straight from `GameOfRobot.exe`, texts, scenes, shapes, room rendering),
   tested against the Python output
 
+## Reference screenshots from the real game
+
+`tools/wine/harness.py` runs `GameOfRobot.exe` under Wine (WineHQ `wine-stable`) on a
+virtual display (`Xvfb`, `xdotool`) and saves the game's own screenshot of an episode's
+start room: palette indices, so comparisons are exact.
+
+    python3 tools/wine/harness.py setup                  # once: sandboxed prefix in .wine/
+    python3 tools/wine/harness.py shot 1 .wine/ep1.png    # episode 1 start room
+    python3 tools/compare_shot.py 1 43 .wine/ep1.png --ignore 15,11,25,14
+
+The prefix does not link into `$HOME` and has no `Z:` drive. The screenshot still shows
+the room-name banner (ignore its cells) and the actors at their start positions.
+
 ## Scripts
 
 - `pnpm check` – typecheck, lint, format check and tests

@@ -8,6 +8,7 @@ export default defineConfig(
   globalIgnores([
     "**/node_modules/",
     "**/dist/",
+    ".wine/",
     "golden/",
     "reference/",
     "renders/",
