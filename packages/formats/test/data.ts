@@ -1,7 +1,9 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 
 /** Repository root; game data and golden outputs are not checked in. */
-const ROOT = new URL("../../../", import.meta.url);
+export const ROOT = new URL("../../../", import.meta.url);
 
 function require(dir: string, hint: string): URL {
   const url = new URL(dir, ROOT);
@@ -51,4 +53,24 @@ export function goldenJson(path: string): unknown {
 
 export function hex(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("hex");
+}
+
+export function sha256(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/**
+ * Byte-array equality that reports the first difference. (assert.deepEqual builds a
+ * full diff of large arrays, which exhausts memory for scenes and renders.)
+ */
+export function assertBytesEqual(actual: Uint8Array, expected: Uint8Array, label: string): void {
+  const n = Math.min(actual.length, expected.length);
+  let i = 0;
+  while (i < n && actual[i] === expected[i]) i++;
+  if (i === n && actual.length === expected.length) return;
+  const at = (a: Uint8Array) => (i < a.length ? `0x${a[i].toString(16).padStart(2, "0")}` : "end");
+  assert.fail(
+    `${label}: first difference at offset ${i} (actual ${at(actual)}, expected ${at(expected)}; ` +
+      `lengths ${actual.length} / ${expected.length})`,
+  );
 }

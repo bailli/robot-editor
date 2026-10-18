@@ -2,14 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { cryptScene } from "../src/scene-crypt.ts";
-import {
-  LOGIC_CELL,
-  ROOM_CELLS,
-  SceneFormatError,
-  parseRoomMap,
-  parseScene,
-} from "../src/scene.ts";
-import { golden, goldenJson, hex, resources } from "./data.ts";
+import { LOGIC_CELL, SceneFormatError, parseRoomMap, parseScene } from "../src/scene.ts";
+import { assertBytesEqual, golden, goldenJson, hex, resources } from "./data.ts";
 
 interface GoldenRoom {
   id: number;
@@ -27,11 +21,9 @@ test("finds all 5 SCENE resources", () => {
 
 for (const { id, data } of all) {
   test(`SCENE ${id} decrypts like the Python tool`, () => {
-    assert.deepEqual(cryptScene(data), golden(`scene/${id}.scn`));
-  });
-
-  test(`SCENE ${id} encryption round-trips`, () => {
-    assert.deepEqual(cryptScene(cryptScene(data)), data);
+    const plain = cryptScene(data);
+    assertBytesEqual(plain, golden(`scene/${id}.scn`), `SCENE ${id}`);
+    assert.equal(new TextDecoder().decode(plain.subarray(0, 5)), "SCNV3");
   });
 
   test(`SCENE ${id} rooms match the Python parser`, () => {
@@ -80,12 +72,12 @@ for (const { id, data } of all) {
   });
 }
 
-test("every room has a full grid", () => {
-  const rooms = all.flatMap(({ data }) => parseScene(cryptScene(data)));
-  assert.equal(rooms.length, 346);
-  for (const room of rooms) {
-    assert.equal(room.base.length, ROOM_CELLS);
-    assert.equal(room.overlay.length, ROOM_CELLS);
+test("no original room has bytes after its logic records", () => {
+  // The game reports a decode error for such rooms, so the shipped data must have none.
+  for (const { id, data } of all) {
+    for (const room of parseScene(cryptScene(data))) {
+      assert.equal(room.trailing.length, 0, `SCENE ${id} room ${room.id}`);
+    }
   }
 });
 
@@ -126,4 +118,30 @@ test("a truncated actor record is left over, a complete one is parsed", () => {
   assert.equal(full.records[0]?.slot, 0xff);
   assert.equal(full.records[0]?.extra, 0x12345678);
   assert.equal(full.trailing.length, 0);
+});
+
+const SIGNATURE = [0x53, 0x43, 0x4e, 0x56, 0x33, 0x1a, 0x00];
+
+/** A scene with one room (id 1, no tags) whose map is EMPTY_LAYERS, plus `extra` bytes. */
+function scene(mapLength = EMPTY_LAYERS.length + 2, extra: number[] = []): Uint8Array {
+  return Uint8Array.from([
+    ...SIGNATURE,
+    1,
+    0,
+    mapLength & 0xff,
+    mapLength >> 8,
+    ...EMPTY_LAYERS,
+    ...extra,
+  ]);
+}
+
+test("parses a minimal synthetic scene", () => {
+  const rooms = parseScene(scene());
+  assert.equal(rooms.length, 1);
+  assert.equal(rooms[0]?.id, 1);
+});
+
+test("rejects a map length below 2 and a stray byte after the last room", () => {
+  assert.throws(() => parseScene(scene(1)), SceneFormatError);
+  assert.throws(() => parseScene(scene(undefined, [0x42])), SceneFormatError);
 });

@@ -21,12 +21,19 @@ export const SYMBOL_TABLE_SIZE = 90;
 const HEADER_SIZE = SYMBOL_TABLE_SIZE + 6;
 const NEWLINE_SYMBOL = 0x7f;
 
+export class CrunchedFormatError extends Error {
+  override name = "CrunchedFormatError";
+}
+
 export interface Crunched {
   marker: number;
   /** Unpacked size as stored in the header. */
   size: number;
   entryCount: number;
-  /** Decoded text in code page 437 with "\n" line endings. */
+  /**
+   * Decoded text in code page 437 with "\n" line endings. Shorter than `size` if the
+   * bitstream ends early (all original resources decode completely).
+   */
   text: Uint8Array;
 }
 
@@ -77,7 +84,7 @@ function readSymbol(bits: BitReader, table: Uint8Array): number | undefined {
 
 export function uncrunch(data: Uint8Array): Crunched {
   if (data.length < HEADER_SIZE) {
-    throw new RangeError(`CRUNCHED data too short: ${data.length} bytes`);
+    throw new CrunchedFormatError(`CRUNCHED data too short: ${data.length} bytes`);
   }
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const table = data.subarray(0, SYMBOL_TABLE_SIZE);

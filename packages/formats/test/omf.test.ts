@@ -57,10 +57,20 @@ test("SEGDEF: 'big' segments are 64 KiB, absolute segments skip frame and offset
   assert.equal(module.segments[2]?.data.length, 16);
 });
 
-test("rejects fixups that refer to threads", () => {
-  const thread = [0xc4, 0x00, 0x88 | 0x04, 0x01]; // F and T bits set
-  const data = omf(lnames("_TEXT"), segdef(4, 1), ledata(1, 0, [0, 0, 0, 0]), fixupp(thread));
-  assert.throws(() => parseOmf(data), OmfFormatError);
+for (const [bit, name] of [
+  [0x80, "frame"],
+  [0x08, "target"],
+] as const) {
+  test(`rejects fixups that refer to a ${name} thread`, () => {
+    const thread = [0xc4, 0x00, bit | 0x04, 0x01];
+    const data = omf(lnames("_TEXT"), segdef(4, 1), ledata(1, 0, [0, 0, 0, 0]), fixupp(thread));
+    assert.throws(() => parseOmf(data), OmfFormatError);
+  });
+}
+
+test("rejects a truncated record", () => {
+  const data = shapeModule(0);
+  assert.throws(() => parseOmf(data.subarray(0, data.length - 10)), OmfFormatError);
 });
 
 test("rejects THREAD subrecords and LEDATA outside its segment", () => {

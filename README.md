@@ -12,7 +12,9 @@ The game itself and everything derived from it are not part of this repository.
 2. Extract the PE resources of the game:
    `7z x -oresources reference/GameOfRobot.exe '.rsrc/*' && mv resources/.rsrc/* resources/ && rmdir resources/.rsrc`
 3. `pnpm install`
-4. `pnpm golden` – exports the reference output of the Python tools to `golden/`
+4. `pnpm golden` – exports the reference output of the Python tools to `golden/`; their
+   hashes are committed in `golden.sha256`, so changes to the reference output show up
+   in review
 
 ## Layout
 

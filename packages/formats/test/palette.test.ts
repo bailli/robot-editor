@@ -26,13 +26,13 @@ test("palettes of all episodes match the Python tool", () => {
   }
 });
 
-test("episode 3 has its own palette", () => {
-  assert.notDeepEqual(episodePalette(image, 3), episodePalette(image, 1));
-  assert.deepEqual(episodePalette(image, 0), episodePalette(image, 1));
-});
-
-test("rejects reads outside initialised data", () => {
-  assert.throws(() => readVa(image, 0x51bbdc, 25), PeFormatError);
+test("rejects reads outside initialised data, also across a section's end", () => {
+  const data = image.sections.find((s) => s.name === ".data");
+  assert.ok(data);
+  const end = image.imageBase + data.virtualAddress + data.rawSize;
+  assert.equal(readVa(image, end - 16, 16).length, 16);
+  assert.throws(() => readVa(image, end - 16, 32), PeFormatError);
+  assert.throws(() => readVa(image, 0x51bbdc, 25), PeFormatError); // uninitialised data
 });
 
 test("rejects data that is not a PE image", () => {

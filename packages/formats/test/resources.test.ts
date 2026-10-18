@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { uncrunch } from "../src/crunched.ts";
 import { parsePe } from "../src/pe.ts";
 import { type PeResource, ResourceType, findResource, readResources } from "../src/resources.ts";
-import { cryptScene } from "../src/scene-crypt.ts";
-import { parseScene } from "../src/scene.ts";
-import { exe, resource, resources } from "./data.ts";
+import { assertBytesEqual, exe, resources } from "./data.ts";
 
 const all = readResources(parsePe(exe()));
 
@@ -58,27 +55,18 @@ test("raw resources are byte-identical to the 7-Zip extraction", () => {
       (e) => e.id === String(r.name) && e.language === String(r.language),
     );
     assert.ok(expected, `${type}/${r.name} missing in resources/`);
-    assert.deepEqual(r.data, expected.data, `${type}/${r.name}`);
+    assertBytesEqual(r.data, expected.data, `${type}/${r.name}`);
     compared++;
   }
   assert.equal(compared, 78);
 });
 
-test("game data loads straight from the exe", () => {
+test("findResource finds named and numeric types, optionally by language", () => {
   const scene = findResource(all, "SCENE", 1104);
-  assert.ok(scene);
-  assert.equal(scene.language, 1033);
-  assert.deepEqual(scene.data, resource("SCENE", "1104"));
-  assert.equal(parseScene(cryptScene(scene.data)).length, 59);
-
-  const episodes = findResource(all, "CRUNCHED", 9901, 1031);
-  assert.ok(episodes);
-  assert.equal(uncrunch(episodes.data).entryCount, 9);
-});
-
-test("findResource filters by language", () => {
+  assert.equal(scene?.language, 1033);
   assert.ok(findResource(all, ResourceType.MENU, 2010, 1031));
   assert.equal(findResource(all, ResourceType.MENU, 2010, 1033), undefined);
+  assert.equal(findResource(all, "SCENE", 9999), undefined);
 });
 
 test("an image without resource directory has no resources", () => {

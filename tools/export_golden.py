@@ -11,7 +11,10 @@ golden/scene/<id>.rooms.json    its parsed rooms
 golden/palettes.json            the 16-colour palette of each episode 0..4
 golden/shapes/<id>.json         decoded shape tables of each SHAPES resource (masks as 0/1 strings)
 golden/render/<episode>.json    sha256 of the palette-index render of every room
-golden/render/1-43.bin          full palette-index render of episode 1 room 43 (640x348)
+
+It also writes golden.sha256 (committed): the hash of every golden file, so that a
+change to the reference output shows up in review even when the TypeScript code was
+changed in step with the Python tools.
 """
 import glob
 import hashlib
@@ -86,9 +89,13 @@ def main():
         for room in rooms:
             pixels = render_room.render_indices(objs, room)
             hashes[room["id"]] = hashlib.sha256(pixels).hexdigest()
-            if (episode, room["id"]) == (1, 43):
-                write(f"{out}/render/1-43.bin", pixels)
         write(f"{out}/render/{episode}.json", json.dumps(hashes))
+    lines = []
+    for path in sorted(glob.glob(f"{out}/**/*", recursive=True)):
+        if os.path.isfile(path):
+            digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+            lines.append(f"{digest}  {os.path.relpath(path, ROOT)}\n")
+    write(f"{ROOT}/golden.sha256", "".join(lines))
     print("golden data written to", out)
 
 

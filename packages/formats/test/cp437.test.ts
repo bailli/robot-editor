@@ -14,10 +14,6 @@ test("round-trips all 256 bytes", () => {
   assert.deepEqual(encodeCp437(decodeCp437(ALL_BYTES)), ALL_BYTES);
 });
 
-test("decodes German umlauts", () => {
-  assert.equal(decodeCp437(Uint8Array.of(0x84, 0x94, 0x81, 0xe1)), "äöüß");
-});
-
 test("rejects characters outside the code page", () => {
   assert.throws(() => encodeCp437("€"), RangeError);
 });

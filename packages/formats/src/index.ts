@@ -1,5 +1,5 @@
 export { decodeCp437, encodeCp437 } from "./cp437.ts";
-export { SYMBOL_TABLE_SIZE, uncrunch } from "./crunched.ts";
+export { CrunchedFormatError, SYMBOL_TABLE_SIZE, uncrunch } from "./crunched.ts";
 export type { Crunched } from "./crunched.ts";
 export { OmfFormatError, parseOmf } from "./omf.ts";
 export type { OmfFixup, OmfModule, OmfPublic, OmfSegment } from "./omf.ts";
