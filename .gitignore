@@ -1,0 +1,12 @@
+node_modules/
+dist/
+__pycache__/
+
+# Game data and everything derived from it (copyrighted, regenerate locally)
+reference/
+resources/
+golden/
+scenes/
+texts/
+shapes/
+renders/
