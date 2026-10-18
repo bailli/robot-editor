@@ -24,9 +24,11 @@ export {
   SCREEN_WIDTH,
   TILE_HEIGHT,
   TILE_WIDTH,
+  blitCell,
   cellFrame,
   cellPixels,
   glyphRow,
+  renderCell,
   renderRoom,
   toRgba,
 } from "./render.ts";

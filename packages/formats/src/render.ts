@@ -1,6 +1,6 @@
 import { type EpisodeClasses, FrameMethod, type ObjectClass } from "./classes.ts";
 import type { Rgb } from "./palette.ts";
-import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
+import { LOGIC_CELL, ROOM_CELLS, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
 import {
   type Colours,
   type Shape,
@@ -295,6 +295,35 @@ export function cellPixels(
   return sprite ? pixels : pixels.map((c) => (c === TRANSPARENT ? TILE_BACKGROUND : c));
 }
 
+const TILE_SIZE = TILE_WIDTH * TILE_HEIGHT;
+
+/**
+ * The 16x12 pixels of one map position: its base cell as a tile on colour 15, its
+ * overlay cell as a sprite on top (see renderRoom).
+ */
+export function renderCell(
+  base: number,
+  overlay: number,
+  objects: ShapeTable,
+  episode?: EpisodeClasses,
+): Uint8Array {
+  const out = cellPixels(base, objects, episode) ?? new Uint8Array(TILE_SIZE).fill(TILE_BACKGROUND);
+  const sprite = cellPixels(overlay, objects, episode, true);
+  if (sprite) {
+    for (const [i, c] of sprite.entries()) if (c !== TRANSPARENT) out[i] = c;
+  }
+  return out;
+}
+
+/** Copies a cell's pixels (renderCell) to position `index` of a room image. */
+export function blitCell(image: Uint8Array, index: number, pixels: Uint8Array): void {
+  const x0 = (index % ROOM_WIDTH) * TILE_WIDTH;
+  const y0 = Math.floor(index / ROOM_WIDTH) * TILE_HEIGHT;
+  for (let y = 0; y < TILE_HEIGHT; y++) {
+    image.set(pixels.subarray(y * TILE_WIDTH, (y + 1) * TILE_WIDTH), (y0 + y) * SCREEN_WIDTH + x0);
+  }
+}
+
 /**
  * Renders a room to palette indices (SCREEN_WIDTH x SCREEN_HEIGHT, row-major).
  *
@@ -304,24 +333,10 @@ export function cellPixels(
  * actors and the cells stored in logic records (cells of type 0x7f stay empty).
  */
 export function renderRoom(room: Room, objects: ShapeTable, episode?: EpisodeClasses): Uint8Array {
-  const out = new Uint8Array(SCREEN_WIDTH * SCREEN_HEIGHT).fill(TILE_BACKGROUND);
-  const draw = (layer: Uint16Array, sprite: boolean) => {
-    layer.forEach((cell, i) => {
-      const pixels = cellPixels(cell, objects, episode, sprite);
-      if (!pixels) return;
-      const x0 = (i % ROOM_WIDTH) * TILE_WIDTH;
-      const y0 = Math.floor(i / ROOM_WIDTH) * TILE_HEIGHT;
-      for (let y = 0; y < TILE_HEIGHT; y++) {
-        const row = (y0 + y) * SCREEN_WIDTH + x0;
-        for (let x = 0; x < TILE_WIDTH; x++) {
-          const c = pixels[y * TILE_WIDTH + x] ?? TRANSPARENT;
-          if (c !== TRANSPARENT) out[row + x] = c;
-        }
-      }
-    });
-  };
-  draw(room.base, false);
-  draw(room.overlay, true);
+  const out = new Uint8Array(SCREEN_WIDTH * SCREEN_HEIGHT);
+  for (let i = 0; i < ROOM_CELLS; i++) {
+    blitCell(out, i, renderCell(room.base[i] ?? 0, room.overlay[i] ?? 0, objects, episode));
+  }
   return out;
 }
 
