@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import {
+  type Game,
   ROOM_HEIGHT,
   ROOM_WIDTH,
   SCREEN_HEIGHT,
@@ -13,7 +14,7 @@ import {
   renderRoom,
 } from "@robot/formats";
 
-import { type Game, ROOT } from "./game.ts";
+import { ROOT } from "./game.ts";
 import { patchedExe } from "./patch.ts";
 import { readIndexedPng } from "./png.ts";
 

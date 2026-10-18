@@ -1,6 +1,4 @@
-import { type Room, cryptScene, replaceResource, serializeScene } from "@robot/formats";
-
-import type { Game } from "./game.ts";
+import type { Game, Room } from "@robot/formats";
 
 /** The room each episode starts in (measured in the unpatched game). */
 export const START_ROOMS: Readonly<Partial<Record<number, number>>> = {
@@ -32,10 +30,8 @@ export function patchedExe(game: Game, episode: number, roomId: number): Uint8Ar
   const keep = game
     .episode(episode)
     .rooms.filter((r) => (r.id === 1 || r.id === 2) && r.id !== start);
-  const scene = serializeScene([...keep, room].sort((a, b) => a.id - b.id));
-  return replaceResource(
-    game.image,
-    game.resource("SCENE", 1004 + 100 * episode),
-    cryptScene(scene),
+  return game.withScene(
+    episode,
+    [...keep, room].sort((a, b) => a.id - b.id),
   );
 }

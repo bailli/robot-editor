@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { renderRoom } from "@robot/formats";
 
-import { Game, ROOT } from "../src/game.ts";
+import { ROOT, loadGame } from "../src/game.ts";
 import { differingCells, readManifest, readShot, sha256 } from "../src/shots.ts";
 
 /**
@@ -14,7 +14,7 @@ import { differingCells, readManifest, readShot, sha256 } from "../src/shots.ts"
  * improvements are recorded deliberately (`robot shots --update`, reviewed as a diff).
  */
 const HINT = "run `pnpm robot shots` (needs Wine) or `pnpm robot shots --update`";
-const game = Game.load();
+const game = loadGame();
 
 for (const shot of readManifest()) {
   const present = existsSync(new URL(shot.file, ROOT));

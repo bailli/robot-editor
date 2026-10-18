@@ -1,5 +1,7 @@
 export { FrameMethod, readEpisodeClasses } from "./classes.ts";
 export type { EpisodeClasses, ObjectClass } from "./classes.ts";
+export { EPISODES, Game, sceneId, shapesId } from "./game.ts";
+export type { Episode } from "./game.ts";
 export { decodeCp437, encodeCp437 } from "./cp437.ts";
 export { CrunchedFormatError, SYMBOL_TABLE_SIZE, uncrunch } from "./crunched.ts";
 export type { Crunched } from "./crunched.ts";
@@ -7,7 +9,15 @@ export { OmfFormatError, parseOmf } from "./omf.ts";
 export type { OmfFixup, OmfModule, OmfPublic, OmfSegment } from "./omf.ts";
 export { PALETTE_SIZE, episodePalette } from "./palette.ts";
 export type { Rgb } from "./palette.ts";
-export { DIRECTORY_RESOURCE, PeFormatError, parsePe, readRva, readVa } from "./pe.ts";
+export {
+  DIRECTORY_RESOURCE,
+  DIRECTORY_SECURITY,
+  PeFormatError,
+  parsePe,
+  readRva,
+  readVa,
+  resizeLastSection,
+} from "./pe.ts";
 export type { PeDataDirectory, PeImage, PeSection } from "./pe.ts";
 export {
   SCREEN_HEIGHT,

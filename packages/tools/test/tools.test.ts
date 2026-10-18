@@ -14,7 +14,7 @@ import {
   readResources,
 } from "@robot/formats";
 
-import { Game } from "../src/game.ts";
+import { loadGame } from "../src/game.ts";
 import { START_ROOMS, patchedExe } from "../src/patch.ts";
 import { readIndexedPng, writeIndexedPng } from "../src/png.ts";
 import { differingCells, paletteOffset } from "../src/shots.ts";
@@ -56,7 +56,7 @@ test("screenshots are compared by the low 4 bits, without the status row", () =>
 });
 
 test("a patched exe starts the episode in a copy of the wanted room without scripts", () => {
-  const game = Game.load();
+  const game = loadGame();
   const patched = parsePe(patchedExe(game, 1, 21));
   assert.equal(patched.data.length, game.image.data.length);
   const scene = findResource(readResources(patched), "SCENE", 1104);

@@ -9,6 +9,8 @@ export interface PeSection {
   virtualSize: number;
   rawOffset: number;
   rawSize: number;
+  /** File offset of the section header. */
+  headerOffset: number;
 }
 
 export interface PeDataDirectory {
@@ -22,9 +24,13 @@ export interface PeImage {
   /** Indexed by IMAGE_DIRECTORY_ENTRY_* (e.g. 2 = resources). */
   dataDirectories: PeDataDirectory[];
   sections: PeSection[];
+  /** File offset of the optional header. */
+  optionalHeaderOffset: number;
 }
 
 export const DIRECTORY_RESOURCE = 2;
+/** The certificate table (Authenticode signature): a file offset, not an RVA. */
+export const DIRECTORY_SECURITY = 4;
 
 export class PeFormatError extends Error {
   override name = "PeFormatError";
@@ -67,9 +73,10 @@ export function parsePe(data: Uint8Array): PeImage {
       virtualAddress: view.getUint32(h + 12, true),
       rawSize: view.getUint32(h + 16, true),
       rawOffset: view.getUint32(h + 20, true),
+      headerOffset: h,
     });
   }
-  return { data, imageBase, dataDirectories, sections };
+  return { data, imageBase, dataDirectories, sections, optionalHeaderOffset: optional };
 }
 
 /** Reads initialised bytes at a virtual address (e.g. 0x4827f0); returns a view into the image. */
@@ -91,4 +98,47 @@ export function readRva(image: PeImage, rva: number, length: number): Uint8Array
   }
   const va = image.imageBase + rva;
   throw new PeFormatError(`no initialised data at 0x${va.toString(16)} (+${length})`);
+}
+
+const alignUp = (n: number, alignment: number) => Math.ceil(n / alignment) * alignment;
+
+/**
+ * A copy of the image whose last section (in memory and in the file) has the given
+ * virtual size; its raw size and the image sizes in the headers follow, new space is
+ * zeroed. Data after the section in the file may only be the certificate table: an
+ * Authenticode signature, invalid for a modified image anyway, so it is dropped.
+ */
+export function resizeLastSection(image: PeImage, virtualSize: number): Uint8Array {
+  const last = image.sections.reduce<PeSection | undefined>(
+    (a, s) => (!a || s.virtualAddress > a.virtualAddress ? s : a),
+    undefined,
+  );
+  if (!last) throw new PeFormatError("image without sections");
+  const rawEnd = last.rawOffset + last.rawSize;
+  if (image.sections.some((s) => s.rawOffset + s.rawSize > rawEnd)) {
+    throw new PeFormatError(`section ${last.name} is not last in the file`);
+  }
+  const certificates = image.dataDirectories.at(DIRECTORY_SECURITY);
+  const overlay = image.data.length - rawEnd;
+  if (overlay > 0 && !(certificates?.rva === rawEnd && certificates.size === overlay)) {
+    throw new PeFormatError(`${overlay} unknown bytes after section ${last.name}`);
+  }
+  const view = new DataView(image.data.buffer, image.data.byteOffset, image.data.byteLength);
+  const o = image.optionalHeaderOffset;
+  const sectionAlignment = view.getUint32(o + 32, true);
+  const fileAlignment = view.getUint32(o + 36, true);
+  const rawSize = alignUp(virtualSize, fileAlignment);
+
+  const out = new Uint8Array(last.rawOffset + rawSize);
+  out.set(image.data.subarray(0, Math.min(rawEnd, out.length)));
+  const w = new DataView(out.buffer);
+  w.setUint32(last.headerOffset + 8, virtualSize, true);
+  w.setUint32(last.headerOffset + 16, rawSize, true);
+  w.setUint32(o + 8, w.getUint32(o + 8, true) + rawSize - last.rawSize, true); // initialised data
+  w.setUint32(o + 56, alignUp(last.virtualAddress + virtualSize, sectionAlignment), true);
+  if (certificates && DIRECTORY_SECURITY < image.dataDirectories.length) {
+    w.setUint32(o + 96 + DIRECTORY_SECURITY * 8, 0, true);
+    w.setUint32(o + 100 + DIRECTORY_SECURITY * 8, 0, true);
+  }
+  return out;
 }

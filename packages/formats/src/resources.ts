@@ -1,4 +1,11 @@
-import { DIRECTORY_RESOURCE, PeFormatError, type PeImage, readRva } from "./pe.ts";
+import {
+  DIRECTORY_RESOURCE,
+  PeFormatError,
+  type PeImage,
+  parsePe,
+  readRva,
+  resizeLastSection,
+} from "./pe.ts";
 
 /**
  * Reader for the PE resource tree (type / name / language), so game data can be taken
@@ -108,27 +115,55 @@ export function findResource(
 }
 
 /**
- * A copy of the image bytes with a resource's data replaced in place: the new data must
- * not be larger than the old; the rest of the old space is zeroed and the size in the
- * data entry updated. (Enough for patched copies; growing would need relocating data.)
+ * A copy of the image bytes with a resource's data replaced. Data that fits is written in
+ * place (the rest of the old space zeroed). Larger data moves to the end of the resource
+ * section, which grows (see resizeLastSection; the section must be the image's last, as
+ * in GameOfRobot.exe); the old space is zeroed, a resource already at the end grows in
+ * place, so saving the same resource again does not pile up copies.
  */
 export function replaceResource(
   image: PeImage,
   resource: PeResource,
   data: Uint8Array,
 ): Uint8Array {
-  if (data.length > resource.data.length) {
-    throw new PeFormatError(
-      `${String(resource.type)}/${String(resource.name)}: ${data.length} bytes do not fit into ${resource.data.length}`,
-    );
+  if (data.length <= resource.data.length) {
+    const out = image.data.slice();
+    writeResource(out, resource, resource.dataOffset, undefined, data);
+    return out;
   }
-  const out = image.data.slice();
-  out.fill(0, resource.dataOffset, resource.dataOffset + resource.data.length);
-  out.set(data, resource.dataOffset);
-  new DataView(out.buffer, out.byteOffset, out.byteLength).setUint32(
-    resource.entryOffset + 4,
-    data.length,
-    true,
+  const dir = image.dataDirectories.at(DIRECTORY_RESOURCE);
+  const section = image.sections.find(
+    (s) => dir && dir.rva >= s.virtualAddress && dir.rva < s.virtualAddress + s.virtualSize,
   );
+  if (!dir || !section) throw new PeFormatError("image without resource section");
+  const sectionEnd = section.virtualAddress + section.virtualSize;
+  const rva = section.virtualAddress + resource.dataOffset - section.rawOffset;
+  const isLast = align8(rva + resource.data.length) >= sectionEnd;
+  const newRva = isLast ? rva : align8(sectionEnd);
+  const out = resizeLastSection(image, newRva + data.length - section.virtualAddress);
+  const fileOffset = section.rawOffset + newRva - section.virtualAddress;
+  writeResource(out, resource, fileOffset, newRva, data);
+  if (dir.rva + dir.size >= sectionEnd) {
+    const o = image.optionalHeaderOffset + 96 + DIRECTORY_RESOURCE * 8 + 4;
+    new DataView(out.buffer).setUint32(o, newRva + data.length - dir.rva, true);
+  }
+  parsePe(out); // the headers still describe the file
   return out;
+}
+
+const align8 = (n: number) => (n + 7) & ~7;
+
+/** Zeroes the old data, writes `data` at `fileOffset` and points the data entry to it. */
+function writeResource(
+  out: Uint8Array,
+  resource: PeResource,
+  fileOffset: number,
+  rva: number | undefined,
+  data: Uint8Array,
+): void {
+  out.fill(0, resource.dataOffset, resource.dataOffset + resource.data.length);
+  out.set(data, fileOffset);
+  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  if (rva !== undefined) view.setUint32(resource.entryOffset, rva, true);
+  view.setUint32(resource.entryOffset + 4, data.length, true);
 }

@@ -18,7 +18,7 @@ import { parseArgs } from "node:util";
 
 import { renderRoom } from "@robot/formats";
 
-import { Game, ROOT } from "./game.ts";
+import { ROOT, loadGame } from "./game.ts";
 import { patchedExe } from "./patch.ts";
 import { writeIndexedPng } from "./png.ts";
 import {
@@ -43,7 +43,7 @@ const { values, positionals } = parseArgs({
   },
 });
 const [command, ...args] = positionals;
-const game = () => Game.load(values.exe);
+const game = () => loadGame(values.exe);
 
 function usage(): never {
   console.error("usage: robot render|compare|eval|patch|shots ... (see src/robot.ts)");

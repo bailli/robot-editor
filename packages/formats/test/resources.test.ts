@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { PeFormatError, parsePe } from "../src/pe.ts";
+import { DIRECTORY_SECURITY, PeFormatError, parsePe } from "../src/pe.ts";
 import {
   type PeResource,
   ResourceType,
@@ -97,6 +97,45 @@ test("replaceResource writes smaller data in place and updates the size", () => 
   assert.deepEqual([...(after?.data ?? [])], [1, 2, 3]);
   assert.equal(patched.length, image.data.length);
   assert.equal(findResource(readResources(parsePe(patched)), "SCENE", 1104)?.data.length, 59988);
+});
+
+test("replaceResource moves larger data to the end of the grown resource section", () => {
+  const image = parsePe(exe());
+  const all = readResources(image);
+  const scene = findResource(all, "SCENE", 1104);
+  assert.ok(scene);
+  const big = Uint8Array.from({ length: scene.data.length + 5000 }, (_, i) => i);
+  const grown = parsePe(replaceResource(image, scene, big));
+  const rsrc = grown.sections.at(-1);
+  assert.equal(rsrc?.name, ".rsrc");
+  assert.equal(rsrc.virtualSize, (image.sections.at(-1)?.virtualSize ?? 0) + big.length);
+  assert.equal(grown.data.length, rsrc.rawOffset + rsrc.rawSize, "no signature left behind");
+  assert.deepEqual(grown.dataDirectories[DIRECTORY_SECURITY], { rva: 0, size: 0 });
+  const after = readResources(grown);
+  const moved = findResource(after, "SCENE", 1104);
+  assertBytesEqual(moved?.data ?? new Uint8Array(), big, "moved data");
+  assert.ok(
+    grown.data
+      .subarray(scene.dataOffset, scene.dataOffset + scene.data.length)
+      .every((b) => b === 0),
+  );
+  for (const r of all.filter((r) => r !== scene)) {
+    assertBytesEqual(
+      findResource(after, r.type, r.name, r.language)?.data ?? new Uint8Array(),
+      r.data,
+      `${String(r.type)}/${String(r.name)}`,
+    );
+  }
+
+  // growing it again reuses its place at the end
+  const again = parsePe(replaceResource(grown, moved ?? scene, new Uint8Array(big.length + 100)));
+  assert.equal(again.sections.at(-1)?.virtualSize, rsrc.virtualSize + 100);
+});
+
+test("replaceResource does not grow an image with unknown data after its last section", () => {
+  const image = parsePe(Uint8Array.from([...exe(), 1, 2, 3]));
+  const scene = findResource(readResources(image), "SCENE", 1004);
+  assert.ok(scene);
   assert.throws(
     () => replaceResource(image, scene, new Uint8Array(scene.data.length + 1)),
     PeFormatError,
