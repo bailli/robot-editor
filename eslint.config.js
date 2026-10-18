@@ -48,6 +48,10 @@ export default defineConfig(
     },
   },
   {
+    files: ["packages/tools/src/**/*.ts"],
+    rules: { "no-console": "off" }, // command line tools
+  },
+  {
     files: ["**/*.js"],
     extends: [tseslint.configs.disableTypeChecked],
   },
