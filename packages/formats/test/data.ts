@@ -29,6 +29,17 @@ export function resources(type: string): { id: string; data: Uint8Array }[] {
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
+export function resource(type: string, id: string): Uint8Array {
+  const found = resources(type).find((r) => r.id === id);
+  if (!found) throw new Error(`resource ${type}/${id} not found`);
+  return found.data;
+}
+
+export function exe(): Uint8Array {
+  const reference = require("reference/", "put the unpacked game into reference/ (see README)");
+  return new Uint8Array(readFileSync(new URL("GameOfRobot.exe", reference)));
+}
+
 export function golden(path: string): Uint8Array {
   return new Uint8Array(readFileSync(new URL(path, require("golden/", GOLDEN_HINT))));
 }
