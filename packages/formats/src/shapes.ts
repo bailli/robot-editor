@@ -3,7 +3,7 @@ import { type OmfFixup, type OmfModule, parseOmf } from "./omf.ts";
 /**
  * SHAPES resources: sprite and tile graphics as OMF object files.
  *
- * Each public symbol (_Rob_object, _Aliens, _Hero1, ...) starts a table of 12-byte
+ * Each public symbol (_Rob_object, _Aliens = the robots, _Hero1, ...) starts a table of 12-byte
  * shape descriptors in the data segment:
  *   u8  width            u8  height
  *   u16 0                u8  bytes per row        u8 frame count

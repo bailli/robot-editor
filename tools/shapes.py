@@ -3,7 +3,7 @@
 
 Each SHAPES resource is an OMF .OBJ written by "TOM Productions Shape editor SED93".
 The game links it at load time with its own mini linker (0x43a050). _DATA holds tables
-of shape descriptors (one table per public symbol, e.g. _Rob_object, _Aliens, _Hero1);
+of shape descriptors (one table per public symbol, e.g. _Rob_object, _Aliens (the robots), _Hero1);
 _TEXT holds 1-bit masks. Pointers are resolved via FIXUPP records.
 
 Shape descriptor, 12 bytes:
