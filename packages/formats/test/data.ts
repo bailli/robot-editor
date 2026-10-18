@@ -12,7 +12,7 @@ function require(dir: string, hint: string): URL {
 }
 
 const RESOURCES_HINT = "extract the resources from reference/GameOfRobot.exe (see README)";
-const GOLDEN_HINT = "run `npm run golden` first";
+const GOLDEN_HINT = "run `pnpm golden` first";
 
 /** All resources of one type, e.g. "CRUNCHED", across language folders. */
 export function resources(type: string): { id: string; data: Uint8Array }[] {

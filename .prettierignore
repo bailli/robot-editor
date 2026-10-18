@@ -5,4 +5,4 @@ resources/
 scenes/
 shapes/
 texts/
-package-lock.json
+pnpm-lock.yaml

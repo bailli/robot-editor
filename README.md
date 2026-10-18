@@ -11,8 +11,8 @@ The game itself and everything derived from it are not part of this repository.
    `7z x -oreference reference/GameOfRobotInstall.exe`
 2. Extract the PE resources of the game:
    `7z x -oresources reference/GameOfRobot.exe '.rsrc/*' && mv resources/.rsrc/* resources/ && rmdir resources/.rsrc`
-3. `npm install`
-4. `npm run golden` – exports the reference output of the Python tools to `golden/`
+3. `pnpm install`
+4. `pnpm golden` – exports the reference output of the Python tools to `golden/`
 
 ## Layout
 
@@ -22,9 +22,9 @@ The game itself and everything derived from it are not part of this repository.
 
 ## Scripts
 
-- `npm run check` – typecheck, lint, format check and tests
-- `npm test` – tests only
-- `npm run format` – apply Prettier
+- `pnpm check` – typecheck, lint, format check and tests
+- `pnpm test` – tests only
+- `pnpm format` – apply Prettier
 
 TypeScript is restricted to erasable syntax, so Node.js (>= 22.18) runs the sources directly
 without a build step.
