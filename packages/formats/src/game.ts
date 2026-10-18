@@ -7,6 +7,16 @@ import { type Room, parseScene, serializeScene } from "./scene.ts";
 import { type ShapeTable, parseShapes } from "./shapes.ts";
 
 export const EPISODES = [0, 1, 2, 3, 4] as const;
+export const EPISODE_NAMES = ["Robot Junior", "Robot I", "Robot II", "Robot III", "Robot IV"];
+
+/** The room each episode starts in (measured in the unpatched game). */
+export const START_ROOMS: Readonly<Partial<Record<number, number>>> = {
+  0: 43,
+  1: 43,
+  2: 43,
+  3: 41,
+  4: 53,
+};
 
 /** Resource ids of episode n (0 = Junior): shapes 1002, scene 1004, plus 100 n. */
 export const shapesId = (episode: number) => 1002 + 100 * episode;

@@ -14,7 +14,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
-    "robot": "node packages/tools/src/robot.ts"
+    "robot": "node packages/tools/src/robot.ts",
+    "editor": "pnpm --filter @robot/editor dev"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

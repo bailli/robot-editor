@@ -1,6 +1,6 @@
 export { FrameMethod, readEpisodeClasses } from "./classes.ts";
 export type { EpisodeClasses, ObjectClass } from "./classes.ts";
-export { EPISODES, Game, sceneId, shapesId } from "./game.ts";
+export { EPISODE_NAMES, EPISODES, Game, START_ROOMS, sceneId, shapesId } from "./game.ts";
 export type { Episode } from "./game.ts";
 export { decodeCp437, encodeCp437 } from "./cp437.ts";
 export { CrunchedFormatError, SYMBOL_TABLE_SIZE, uncrunch } from "./crunched.ts";

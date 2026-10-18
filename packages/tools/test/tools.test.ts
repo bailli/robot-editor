@@ -8,6 +8,7 @@ import { test } from "vitest";
 import {
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
+  START_ROOMS,
   cryptScene,
   findResource,
   parsePe,
@@ -16,7 +17,7 @@ import {
 } from "@robot/formats";
 
 import { loadGame } from "../src/game.ts";
-import { START_ROOMS, patchedExe } from "../src/patch.ts";
+import { patchedExe } from "../src/patch.ts";
 import { readIndexedPng, writeIndexedPng } from "../src/png.ts";
 import { differingCells, paletteOffset } from "../src/shots.ts";
 

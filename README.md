@@ -10,7 +10,8 @@ The game itself and everything derived from it are not part of this repository.
 1. Put `GameOfRobotInstall.exe` into `reference/` and unpack it:
    `7z x -oreference reference/GameOfRobotInstall.exe`
 2. `pnpm install`
-3. Optional, for the comparison test with 7-Zip's resource extraction:
+3. `pnpm exec playwright install --only-shell chromium` (the editor's tests run in it)
+4. Optional, for the comparison test with 7-Zip's resource extraction:
    `7z x -oresources reference/GameOfRobot.exe '.rsrc/*' && mv resources/.rsrc/* resources/ && rmdir resources/.rsrc`
 
 ## Layout
@@ -18,8 +19,20 @@ The game itself and everything derived from it are not part of this repository.
 - `packages/formats` – `@robot/formats`: readers and writers for the game formats
   (resources straight from `GameOfRobot.exe`, texts, scenes, shapes, object classes, room
   rendering); no dependencies, runs in Node and browsers
+- `packages/editor` – `@robot/editor`: the level editor in the browser
 - `packages/tools` – `@robot/tools`: command line tools (`pnpm robot ...`)
 - `tools/wine/harness.py` – runs the real game under Wine for reference screenshots
+
+## Editor
+
+`pnpm editor` starts it at http://localhost:5173 and opens `reference/GameOfRobot.exe`
+by itself; otherwise open or drop an exe (it never leaves the browser). Pick an episode
+and a room, then paint the base or overlay layer: left button paints, right button picks
+the tile under the cursor, Ctrl+Z / Ctrl+Y undo and redo, G shows the grid. "Save exe"
+downloads a copy with the edited scenes. Scenes that grow move to the end of the
+resource section (the exe's signature is dropped). Logic cells (magenta) refer to the
+room's logic records and cannot be painted yet. `pnpm --filter @robot/editor build`
+makes a static build in `packages/editor/dist/`.
 
 ## Command line
 

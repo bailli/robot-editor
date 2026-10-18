@@ -1,13 +1,4 @@
-import type { Game, Room } from "@robot/formats";
-
-/** The room each episode starts in (measured in the unpatched game). */
-export const START_ROOMS: Readonly<Partial<Record<number, number>>> = {
-  0: 43,
-  1: 43,
-  2: 43,
-  3: 41,
-  4: 53,
-};
+import { type Game, type Room, START_ROOMS } from "@robot/formats";
 
 /** Room tags holding the script source (6/1) and the compiled script (6/2). */
 const isScript = (kind: number, value: number) => kind === 6 && (value === 1 || value === 2);

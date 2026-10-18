@@ -341,7 +341,10 @@ export function renderRoom(room: Room, objects: ShapeTable, episode?: EpisodeCla
 }
 
 /** Converts palette indices to RGBA, e.g. for `new ImageData(rgba, SCREEN_WIDTH)`. */
-export function toRgba(indices: Uint8Array, palette: readonly Rgb[]): Uint8ClampedArray {
+export function toRgba(
+  indices: Uint8Array,
+  palette: readonly Rgb[],
+): Uint8ClampedArray<ArrayBuffer> {
   const lut = new Uint8Array(256 * 4);
   for (let c = 0; c < 256; c++) lut[c * 4 + 3] = 255; // indices beyond the palette: black
   for (const [c, [r, g, b]] of palette.entries()) lut.set([r, g, b], c * 4);
