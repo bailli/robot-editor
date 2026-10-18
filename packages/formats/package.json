@@ -1,0 +1,14 @@
+{
+  "name": "@robot/formats",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Readers for the data formats of The Game of Robot (GameOfRobot.exe)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "node --test \"test/**/*.test.ts\""
+  }
+}
