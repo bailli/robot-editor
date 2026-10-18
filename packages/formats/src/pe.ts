@@ -82,7 +82,11 @@ export function readRva(image: PeImage, rva: number, length: number): Uint8Array
   for (const s of image.sections) {
     const offset = rva - s.virtualAddress;
     if (offset >= 0 && offset + length <= s.rawSize) {
-      return image.data.subarray(s.rawOffset + offset, s.rawOffset + offset + length);
+      const start = s.rawOffset + offset;
+      if (start + length > image.data.length) {
+        throw new PeFormatError(`image truncated: section ${s.name} extends past end of file`);
+      }
+      return image.data.subarray(start, start + length);
     }
   }
   const va = image.imageBase + rva;

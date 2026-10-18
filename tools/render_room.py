@@ -2,7 +2,7 @@
 """Render one room of an episode to a PNG at the game's native 640x348.
 
 usage: render_room.py EPISODE ROOM_ID OUT.png [--zoom N]
-Reads resources/1033/SHAPES/1E02 and scenes/1E04.scn (E = episode 0..4).
+Reads resources/1033/SHAPES/1E02 and resources/1033/SCENE/1E04 (E = episode 0..4).
 Base cells are drawn as tiles on white; overlay cells are drawn as sprites (transparent
 where no mask is set). The frame is the low nibble of the cell's high byte, or 0 if the
 shape has no such frame: what the wall class (0x41faa0, used for diagonal wall corners)
@@ -29,6 +29,9 @@ def load_episode(episode):
 
 
 def cell_frame(shape, cell):
+    """Low nibble of the high byte, 0 if out of range, None if the shape has no frames."""
+    if not shape.frames:
+        return None
     frame = (cell >> 8) & 0xF
     return frame if frame < len(shape.frames) else 0
 
@@ -39,10 +42,13 @@ def render_indices(objs, room):
     for layer, sprite in ((room["base"], False), (room["over"], True)):
         for i, cell in enumerate(layer):
             t = cell & 0xFF
-            s = objs[t] if 0 < t < len(objs) else None
-            if not s:
+            if t in (0, scene.LOGIC_CELL):
                 continue
-            pix = s.pixels(cell_frame(s, cell))
+            s = objs[t] if t < len(objs) else None
+            frame = cell_frame(s, cell) if s else None
+            if frame is None:
+                continue
+            pix = s.pixels(frame)
             x0, y0 = (i % scene.W) * TILE_W, (i // scene.W) * TILE_H
             for y in range(min(s.height, HEIGHT - y0)):
                 row = (y0 + y) * WIDTH + x0

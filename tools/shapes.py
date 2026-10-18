@@ -20,8 +20,8 @@ colour c_k into every pixel the mask covers. Mask 3 is not used by the drawing c
 Map tiles start from colour 15 (all four planes set, 0x41fb93), so the visible colour of
 a pixel covered only by mask k is 15 ^ c_k; empty floor is white. Pixels covered by no
 mask are transparent when drawn as a sprite (0x428f70). Verified against a screenshot
-of Episode I room 43. Wall tiles are additionally auto-tiled from their neighbours
-(0x41fb80), which is not implemented here.
+of Episode I room 43. Which frame a map cell shows is decided by its object class (see
+render_room.py); walls store their diagonal corner pieces as frames 1-4 in the map.
 """
 import os
 import struct
@@ -58,7 +58,7 @@ class Shape:
             c = background
             for k in range(3):
                 if masks[k] and masks[k][i]:
-                    c ^= cols[k]
+                    c = (c ^ cols[k]) & 0xF
                     covered = True
             out.append(c if covered else None)
         return out
@@ -67,7 +67,7 @@ class Shape:
 def load(d):
     m = Module(d)
     text, data = m.data[1], m.data[2]
-    ptrs = {f[1] for f in m.fixups if f[0] == 2}
+    ptrs = {f[1]: f[6] for f in m.fixups if f[0] == 2}  # offset in DATA -> displacement
 
     def mask(po, w, h, bpr):
         return [1 if text[po + y * bpr + (x >> 3)] & (0x80 >> (x & 7)) else 0
@@ -79,7 +79,7 @@ def load(d):
         for j in range(4):
             if e + 2 + 4 * j in ptrs:
                 po, = struct.unpack_from("<H", data, e + 2 + 4 * j)
-                masks.append(mask(po, w, h, bpr))
+                masks.append(mask(po + ptrs[e + 2 + 4 * j], w, h, bpr))
             else:
                 masks.append(None)
         return word, masks
@@ -98,7 +98,7 @@ def load(d):
                 continue
             if p + 6 not in ptrs:
                 break
-            frames = [frame(fr + 18 * i, w, h, bpr) for i in range(n)]
+            frames = [frame(fr + ptrs[p + 6] + 18 * i, w, h, bpr) for i in range(n)]
             table.append(Shape(w, h, bpr, tuple(data[p + 8:p + 11]), data[p + 11], frames))
         while table and table[-1] is None:
             table.pop()

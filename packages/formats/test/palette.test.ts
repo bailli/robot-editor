@@ -38,3 +38,8 @@ test("rejects reads outside initialised data", () => {
 test("rejects data that is not a PE image", () => {
   assert.throws(() => parsePe(new Uint8Array(100)), PeFormatError);
 });
+
+test("a truncated exe fails loudly instead of returning short data", () => {
+  const truncated = parsePe(exe().subarray(0, 0x80000));
+  assert.throws(() => episodePalette(truncated, 1), PeFormatError);
+});

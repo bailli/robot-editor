@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { cryptScene } from "../src/scene-crypt.ts";
-import { LOGIC_CELL, ROOM_CELLS, SceneFormatError, parseScene } from "../src/scene.ts";
+import {
+  LOGIC_CELL,
+  ROOM_CELLS,
+  SceneFormatError,
+  parseRoomMap,
+  parseScene,
+} from "../src/scene.ts";
 import { golden, goldenJson, hex, resources } from "./data.ts";
 
 interface GoldenRoom {
@@ -92,4 +98,32 @@ test("rejects data without the SCNV3 signature", () => {
 test("rejects a truncated scene", () => {
   const plain = cryptScene(all[0]?.data ?? new Uint8Array());
   assert.throws(() => parseScene(plain.subarray(0, plain.length - 5)), SceneFormatError);
+});
+
+/** A map body whose four layers are all zero (one run of 1160 cells each). */
+const EMPTY_LAYERS = Array.from({ length: 4 }, () => [
+  ...Array<number>(9).fill(0xff),
+  0x91,
+  0x00,
+]).flat();
+
+test("keeps bytes after the last logic record instead of rejecting the room", () => {
+  const record = [5, 0x05, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const map = parseRoomMap(Uint8Array.from([...EMPTY_LAYERS, ...record, 1, 2, 3]));
+  assert.equal(map.records.length, 1);
+  assert.deepEqual([...map.trailing], [1, 2, 3]);
+});
+
+test("a truncated actor record is left over, a complete one is parsed", () => {
+  const truncated = [0xfe, ...Array<number>(12).fill(7)]; // needs 15 bytes, has 13
+  const partial = parseRoomMap(Uint8Array.from([...EMPTY_LAYERS, ...truncated]));
+  assert.deepEqual(partial.records, []);
+  assert.equal(partial.trailing.length, 13);
+
+  const actor = [0xfe, 0x78, 0x56, 0x34, 0x12, ...Array<number>(10).fill(1)];
+  const full = parseRoomMap(Uint8Array.from([...EMPTY_LAYERS, ...actor]));
+  assert.equal(full.records.length, 1);
+  assert.equal(full.records[0]?.slot, 0xff);
+  assert.equal(full.records[0]?.extra, 0x12345678);
+  assert.equal(full.trailing.length, 0);
 });

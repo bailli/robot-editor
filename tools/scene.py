@@ -29,6 +29,7 @@ import sys
 
 W, H = 40, 29
 CELLS = W * H
+LOGIC_CELL = 0x7F
 
 
 def unrle(m, pos, n=CELLS):
@@ -56,6 +57,8 @@ def parse_map(m):
     objects = []
     while len(m) - pos >= 11:
         tag = m[pos]
+        if tag == 0xFE and len(m) - pos < 15:
+            break  # truncated actor record: left over like any other stray bytes
         pos += 1
         extra = None
         if tag == 0xFE:

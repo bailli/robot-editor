@@ -3,8 +3,10 @@
  * (written by "TOM Productions Shape editor SED93", linked by the game at 0x43a050).
  *
  * Handles the record types these files use: THEADR, COMENT, LNAMES, SEGDEF, GRPDEF,
- * PUBDEF, LEDATA, FIXUPP and MODEND. FIXUPP THREAD subrecords are not supported.
+ * PUBDEF, LEDATA, FIXUPP and MODEND. Threads (FIXUPP THREAD subrecords and fixups that
+ * refer to them) are not supported and raise OmfFormatError.
  */
+import { ByteReader } from "./bytes.ts";
 
 export interface OmfSegment {
   name: string;
@@ -50,30 +52,13 @@ const SEGDEF = 0x98;
 const FIXUPP = 0x9c;
 const LEDATA = 0xa0;
 
-class RecordReader {
-  readonly body: Uint8Array;
-  readonly view: DataView;
-  pos = 0;
-
+class RecordReader extends ByteReader {
   constructor(body: Uint8Array) {
-    this.body = body;
-    this.view = new DataView(body.buffer, body.byteOffset, body.byteLength);
+    super(body, (message) => new OmfFormatError(`record too short: ${message}`));
   }
 
   get done(): boolean {
-    return this.pos >= this.body.length;
-  }
-
-  u8(): number {
-    if (this.pos >= this.body.length) throw new OmfFormatError("record too short");
-    return this.body[this.pos++];
-  }
-
-  u16(): number {
-    if (this.pos + 2 > this.body.length) throw new OmfFormatError("record too short");
-    const v = this.view.getUint16(this.pos, true);
-    this.pos += 2;
-    return v;
+    return this.remaining === 0;
   }
 
   /** OMF index: one byte, or two bytes if the high bit of the first is set. */
@@ -84,16 +69,10 @@ class RecordReader {
 
   name(): string {
     const length = this.u8();
-    if (this.pos + length > this.body.length) throw new OmfFormatError("name too long");
-    const s = String.fromCharCode(...this.body.subarray(this.pos, this.pos + length));
+    this.need(length);
+    const s = String.fromCharCode(...this.data.subarray(this.pos, this.pos + length));
     this.pos += length;
     return s;
-  }
-
-  rest(): Uint8Array {
-    const out = this.body.subarray(this.pos);
-    this.pos = this.body.length;
-    return out;
   }
 }
 
@@ -122,8 +101,13 @@ export function parseOmf(data: Uint8Array): OmfModule {
         while (!r.done) lnames.push(r.name());
         break;
       case SEGDEF: {
-        r.u8(); // attributes
-        const size = r.u16();
+        const acbp = r.u8();
+        if (acbp >> 5 === 0) {
+          r.u16(); // absolute segment: frame number
+          r.u8(); // and offset
+        }
+        const length = r.u16();
+        const size = acbp & 0x02 && length === 0 ? 0x10000 : length; // "big" bit: 64 KiB
         const name = lnames[r.index()] ?? "";
         module.segments.push({ name, data: new Uint8Array(size) });
         break;
@@ -159,10 +143,13 @@ export function parseOmf(data: Uint8Array): OmfModule {
           if (!lastData) throw new OmfFormatError("FIXUPP without preceding LEDATA");
           const locat = (hi << 8) | r.u8();
           const fixData = r.u8();
+          if (fixData & 0x88)
+            throw new OmfFormatError("fixups referring to threads are not supported");
           const frameMethod = (fixData >> 4) & 7;
           const targetMethod = fixData & 3;
-          if (frameMethod < 4) r.index();
-          const target = r.index();
+          if (frameMethod < 3) r.index();
+          else if (frameMethod === 3) r.u16(); // frame number
+          const target = targetMethod === 3 ? r.u16() : r.index();
           const displacement = fixData & 4 ? 0 : r.u16();
           module.fixups.push({
             segment: lastData.segment,

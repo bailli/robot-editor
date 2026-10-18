@@ -1,5 +1,5 @@
 import type { Rgb } from "./palette.ts";
-import { ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
+import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
 import {
   type Shape,
   type ShapeTable,
@@ -15,11 +15,12 @@ export const SCREEN_HEIGHT = ROOM_HEIGHT * TILE_HEIGHT;
 
 /**
  * Frame of a map cell: the low nibble of the cell's high byte, or 0 if the shape has no
- * such frame. This is what the wall class (0x41faa0) and most other object classes do;
- * walls store their diagonal corner pieces this way (frames 1-4), so there is no
- * neighbour-based auto-tiling at runtime.
+ * such frame; undefined if the shape has no frames at all. This is what the wall class
+ * (0x41faa0) and most other object classes do; walls store their diagonal corner pieces
+ * this way (frames 1-4), so there is no neighbour-based auto-tiling at runtime.
  */
-export function cellFrame(shape: Shape, cell: number): number {
+export function cellFrame(shape: Shape, cell: number): number | undefined {
+  if (shape.frames.length === 0) return undefined;
   const frame = (cell >> 8) & 0xf;
   return frame < shape.frames.length ? frame : 0;
 }
@@ -38,9 +39,11 @@ export function renderRoom(room: Room, objects: ShapeTable): Uint8Array {
   const draw = (layer: Uint16Array, sprite: boolean) => {
     layer.forEach((cell, i) => {
       const type = cell & 0xff;
-      const shape = type === 0 ? null : objects[type];
+      if (type === 0 || type === LOGIC_CELL) return;
+      const shape = objects.at(type);
       if (!shape) return;
       const frame = cellFrame(shape, cell);
+      if (frame === undefined) return;
       let frames = cache.get(shape);
       if (!frames) {
         frames = [];
@@ -68,10 +71,16 @@ export function renderRoom(room: Room, objects: ShapeTable): Uint8Array {
 
 /** Converts palette indices to RGBA, e.g. for `new ImageData(rgba, SCREEN_WIDTH)`. */
 export function toRgba(indices: Uint8Array, palette: readonly Rgb[]): Uint8ClampedArray {
+  const lut = new Uint8Array(256 * 4);
+  for (let c = 0; c < 256; c++) lut[c * 4 + 3] = 255; // indices beyond the palette: black
+  for (const [c, [r, g, b]] of palette.entries()) lut.set([r, g, b], c * 4);
   const out = new Uint8ClampedArray(indices.length * 4);
-  indices.forEach((c, i) => {
-    const [r, g, b] = palette[c] ?? [0, 0, 0];
-    out.set([r, g, b, 255], i * 4);
-  });
+  for (let i = 0, o = 0; i < indices.length; i++, o += 4) {
+    const l = indices[i] * 4;
+    out[o] = lut[l];
+    out[o + 1] = lut[l + 1];
+    out[o + 2] = lut[l + 2];
+    out[o + 3] = lut[l + 3];
+  }
   return out;
 }

@@ -1,4 +1,4 @@
-import { type OmfModule, parseOmf } from "./omf.ts";
+import { type OmfFixup, type OmfModule, parseOmf } from "./omf.ts";
 
 /**
  * SHAPES resources: sprite and tile graphics as OMF object files.
@@ -49,23 +49,32 @@ const PLANES = 4;
 const DRAWN_PLANES = 3;
 
 interface Pointer {
+  /** Segment index in OmfModule.segments. */
+  index: number;
   segment: Uint8Array;
   offset: number;
 }
 
 function pointerResolver(module: OmfModule) {
-  const targets = new Map<string, number>();
+  const fixups = new Map<string, OmfFixup>();
   for (const f of module.fixups) {
-    if (f.targetMethod === 0) targets.set(`${f.segment}:${f.offset}`, f.target);
+    if (f.targetMethod === 0) fixups.set(`${f.segment}:${f.offset}`, f);
   }
-  /** The pointer stored at segment:offset, if a fixup makes it a pointer. */
+  /**
+   * The pointer stored at segment:offset, if a fixup makes it a pointer. As in OMF, the
+   * target offset is the stored value plus the fixup's displacement.
+   */
   return (segment: number, offset: number): Pointer | undefined => {
-    const target = targets.get(`${segment}:${offset}`);
+    const fixup = fixups.get(`${segment}:${offset}`);
     const from = module.segments[segment];
-    const to = target === undefined ? undefined : module.segments[target];
-    if (!from || !to) return undefined;
+    const to = fixup === undefined ? undefined : module.segments[fixup.target];
+    if (!fixup || !from || !to) return undefined;
     const view = new DataView(from.data.buffer, from.data.byteOffset, from.data.byteLength);
-    return { segment: to.data, offset: view.getUint16(offset, true) };
+    return {
+      index: fixup.target,
+      segment: to.data,
+      offset: (view.getUint16(offset, true) + fixup.displacement) & 0xffff,
+    };
   };
 }
 
@@ -98,7 +107,6 @@ export function parseShapes(data: Uint8Array): Map<string, ShapeTable> {
         frames.segment.byteOffset,
         frames.segment.byteLength,
       );
-      const frameSegment = module.segments.findIndex((s) => s?.data === frames.segment);
       const planeSize = height * bytesPerRow;
       table.push({
         width,
@@ -111,7 +119,7 @@ export function parseShapes(data: Uint8Array): Map<string, ShapeTable> {
           return {
             word: frameView.getUint16(e, true),
             planes: Array.from({ length: PLANES }, (_, j) => {
-              const plane = pointerAt(frameSegment, e + 2 + 4 * j);
+              const plane = pointerAt(frames.index, e + 2 + 4 * j);
               return plane ? plane.segment.slice(plane.offset, plane.offset + planeSize) : null;
             }),
           };
@@ -131,6 +139,7 @@ export function planeBit(shape: Shape, plane: Uint8Array, x: number, y: number):
 /**
  * Colour index per pixel (row-major, width * height), TRANSPARENT where no drawn plane
  * is set. `colours` overrides the descriptor colours (some object classes do that).
+ * Results are 4-bit like the game's four bitplanes, so they never equal TRANSPARENT.
  */
 export function shapePixels(
   shape: Shape,
@@ -150,7 +159,7 @@ export function shapePixels(
       for (let x = 0; x < shape.width; x++) {
         if (!planeBit(shape, plane, x, y)) continue;
         const i = y * shape.width + x;
-        out[i] = (out[i] === TRANSPARENT ? background : out[i]) ^ colours[k];
+        out[i] = ((out[i] === TRANSPARENT ? background : out[i]) ^ colours[k]) & 0x0f;
       }
     }
   }

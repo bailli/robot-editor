@@ -19,7 +19,10 @@
  *   Then 11-byte logic records while at least 11 bytes remain: u8 slot, 10 bytes data.
  *   Slot 0xfe means a u32 follows and the record is an actor (slot 0xff).
  *   A cell with low byte 0x7f places the record whose slot is the cell's high byte.
+ *   Bytes left over after the records make the game show a decode error, but it still
+ *   loads the room; they are kept in Room.trailing.
  */
+import { ByteReader } from "./bytes.ts";
 
 export const ROOM_WIDTH = 40;
 export const ROOM_HEIGHT = 29;
@@ -55,61 +58,19 @@ export interface Room {
   base: Uint16Array;
   overlay: Uint16Array;
   records: LogicRecord[];
+  /** Bytes after the last complete logic record (empty in all original scenes). */
+  trailing: Uint8Array;
 }
 
 export class SceneFormatError extends Error {
   override name = "SceneFormatError";
 }
 
-class Reader {
-  readonly data: Uint8Array;
-  readonly view: DataView;
-  pos: number;
-
-  constructor(data: Uint8Array, pos = 0) {
-    this.data = data;
-    this.view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-    this.pos = pos;
-  }
-
-  get remaining(): number {
-    return this.data.length - this.pos;
-  }
-
-  need(n: number): void {
-    if (this.remaining < n) {
-      throw new SceneFormatError(`unexpected end of data at offset ${this.pos} (need ${n} bytes)`);
-    }
-  }
-
-  u8(): number {
-    this.need(1);
-    return this.data[this.pos++];
-  }
-
-  u16(): number {
-    this.need(2);
-    const v = this.view.getUint16(this.pos, true);
-    this.pos += 2;
-    return v;
-  }
-
-  u32(): number {
-    this.need(4);
-    const v = this.view.getUint32(this.pos, true);
-    this.pos += 4;
-    return v;
-  }
-
-  bytes(n: number): Uint8Array {
-    this.need(n);
-    const out = this.data.slice(this.pos, this.pos + n);
-    this.pos += n;
-    return out;
-  }
+function reader(data: Uint8Array, pos = 0): ByteReader {
+  return new ByteReader(data, (message) => new SceneFormatError(message), pos);
 }
 
-function unpackLayer(r: Reader): Uint8Array {
+function unpackLayer(r: ByteReader): Uint8Array {
   const layer = new Uint8Array(ROOM_CELLS);
   let filled = 0;
   while (filled < ROOM_CELLS) {
@@ -127,8 +88,10 @@ function unpackLayer(r: Reader): Uint8Array {
   return layer;
 }
 
-export function parseRoomMap(body: Uint8Array): Pick<Room, "base" | "overlay" | "records"> {
-  const r = new Reader(body);
+export function parseRoomMap(
+  body: Uint8Array,
+): Pick<Room, "base" | "overlay" | "records" | "trailing"> {
+  const r = reader(body);
   const [l0, l1, l2, l3] = [unpackLayer(r), unpackLayer(r), unpackLayer(r), unpackLayer(r)];
   const base = new Uint16Array(ROOM_CELLS);
   const overlay = new Uint16Array(ROOM_CELLS);
@@ -138,25 +101,25 @@ export function parseRoomMap(body: Uint8Array): Pick<Room, "base" | "overlay" | 
   }
   const records: LogicRecord[] = [];
   while (r.remaining >= RECORD_SIZE) {
-    const slot = r.u8();
+    const slot = r.data[r.pos];
     if (slot === ACTOR_PREFIX) {
+      if (r.remaining < RECORD_SIZE + 4) break;
+      r.pos++;
       const extra = r.u32();
       records.push({ slot: ACTOR_SLOT, data: r.bytes(10), extra });
     } else {
+      r.pos++;
       records.push({ slot, data: r.bytes(10) });
     }
   }
-  if (r.remaining !== 0) {
-    throw new SceneFormatError(`${r.remaining} stray bytes after the logic records`);
-  }
-  return { base, overlay, records };
+  return { base, overlay, records, trailing: r.rest().slice() };
 }
 
 export function parseScene(data: Uint8Array): Room[] {
   if (data.length < HEADER_SIZE || SIGNATURE.some((b, i) => data[i] !== b)) {
     throw new SceneFormatError("missing SCNV3 signature (is the scene still encrypted?)");
   }
-  const r = new Reader(data, HEADER_SIZE);
+  const r = reader(data, HEADER_SIZE);
   const rooms: Room[] = [];
   while (r.remaining >= 2) {
     if (rooms.length === MAX_ROOMS) {

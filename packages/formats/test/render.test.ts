@@ -6,8 +6,8 @@ import { episodePalette } from "../src/palette.ts";
 import { parsePe } from "../src/pe.ts";
 import { SCREEN_HEIGHT, SCREEN_WIDTH, cellFrame, renderRoom, toRgba } from "../src/render.ts";
 import { cryptScene } from "../src/scene-crypt.ts";
-import { parseScene } from "../src/scene.ts";
-import { parseShapes } from "../src/shapes.ts";
+import { LOGIC_CELL, ROOM_CELLS, type Room, parseScene } from "../src/scene.ts";
+import { type Shape, type ShapeTable, parseShapes } from "../src/shapes.ts";
 import { exe, golden, goldenJson, resource } from "./data.ts";
 
 function loadEpisode(episode: number) {
@@ -53,4 +53,40 @@ test("toRgba maps indices through the palette", () => {
   const palette = episodePalette(parsePe(exe()), 1);
   const rgba = toRgba(Uint8Array.of(0, 15, 9), palette);
   assert.deepEqual([...rgba], [0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 255]);
+});
+
+function room(cells: Record<number, number>): Room {
+  const base = new Uint16Array(ROOM_CELLS);
+  for (const [i, cell] of Object.entries(cells)) base[Number(i)] = cell;
+  return {
+    id: 1,
+    tags: [],
+    base,
+    overlay: new Uint16Array(ROOM_CELLS),
+    records: [],
+    trailing: new Uint8Array(),
+  };
+}
+
+const SOLID: Shape = {
+  width: 16,
+  height: 12,
+  bytesPerRow: 2,
+  colours: [6, 0, 0],
+  unknown: 0,
+  frames: [{ word: 0, planes: [new Uint8Array(24).fill(0xff), null, null, null] }],
+};
+
+test("logic cells are never drawn, even if the table has a shape 127", () => {
+  const table: ShapeTable = Array.from({ length: 128 }, () => SOLID);
+  const pixels = renderRoom(room({ 0: LOGIC_CELL, 1: 0x0001 }), table);
+  assert.equal(pixels[0], 15); // cell 0: logic cell stays background
+  assert.equal(pixels[16], 15 ^ 6); // cell 1: drawn
+});
+
+test("cells whose shape has no frames are skipped", () => {
+  const empty: Shape = { ...SOLID, frames: [] };
+  assert.equal(cellFrame(empty, 0x0001), undefined);
+  const pixels = renderRoom(room({ 0: 0x0001 }), [null, empty]);
+  assert.ok(pixels.every((c) => c === 15));
 });
