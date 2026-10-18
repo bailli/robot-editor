@@ -14,12 +14,16 @@ import { ROOT, resource, sha256 } from "./data.ts";
  * today (actors, animations and not yet understood tile classes). The test requires
  * exactly that set: a regression fails, and so does an improvement, which is then
  * recorded by re-running take_shots.py and shows up in review as a diff of shots.json.
+ * Pixels are compared by their low 4 bits: dark rooms show the same 16 colours shifted
+ * into another part of the game's palette (paletteOffset).
  */
 interface Shot {
   episode: number;
   room: number;
   file: string;
   sha256: string;
+  paletteOffset: number;
+  patched?: boolean;
   differingCells: [number, number][];
 }
 
@@ -34,7 +38,7 @@ function differingCells(game: Uint8Array, ours: Uint8Array): [number, number][] 
       for (let y = 0; y < TILE_HEIGHT && !differs; y++) {
         const row = (cy * TILE_HEIGHT + y) * SCREEN_WIDTH + cx * TILE_WIDTH;
         for (let x = 0; x < TILE_WIDTH; x++) {
-          if (game[row + x] !== ours[row + x]) {
+          if (((game[row + x] ?? 0) ^ (ours[row + x] ?? 0)) & 0x0f) {
             differs = true;
             break;
           }
@@ -48,7 +52,7 @@ function differingCells(game: Uint8Array, ours: Uint8Array): [number, number][] 
 
 for (const shot of shots) {
   const path = new URL(shot.file, ROOT);
-  const name = `episode ${shot.episode} room ${shot.room} matches the game screenshot except the known cells`;
+  const name = `episode ${shot.episode} room ${shot.room}${shot.patched ? " (patched start)" : ""} matches the game screenshot except the known cells`;
   test(name, { skip: existsSync(path) ? false : `${shot.file} is missing: ${HINT}` }, () => {
     const game = new Uint8Array(readFileSync(path));
     assert.equal(

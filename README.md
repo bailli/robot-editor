@@ -39,7 +39,9 @@ animated tiles differ from a static render by nature.
 `python3 tools/wine/take_shots.py` takes the start-room screenshots of all episodes into
 `shots/` (not committed) and records in `shots.json` (committed) where our renderer
 still differs from the game. The tests compare against these screenshots when present
-and fail whenever that set of cells changes.
+and fail whenever that set of cells changes. `take_shots.py --room EPISODE ROOM ...`
+screenshots any room: it runs a patched copy of the exe whose scene holds only the
+title screens and the wanted room (without its scripts) in the start room's slot.
 
 ## Scripts
 

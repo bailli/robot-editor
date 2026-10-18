@@ -99,8 +99,23 @@ def parse_scene(d):
         pos += w - 2
         base, over, objects, leftover = parse_map(body)
         rooms.append(dict(id=rid, tags=tags, props=props, blobs=blobs, base=base, over=over,
-                          objects=objects, leftover=leftover))
+                          objects=objects, leftover=leftover, body=bytes(body)))
     return rooms
+
+
+def serialize_scene(rooms):
+    """Inverse of parse_scene for the raw parts: id, tags and map body of each room."""
+    out = bytearray(b"SCNV3\x1a\x00")
+    for r in rooms:
+        out += struct.pack("<H", r["id"])
+        for kind, val, data in r["tags"]:
+            out += struct.pack("<H", 0x8000 | kind << 12 | val)
+            if kind == 5:
+                out += data
+            elif kind == 6:
+                out += struct.pack("<H", len(data)) + data
+        out += struct.pack("<H", len(r["body"]) + 2) + r["body"]
+    return bytes(out)
 
 
 def grid(cells, f):
