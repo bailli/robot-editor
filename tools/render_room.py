@@ -10,20 +10,24 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import descene  # noqa: E402
 import scene  # noqa: E402
 import shapes  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+TILE_W, TILE_H = 16, 12
+WIDTH, HEIGHT = scene.W * TILE_W, scene.H * TILE_H
 
 
-def render(episode, room_id):
-    from PIL import Image
-    pal = shapes.palette(episode)
+def load_episode(episode):
     objs = shapes.load(open(f"{ROOT}/resources/1033/SHAPES/1{episode}02", "rb").read())["_Rob_object"]
-    room = next(r for r in scene.parse_scene(open(f"{ROOT}/scenes/1{episode}04.scn", "rb").read())
-                if r["id"] == room_id)
-    img = Image.new("RGB", (scene.W * 16, scene.H * 12), pal[15])
-    px = img.load()
+    encrypted = open(f"{ROOT}/resources/1033/SCENE/1{episode}04", "rb").read()
+    return objs, scene.parse_scene(descene.decrypt(encrypted))
+
+
+def render_indices(objs, room):
+    """Palette index per pixel, row-major, WIDTH x HEIGHT bytes."""
+    out = bytearray([15]) * (WIDTH * HEIGHT)
     for layer, sprite in ((room["base"], False), (room["over"], True)):
         for i, cell in enumerate(layer):
             t = cell & 0xFF
@@ -31,14 +35,24 @@ def render(episode, room_id):
             if not s:
                 continue
             pix = s.pixels(0)
-            x0, y0 = (i % scene.W) * 16, (i // scene.W) * 12
-            for y in range(s.height):
-                for x in range(s.width):
+            x0, y0 = (i % scene.W) * TILE_W, (i // scene.W) * TILE_H
+            for y in range(min(s.height, HEIGHT - y0)):
+                row = (y0 + y) * WIDTH + x0
+                for x in range(min(s.width, WIDTH - x0)):
                     c = pix[y * s.width + x]
                     if c is None and sprite:
                         continue
-                    px[x0 + x, y0 + y] = pal[15 if c is None else c]
-    return img
+                    out[row + x] = 15 if c is None else c
+    return bytes(out)
+
+
+def render(episode, room_id):
+    from PIL import Image
+    objs, rooms = load_episode(episode)
+    room = next(r for r in rooms if r["id"] == room_id)
+    img = Image.frombytes("P", (WIDTH, HEIGHT), render_indices(objs, room))
+    img.putpalette([v for rgb in shapes.palette(episode) for v in rgb])
+    return img.convert("RGB")
 
 
 if __name__ == "__main__":
