@@ -5,8 +5,8 @@ export { OmfFormatError, parseOmf } from "./omf.ts";
 export type { OmfFixup, OmfModule, OmfPublic, OmfSegment } from "./omf.ts";
 export { PALETTE_SIZE, episodePalette } from "./palette.ts";
 export type { Rgb } from "./palette.ts";
-export { PeFormatError, parsePe, readVa } from "./pe.ts";
-export type { PeImage, PeSection } from "./pe.ts";
+export { DIRECTORY_RESOURCE, PeFormatError, parsePe, readRva, readVa } from "./pe.ts";
+export type { PeDataDirectory, PeImage, PeSection } from "./pe.ts";
 export {
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
@@ -16,6 +16,8 @@ export {
   renderRoom,
   toRgba,
 } from "./render.ts";
+export { findResource, readResources, ResourceType } from "./resources.ts";
+export type { PeResource } from "./resources.ts";
 export { cryptScene, SCENE_KEY } from "./scene-crypt.ts";
 export {
   LOGIC_CELL,

@@ -1,6 +1,6 @@
 /**
- * Minimal reader for 32-bit PE images (GameOfRobot.exe): headers and section mapping,
- * enough to read initialised data by virtual address.
+ * Minimal reader for 32-bit PE images (GameOfRobot.exe): headers, data directories and
+ * section mapping, enough to read initialised data by virtual address.
  */
 
 export interface PeSection {
@@ -11,11 +11,20 @@ export interface PeSection {
   rawSize: number;
 }
 
+export interface PeDataDirectory {
+  rva: number;
+  size: number;
+}
+
 export interface PeImage {
   data: Uint8Array;
   imageBase: number;
+  /** Indexed by IMAGE_DIRECTORY_ENTRY_* (e.g. 2 = resources). */
+  dataDirectories: PeDataDirectory[];
   sections: PeSection[];
 }
+
+export const DIRECTORY_RESOURCE = 2;
 
 export class PeFormatError extends Error {
   override name = "PeFormatError";
@@ -39,6 +48,11 @@ export function parsePe(data: Uint8Array): PeImage {
     throw new PeFormatError("not a 32-bit PE image");
   }
   const imageBase = view.getUint32(optional + 28, true);
+  const directoryCount = Math.min(view.getUint32(optional + 92, true), (optionalSize - 96) / 8);
+  const dataDirectories = Array.from({ length: directoryCount }, (_, i) => ({
+    rva: view.getUint32(optional + 96 + i * 8, true),
+    size: view.getUint32(optional + 100 + i * 8, true),
+  }));
   const sections: PeSection[] = [];
   for (let i = 0; i < sectionCount; i++) {
     const h = optional + optionalSize + i * 40;
@@ -55,17 +69,22 @@ export function parsePe(data: Uint8Array): PeImage {
       rawOffset: view.getUint32(h + 20, true),
     });
   }
-  return { data, imageBase, sections };
+  return { data, imageBase, dataDirectories, sections };
 }
 
 /** Reads initialised bytes at a virtual address (e.g. 0x4827f0); returns a view into the image. */
 export function readVa(image: PeImage, va: number, length: number): Uint8Array {
-  const rva = va - image.imageBase;
+  return readRva(image, va - image.imageBase, length);
+}
+
+/** Reads initialised bytes at an address relative to the image base. */
+export function readRva(image: PeImage, rva: number, length: number): Uint8Array {
   for (const s of image.sections) {
     const offset = rva - s.virtualAddress;
     if (offset >= 0 && offset + length <= s.rawSize) {
       return image.data.subarray(s.rawOffset + offset, s.rawOffset + offset + length);
     }
   }
+  const va = image.imageBase + rva;
   throw new PeFormatError(`no initialised data at 0x${va.toString(16)} (+${length})`);
 }

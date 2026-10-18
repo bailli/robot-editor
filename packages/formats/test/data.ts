@@ -15,13 +15,14 @@ const RESOURCES_HINT = "extract the resources from reference/GameOfRobot.exe (se
 const GOLDEN_HINT = "run `pnpm golden` first";
 
 /** All resources of one type, e.g. "CRUNCHED", across language folders. */
-export function resources(type: string): { id: string; data: Uint8Array }[] {
+export function resources(type: string): { language: string; id: string; data: Uint8Array }[] {
   const root = require("resources/", RESOURCES_HINT);
   return readdirSync(root)
     .filter((lang) => existsSync(new URL(`${lang}/${type}/`, root)))
     .flatMap((lang) => {
       const dir = new URL(`${lang}/${type}/`, root);
       return readdirSync(dir).map((id) => ({
+        language: lang,
         id,
         data: new Uint8Array(readFileSync(new URL(id, dir))),
       }));

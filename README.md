@@ -17,7 +17,8 @@ The game itself and everything derived from it are not part of this repository.
 ## Layout
 
 - `tools/` – Python reference tools (decoders, renderers, golden export)
-- `packages/formats` – `@robot/formats`, TypeScript readers for the game formats,
+- `packages/formats` – `@robot/formats`, TypeScript readers for the game formats
+  (resources straight from `GameOfRobot.exe`, texts, scenes, shapes, room rendering),
   tested against the Python output
 
 ## Scripts
