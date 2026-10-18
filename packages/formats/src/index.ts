@@ -1,5 +1,19 @@
 export { FrameMethod, readEpisodeClasses } from "./classes.ts";
 export type { EpisodeClasses, ObjectClass } from "./classes.ts";
+export {
+  CLOSED_EXIT_CELL,
+  DIRECTIONS,
+  EXIT_CELL,
+  EXITS_TAG,
+  OPPOSITE,
+  OUTSIDE_ROOM,
+  arrivalCell,
+  edgeCells,
+  exitsByte,
+  roomExits,
+  roomScriptExits,
+} from "./exits.ts";
+export type { Direction, Exits, ScriptExit, ScriptTeleport } from "./exits.ts";
 export { EPISODE_NAMES, EPISODES, Game, START_ROOMS, sceneId, shapesId } from "./game.ts";
 export type { Episode } from "./game.ts";
 export { decodeCp437, encodeCp437 } from "./cp437.ts";

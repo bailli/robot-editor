@@ -5,8 +5,12 @@
  *   "SCNV3\x1a\x00"   7-byte signature
  *   per room (at most 200):
  *     u16  room id
- *     u16  tags with bit 15 set: kind = (tag >> 12) & 7, value = tag & 0xfff
- *            kind 5  followed by 8 bytes
+ *     u16  tags with bit 15 set: kind = (tag >> 12) & 7, value = tag & 0xfff; the loader
+ *          keeps kinds 1-5 in the room record (+0x14 onwards):
+ *            kind 1  exits byte (+0x15, see exits.ts)
+ *            kind 2  byte at +0x14, kind 3 byte at +0x16 (unknown)
+ *            kind 4  u32 at +0x18 (unknown; values like 100, 500)
+ *            kind 5  followed by 8 bytes: a name, e.g. "BRANDUNG", "LAVA" (sound?)
  *            kind 6  followed by u16 length + payload
  *                    (value 1 = script source, 2 = compiled script, 3 = unknown)
  *     u16  map length (bit 15 clear, includes these 2 bytes), then the map body
