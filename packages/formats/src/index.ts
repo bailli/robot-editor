@@ -12,6 +12,7 @@ export {
   SCREEN_WIDTH,
   TILE_HEIGHT,
   TILE_WIDTH,
+  cellFrame,
   renderRoom,
   toRgba,
 } from "./render.ts";

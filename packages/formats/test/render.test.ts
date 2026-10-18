@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { episodePalette } from "../src/palette.ts";
 import { parsePe } from "../src/pe.ts";
-import { SCREEN_HEIGHT, SCREEN_WIDTH, renderRoom, toRgba } from "../src/render.ts";
+import { SCREEN_HEIGHT, SCREEN_WIDTH, cellFrame, renderRoom, toRgba } from "../src/render.ts";
 import { cryptScene } from "../src/scene-crypt.ts";
 import { parseScene } from "../src/scene.ts";
 import { parseShapes } from "../src/shapes.ts";
@@ -36,6 +36,17 @@ test("episode 1 room 43 matches the reference render pixel for pixel", () => {
   const pixels = renderRoom(room, objects);
   assert.equal(pixels.length, SCREEN_WIDTH * SCREEN_HEIGHT);
   assert.deepEqual(pixels, golden("render/1-43.bin"));
+});
+
+test("cellFrame takes the low nibble of the high byte, falling back to frame 0", () => {
+  const { objects } = loadEpisode(1);
+  const wall = objects[6];
+  assert.ok(wall);
+  assert.equal(wall.frames.length, 6);
+  assert.equal(cellFrame(wall, 0x0006), 0);
+  assert.equal(cellFrame(wall, 0x0206), 2); // diagonal corner piece
+  assert.equal(cellFrame(wall, 0x1406), 4); // high nibble is not part of the frame
+  assert.equal(cellFrame(wall, 0x0906), 0); // no frame 9
 });
 
 test("toRgba maps indices through the palette", () => {

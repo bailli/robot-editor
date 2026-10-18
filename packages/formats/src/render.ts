@@ -14,25 +14,39 @@ export const SCREEN_WIDTH = ROOM_WIDTH * TILE_WIDTH;
 export const SCREEN_HEIGHT = ROOM_HEIGHT * TILE_HEIGHT;
 
 /**
+ * Frame of a map cell: the low nibble of the cell's high byte, or 0 if the shape has no
+ * such frame. This is what the wall class (0x41faa0) and most other object classes do;
+ * walls store their diagonal corner pieces this way (frames 1-4), so there is no
+ * neighbour-based auto-tiling at runtime.
+ */
+export function cellFrame(shape: Shape, cell: number): number {
+  const frame = (cell >> 8) & 0xf;
+  return frame < shape.frames.length ? frame : 0;
+}
+
+/**
  * Renders a room to palette indices (SCREEN_WIDTH x SCREEN_HEIGHT, row-major).
  *
  * Base cells are drawn as tiles on colour 15, overlay cells as sprites on top.
  * Shapes come from the episode's _Rob_object table, indexed by the cell's low byte;
- * frame 0 is used. Not yet applied: wall auto-tiling and state-dependent colours.
+ * the frame is chosen by cellFrame. Not applied yet: class-specific frame and colour
+ * logic, and the cells stored in logic records (cells of type 0x7f stay empty).
  */
 export function renderRoom(room: Room, objects: ShapeTable): Uint8Array {
   const out = new Uint8Array(SCREEN_WIDTH * SCREEN_HEIGHT).fill(TILE_BACKGROUND);
-  const cache = new Map<Shape, Uint8Array>();
+  const cache = new Map<Shape, Uint8Array[]>();
   const draw = (layer: Uint16Array, sprite: boolean) => {
     layer.forEach((cell, i) => {
       const type = cell & 0xff;
       const shape = type === 0 ? null : objects[type];
       if (!shape) return;
-      let pixels = cache.get(shape);
-      if (!pixels) {
-        pixels = shapePixels(shape);
-        cache.set(shape, pixels);
+      const frame = cellFrame(shape, cell);
+      let frames = cache.get(shape);
+      if (!frames) {
+        frames = [];
+        cache.set(shape, frames);
       }
+      const pixels = (frames[frame] ??= shapePixels(shape, frame));
       const x0 = (i % ROOM_WIDTH) * TILE_WIDTH;
       const y0 = Math.floor(i / ROOM_WIDTH) * TILE_HEIGHT;
       const w = Math.min(shape.width, SCREEN_WIDTH - x0);

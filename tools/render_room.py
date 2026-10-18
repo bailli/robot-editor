@@ -4,7 +4,10 @@
 usage: render_room.py EPISODE ROOM_ID OUT.png [--zoom N]
 Reads resources/1033/SHAPES/1E02 and scenes/1E04.scn (E = episode 0..4).
 Base cells are drawn as tiles on white; overlay cells are drawn as sprites (transparent
-where no mask is set). Wall auto-tiling and object state are not applied yet.
+where no mask is set). The frame is the low nibble of the cell's high byte, or 0 if the
+shape has no such frame: what the wall class (0x41faa0, used for diagonal wall corners)
+and most other classes do. Not applied yet: class-specific frame/colour logic and
+drawing the cells stored in logic records (cells with type 0x7f stay empty).
 """
 import os
 import sys
@@ -25,6 +28,11 @@ def load_episode(episode):
     return objs, scene.parse_scene(descene.decrypt(encrypted))
 
 
+def cell_frame(shape, cell):
+    frame = (cell >> 8) & 0xF
+    return frame if frame < len(shape.frames) else 0
+
+
 def render_indices(objs, room):
     """Palette index per pixel, row-major, WIDTH x HEIGHT bytes."""
     out = bytearray([15]) * (WIDTH * HEIGHT)
@@ -34,7 +42,7 @@ def render_indices(objs, room):
             s = objs[t] if 0 < t < len(objs) else None
             if not s:
                 continue
-            pix = s.pixels(0)
+            pix = s.pixels(cell_frame(s, cell))
             x0, y0 = (i % scene.W) * TILE_W, (i // scene.W) * TILE_H
             for y in range(min(s.height, HEIGHT - y0)):
                 row = (y0 + y) * WIDTH + x0
