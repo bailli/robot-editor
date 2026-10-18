@@ -150,3 +150,132 @@ export function parseScene(data: Uint8Array): Room[] {
   }
   return rooms;
 }
+
+/** Growable little-endian byte buffer for the writers. */
+class ByteWriter {
+  private buf = new Uint8Array(4096);
+  length = 0;
+
+  private reserve(n: number): void {
+    if (this.length + n <= this.buf.length) return;
+    const next = new Uint8Array(Math.max(this.buf.length * 2, this.length + n));
+    next.set(this.buf.subarray(0, this.length));
+    this.buf = next;
+  }
+
+  u8(v: number): void {
+    this.reserve(1);
+    this.buf[this.length++] = v;
+  }
+
+  u16(v: number): void {
+    this.u8(v & 0xff);
+    this.u8((v >> 8) & 0xff);
+  }
+
+  u32(v: number): void {
+    this.u16(v & 0xffff);
+    this.u16(v >>> 16);
+  }
+
+  bytes(data: Uint8Array): void {
+    this.reserve(data.length);
+    this.buf.set(data, this.length);
+    this.length += data.length;
+  }
+
+  result(): Uint8Array {
+    return this.buf.slice(0, this.length);
+  }
+}
+
+const MAX_RUN_STEP = 0x7f;
+
+/** RLE as read by unpackLayer: run-length bytes (0x81..0xff, summed), escape 0x80. */
+function packLayer(w: ByteWriter, layer: Uint8Array): void {
+  for (let i = 0; i < layer.length;) {
+    const value = layer[i];
+    let run = 1;
+    while (i + run < layer.length && layer[i + run] === value) run++;
+    i += run;
+    if (run > 1) {
+      for (let left = run; left > 0; left -= MAX_RUN_STEP)
+        w.u8(0x80 + Math.min(left, MAX_RUN_STEP));
+    }
+    if (value >= 0x80) w.u8(0x80); // escape: a value >= 0x80 would read as a run length
+    w.u8(value);
+  }
+}
+
+/** Encodes a room map body (inverse of parseRoomMap). */
+export function encodeRoomMap(
+  map: Pick<Room, "base" | "overlay" | "records" | "trailing">,
+): Uint8Array {
+  if (map.base.length !== ROOM_CELLS || map.overlay.length !== ROOM_CELLS) {
+    throw new SceneFormatError(`a room map has ${ROOM_CELLS} cells per layer`);
+  }
+  const w = new ByteWriter();
+  packLayer(
+    w,
+    Uint8Array.from(map.base, (c) => c & 0xff),
+  );
+  packLayer(
+    w,
+    Uint8Array.from(map.base, (c) => c >> 8),
+  );
+  packLayer(
+    w,
+    Uint8Array.from(map.overlay, (c) => c & 0xff),
+  );
+  packLayer(
+    w,
+    Uint8Array.from(map.overlay, (c) => c >> 8),
+  );
+  for (const record of map.records) {
+    if (record.data.length !== RECORD_SIZE - 1) {
+      throw new SceneFormatError(`record data must be ${RECORD_SIZE - 1} bytes`);
+    }
+    if (record.extra !== undefined) {
+      w.u8(ACTOR_PREFIX);
+      w.u32(record.extra);
+    } else if (record.slot === ACTOR_PREFIX || record.slot === ACTOR_SLOT) {
+      throw new SceneFormatError(`slot ${record.slot} is reserved for actor records`);
+    } else {
+      w.u8(record.slot);
+    }
+    w.bytes(record.data);
+  }
+  w.bytes(map.trailing);
+  return w.result();
+}
+
+/** Serialises rooms to a (decrypted) SCNV3 scene; inverse of parseScene. */
+export function serializeScene(rooms: readonly Room[]): Uint8Array {
+  if (rooms.length > MAX_ROOMS) throw new SceneFormatError(`more than ${MAX_ROOMS} rooms`);
+  const w = new ByteWriter();
+  w.bytes(Uint8Array.of(...SIGNATURE, 0));
+  for (const room of rooms) {
+    w.u16(room.id);
+    for (const tag of room.tags) {
+      if (tag.kind < 0 || tag.kind > 7 || tag.value < 0 || tag.value > 0xfff) {
+        throw new SceneFormatError(`room ${room.id}: invalid tag ${tag.kind}/${tag.value}`);
+      }
+      w.u16(0x8000 | (tag.kind << 12) | tag.value);
+      if (tag.kind === 5) {
+        if (tag.data?.length !== 8)
+          throw new SceneFormatError(`room ${room.id}: kind 5 tags carry 8 bytes`);
+        w.bytes(tag.data);
+      } else if (tag.kind === 6) {
+        const data = tag.data ?? new Uint8Array();
+        if (data.length > 0xffff) throw new SceneFormatError(`room ${room.id}: tag data too long`);
+        w.u16(data.length);
+        w.bytes(data);
+      }
+    }
+    const body = encodeRoomMap(room);
+    if (body.length + 2 > 0x7fff) throw new SceneFormatError(`room ${room.id}: map too large`);
+    w.u16(body.length + 2);
+    w.bytes(body);
+  }
+  return w.result();
+}

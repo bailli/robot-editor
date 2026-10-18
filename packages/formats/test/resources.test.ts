@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parsePe } from "../src/pe.ts";
-import { type PeResource, ResourceType, findResource, readResources } from "../src/resources.ts";
+import { PeFormatError, parsePe } from "../src/pe.ts";
+import {
+  type PeResource,
+  ResourceType,
+  findResource,
+  readResources,
+  replaceResource,
+} from "../src/resources.ts";
 import { assertBytesEqual, exe, resources } from "./data.ts";
 
 const all = readResources(parsePe(exe()));
@@ -72,4 +78,19 @@ test("findResource finds named and numeric types, optionally by language", () =>
 test("an image without resource directory has no resources", () => {
   const image = parsePe(exe());
   assert.deepEqual(readResources({ ...image, dataDirectories: [] }), []);
+});
+
+test("replaceResource writes smaller data in place and updates the size", () => {
+  const image = parsePe(exe());
+  const scene = findResource(readResources(image), "SCENE", 1004);
+  assert.ok(scene);
+  const patched = replaceResource(image, scene, Uint8Array.of(1, 2, 3));
+  const after = findResource(readResources(parsePe(patched)), "SCENE", 1004);
+  assert.deepEqual([...(after?.data ?? [])], [1, 2, 3]);
+  assert.equal(patched.length, image.data.length);
+  assert.equal(findResource(readResources(parsePe(patched)), "SCENE", 1104)?.data.length, 59988);
+  assert.throws(
+    () => replaceResource(image, scene, new Uint8Array(scene.data.length + 1)),
+    PeFormatError,
+  );
 });

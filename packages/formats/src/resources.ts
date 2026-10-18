@@ -13,6 +13,9 @@ export interface PeResource {
   /** Windows language id, e.g. 1031 (German), 1033 (English), 0 (neutral). */
   language: number;
   data: Uint8Array;
+  /** File offsets of the data and of its IMAGE_RESOURCE_DATA_ENTRY (for replaceResource). */
+  dataOffset: number;
+  entryOffset: number;
 }
 
 /** Standard numeric resource types (RT_*). */
@@ -36,6 +39,7 @@ export function readResources(image: PeImage): PeResource[] {
   if (!dir || dir.size === 0) return [];
   const root = readRva(image, dir.rva, dir.size);
   const view = new DataView(root.buffer, root.byteOffset, root.byteLength);
+  const rootOffset = root.byteOffset - image.data.byteOffset;
 
   const check = (offset: number, length: number) => {
     if (offset + length > root.length) {
@@ -75,11 +79,14 @@ export function readResources(image: PeImage): PeResource[] {
       }
       check(target, 16);
       const [type = 0, name = 0] = path;
+      const data = readRva(image, view.getUint32(target, true), view.getUint32(target + 4, true));
       out.push({
         type,
         name,
         language: typeof key === "number" ? key : 0,
-        data: readRva(image, view.getUint32(target, true), view.getUint32(target + 4, true)),
+        data,
+        dataOffset: data.byteOffset - image.data.byteOffset,
+        entryOffset: rootOffset + target,
       });
     }
   };
@@ -98,4 +105,30 @@ export function findResource(
     (r) =>
       r.type === type && r.name === name && (language === undefined || r.language === language),
   );
+}
+
+/**
+ * A copy of the image bytes with a resource's data replaced in place: the new data must
+ * not be larger than the old; the rest of the old space is zeroed and the size in the
+ * data entry updated. (Enough for patched copies; growing would need relocating data.)
+ */
+export function replaceResource(
+  image: PeImage,
+  resource: PeResource,
+  data: Uint8Array,
+): Uint8Array {
+  if (data.length > resource.data.length) {
+    throw new PeFormatError(
+      `${String(resource.type)}/${String(resource.name)}: ${data.length} bytes do not fit into ${resource.data.length}`,
+    );
+  }
+  const out = image.data.slice();
+  out.fill(0, resource.dataOffset, resource.dataOffset + resource.data.length);
+  out.set(data, resource.dataOffset);
+  new DataView(out.buffer, out.byteOffset, out.byteLength).setUint32(
+    resource.entryOffset + 4,
+    data.length,
+    true,
+  );
+  return out;
 }

@@ -20,18 +20,20 @@ export {
   renderRoom,
   toRgba,
 } from "./render.ts";
-export { findResource, readResources, ResourceType } from "./resources.ts";
+export { findResource, readResources, replaceResource, ResourceType } from "./resources.ts";
 export type { PeResource } from "./resources.ts";
 export { cryptScene, SCENE_KEY } from "./scene-crypt.ts";
 export {
   LOGIC_CELL,
   MAX_ROOMS,
+  encodeRoomMap,
   parseRoomMap,
   parseScene,
   ROOM_CELLS,
   ROOM_HEIGHT,
   ROOM_WIDTH,
   SceneFormatError,
+  serializeScene,
 } from "./scene.ts";
 export type { LogicRecord, Room, RoomTag } from "./scene.ts";
 export { TILE_BACKGROUND, TRANSPARENT, parseShapes, planeBit, shapePixels } from "./shapes.ts";

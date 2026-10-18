@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { cryptScene } from "../src/scene-crypt.ts";
-import { LOGIC_CELL, SceneFormatError, parseRoomMap, parseScene } from "../src/scene.ts";
+import {
+  LOGIC_CELL,
+  SceneFormatError,
+  encodeRoomMap,
+  parseRoomMap,
+  parseScene,
+  serializeScene,
+} from "../src/scene.ts";
 import { assertBytesEqual, golden, goldenJson, hex, resources } from "./data.ts";
 
 interface GoldenRoom {
@@ -144,4 +151,30 @@ test("parses a minimal synthetic scene", () => {
 test("rejects a map length below 2 and a stray byte after the last room", () => {
   assert.throws(() => parseScene(scene(1)), SceneFormatError);
   assert.throws(() => parseScene(scene(undefined, [0x42])), SceneFormatError);
+});
+
+for (const { id, data } of all) {
+  test(`SCENE ${id}: re-encoding reproduces the original bytes`, () => {
+    const plain = cryptScene(data);
+    assertBytesEqual(serializeScene(parseScene(plain)), plain, `SCENE ${id}`);
+  });
+}
+
+test("encodeRoomMap escapes values >= 0x80 and splits long runs", () => {
+  const map = parseRoomMap(Uint8Array.from(EMPTY_LAYERS));
+  map.base.fill(0x0081, 0, 300); // value 0x81 in layer 0, a run longer than 127
+  map.overlay[5] = 0x8000; // a single 0x80 in layer 3
+  const again = parseRoomMap(encodeRoomMap(map));
+  assert.deepEqual(again.base, map.base);
+  assert.deepEqual(again.overlay, map.overlay);
+});
+
+test("serializeScene rejects what the format cannot hold", () => {
+  const [room] = parseScene(scene());
+  assert.ok(room);
+  const bad = (change: Partial<typeof room>) => () => serializeScene([{ ...room, ...change }]);
+  assert.throws(bad({ tags: [{ kind: 5, value: 0, data: new Uint8Array(3) }] }), SceneFormatError);
+  assert.throws(bad({ tags: [{ kind: 1, value: 0x1000 }] }), SceneFormatError);
+  assert.throws(bad({ records: [{ slot: 0xfe, data: new Uint8Array(10) }] }), SceneFormatError);
+  assert.throws(bad({ records: [{ slot: 1, data: new Uint8Array(9) }] }), SceneFormatError);
 });
