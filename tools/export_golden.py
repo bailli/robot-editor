@@ -84,10 +84,10 @@ def main():
         write(f"{out}/shapes/{os.path.basename(path)}.json",
               json.dumps({name: [shape_json(s) for s in t] for name, t in tables.items()}))
     for episode in range(5):
-        objs, rooms = render_room.load_episode(episode)
+        ep, rooms = render_room.load_episode(episode)
         hashes = {}
         for room in rooms:
-            pixels = render_room.render_indices(objs, room)
+            pixels = render_room.render_indices(ep, room)
             hashes[room["id"]] = hashlib.sha256(pixels).hexdigest()
         write(f"{out}/render/{episode}.json", json.dumps(hashes))
     lines = []

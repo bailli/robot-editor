@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import { readEpisodeClasses } from "../src/classes.ts";
+import { parsePe } from "../src/pe.ts";
 import { SCREEN_WIDTH, TILE_HEIGHT, TILE_WIDTH, renderRoom } from "../src/render.ts";
 import { cryptScene } from "../src/scene-crypt.ts";
 import { ROOM_HEIGHT, ROOM_WIDTH, parseScene } from "../src/scene.ts";
 import { parseShapes } from "../src/shapes.ts";
-import { ROOT, resource, sha256 } from "./data.ts";
+import { ROOT, exe, resource, sha256 } from "./data.ts";
 
 /**
  * Compares our renders with screenshots taken in the real game (tools/wine/take_shots.py).
@@ -66,7 +68,8 @@ for (const shot of shots) {
       (r) => r.id === shot.room,
     );
     assert.ok(room);
-    const actual = differingCells(game, renderRoom(room, objects));
+    const classes = readEpisodeClasses(parsePe(exe()), shot.episode);
+    const actual = differingCells(game, renderRoom(room, objects, classes));
     const key = ([x, y]: [number, number]) => `${x},${y}`;
     const known = new Set(shot.differingCells.map(key));
     const now = new Set(actual.map(key));

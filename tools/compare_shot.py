@@ -25,11 +25,11 @@ def compare(episode, room_id, shot_path, ignore=()):
     if shot.size != (render_room.WIDTH, render_room.HEIGHT) or shot.mode != "P":
         sys.exit(f"{shot_path}: expected a {render_room.WIDTH}x{render_room.HEIGHT} palette PNG")
     game = shot.tobytes()
-    objs, rooms = render_room.load_episode(episode)
+    ep, rooms = render_room.load_episode(episode)
     room = next((r for r in rooms if r["id"] == room_id), None)
     if room is None:
         sys.exit(f"episode {episode} has no room {room_id}")
-    ours = render_room.render_indices(objs, room)
+    ours = render_room.render_indices(ep, room)
     cells = []
     for cy in range(1, scene.H):
         for cx in range(scene.W):

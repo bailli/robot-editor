@@ -1,10 +1,13 @@
+import { type EpisodeClasses, FrameMethod, type ObjectClass } from "./classes.ts";
 import type { Rgb } from "./palette.ts";
 import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
 import {
+  type Colours,
   type Shape,
   type ShapeTable,
   TILE_BACKGROUND,
   TRANSPARENT,
+  planeBit,
   shapePixels,
 } from "./shapes.ts";
 
@@ -12,6 +15,8 @@ export const TILE_WIDTH = 16;
 export const TILE_HEIGHT = 12;
 export const SCREEN_WIDTH = ROOM_WIDTH * TILE_WIDTH;
 export const SCREEN_HEIGHT = ROOM_HEIGHT * TILE_HEIGHT;
+const CELL_PIXELS = TILE_WIDTH * TILE_HEIGHT;
+const DRAWN_PLANES = 3;
 
 /**
  * Frame of a map cell: the low nibble of the cell's high byte, or 0 if the shape has no
@@ -25,41 +30,292 @@ export function cellFrame(shape: Shape, cell: number): number | undefined {
   return frame < shape.frames.length ? frame : 0;
 }
 
+/** Plane masks (one 0/1 per pixel) of planes 0..2; null where a plane is empty. */
+type Masks = (Uint8Array | null)[];
+
+function frameMasks(shape: Shape, frame: number): Masks {
+  const planes = frame >= 0 && frame < shape.frames.length ? shape.frames[frame].planes : undefined;
+  return Array.from({ length: DRAWN_PLANES }, (_, k) => {
+    const plane = planes?.[k];
+    if (!plane) return null;
+    const mask = new Uint8Array(CELL_PIXELS);
+    for (let y = 0; y < TILE_HEIGHT; y++) {
+      for (let x = 0; x < TILE_WIDTH; x++)
+        mask[y * TILE_WIDTH + x] = planeBit(shape, plane, x, y) ? 1 : 0;
+    }
+    return mask;
+  });
+}
+
+/** Colour per pixel from explicit masks, TRANSPARENT where none is set. */
+function colourise(masks: Masks, colours: Colours, background = TILE_BACKGROUND): Uint8Array {
+  const out = new Uint8Array(CELL_PIXELS).fill(TRANSPARENT);
+  masks.forEach((mask, k) => {
+    if (!mask) return;
+    mask.forEach((bit, i) => {
+      if (bit) out[i] = ((out[i] === TRANSPARENT ? background : out[i]) ^ colours[k]) & 0x0f;
+    });
+  });
+  return out;
+}
+
+/** XORs a frame's plane colours onto existing (opaque) pixels. */
+function xorFrame(
+  pixels: Uint8Array,
+  shape: Shape,
+  frame: number,
+  planes = DRAWN_PLANES,
+): Uint8Array {
+  frameMasks(shape, frame)
+    .slice(0, planes)
+    .forEach((mask, k) => {
+      mask?.forEach((bit, i) => {
+        if (bit) pixels[i] = (pixels[i] ^ shape.colours[k]) & 0x0f;
+      });
+    });
+  return pixels;
+}
+
+const white = () => new Uint8Array(CELL_PIXELS).fill(TILE_BACKGROUND);
+
+function framePixels(shape: Shape, frame: number, colours?: Colours): Uint8Array {
+  return shapePixels(shape, frame < shape.frames.length ? frame : 0, TILE_BACKGROUND, colours);
+}
+
+/** FrameMethod.TERRAIN without state bit 4: 8x6 quarters from the pattern's frames. */
+function terrain(shape: Shape, pattern: number): Uint8Array {
+  const quarterFrames = [
+    pattern & 0xf,
+    (pattern >> 4) & 0xf,
+    (pattern >> 12) & 0xf,
+    (pattern >> 8) & 0xf,
+  ];
+  const masks: Masks = Array.from({ length: DRAWN_PLANES }, (_, j) => {
+    const plane = new Uint8Array(CELL_PIXELS);
+    quarterFrames.forEach((frame, q) => {
+      const src = frameMasks(shape, frame)[j];
+      if (!src) return;
+      const x0 = (q % 2) * 8;
+      const y0 = Math.floor(q / 2) * 6;
+      for (let y = y0; y < y0 + 6; y++) {
+        for (let x = x0; x < x0 + 8; x++) plane[y * TILE_WIDTH + x] = src[y * TILE_WIDTH + x] ?? 0;
+      }
+    });
+    return plane;
+  });
+  return colourise(masks, shape.colours);
+}
+
+/** FrameMethod.MASKED (0x41fb80): quarters cut by mask frames base+0..3. */
+function masked(
+  shape: Shape,
+  cls: ObjectClass | undefined,
+  pattern: number,
+  state: number,
+): Uint8Array {
+  const planes = Array.from({ length: DRAWN_PLANES }, () => new Uint8Array(CELL_PIXELS));
+  let maskBase = 0;
+  let extra = 0;
+  if (cls?.id === 0xde) {
+    maskBase = 7;
+    extra = state >> 6;
+  } else if (cls?.id === 0xdf) {
+    maskBase = 0x10;
+    extra = (state >> 4) & 0xc;
+  }
+  for (let k = 0; k < 4; k++) {
+    const f = (pattern >> (4 * k)) & 7;
+    if (!f) continue;
+    let frame = f - 1;
+    if (state & 0x20) frame ^= 3;
+    frame += extra;
+    const mask = frameMasks(shape, maskBase + k)[0];
+    const src = frameMasks(shape, frame);
+    planes.forEach((plane, j) => {
+      const s = src[j];
+      if (!s || !mask) return;
+      plane.forEach((bit, i) => (plane[i] = bit | ((s[i] ?? 0) & (mask[i] ?? 0))));
+    });
+  }
+  return colourise(planes, shape.colours);
+}
+
+/** FrameMethod.ADDONS (0x426bf0). */
+function addons(shape: Shape, state: number): Uint8Array {
+  if (state >= 0x20) {
+    if (state === 0x21) return xorFrame(xorFrame(white(), shape, 9), shape, 10);
+    return xorFrame(white(), shape, 10);
+  }
+  const pixels = xorFrame(white(), shape, state & 7);
+  if (state & 0x08) xorFrame(pixels, shape, 8);
+  if (state & 0x10) xorFrame(pixels, shape, 9);
+  return pixels;
+}
+
+/** FrameMethod.CUT (0x426dc0). */
+function cut(shape: Shape, state: number): Uint8Array {
+  if (state < 8) return xorFrame(white(), shape, state);
+  if (state >= 0x28) return xorFrame(white(), shape, 12);
+  const src = frameMasks(shape, state & 7);
+  const mask = frameMasks(shape, (state >> 3) + 7)[0];
+  const pixels = white();
+  for (let k = 0; k < 2; k++) {
+    const s = src[k];
+    if (!s || !mask) continue;
+    s.forEach((bit, i) => {
+      if (bit & (mask[i] ?? 0)) pixels[i] = (pixels[i] ^ shape.colours[k]) & 0x0f;
+    });
+  }
+  return pixels;
+}
+
+/** One 16-pixel glyph row (MSB = left), built from bits 7..1 like 0x4291e0 does. */
+export function glyphRow(byte: number): number {
+  let dx = 0;
+  for (let k = 0; k < 7; k++) {
+    const bx = ((byte >> (k + 1)) & 1) << 15;
+    dx |= bx;
+    dx >>= 1;
+    dx |= bx;
+    dx >>= k === 6 ? 2 : 1;
+  }
+  return dx & 0xffff;
+}
+
+/** FrameMethod.LETTER (0x40e8f0): frame 0, then glyph state & 0x7f in colour 1. */
+function letter(shape: Shape, font: Uint8Array, state: number): Uint8Array {
+  const colours: Colours = state & 0x80 ? [0, shape.colours[1], shape.colours[2]] : shape.colours;
+  const pixels = framePixels(shape, 0, colours).map((c) =>
+    c === TRANSPARENT ? TILE_BACKGROUND : c,
+  );
+  const char = state & 0x7f;
+  if (char > 0x20) {
+    for (let row = 0; row < 8; row++) {
+      const bits = glyphRow(font[char * 8 + row] ?? 0);
+      for (let x = 0; x < TILE_WIDTH; x++) {
+        if (bits & (0x8000 >> x)) pixels[(3 + row) * TILE_WIDTH + x] = colours[1];
+      }
+    }
+  }
+  return pixels;
+}
+
+const NO_CLASSES: EpisodeClasses = {
+  classes: new Map(),
+  typeOfClass: new Map(),
+  underlays: [],
+  terrainPatterns: [],
+  maskedPatterns: [],
+  font: new Uint8Array(128 * 8),
+};
+
+function underlayIndex(method: number, state: number): number {
+  switch (method) {
+    case FrameMethod.WALL:
+      return state & 0xf0 ? state >> 4 : 0;
+    case FrameMethod.UNDERLAY5:
+      return state & 0xe0 && (state & 0xf) < 6 ? state >> 5 : 0;
+    case FrameMethod.TERRAIN:
+      return state & 0xe0 ? (state >> 5) + 0xf : 0;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * The 16x12 pixels of a map cell as drawn by its object class (palette indices,
+ * TRANSPARENT where a sprite leaves the background visible), or undefined if nothing is
+ * drawn. See tools/render_classes.py for the description of each class method.
+ */
+export function cellPixels(
+  cell: number,
+  objects: ShapeTable,
+  episode: EpisodeClasses = NO_CLASSES,
+  sprite = false,
+): Uint8Array | undefined {
+  const type = cell & 0xff;
+  const state = cell >> 8;
+  if (type === 0 || type === LOGIC_CELL) return undefined;
+  const shape = objects.at(type);
+  if (!shape || shape.frames.length === 0) return undefined;
+  if (shape.width !== TILE_WIDTH || shape.height !== TILE_HEIGHT) return undefined;
+  const cls = episode.classes.get(type);
+  const method = cls?.frameMethod ?? 0;
+
+  let pixels: Uint8Array;
+  switch (method) {
+    case FrameMethod.ZERO:
+      pixels = framePixels(shape, 0);
+      break;
+    case FrameMethod.STATE:
+      pixels = framePixels(shape, state);
+      break;
+    case FrameMethod.TERRAIN:
+      pixels =
+        state & 0x10
+          ? framePixels(shape, (state & 0xf) + 4)
+          : terrain(shape, episode.terrainPatterns[state & 0xf] ?? 0);
+      break;
+    case FrameMethod.MASKED:
+      pixels = masked(shape, cls, episode.maskedPatterns[state & 0x1f] ?? 0, state);
+      break;
+    case FrameMethod.DOOR:
+      pixels = framePixels(shape, 0, [state & 0xf || 15, shape.colours[1], shape.colours[2]]);
+      break;
+    case FrameMethod.LETTER:
+      pixels = letter(shape, episode.font, state);
+      break;
+    case FrameMethod.ADDONS:
+      pixels = addons(shape, state);
+      break;
+    case FrameMethod.CUT:
+      pixels = cut(shape, state);
+      break;
+    default:
+      pixels = framePixels(shape, state & 0xf);
+  }
+
+  const k = episode.underlays.length > 0 ? underlayIndex(method, state) : 0;
+  const entry = k > 0 ? episode.underlays[k - 1] : undefined;
+  if (entry) {
+    const [classId, underState] = entry;
+    const underType = episode.typeOfClass.get(classId) ?? 0;
+    const under = underType > 0 ? objects.at(underType) : null;
+    if (under && under.frames.length > 0) {
+      const below = framePixels(under, underState);
+      return pixels.map((c, i) =>
+        c !== TRANSPARENT
+          ? c
+          : below[i] !== TRANSPARENT
+            ? (below[i] ?? TILE_BACKGROUND)
+            : TILE_BACKGROUND,
+      );
+    }
+  }
+  return sprite ? pixels : pixels.map((c) => (c === TRANSPARENT ? TILE_BACKGROUND : c));
+}
+
 /**
  * Renders a room to palette indices (SCREEN_WIDTH x SCREEN_HEIGHT, row-major).
  *
- * Base cells are drawn as tiles on colour 15, overlay cells as sprites on top.
- * Shapes come from the episode's _Rob_object table, indexed by the cell's low byte;
- * the frame is chosen by cellFrame. Not applied yet: class-specific frame and colour
- * logic, and the cells stored in logic records (cells of type 0x7f stay empty).
+ * Base cells are drawn as tiles on colour 15, overlay cells as sprites on top, each as
+ * its object class does (cellPixels; pass the episode's classes from
+ * readEpisodeClasses, without them every cell uses the cellFrame rule). Not drawn:
+ * actors and the cells stored in logic records (cells of type 0x7f stay empty).
  */
-export function renderRoom(room: Room, objects: ShapeTable): Uint8Array {
+export function renderRoom(room: Room, objects: ShapeTable, episode?: EpisodeClasses): Uint8Array {
   const out = new Uint8Array(SCREEN_WIDTH * SCREEN_HEIGHT).fill(TILE_BACKGROUND);
-  const cache = new Map<Shape, Uint8Array[]>();
   const draw = (layer: Uint16Array, sprite: boolean) => {
     layer.forEach((cell, i) => {
-      const type = cell & 0xff;
-      if (type === 0 || type === LOGIC_CELL) return;
-      const shape = objects.at(type);
-      if (!shape) return;
-      const frame = cellFrame(shape, cell);
-      if (frame === undefined) return;
-      let frames = cache.get(shape);
-      if (!frames) {
-        frames = [];
-        cache.set(shape, frames);
-      }
-      const pixels = (frames[frame] ??= shapePixels(shape, frame));
+      const pixels = cellPixels(cell, objects, episode, sprite);
+      if (!pixels) return;
       const x0 = (i % ROOM_WIDTH) * TILE_WIDTH;
       const y0 = Math.floor(i / ROOM_WIDTH) * TILE_HEIGHT;
-      const w = Math.min(shape.width, SCREEN_WIDTH - x0);
-      const h = Math.min(shape.height, SCREEN_HEIGHT - y0);
-      for (let y = 0; y < h; y++) {
+      for (let y = 0; y < TILE_HEIGHT; y++) {
         const row = (y0 + y) * SCREEN_WIDTH + x0;
-        for (let x = 0; x < w; x++) {
-          const c = pixels[y * shape.width + x] ?? TRANSPARENT;
-          if (c === TRANSPARENT && sprite) continue;
-          out[row + x] = c === TRANSPARENT ? TILE_BACKGROUND : c;
+        for (let x = 0; x < TILE_WIDTH; x++) {
+          const c = pixels[y * TILE_WIDTH + x] ?? TRANSPARENT;
+          if (c !== TRANSPARENT) out[row + x] = c;
         }
       }
     });

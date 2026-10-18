@@ -1,27 +1,35 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { readEpisodeClasses } from "../src/classes.ts";
 import type { Rgb } from "../src/palette.ts";
+import { parsePe } from "../src/pe.ts";
 import { SCREEN_HEIGHT, SCREEN_WIDTH, cellFrame, renderRoom, toRgba } from "../src/render.ts";
 import { cryptScene } from "../src/scene-crypt.ts";
 import { LOGIC_CELL, ROOM_CELLS, type Room, parseScene } from "../src/scene.ts";
 import { type Shape, type ShapeTable, parseShapes } from "../src/shapes.ts";
-import { goldenJson, resource, sha256 } from "./data.ts";
+import { exe, goldenJson, resource, sha256 } from "./data.ts";
+
+const image = parsePe(exe());
 
 function loadEpisode(episode: number) {
   const objects = parseShapes(resource("SHAPES", `1${episode}02`)).get("_Rob_object");
   assert.ok(objects);
   const rooms = parseScene(cryptScene(resource("SCENE", `1${episode}04`)));
-  return { objects, rooms };
+  return { objects, rooms, classes: readEpisodeClasses(image, episode) };
 }
 
 for (let episode = 0; episode < 5; episode++) {
   test(`episode ${episode}: every room renders like the Python renderer`, () => {
-    const { objects, rooms } = loadEpisode(episode);
+    const { objects, rooms, classes } = loadEpisode(episode);
     const expected = goldenJson(`render/${episode}.json`) as Record<string, string>;
     assert.equal(rooms.length, Object.keys(expected).length);
     for (const room of rooms) {
-      assert.equal(sha256(renderRoom(room, objects)), expected[String(room.id)], `room ${room.id}`);
+      assert.equal(
+        sha256(renderRoom(room, objects, classes)),
+        expected[String(room.id)],
+        `room ${room.id}`,
+      );
     }
   });
 }

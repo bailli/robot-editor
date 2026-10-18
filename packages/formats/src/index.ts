@@ -1,3 +1,5 @@
+export { FrameMethod, readEpisodeClasses } from "./classes.ts";
+export type { EpisodeClasses, ObjectClass } from "./classes.ts";
 export { decodeCp437, encodeCp437 } from "./cp437.ts";
 export { CrunchedFormatError, SYMBOL_TABLE_SIZE, uncrunch } from "./crunched.ts";
 export type { Crunched } from "./crunched.ts";
@@ -13,6 +15,8 @@ export {
   TILE_HEIGHT,
   TILE_WIDTH,
   cellFrame,
+  cellPixels,
+  glyphRow,
   renderRoom,
   toRgba,
 } from "./render.ts";

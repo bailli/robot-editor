@@ -42,6 +42,7 @@ still differs from the game. The tests compare against these screenshots when pr
 and fail whenever that set of cells changes. `take_shots.py --room EPISODE ROOM ...`
 screenshots any room: it runs a patched copy of the exe whose scene holds only the
 title screens and the wanted room (without its scripts) in the start room's slot.
+`python3 tools/eval_shots.py --types` lists where the renderer still differs, by tile type.
 
 ## Scripts
 

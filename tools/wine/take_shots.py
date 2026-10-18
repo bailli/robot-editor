@@ -89,14 +89,14 @@ def take(episode, room_id=None):
     harness.shot(episode, png, exe=exe)
     game = Image.open(png).tobytes()
     open(os.path.join(SHOTS, f"{stem}.bin"), "wb").write(game)
-    objs, rooms = render_room.load_episode(episode)
+    ep, rooms = render_room.load_episode(episode)
     if room_id is None:  # the start room: the room that matches best
         candidates = rooms
     else:
         candidates = [r for r in rooms if r["id"] == room_id]
     best = None
     for room in candidates:
-        cells = differing_cells(game, render_room.render_indices(objs, room))
+        cells = differing_cells(game, render_room.render_indices(ep, room))
         if best is None or len(cells) < len(best[1]):
             best = (room["id"], cells)
     found, cells = best
