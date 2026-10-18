@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+
+import { test } from "vitest";
 
 import { readEpisodeClasses } from "../src/classes.ts";
 import type { Rgb } from "../src/palette.ts";
@@ -8,9 +9,7 @@ import { SCREEN_HEIGHT, SCREEN_WIDTH, cellFrame, renderRoom, toRgba } from "../s
 import { cryptScene } from "../src/scene-crypt.ts";
 import { LOGIC_CELL, ROOM_CELLS, type Room, parseScene } from "../src/scene.ts";
 import { type Shape, type ShapeTable, parseShapes } from "../src/shapes.ts";
-import { exe, resource, snapshots } from "./data.ts";
-
-const snapshot = snapshots(import.meta.url);
+import { exe, resource, snapshot } from "./data.ts";
 
 const image = parsePe(exe());
 

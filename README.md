@@ -48,9 +48,9 @@ animations and other runtime effects differ from a static render by nature.
 ## Scripts
 
 - `pnpm check` – typecheck, lint, format check and tests
-- `pnpm test` – tests only
-- `pnpm snapshots` – record changed outputs in `packages/formats/test/snapshots/` (review
-  the diff)
+- `pnpm test` – tests only (Vitest; `pnpm exec vitest` to watch)
+- `pnpm snapshots` – record changed outputs in `packages/formats/test/__snapshots__/`
+  (review the diff)
 - `pnpm format` – apply Prettier
 
 TypeScript is restricted to erasable syntax, so Node.js (>= 22.18) runs the sources directly

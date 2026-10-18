@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+
+import { test } from "vitest";
 
 import { cryptScene } from "../src/scene-crypt.ts";
 import {
@@ -10,9 +11,7 @@ import {
   parseScene,
   serializeScene,
 } from "../src/scene.ts";
-import { assertBytesEqual, resources, snapshots } from "./data.ts";
-
-const snapshot = snapshots(import.meta.url);
+import { assertBytesEqual, resources, snapshot } from "./data.ts";
 
 const all = resources("SCENE");
 

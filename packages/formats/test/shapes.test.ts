@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+
+import { test } from "vitest";
 
 import { type Shape, TRANSPARENT, parseShapes, shapePixels } from "../src/shapes.ts";
-import { resources, snapshots } from "./data.ts";
-
-const snapshot = snapshots(import.meta.url);
+import { resources, snapshot } from "./data.ts";
 
 const all = resources("SHAPES");
 

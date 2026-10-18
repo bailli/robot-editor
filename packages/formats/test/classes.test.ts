@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+
+import { test } from "vitest";
 
 import { FrameMethod, readEpisodeClasses } from "../src/classes.ts";
 import { parsePe } from "../src/pe.ts";

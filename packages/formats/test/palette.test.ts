@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+
+import { test } from "vitest";
 
 import { episodePalette } from "../src/palette.ts";
 import { PeFormatError, parsePe, readVa } from "../src/pe.ts";
-import { exe, snapshots } from "./data.ts";
-
-const snapshot = snapshots(import.meta.url);
+import { exe, snapshot } from "./data.ts";
 
 const image = parsePe(exe());
 

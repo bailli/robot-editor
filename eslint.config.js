@@ -24,7 +24,7 @@ export default defineConfig(
     languageOptions: {
       globals: globals.node,
       parserOptions: {
-        projectService: true,
+        projectService: { allowDefaultProject: ["vitest.config.ts"] },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -34,14 +34,6 @@ export default defineConfig(
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/consistent-type-exports": "error",
       "@typescript-eslint/no-import-type-side-effects": "error",
-      "@typescript-eslint/no-floating-promises": [
-        "error",
-        {
-          allowForKnownSafeCalls: [
-            { from: "package", package: "node:test", name: ["describe", "it", "suite", "test"] },
-          ],
-        },
-      ],
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
       "@typescript-eslint/switch-exhaustiveness-check": "error",
     },

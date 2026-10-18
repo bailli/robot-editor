@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p .",
-    "test": "node --test \"test/**/*.test.ts\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@robot/formats": "workspace:*",

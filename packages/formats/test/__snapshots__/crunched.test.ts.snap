@@ -1,0 +1,151 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CRUNCHED 1006 decodes completely to printable text > 1006 header 1`] = `
+{
+  "entries": 27,
+  "marker": 21845,
+  "size": 1130,
+}
+`;
+
+exports[`CRUNCHED 1006 decodes completely to printable text > 1006 text 1`] = `"sha256:3f34a550b949356132766807c6c01b511c36a24255b6c8423cb14d6e1f8e0f53"`;
+
+exports[`CRUNCHED 1010 decodes completely to printable text > 1010 header 1`] = `
+{
+  "entries": 149,
+  "marker": 21845,
+  "size": 23450,
+}
+`;
+
+exports[`CRUNCHED 1010 decodes completely to printable text > 1010 text 1`] = `"sha256:6351e2b778649b07d22a18bda6d1dcf9df6c1dcb8adf4cc956faccccdb80363e"`;
+
+exports[`CRUNCHED 1011 decodes completely to printable text > 1011 header 1`] = `
+{
+  "entries": 149,
+  "marker": 1281,
+  "size": 22760,
+}
+`;
+
+exports[`CRUNCHED 1011 decodes completely to printable text > 1011 text 1`] = `"sha256:0f8bd5777b029d64963644e5c85a97fc581160152ea6eee12518b696ce66b347"`;
+
+exports[`CRUNCHED 1106 decodes completely to printable text > 1106 header 1`] = `
+{
+  "entries": 39,
+  "marker": 21845,
+  "size": 1981,
+}
+`;
+
+exports[`CRUNCHED 1106 decodes completely to printable text > 1106 text 1`] = `"sha256:5268477479a2dcae54b450719cf2dd91e03eadb9e57a2fd67b13f53f4cd09aaa"`;
+
+exports[`CRUNCHED 1110 decodes completely to printable text > 1110 header 1`] = `
+{
+  "entries": 287,
+  "marker": 21845,
+  "size": 40838,
+}
+`;
+
+exports[`CRUNCHED 1110 decodes completely to printable text > 1110 text 1`] = `"sha256:3dda8c3c5214089137339de3c1767d0242af9f9548f20191a0ec514df1d51368"`;
+
+exports[`CRUNCHED 1111 decodes completely to printable text > 1111 header 1`] = `
+{
+  "entries": 287,
+  "marker": 1281,
+  "size": 38991,
+}
+`;
+
+exports[`CRUNCHED 1111 decodes completely to printable text > 1111 text 1`] = `"sha256:687a5b82cf120fa3aea62ca8755e034d5a727d9c44a80186c51c9f89002c0b62"`;
+
+exports[`CRUNCHED 1206 decodes completely to printable text > 1206 header 1`] = `
+{
+  "entries": 65,
+  "marker": 21845,
+  "size": 3047,
+}
+`;
+
+exports[`CRUNCHED 1206 decodes completely to printable text > 1206 text 1`] = `"sha256:8e94586a7e549dc4c515d965e2a309a9557ae8d5e3f8a3169ebdd78494d8a162"`;
+
+exports[`CRUNCHED 1210 decodes completely to printable text > 1210 header 1`] = `
+{
+  "entries": 412,
+  "marker": 21845,
+  "size": 60128,
+}
+`;
+
+exports[`CRUNCHED 1210 decodes completely to printable text > 1210 text 1`] = `"sha256:953bbcb4037cd555df6c871ac8c13ab5d49ef3899c1f86bc5be3a5fec6236fd3"`;
+
+exports[`CRUNCHED 1306 decodes completely to printable text > 1306 header 1`] = `
+{
+  "entries": 70,
+  "marker": 21845,
+  "size": 2957,
+}
+`;
+
+exports[`CRUNCHED 1306 decodes completely to printable text > 1306 text 1`] = `"sha256:3ae50392ed2463fd0a775ea58745d2b9f5aa935597bc07ca2fa3ed9fc7de033b"`;
+
+exports[`CRUNCHED 1310 decodes completely to printable text > 1310 header 1`] = `
+{
+  "entries": 216,
+  "marker": 21845,
+  "size": 47522,
+}
+`;
+
+exports[`CRUNCHED 1310 decodes completely to printable text > 1310 text 1`] = `"sha256:d2f6a2e25099fbe2eccfd27ddf1b29c0125d74eb57fabc068a77afa91aa928d4"`;
+
+exports[`CRUNCHED 1320 decodes completely to printable text > 1320 header 1`] = `
+{
+  "entries": 238,
+  "marker": 21845,
+  "size": 54796,
+}
+`;
+
+exports[`CRUNCHED 1320 decodes completely to printable text > 1320 text 1`] = `"sha256:7f754886dccdfabb254fd448c433b3b6e010b97b06fbc728208ff314daa4203c"`;
+
+exports[`CRUNCHED 1406 decodes completely to printable text > 1406 header 1`] = `
+{
+  "entries": 94,
+  "marker": 21845,
+  "size": 2448,
+}
+`;
+
+exports[`CRUNCHED 1406 decodes completely to printable text > 1406 text 1`] = `"sha256:0d68900564cdd1d5d7259f9569b749cdb110a8c1f0dae8aa9a5b66955b207c17"`;
+
+exports[`CRUNCHED 1410 decodes completely to printable text > 1410 header 1`] = `
+{
+  "entries": 448,
+  "marker": 21845,
+  "size": 58410,
+}
+`;
+
+exports[`CRUNCHED 1410 decodes completely to printable text > 1410 text 1`] = `"sha256:cefc286c44708deb44e4acc6c633a3b57127d31ed158ed93ee998bf1c5b652c1"`;
+
+exports[`CRUNCHED 9900 decodes completely to printable text > 9900 header 1`] = `
+{
+  "entries": 9,
+  "marker": 1281,
+  "size": 3623,
+}
+`;
+
+exports[`CRUNCHED 9900 decodes completely to printable text > 9900 text 1`] = `"sha256:05bcb0deead787d224fc764848475ec51aca02dbadb73da200db3ffb78ec647f"`;
+
+exports[`CRUNCHED 9901 decodes completely to printable text > 9901 header 1`] = `
+{
+  "entries": 9,
+  "marker": 1281,
+  "size": 3625,
+}
+`;
+
+exports[`CRUNCHED 9901 decodes completely to printable text > 9901 text 1`] = `"sha256:4012a56b04ed620816fd1051690b7fee0cad17be3b0d93e2e3bc3ed2f9549157"`;

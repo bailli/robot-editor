@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { basename } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+
+import { expect } from "vitest";
 
 import { parsePe } from "../src/pe.ts";
 import { readResources } from "../src/resources.ts";
@@ -86,51 +86,21 @@ export function assertBytesEqual(actual: Uint8Array, expected: Uint8Array, label
   );
 }
 
-type Snapshot = string | number | boolean | null | Snapshot[] | { [key: string]: Snapshot };
-
 /** JSON for snapshots: byte arrays as hex. */
 function toJson(value: unknown): string {
   return JSON.stringify(value, (_, v: unknown) => (v instanceof Uint8Array ? hex(v) : v));
 }
 
 /**
- * Snapshots of outputs, committed in test/snapshots/<test file>.json: a change of an
- * output fails the test and shows up in review once recorded (`pnpm snapshots`, which
- * sets UPDATE_SNAPSHOTS). Small values are stored as they are, large ones (and byte
- * arrays) as sha256.
+ * Matches an output against its snapshot in test/__snapshots__ (committed): a change
+ * fails the test and shows up in review once recorded (`pnpm snapshots`). Small values
+ * are stored as they are, large ones (and byte arrays) as sha256.
  */
-export function snapshots(testFile: string): (name: string, value: unknown) => void {
-  const dir = new URL("snapshots/", import.meta.url);
-  const file = new URL(`${basename(fileURLToPath(testFile), ".test.ts")}.json`, dir);
-  const update = process.env["UPDATE_SNAPSHOTS"] === "1";
-  const stored = existsSync(file)
-    ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, Snapshot>)
-    : {};
-  const recorded: Record<string, Snapshot> = {};
-  if (update) {
-    process.on("exit", () => {
-      mkdirSync(dir, { recursive: true });
-      const sorted = Object.fromEntries(
-        Object.entries(recorded).sort(([a], [b]) => a.localeCompare(b)),
-      );
-      writeFileSync(file, `${JSON.stringify(sorted, null, 2)}\n`);
-    });
-  }
-  return (name, value) => {
-    const json = toJson(value);
-    const snapshot: Snapshot =
-      value instanceof Uint8Array || json.length > 200
-        ? `sha256:${sha256(value instanceof Uint8Array ? value : json)}`
-        : (JSON.parse(json) as Snapshot);
-    if (update) {
-      recorded[name] = snapshot;
-      return;
-    }
-    assert.ok(name in stored, `no snapshot "${name}": run \`pnpm snapshots\``);
-    assert.deepEqual(
-      snapshot,
-      stored[name],
-      `snapshot "${name}" changed; if intended: \`pnpm snapshots\``,
-    );
-  };
+export function snapshot(name: string, value: unknown): void {
+  const json = toJson(value);
+  expect(
+    value instanceof Uint8Array || json.length > 200
+      ? `sha256:${sha256(value instanceof Uint8Array ? value : json)}`
+      : JSON.parse(json),
+  ).toMatchSnapshot(name);
 }

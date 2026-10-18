@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { test } from "node:test";
+
+import { test } from "vitest";
 
 import { renderRoom } from "@robot/formats";
 
@@ -19,7 +20,8 @@ const game = loadGame();
 for (const shot of readManifest()) {
   const present = existsSync(new URL(shot.file, ROOT));
   const name = `episode ${shot.episode} room ${shot.room}${shot.patched ? " (patched start)" : ""} matches the game screenshot except the known cells`;
-  test(name, { skip: present ? false : `${shot.file} is missing: ${HINT}` }, () => {
+  test(name, ({ skip }) => {
+    if (!present) skip(`${shot.file} is missing: ${HINT}`);
     const indices = readShot(shot.file);
     assert.equal(
       sha256(indices),

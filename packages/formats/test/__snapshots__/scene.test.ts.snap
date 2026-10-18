@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SCENE 1004 decrypts and parses > 1004 decrypted 1`] = `"sha256:00b08149e7e870f1a76ca0835e7b3fe8318d17c8a68420c8a033dba11beebfdb"`;
+
+exports[`SCENE 1004 decrypts and parses > 1004 rooms 1`] = `"sha256:4ab85a84f1d0b50c5e2128355c18290793dd338ef68482743c9c50d2b2004ef0"`;
+
+exports[`SCENE 1104 decrypts and parses > 1104 decrypted 1`] = `"sha256:aca44c42d14f3c5b12456e8acaf86b330f5e9df3c85cdb9c1883892063e51742"`;
+
+exports[`SCENE 1104 decrypts and parses > 1104 rooms 1`] = `"sha256:432f2b5cd3fd39941fefc9d40cc5b86a4b0d12fbbcda8dd2c9883f6e71c139ed"`;
+
+exports[`SCENE 1204 decrypts and parses > 1204 decrypted 1`] = `"sha256:678a6c99b55727ab99bd0ebedaf32d8a772ca3f0032d16ea77ffe6302fc183cd"`;
+
+exports[`SCENE 1204 decrypts and parses > 1204 rooms 1`] = `"sha256:5460f9fde0fcb1da71a604628d70485744e89dcb1eed9e0c6afd630002c417c9"`;
+
+exports[`SCENE 1304 decrypts and parses > 1304 decrypted 1`] = `"sha256:696367452638df8286108e1bfbd4c837c76b0ce7379d7126c48ae38e96dd2be0"`;
+
+exports[`SCENE 1304 decrypts and parses > 1304 rooms 1`] = `"sha256:5cf35b0a83482fdf570bd333e6d95c200b3bd2cc715401be6f411eff2a31772d"`;
+
+exports[`SCENE 1404 decrypts and parses > 1404 decrypted 1`] = `"sha256:79922188b2e1b2d594e508b38c52297996f1071f4ec255224cbcc7e64db99308"`;
+
+exports[`SCENE 1404 decrypts and parses > 1404 rooms 1`] = `"sha256:18a3028c0b750a4b9d08408ca6f7ab140ca2435e262ac49c7b9bbfad3a61daf4"`;

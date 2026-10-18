@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+
+import { test } from "vitest";
 
 import { decodeCp437, encodeCp437 } from "../src/cp437.ts";
-import { snapshots } from "./data.ts";
-
-const snapshot = snapshots(import.meta.url);
+import { snapshot } from "./data.ts";
 
 const ALL_BYTES = Uint8Array.from({ length: 256 }, (_, i) => i);
 

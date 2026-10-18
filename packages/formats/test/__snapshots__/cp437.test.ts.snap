@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`decodes all 256 bytes > all 256 bytes 1`] = `"sha256:460fd2443d67a2cc5ba654c5265467578e9005f45315ac9ef683a29449199fa5"`;
