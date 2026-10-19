@@ -1,4 +1,5 @@
 import type { EpisodeClasses } from "./classes.ts";
+import { TELEPORTER_RECORD } from "./exits.ts";
 import { LOGIC_CELL, type Room } from "./scene.ts";
 
 /**
@@ -75,8 +76,7 @@ const RULES: Readonly<Partial<Record<number, Rule>>> = {
 const AS_CLASS_200 = 0x41bc80;
 /** describe method 0x420280 of logic cells: by the logic record. */
 const LOGIC = 0x420280;
-const TELEPORTER_RECORD = 13;
-const GATED_RECORD = 5;
+const SPAWNER_RECORD = 5;
 
 /** Whether describeCell models a describe method (vtable +0x54). */
 export function knowsDescribeMethod(address: number): boolean {
@@ -100,11 +100,11 @@ export function describeCell(
   const textOf = (classId: number) => classes.typeOfClass.get(classId) ?? 0; // the game's table starts zeroed
   if (cls.describeMethod === LOGIC || type === LOGIC_CELL) {
     const record = room?.records.find((r) => r.slot === state);
-    // teleporters: class 0x43's text, variant from the record; item-gated cells: 0x34
+    // teleporters: class 0x43's text, variant from the record; spawners: class 0x34's
     if (record?.data[0] === TELEPORTER_RECORD) {
       return { text: textOf(0x43), variant: record.data[7] };
     }
-    if (record?.data[0] === GATED_RECORD) return { text: textOf(0x34), variant: "random" };
+    if (record?.data[0] === SPAWNER_RECORD) return { text: textOf(0x34), variant: "random" };
     return { text: textOf(cls.id), variant: 0 };
   }
   if (cls.describeMethod === AS_CLASS_200) return { text: textOf(200), variant: 0 };

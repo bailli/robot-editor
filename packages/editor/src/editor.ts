@@ -1,4 +1,11 @@
-import { Game, LOGIC_CELL, type LogicRecord, ROOM_CELLS, type Room } from "@robot/formats";
+import {
+  Game,
+  LOGIC_CELL,
+  type LogicRecord,
+  ROOM_CELLS,
+  type Room,
+  recordCell,
+} from "@robot/formats";
 
 export type Layer = "base" | "overlay";
 
@@ -250,10 +257,7 @@ const before = (change: CellChange) => change.before;
 const after = (change: CellChange) => change.after;
 
 /** The cell a record shows (what its logic cell looks like). */
-export function shownCell(record: LogicRecord): number {
-  const at = record.data[0] === CELL_AT_4 ? 4 : 2;
-  return new DataView(record.data.buffer, record.data.byteOffset).getUint16(at, true);
-}
+export const shownCell = recordCell;
 
 function sameRecords(a: readonly LogicRecord[], b: readonly LogicRecord[]): boolean {
   return (

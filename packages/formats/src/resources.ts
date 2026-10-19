@@ -136,6 +136,11 @@ export function replaceResource(
     (s) => dir && dir.rva >= s.virtualAddress && dir.rva < s.virtualAddress + s.virtualSize,
   );
   if (!dir || !section) throw new PeFormatError("image without resource section");
+  if (image.sections.some((s) => s.virtualAddress > section.virtualAddress)) {
+    throw new PeFormatError(
+      `cannot grow ${String(resource.name)}: ${section.name} is not the last section`,
+    );
+  }
   const sectionEnd = section.virtualAddress + section.virtualSize;
   const rva = section.virtualAddress + resource.dataOffset - section.rawOffset;
   const isLast = align8(rva + resource.data.length) >= sectionEnd;

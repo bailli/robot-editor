@@ -26,6 +26,7 @@ import {
   differingCells,
   readManifest,
   readShot,
+  shotRoom,
   takeShot,
   updateShot,
   writeManifest,
@@ -116,7 +117,7 @@ switch (command) {
       if (!existsSync(new URL(shot.file, ROOT))) continue;
       const now = updateShot(g, shot);
       total += now.differingCells.length;
-      const room = g.room(shot.episode, shot.room);
+      const room = shotRoom(g, shot); // what was compared (patched: without actors)
       for (const [x, y] of now.differingCells) {
         const key = `ep ${shot.episode} base ${(room.base[y * 40 + x] ?? 0) & 0xff} over ${(room.overlay[y * 40 + x] ?? 0) & 0xff}`;
         byType.set(key, (byType.get(key) ?? 0) + 1);

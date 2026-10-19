@@ -137,3 +137,17 @@ test("replaceResource does not grow an image with unknown data after its last se
     PeFormatError,
   );
 });
+
+test("replaceResource does not grow a resource section that is not the last", () => {
+  const image = parsePe(exe());
+  const rsrc = image.sections.at(-1);
+  assert.ok(rsrc);
+  const later = { ...rsrc, name: ".reloc", virtualAddress: rsrc.virtualAddress + 0x200000 };
+  const moved = { ...image, sections: [...image.sections, later] };
+  const scene = findResource(readResources(image), "SCENE", 1004);
+  assert.ok(scene);
+  assert.throws(
+    () => replaceResource(moved, scene, new Uint8Array(scene.data.length + 1)),
+    /is not the last section/,
+  );
+});

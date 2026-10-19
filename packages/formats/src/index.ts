@@ -91,6 +91,7 @@ export {
   encodeRoomMap,
   parseRoomMap,
   parseScene,
+  recordCell,
   resolveCell,
   ROOM_CELLS,
   ROOM_HEIGHT,

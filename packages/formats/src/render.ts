@@ -97,10 +97,11 @@ function terrain(shape: Shape, pattern: number): Uint8Array {
     (pattern >> 12) & 0xf,
     (pattern >> 8) & 0xf,
   ];
+  const quarterMasks = quarterFrames.map((frame) => frameMasks(shape, frame));
   const masks: Masks = Array.from({ length: DRAWN_PLANES }, (_, j) => {
     const plane = new Uint8Array(CELL_PIXELS);
-    quarterFrames.forEach((frame, q) => {
-      const src = frameMasks(shape, frame)[j];
+    quarterMasks.forEach((frameMask, q) => {
+      const src = frameMask[j];
       if (!src) return;
       const x0 = (q % 2) * 8;
       const y0 = Math.floor(q / 2) * 6;
@@ -337,14 +338,21 @@ export function blitCell(image: Uint8Array, index: number, pixels: Uint8Array): 
  * Base cells are drawn as tiles on colour 15, overlay cells as sprites on top, each as
  * its object class does (cellPixels; pass the episode's classes from
  * readEpisodeClasses, without them every cell uses the cellFrame rule). Not drawn:
- * actors and the cells stored in logic records (cells of type 0x7f stay empty).
+ * actors. Logic cells show the cell their record holds (resolveCell).
  */
 export function renderRoom(room: Room, objects: ShapeTable, episode?: EpisodeClasses): Uint8Array {
   const out = new Uint8Array(SCREEN_WIDTH * SCREEN_HEIGHT);
+  const cells = new Map<number, Uint8Array>(); // rooms repeat few (base, overlay) pairs
   for (let i = 0; i < ROOM_CELLS; i++) {
     const base = resolveCell(room, room.base[i] ?? 0);
     const overlay = resolveCell(room, room.overlay[i] ?? 0);
-    blitCell(out, i, renderCell(base, overlay, objects, episode));
+    const key = base * 0x10000 + overlay;
+    let pixels = cells.get(key);
+    if (!pixels) {
+      pixels = renderCell(base, overlay, objects, episode);
+      cells.set(key, pixels);
+    }
+    blitCell(out, i, pixels);
   }
   return out;
 }
