@@ -27,6 +27,18 @@ export interface CellDescription {
 /** Entry shown when the chosen variant does not exist. */
 export const NO_DESCRIPTION = 510;
 
+/** The "expert" field (class 66, tile 0x32 in episodes I, II and IV). */
+export const EXPERT_CLASS = 66;
+
+/**
+ * The points the hero needs to cross a cell, if it is an expert field: its state × 10,000
+ * (0x4264f0: score / 10000 ≥ state; else message 508, "Du brauchst mindestens %ld
+ * Punkte…").
+ */
+export function requiredPoints(cell: number, classes: EpisodeClasses): number | undefined {
+  return classes.classes.get(cell & 0xff)?.id === EXPERT_CLASS ? (cell >> 8) * 10000 : undefined;
+}
+
 type Rule = (state: number, episode: number) => number | readonly number[] | "random";
 
 /** Describe methods by address; each gets the state byte of the cell. */

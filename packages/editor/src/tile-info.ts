@@ -6,6 +6,7 @@ import {
   describeCell,
   descriptionTexts,
   displayText,
+  requiredPoints,
 } from "@robot/formats";
 
 export interface TileInfo {
@@ -51,9 +52,11 @@ export class TileNames {
       : this.actorNames.get(value & 0xff);
     const description = describeCell(value, this.classes, this.episode, room);
     const texts = description ? descriptionTexts(description, this.texts) : [];
+    const points = requiredPoints(value, this.classes);
+    const needs = points === undefined ? [] : [`Needs at least ${points} points to cross.`];
     return {
       name,
-      descriptions: texts.map(displayText).filter((d) => d !== ""),
+      descriptions: [...needs, ...texts.map(displayText).filter((d) => d !== "")],
       random: description !== undefined && typeof description.variant !== "number",
     };
   }

@@ -565,3 +565,10 @@ test("the side column shows one panel at a time; clicking a record cell opens th
   expect(app.sidePanel.shown).toBe("record");
   expect(panel("record")?.querySelector(".record-view")?.hasAttribute("hidden")).toBe(false);
 });
+
+test("expert fields say how many points they need", () => {
+  app.setTile(0x0c32); // episode I: state 12
+  expect(document.querySelector(".tile-text")?.textContent).toMatch(
+    /^Expert – Needs at least 120000 points to cross\./,
+  );
+});

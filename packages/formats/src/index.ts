@@ -150,7 +150,14 @@ export { TILE_BACKGROUND, TRANSPARENT, parseShapes, planeBit, shapePixels } from
 export type { Colours, Frame, Shape, ShapeTable } from "./shapes.ts";
 export { displayText, parseObjectNames, parseTexts } from "./texts.ts";
 export type { Texts } from "./texts.ts";
-export { NO_DESCRIPTION, describeCell, descriptionTexts, knowsDescribeMethod } from "./describe.ts";
+export {
+  EXPERT_CLASS,
+  NO_DESCRIPTION,
+  describeCell,
+  descriptionTexts,
+  knowsDescribeMethod,
+  requiredPoints,
+} from "./describe.ts";
 export type { CellDescription } from "./describe.ts";
 export { describeRecord } from "./records.ts";
 export type { RecordInfo, RecordKind } from "./records.ts";

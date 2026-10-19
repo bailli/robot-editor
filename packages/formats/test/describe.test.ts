@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 
 import { expect, test } from "vitest";
 
-import { describeCell, descriptionTexts, knowsDescribeMethod } from "../src/describe.ts";
+import {
+  describeCell,
+  descriptionTexts,
+  knowsDescribeMethod,
+  requiredPoints,
+} from "../src/describe.ts";
 import { EPISODES, Game } from "../src/game.ts";
 import { displayText } from "../src/texts.ts";
 import { exe, snapshot } from "./data.ts";
@@ -65,4 +70,13 @@ test("descriptions of every cell in the game", () => {
     }
     snapshot(`episode ${episode}`, [...new Set(lines)].sort());
   }
+});
+
+test("expert fields need their state × 10,000 points", () => {
+  const classes = game.episode(1).classes;
+  expect(requiredPoints(0x0c32, classes)).toBe(120000);
+  expect(requiredPoints(0x1a32, classes)).toBe(260000);
+  expect(requiredPoints(0x0c31, classes)).toBeUndefined();
+  // Junior's tile 0x32 is the goal, not an expert field
+  expect(requiredPoints(0x0132, game.episode(0).classes)).toBeUndefined();
 });

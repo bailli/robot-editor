@@ -245,6 +245,13 @@ Files in `packages/formats/src`:
 - **Descriptions** (`describe.ts`, 0x406ae0): the cell's class picks the variant (37
   describe methods, all modelled), the text is the entry of the class's tile type; a
   negative variant is random (0x438850), a missing one shows entry 510.
+- **Expert fields** (class 66, tile 0x32 in episodes I, II and IV; Junior's 0x32 is the
+  goal, III's a stool): the hero may cross only with at least **state × 10,000 points**
+  (0x4264f0: score / 10000 ≥ state, else message 508 "Du brauchst mindestens %ld
+  Punkte…"; e.g. 0x0c32 = 120,000). `requiredPoints`; the editor says it in the tile's
+  description. Passing also calls the room-change check 0x42f7c0 with that number, whose
+  episode method compares it with a random 70,000–100,000 and else checks a key at
+  0x51bb80 (probably the registration; not followed).
 - **Logic records** (`records.ts`), all 1177 in the game classified: 1 stacked (object on
   another cell, e.g. drawbridges), 3 buried (dug up with the shovel), 5 spawner (creature
   near the hero), 7 creature, 8 travelling actor, 11 logic-gate circuit node (episode I),
