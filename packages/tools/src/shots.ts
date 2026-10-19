@@ -15,7 +15,7 @@ import {
 } from "@robot/formats";
 
 import { ROOT } from "./game.ts";
-import { patchedExe } from "./patch.ts";
+import { calmRoom, patchedExe } from "./patch.ts";
 import { readIndexedPng } from "./png.ts";
 
 /**
@@ -91,12 +91,21 @@ export function readShot(file: string): Uint8Array {
   return image.indices;
 }
 
+/** The room a screenshot shows: patched exes hold the room without enemies. */
+export function shotRoom(
+  game: Game,
+  shot: { episode: number; room: number; patched?: boolean | undefined },
+) {
+  const room = game.room(shot.episode, shot.room);
+  return shot.patched ? calmRoom(room) : room;
+}
+
 function describe(game: Game, episode: number, room: number, file: string, patched: boolean): Shot {
   const indices = readShot(file);
   const ep = game.episode(episode);
   const cells = differingCells(
     indices,
-    renderRoom(game.room(episode, room), ep.objects, ep.classes),
+    renderRoom(shotRoom(game, { episode, room, patched }), ep.objects, ep.classes),
   );
   return {
     episode,

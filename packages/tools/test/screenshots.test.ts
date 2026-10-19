@@ -6,7 +6,7 @@ import { test } from "vitest";
 import { renderRoom } from "@robot/formats";
 
 import { ROOT, loadGame } from "../src/game.ts";
-import { differingCells, readManifest, readShot, sha256 } from "../src/shots.ts";
+import { differingCells, readManifest, readShot, sha256, shotRoom } from "../src/shots.ts";
 
 /**
  * Compares our renders with screenshots taken in the real game (`robot shots`).
@@ -31,7 +31,7 @@ for (const shot of readManifest()) {
     const ep = game.episode(shot.episode);
     const actual = differingCells(
       indices,
-      renderRoom(game.room(shot.episode, shot.room), ep.objects, ep.classes),
+      renderRoom(shotRoom(game, shot), ep.objects, ep.classes),
     );
     const key = ([x, y]: [number, number]) => `${x},${y}`;
     const known = new Set(shot.differingCells.map(key));

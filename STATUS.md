@@ -110,12 +110,12 @@ Files in `packages/formats/src`:
   Class 0 is the shared empty class (left out of the class→type table 0x4c70e0, 0x43b46a).
 - **Renderer:** draws base cells as tiles and overlay cells as sprites with each class's
   frame method (12 methods incl. walls, terrain quarters, masks, doors, letters with the
-  game font, underlays); logic cells show their record's cell. **1106 cells differ** in 26
+  game font, underlays); logic cells show their record's cell. **784 cells differ** in 26
   reference screenshots (`pnpm robot eval`), most from runtime effects (see open items).
 - **Reference screenshots of any room** use a patched exe (`patch.ts`): the room in the
-  start room's slot, without scripts and without enemies (`calmRoom`: tile type 2, the
-  robots/animals, and spawner/creature records), so the hero cannot be killed before
-  the screenshot (that showed a "you have died" box in the middle of two shots).
+  start room's slot, without scripts and without enemies (`calmRoom`: tile types 2,
+  robots/animals, and 0x2d, androids/snakes, and spawner/creature records), so the hero
+  cannot be killed before the screenshot (its message box covered four shots).
 
 ### Room connections (`exits.ts`)
 

@@ -56,7 +56,7 @@ prefix in `.wine/` does not link into `$HOME` and has no `Z:` drive.
 `pnpm robot shots` stores screenshots in `shots/` (not committed) and records in
 `shots.json` (committed) where our renderer still differs from the game. Any room can be
 screenshot: a patched copy of the exe holds only the title screens and the wanted room
-(without its scripts) in the start room's slot. The tests compare against the screenshots
+(without its scripts and enemies) in the start room's slot. The game runs silently. The tests compare against the screenshots
 when present and fail whenever the set of differing cells changes. Actors (hero, robots),
 animations and other runtime effects differ from a static render by nature.
 

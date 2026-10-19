@@ -193,8 +193,8 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
             except RuntimeError:
                 break
             closed += 1
-        if closed == 0:
-            raise RuntimeError("neither a name dialog nor a room banner appeared")
+        if closed == 0:  # e.g. a room without a name (debug room 99) on a later start
+            print("warning: neither a name dialog nor a room banner appeared", file=sys.stderr)
         time.sleep(wait)
         for key in keys:
             hold(display, key, 0.3)
