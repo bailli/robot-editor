@@ -122,6 +122,11 @@ Files in `packages/formats/src`:
   (they release robots), sand heaps hiding scorpions (sand states 6/7) and
   spawner/creature records. Otherwise the hero can die before the
   screenshot and the death's message box covers the room.
+- **The hero's start** is fixed per episode in the episode code (vtable +0x54: Junior
+  0x40e1a0 (2, 14), I 0x408da0 (5, 14), II 0x409fa0 (6, 23), III 0x40b460 (8, 15), IV
+  0x40d680 (13, 16)); the hero tile (type 1) in the map is cleared, not used. In a
+  patched exe the hero therefore lands at that position in whatever room was put into
+  the start slot (possibly in a wall or water).
 
 ### Room connections (`exits.ts`)
 
@@ -130,9 +135,10 @@ Files in `packages/formats/src`:
   "outside", e.g. episode III's sea), 2/3 = none. Walking off the map arrives on the
   opposite edge, same row/column (0x427a9b); row 0 lies under the status line.
 - **Exit tiles** `0x0017` in walls; closed ones become `0x0110` (0x433ae5).
-- **Scripts** (plain text, C-like) change `RoomNorth`…`RoomWest`, `BusWest`/`BusEast`
-  (bus line in episode II), and `Teleport(room, x, y)`; parsed with fixed vs.
-  state-dependent marking.
+- **Scripts** (plain text, C-like) change `RoomNorth`…`RoomWest` and `BusWest`/`BusEast`
+  (bus line in episode II); parsed with fixed vs. state-dependent marking.
+  `Teleport(room, x, y)` does not move the hero: it sets the point returning teleporters
+  (records with flag 0x02) lead to (0x4fe358/35a/35b, 0x407900).
 - **Passages ±100** ("further in": building interiors, caves): door in = class 98 (tile
   0x53, state 6/7, a roof's door) → +100; door out = class 105 (0x5a) → −100; stairs =
   class 71 (0x3d), state bit 0 clear → +100 (down), set → −100 (up). All have their
@@ -203,13 +209,25 @@ Roughly by value for the editor.
    game: a teleporter added next to the hero's start (episode I room 43, (6, 14), to room
    11 at (20, 15)) takes the hero exactly there. Other record types are only
    round-tripped through the scene writer. Fields of types 7 and 11 are only partly
-   understood.
+   understood. **How to test an edit in the game:** build the exe (`Game.withScene`, or
+   the editor's "Save exe"), put the change next to the hero's start (see "The hero's
+   start" above) and run `python3 -I tools/wine/harness.py shot E OUT.png --exe EXE --keys
+Right` (`--debug DIR` saves every step); the game's screenshot file name tells the room
+   it ended in. There is no CLI command for this yet (the teleporter test was a one-off
+   script).
 2. **Actors.** Known: creation (0x44dc60, kinds 0x100 + n → class via 0x47ec98, 20
    factories registered by class id, 0x44d4e0), which tiles and records produce actors,
    robots' sprites (`_Aliens`, `1E01`) and random colours. Open: the exact sprite order
    (which actors count before a robot), sprites of the other actors (androids etc. use
    their tile graphic in the editor), travelling actors' kinds 0x183/0x185 (classes
-   0x83/0x85 have no registered factory, so they may never appear).
+   0x83/0x85 have no registered factory, so they may never appear), and the six dwords
+   after the class id in each 0x47ec98 entry. Kinds found so far: 0x100 hero, 0x101
+   robot, 0x102 the hero's double (class 3), 0x103 class 0x2c ("mysterious person"),
+   0x104 android (episode III: snake), 0x105 class 74 (helper, tile 0x40), 0x106 turtle,
+   0x107 friendly native, 0x108 wild boar (the last three episode III), 0x109 episode IV
+   robot, 0x10a episode IV tile 0x0c. **Robot-free room:** in the room stored at
+   0x4fe3bc no robots, androids or kind 0x45 are created (0x44d520, 0x44dc60; probably
+   the item "Dies Ding entbindet Dich vom Jagen der Roboter", tile 0x0e); not modelled.
    `RandObj(O_X, min, max)` (0x4073a0, `randomPlacement`) keeps the room's number of
    tile type O_X between min and max: it counts what is there, removes random ones above
    and adds missing ones on empty cells (20 tries each), robots and androids within ±10
@@ -217,12 +235,20 @@ Roughly by value for the editor.
    (0x4fe30b/0x4fe30c, set when walking off an edge, 0x44c5a0: entering from the west
    (25, 14), east (15, 14), north (20, 22), south (20, 7); the bus (20, 14); teleporters
    and stairs keep the old one), other objects anywhere. The script's
-   `Teleport(room, x, y)` only sets where returning teleporters lead (0x407900). Script object names are
-   tile types (sound tables, plus O_ALIEN 2, O_ANDROID 0x2d, O_BOMB 0x13, O_WORM 0x37,
-   O_ISOLATE 9 from compiled scripts).
+   `Teleport(room, x, y)` only sets where returning teleporters lead (0x407900). Script
+   object names are tile types (sound tables, plus O_ALIEN 2, O_ANDROID 0x2d, O_BOMB
+   0x13, O_WORM 0x37, O_ISOLATE 9 from compiled scripts). The editor's `RandObj` counts
+   (`randomPlacement`) look at map cells only; the game also counts actors standing on
+   cells (0x407650 via 0x433230), e.g. those from records.
 3. **Scripts.** Only the source (tag 6/1) is read. The game runs the **compiled** script
    (6/2), whose format is not decoded; editing scripts needs a compiler (the keyword table
-   with variable addresses is at 0x4753c0…, 24-byte records). Tag 6/3 (4 bytes) unknown.
+   with variable addresses is at 0x4753c0…, 24-byte records; functions with their handlers
+   from 0x4750d8, e.g. RandObj 0x4073a0, Teleport 0x407900). Tag 6/3 (4 bytes) unknown.
+   First hints at the bytecode: it starts with the names it uses (`LastRoom`, `RandObj`,
+   … zero-padded), and a call like `RandObj(O_ALIEN, 8, 15)` compiles to
+   `11 02 05 11 08 05 11 0f 05 17 03 16 03`: `11 nn` pushes a byte, `17 nn` calls name
+   number nn; `05` and `16 03` are not understood. Arguments with `|` (e.g.
+   `O_KEY | 0x0500`) compile differently.
 4. **Room tags kind 2, 3, 4** (record +0x14 byte, +0x16 byte, +0x18 dword; values like
    20/40/60/80, 2/3, 100–2500): meaning unknown; kind 4 × 10 is passed to 0x42b640 on
    entering (score bonus?).
@@ -242,6 +268,16 @@ Roughly by value for the editor.
    near 0x4828d4 ("Command %s unknown!", probably cheats; two jump ±100 rooms).
 9. **Saving details:** the PE checksum is not updated (Windows does not check it for
    exes); a moved resource leaves zeroed space behind.
+10. **The game's map in memory is one layer** (0x5197f8 + 0xc, 40×29 words, followed by
+    the actor grid at + 0x91c), while scenes store base and overlay. How the two are
+    merged on loading is not known; "empty cell" (RandObj, the free-cell check 0x433230)
+    is approximated as base and overlay both 0.
+11. **Two edge-exit code paths:** 0x427a9b (arrival only) and 0x44c5a0 (also sets the
+    RandObj reference point; with game flag bit 10 of [0x51bb18]+8 clear, the arrival
+    moves one cell further in). Which one runs when is not known.
+12. **Scorpion sand** (sand states 6/7) is confirmed by the texts in episodes II and III
+    only; in episode IV those states read "Noch mehr Sand" (one cell in the game, still
+    treated as scorpions by `cellActorSource`).
 
 ## Limits and what is shared between episodes
 
@@ -280,6 +316,9 @@ Roughly by value for the editor.
 | 0x406ae0, 0x438850           | describe a cell; fetch a text variant                                          |
 | 0x43b2e0, 0x43b46a           | episode constructor; class tables 0x4c6ce0 (objects) / 0x4c70e0 (class → type) |
 | 0x4fe2fc, 0x4fe35e…0x4fe364  | current room; RoomNorth/South/West/East                                        |
+| 0x44c5a0, 0x44c680           | hero walks off an edge (sets the RandObj reference point); pending room change |
+| 0x44dc60, 0x44d520           | create an actor (kind, x, y); factory lookup by class                          |
+| 0x4073a0, 0x407650           | script RandObj; count a tile type in the room                                  |
 | 0x4827f0                     | base palette (episode III: 0x477c10)                                           |
 | 0x481170                     | 8×8 font                                                                       |
 
@@ -292,3 +331,10 @@ Roughly by value for the editor.
   instead. Failure screenshots go to `.vitest/` (ignored).
 - `pkill -f "<pattern>"` in a shell whose command line contains the pattern kills that
   shell; use `pkill -f "[v]ite …"`.
+- Wine harness: the game sometimes does not come up in time ("xdotool search …" fails);
+  just run the shot again. Debug room 99 shows no room banner on a repeated start (the
+  harness only warns). After the dialogs the harness presses Return until nothing
+  reacts; a Return that opens something in the room would end up in the screenshot
+  (not seen so far, review finding).
+- Each `App` in the editor listens on `window`; tests must `dispose()` old instances,
+  or they react to history and key events too.
