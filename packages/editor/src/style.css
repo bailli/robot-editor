@@ -637,3 +637,8 @@ header button.pressed {
 .map-link.closed {
   color: var(--line);
 }
+
+.map-link.outside {
+  color: var(--muted);
+  border-style: dotted;
+}

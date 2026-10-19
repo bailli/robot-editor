@@ -261,11 +261,13 @@ export function scriptFunctionDoc(name: string, args?: number): ScriptFunctionDo
   return (args === undefined ? undefined : FUNCTIONS[`${key}/${args}`]) ?? FUNCTIONS[key];
 }
 
-/** What argument `index` (0 = first) of a call to `fn` refers to, if known. */
-export function scriptArgument(fn: string, index: number): ScriptArgumentKind | undefined {
-  const key = fn.toUpperCase();
-  const doc = FUNCTIONS[key] ?? FUNCTIONS[`${key}/${index + 1}`];
-  return doc?.kinds?.[index];
+/** What argument `index` (0 = first) of a call to `fn` with `count` arguments refers to. */
+export function scriptArgument(
+  fn: string,
+  index: number,
+  count: number,
+): ScriptArgumentKind | undefined {
+  return scriptFunctionDoc(fn, count)?.kinds?.[index];
 }
 
 /**

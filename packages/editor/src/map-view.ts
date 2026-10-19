@@ -4,6 +4,7 @@ import {
   type EpisodeClasses,
   OUTSIDE_ROOM,
   type Room,
+  type ScriptExit,
   edgeExits,
   exitMode,
   roomScript,
@@ -16,9 +17,9 @@ import { type Connections, connections } from "./exits-view.ts";
  * How a room's exit towards a grid neighbour stands: open by the exits byte ("open"; the
  * hero leaves over any walkable edge cell), open but with exit tiles that do not all
  * arrive on exit tiles of the neighbour ("broken"), opened only by the script
- * ("scripted"), or closed.
+ * ("scripted"), closed, or leading outside (room 2) instead of to the neighbour.
  */
-export type LinkState = "open" | "broken" | "scripted" | "closed";
+export type LinkState = "open" | "broken" | "scripted" | "closed" | "outside";
 
 export interface MapLink {
   from: number;
@@ -47,12 +48,18 @@ export function adjacent(id: number, direction: Direction): number | undefined {
   return to;
 }
 
-/** The exit of `room` towards its grid neighbour `target`, as the map shows it. */
-export function mapLink(room: Room, direction: Direction, target: Room): MapLink {
+/**
+ * The exit of `room` towards its grid neighbour `target`, as the map shows it; `exits`
+ * are the room's script exits (roomScriptExits) if known.
+ */
+export function mapLink(
+  room: Room,
+  direction: Direction,
+  target: Room,
+  exits: readonly ScriptExit[] = roomScriptExits(roomScript(room)).exits,
+): MapLink {
   const mode = exitMode(room, direction);
-  const scripted = roomScriptExits(roomScript(room)).exits.filter(
-    (s) => s.direction === direction && s.room === target.id,
-  );
+  const scripted = exits.filter((s) => s.direction === direction && s.room === target.id);
   const { cells, matching } = edgeExits(room, direction, target);
   const tiles =
     cells.length === 0
@@ -67,10 +74,13 @@ export function mapLink(room: Room, direction: Direction, target: Room): MapLink
     : "";
   let state: LinkState;
   if (mode === "neighbour") state = matching.length === cells.length ? "open" : "broken";
+  else if (mode === "outside") state = "outside";
   else state = scripted.length ? "scripted" : "closed";
-  const title =
-    `${room.id} → ${target.id}: exits byte "${mode}"; ${tiles}${script}. ` +
-    `Click to ${mode === "neighbour" ? "close" : "open"} it.`;
+  const action =
+    mode === "outside"
+      ? "It leads outside (room 2): change it in the room's exits line."
+      : `Click to ${mode === "neighbour" ? "close" : "open"} it.`;
+  const title = `${room.id} → ${target.id}: exits byte "${mode}"; ${tiles}${script}. ${action}`;
   return { from: room.id, to: target.id, direction, state, title };
 }
 
@@ -155,11 +165,14 @@ export class MapView {
 
   show(rooms: readonly Room[], current: number, classes: EpisodeClasses): void {
     const byId = new Map(rooms.map((r) => [r.id, r]));
+    const ids = new Set(byId.keys());
+    // each room's connections once (they parse its script)
+    const all = new Map(rooms.map((r) => [r.id, connections(r, ids, classes)]));
     const floors = [...new Set(rooms.map((r) => mapPosition(r.id).floor))].sort((a, b) => a - b);
     this.element.replaceChildren(
       ...floors.map((floor) => {
         const own = rooms.filter((r) => mapPosition(r.id).floor === floor);
-        return this.floor(floor, own, byId, current, classes);
+        return this.floor(floor, own, byId, current, all);
       }),
     );
     this.element.querySelector(".map-room.current")?.scrollIntoView({ block: "nearest" });
@@ -170,7 +183,7 @@ export class MapView {
     rooms: readonly Room[],
     byId: ReadonlyMap<number, Room>,
     current: number,
-    classes: EpisodeClasses,
+    all: ReadonlyMap<number, Connections>,
   ): HTMLElement {
     const section = document.createElement("div");
     section.className = "map-floor";
@@ -191,11 +204,12 @@ export class MapView {
       element.style.gridColumn = String(column + 1);
       grid.append(element);
     };
-    const ids = new Set(byId.keys());
     for (const room of rooms) {
       const { row, column } = mapPosition(room.id);
       const [r, c] = [2 * (row - row0), 2 * (column - column0)];
-      place(this.room(room, room.id === current, connections(room, ids, classes)), r, c);
+      const own = all.get(room.id);
+      if (!own) continue;
+      place(this.room(room, room.id === current, own), r, c);
       // links to the east and south neighbour (each pair once)
       for (const [direction, back, dr, dc] of [
         ["east", "west", 0, 1],
@@ -204,7 +218,10 @@ export class MapView {
         const id = adjacent(room.id, direction);
         const neighbour = id === undefined ? undefined : byId.get(id);
         if (!neighbour) continue;
-        const links = [mapLink(room, direction, neighbour), mapLink(neighbour, back, room)];
+        const links = [
+          mapLink(room, direction, neighbour, own.scripted),
+          mapLink(neighbour, back, room, all.get(neighbour.id)?.scripted),
+        ];
         place(this.links(links, direction === "east"), r + dr, c + dc);
       }
     }
@@ -263,6 +280,7 @@ export class MapView {
       arrow.dataset["direction"] = link.direction;
       arrow.textContent = LINK_ARROWS[link.direction];
       arrow.title = link.title;
+      arrow.disabled = link.state === "outside";
       arrow.setAttribute("aria-label", `exit ${link.from} ${link.direction}`);
       arrow.addEventListener("click", () => {
         this.events.toggle(link.from, link.direction);

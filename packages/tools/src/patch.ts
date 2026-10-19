@@ -3,16 +3,18 @@ import {
   type Game,
   type LogicRecord,
   type Room,
+  SCRIPT_TAG,
   START_ROOMS,
+  ScriptPart,
   cellActorSource,
-  recordCell,
+  resolveCell,
   roomActors,
 } from "@robot/formats";
 
-/** Room tags holding the script source (6/1) and the compiled script (6/2). */
-const isScript = (kind: number, value: number) => kind === 6 && (value === 1 || value === 2);
+/** Room tags holding the script source and the compiled script. */
+const isScript = (kind: number, value: number) =>
+  kind === SCRIPT_TAG && (value === ScriptPart.SOURCE || value === ScriptPart.COMPILED);
 
-/** Logic records that let creatures appear: spawners (5) and creatures (7), records.ts. */
 /**
  * The room without anything that moves or could kill the hero before a screenshot (a
  * death's message box would cover the room): every actor source (roomActors) goes. Actor
@@ -31,7 +33,8 @@ export function calmRoom(room: Room, classes: EpisodeClasses): Room {
     const layer = actor.layer === "base" ? base : overlay;
     if (actor.record) {
       removed.add(actor.record);
-      layer[actor.cell] = calm(recordCell(actor.record));
+      // what the logic cell shows, following records that show logic cells
+      layer[actor.cell] = calm(resolveCell(room, layer[actor.cell] ?? 0));
     } else {
       layer[actor.cell] = calm(layer[actor.cell] ?? 0);
     }

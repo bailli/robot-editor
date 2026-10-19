@@ -2,7 +2,12 @@ import { expect, test } from "vitest";
 
 import { roomScript } from "../src/exits.ts";
 import { EPISODES, Game } from "../src/game.ts";
-import { scriptArgument, scriptDoc, scriptTextVariants } from "../src/script-docs.ts";
+import {
+  scriptArgument,
+  scriptDoc,
+  scriptFunctionDoc,
+  scriptTextVariants,
+} from "../src/script-docs.ts";
 import {
   Op,
   compileScript,
@@ -130,9 +135,12 @@ test("every keyword of the game is described", () => {
   ]);
   expect(scriptDoc("score", keywords)).toBe("Score: the points (dword at 0x4fe2f0)");
   expect(scriptDoc("count", keywords)).toBeUndefined();
-  expect(scriptArgument("Message", 0)).toBe("text");
-  expect(scriptArgument("SetMan", 3)).toBe("room");
-  expect(scriptArgument("Message", 1)).toBeUndefined();
+  expect(scriptArgument("Message", 0, 2)).toBe("text");
+  expect(scriptArgument("SetMan", 3, 6)).toBe("room");
+  expect(scriptArgument("Message", 1, 2)).toBeUndefined();
+  // overloaded: the form with that many arguments
+  expect(scriptFunctionDoc("Area", 4)?.args).toEqual(["x", "y", "size", "key"]);
+  expect(scriptFunctionDoc("Area", 3)?.args).toEqual(["x", "y", "size"]);
   expect(scriptTextVariants("Message", [700, 25])).toBe("pages");
   expect(scriptTextVariants("Message", [700, 0])).toBe("random");
   expect(scriptTextVariants("Message", [700, undefined])).toBeUndefined();

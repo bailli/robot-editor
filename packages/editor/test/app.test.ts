@@ -508,3 +508,39 @@ test("palette tiles that draw nothing show a robot or a hatching instead", () =>
     /draws nothing in the game/,
   );
 });
+
+test("leaving the map shows the room as the map left it", async () => {
+  await page.getByRole("button", { name: "Map" }).click();
+  await userEvent.click(
+    defined(
+      document.querySelector('.map-link[data-from="43"][data-direction="east"]') ?? undefined,
+    ),
+  );
+  app.setMap(false);
+  expect(document.querySelector<HTMLSelectElement>('[data-direction="east"] select')?.value).toBe(
+    "none",
+  );
+});
+
+test("undoing a painted robot takes it out of the actors", () => {
+  const free = 20 * ROOM_WIDTH + 10; // floor in episode I room 43
+  // one position button per actor in the list
+  const robots = () => app.actorsView.element.querySelectorAll(".actor-cells button").length;
+  const before = robots();
+  app.setTile(0x0002);
+  app.paintCell(free);
+  expect(robots()).toBeGreaterThan(before);
+  app.undo();
+  expect(robots()).toBe(before);
+});
+
+test("the script editor notices when undo changes the script underneath", async () => {
+  defined(app.editor).setScript(1, 43, "RoomWest = 42;");
+  app.showRoom(43);
+  await scriptView().getByRole("button", { name: "Edit" }).click();
+  app.undo();
+  expect(document.querySelector(".script-verdict")?.textContent).toMatch(
+    /changed since editing began/,
+  );
+  await expect.element(scriptView().getByRole("button", { name: "Apply" })).toBeEnabled();
+});

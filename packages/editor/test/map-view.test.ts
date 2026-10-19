@@ -24,6 +24,10 @@ test("links say what the exits byte, the exit tiles and the script do", () => {
   expect(west.title).toMatch(/exits byte "none".*RoomWest = 42 \(depending on the game state\)/);
   // room 21's south edge has an exit tile that does not arrive on one of room 31
   expect(mapLink(room(1, 21), "south", room(1, 31)).state).toBe("broken");
+  // episode III room 11 leads north to the sea, not to its grid neighbour room 1
+  const outside = mapLink(room(3, 11), "north", room(3, 1));
+  expect(outside.state).toBe("outside");
+  expect(outside.title).toMatch(/change it in the room's exits line/);
 });
 
 test("badges show the links that are not to a grid neighbour", () => {

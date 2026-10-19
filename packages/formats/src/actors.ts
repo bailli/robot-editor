@@ -8,7 +8,6 @@ import {
 } from "./classes.ts";
 import { isConditional } from "./exits.ts";
 import { LOGIC_CELL, type LogicRecord, ROOM_CELLS, ROOM_WIDTH, type Room } from "./scene.ts";
-import { scriptConstants } from "./script.ts";
 
 /**
  * The moving actors of a room (robots, androids, animals, the bus, …) and where they come
@@ -83,10 +82,11 @@ export const ACTOR_CLASS_NAMES: Readonly<Partial<Record<number, string>>> = {
  * scene is loaded, 0x432728): with bit 0x80 an index into the episode's actor kinds
  * (originals: 0x83 the dealer, 0x85 the thief), else a tile type (its class).
  */
-export function recordActorKind(byte: number, classes: EpisodeClasses): number {
+export function recordActorKind(byte: number, classes: EpisodeClasses): number | undefined {
+  // an index past the episode's table names no actor
   const low =
-    byte & 0x80 ? (classes.actorKinds[byte & 0x7f] ?? 0) : (classes.classes.get(byte)?.id ?? byte);
-  return 0x100 | (low & 0xff);
+    byte & 0x80 ? classes.actorKinds.at(byte & 0x7f) : (classes.classes.get(byte)?.id ?? byte);
+  return low === undefined ? undefined : 0x100 | (low & 0xff);
 }
 
 /** The class an actor kind names (kinds below 0x10c through ACTOR_KIND_CLASSES). */
@@ -127,7 +127,8 @@ export function roomActors(room: Room, classes: EpisodeClasses): RoomActor[] {
           actors.push({ source, cell, layer, type: typeOf(actorKindClass(0x107)), record });
         } else {
           const target = { room: (d[4] | (d[5] << 8)) & 0x3ff, x: d[6], y: d[7] };
-          const type = typeOf(actorKindClass(recordActorKind(d[8], classes)));
+          const kind = recordActorKind(d[8], classes);
+          const type = kind === undefined ? undefined : typeOf(actorKindClass(kind));
           actors.push({ source, cell, layer, type, record, target });
         }
         continue;
@@ -160,15 +161,6 @@ export function scriptActors(source: string): ScriptActors[] {
       conditional: isConditional(source, m.index),
     }),
   );
-}
-
-/** The tile type of a script object name ("KEY", "ALIEN"), if known (see scriptConstants). */
-export function scriptObjectType(
-  name: string,
-  objectNames: ReadonlyMap<number, string>,
-  classes: EpisodeClasses,
-): number | undefined {
-  return scriptConstants(objectNames, classes).get(`O_${name}`);
 }
 
 /** Classes RandObj places in an area away from the hero (0x407588): robots, androids. */
@@ -219,15 +211,16 @@ export interface RandomPlacement {
  * What RandObj(O_NAME, min, max) does in a room (0x4073a0): it counts the room's objects
  * of that tile type (map cells and actors, 0x407650), draws a number between min and max,
  * removes random ones above it and adds new ones below it, each on an empty cell found
- * with up to 20 random tries (0x433230, 0x433420).
+ * with up to 20 random tries (0x433230, 0x433420). `constants` are the episode's script
+ * constants (Game.scriptConstants).
  */
 export function randomPlacement(
   call: ScriptActors,
   room: Room,
   classes: EpisodeClasses,
-  objectNames: ReadonlyMap<number, string>,
+  constants: ReadonlyMap<string, number>,
 ): RandomPlacement {
-  const type = scriptObjectType(call.name, objectNames, classes);
+  const type = constants.get(`O_${call.name}`);
   let existing = 0;
   let free = 0;
   for (let cell = 0; cell < ROOM_CELLS; cell++) {

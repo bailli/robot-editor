@@ -165,7 +165,6 @@ export {
   randomPlacement,
   roomActors,
   scriptActors,
-  scriptObjectType,
 } from "./actors.ts";
 export type {
   ActorSource,

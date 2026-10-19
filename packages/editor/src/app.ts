@@ -111,8 +111,7 @@ export class App {
   });
   readonly mapView = new MapView({
     open: (room) => {
-      this.setMap(false);
-      this.showRoom(room);
+      this.setMap(false, room);
     },
     toggle: (room, direction) => {
       const editor = this.need();
@@ -364,6 +363,7 @@ export class App {
     this.caches.clear();
     this.tileNames.clear();
     this.robotSprites.clear();
+    this.thumbnails.clear();
     this.welcome.hidden = true;
     this.workspace.hidden = false;
     const linked = roomInAddress();
@@ -808,12 +808,12 @@ export class App {
     );
     this.view.setActors(this.actorsToggle.checked ? this.actors : [], (_, n) => sprites[n]);
     const classes = editor.game.episode(this.episode).classes;
-    const names = editor.game.objectNames(this.episode);
+    const constants = editor.game.scriptConstants(this.episode);
     this.actorsView.show(
       this.actors,
       scriptActors(roomScript(room)).map((call) => ({
         call,
-        placement: randomPlacement(call, room, classes, names),
+        placement: randomPlacement(call, room, classes, constants),
       })),
     );
   }
@@ -838,14 +838,20 @@ export class App {
         editor.room(this.episode, this.roomId),
         edit.changes.map((c) => c.index),
       );
+      // painted cells may be actors (as at the end of a stroke)
+      this.refreshActors();
     }
     this.refreshRoomList();
     this.refreshButtons();
     if (this.mapShown) this.refreshMap();
   }
 
-  /** Shows the episode's map instead of the room, or the room again. */
-  setMap(shown: boolean): void {
+  /**
+   * Shows the episode's map instead of the room, or a room again (`room`, else the shown
+   * one): drawn anew, as edits on the map may have changed it.
+   */
+  setMap(shown: boolean, room = this.roomId): void {
+    if (!this.editor) return;
     this.mapShown = shown;
     this.mapButton.setAttribute("aria-pressed", String(shown));
     this.mapButton.classList.toggle("pressed", shown);
@@ -853,6 +859,7 @@ export class App {
     this.mapView.element.hidden = !shown;
     this.workspace.classList.toggle("map-mode", shown);
     if (shown) this.refreshMap();
+    else this.showRoom(room);
   }
 
   private refreshMap(): void {
@@ -1064,7 +1071,7 @@ export class App {
   ): string | undefined {
     const value = args[index];
     if (value === undefined) return undefined;
-    const kind = scriptArgument(fn, index);
+    const kind = scriptArgument(fn, index, args.length);
     const game = this.need().game;
     if (kind === "room") return this.roomLabel(this.episode, value);
     if (kind !== "text") return undefined;

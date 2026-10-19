@@ -54,6 +54,8 @@ test("travelling actors are the dealer and the thief", () => {
   expect(recordActorKind(0x85, classes)).toBe(0x105);
   // without the bit a tile type: tile 0x2c is the dealer's class
   expect(recordActorKind(0x2c, classes)).toBe(0x12c);
+  // past the episode's table: no actor
+  expect(recordActorKind(0x86, classes)).toBeUndefined();
   const names = EPISODES.flatMap((episode) =>
     game.episode(episode).rooms.flatMap((room) =>
       roomActors(room, game.episode(episode).classes)
@@ -96,7 +98,7 @@ test("RandObj counts what the room has and places robots away from the hero", ()
   const place = (name: string) => {
     const call = scriptActors(roomScript(room)).find((c) => c.name === name);
     assert.ok(call, name);
-    return randomPlacement(call, room, game.episode(2).classes, game.objectNames(2));
+    return randomPlacement(call, room, game.episode(2).classes, game.scriptConstants(2));
   };
   expect(place("ALIEN")).toMatchObject({ type: 2, existing: 20, awayFromHero: true });
   expect(place("ANDROID")).toMatchObject({ type: 0x2d, existing: 4, awayFromHero: true });
@@ -108,6 +110,6 @@ test("script object names resolve through the sound tables first", () => {
   const room = game.room(1, 35); // RandObj(O_TREE, 1, 1)
   const tree = scriptActors(roomScript(room)).find((c) => c.name === "TREE");
   expect(
-    tree && randomPlacement(tree, room, game.episode(1).classes, game.objectNames(1)).type,
+    tree && randomPlacement(tree, room, game.episode(1).classes, game.scriptConstants(1)).type,
   ).toBe(11);
 });

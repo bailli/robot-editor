@@ -122,6 +122,9 @@ export class ScriptView {
   private editing = false;
   private showCode = false;
   private draft = "";
+  /** The source the draft started from, and how to check the draft again. */
+  private draftBase = "";
+  private recheck: (() => void) | undefined;
 
   constructor(events: ScriptViewEvents) {
     this.events = events;
@@ -137,7 +140,11 @@ export class ScriptView {
     const same = room === this.room;
     this.source = source;
     this.room = room;
-    if (same && this.editing) return;
+    if (same && this.editing) {
+      // the room's script may have changed underneath (undo, redo): judge the draft again
+      this.recheck?.();
+      return;
+    }
     this.editing = false;
     this.render();
   }
@@ -145,6 +152,7 @@ export class ScriptView {
   /** Leaves the editor, dropping the draft. */
   close(): void {
     this.editing = false;
+    this.recheck = undefined;
     this.render();
   }
 
@@ -169,6 +177,7 @@ export class ScriptView {
     button(this.source ? "Edit" : "Add script", "Edit the script's source", () => {
       this.editing = true;
       this.draft = this.source;
+      this.draftBase = this.source;
       this.render();
       this.element.querySelector("textarea")?.focus();
     });
@@ -267,11 +276,18 @@ export class ScriptView {
         error = e instanceof Error ? e.message : String(e);
       }
       verdict.classList.toggle("error", error !== undefined);
+      const changed =
+        this.source === this.draftBase
+          ? ""
+          : " The room's script changed since editing began (undo, redo); Apply replaces it.";
       verdict.textContent =
-        error ?? (this.draft.trim() === "" ? "Empty: the room will have no script." : "Compiles.");
+        (error ??
+          (this.draft.trim() === "" ? "Empty: the room will have no script." : "Compiles.")) +
+        changed;
       apply.disabled = error !== undefined || this.draft === this.source;
     };
     area.addEventListener("input", check);
+    this.recheck = check;
     check();
     return [area, verdict];
   }

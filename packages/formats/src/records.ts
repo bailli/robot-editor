@@ -72,7 +72,11 @@ export function describeRecord(record: LogicRecord, classes?: EpisodeClasses): R
       const name = kind === undefined ? undefined : ACTOR_CLASS_NAMES[actorKindClass(kind)];
       const who = name
         ? `the ${name.toLowerCase()}`
-        : `an actor (${kind === undefined ? `byte 8 = 0x${d[8].toString(16)}` : `kind 0x${kind.toString(16)}`})`;
+        : kind !== undefined
+          ? `an actor (kind 0x${kind.toString(16)})`
+          : classes
+            ? `no actor (byte 8 = 0x${d[8].toString(16)} is past the episode's actors)`
+            : `an actor (byte 8 = 0x${d[8].toString(16)})`;
       return (
         `${who} appears here; once the hero dealt with it, it leaves through an edge ` +
         `wall, and following it leads to room ${u16(4) & 0x3ff} at (${d[6]}, ${d[7]})`
