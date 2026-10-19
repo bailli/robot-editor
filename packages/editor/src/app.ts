@@ -423,6 +423,10 @@ export class App {
       .join("\n");
     this.roomTitle.textContent = `${EPISODE_NAMES[this.episode] ?? ""} – room ${id}`;
     const room = editor.room(this.episode, id);
+    // outlines shown while hovering the actor list or the script belong to the old room:
+    // their rows are replaced without a mouseleave
+    this.view.setAreas([]);
+    this.view.setHighlights([]);
     this.view.show(room, this.cache());
     this.connections = connections(
       room,

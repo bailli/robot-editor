@@ -154,6 +154,11 @@ export class RoomView {
     this.drawMarks();
   }
 
+  /** How many areas and highlights are outlined, for tests. */
+  outlines(): number {
+    return this.areas.length + this.highlights.length;
+  }
+
   /** Outlines cells or areas a script names (empty: none). */
   setHighlights(highlights: readonly Highlight[]): void {
     this.highlights = highlights;

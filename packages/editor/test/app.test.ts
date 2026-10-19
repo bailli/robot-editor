@@ -471,3 +471,20 @@ test("the map shows the rooms with their exits and opens or closes them", async 
   await expect.element(page.getByRole("heading", { name: "Robot I – room 33" })).toBeVisible();
   expect(app.mapView.element.hidden).toBe(true);
 });
+
+test("outlines from hovering the actors or the script go when the room changes", async () => {
+  // episode I room 43: RandObj(O_ALIEN, …) outlines where robots appear, SetObj-free script
+  await userEvent.hover(defined(document.querySelector(".actor-row.scripted") ?? undefined));
+  expect(app.view.outlines()).toBeGreaterThan(0);
+  app.back(); // like browser back: the row goes without a mouseleave
+  app.showRoom(44);
+  expect(app.view.outlines()).toBe(0);
+  app.showEpisode(4, 157);
+  const area = [...document.querySelectorAll(".script-source .function")].find(
+    (e) => e.textContent === "SetWarea",
+  );
+  await userEvent.hover(defined(area));
+  expect(app.view.outlines()).toBe(1);
+  app.showRoom(167);
+  expect(app.view.outlines()).toBe(0);
+});
