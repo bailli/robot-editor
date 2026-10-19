@@ -225,9 +225,21 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
    robot, 0x102 the hero's double (class 3), 0x103 class 0x2c ("mysterious person"),
    0x104 android (episode III: snake), 0x105 class 74 (helper, tile 0x40), 0x106 turtle,
    0x107 friendly native, 0x108 wild boar (the last three episode III), 0x109 episode IV
-   robot, 0x10a episode IV tile 0x0c. **Robot-free room:** in the room stored at
-   0x4fe3bc no robots, androids or kind 0x45 are created (0x44d520, 0x44dc60; probably
-   the item "Dies Ding entbindet Dich vom Jagen der Roboter", tile 0x0e); not modelled.
+   robot, 0x10a episode IV tile 0x0c. **Robot-free room** (0x4fe3bc, a word in the
+   saved game state, episode code +0x158): in that room no robots (kind 0x101 / class 2),
+   androids (0x104 / class 0x2d) or worms (class 0x45, tile 0x37) are created (0x44dc60,
+   0x44d520), and hatching sources (0x4237e0's task 0x433e80) release nothing. It is set
+   by episode II's **telephone** (tile 0x5f, class 110, 12 rooms): using it asks for a
+   number (text 400, 4 digits, 0x41e4d0), dialled numbers are looked up in the table at
+   0x47efe0 (32-byte entries: number +0x08, text +0x0c, handler +0x18; 1141 wake-up call
+   402, 1131 telegrams 403, 1191 time 404, 110 police 405, 112 fire brigade 406, 3786
+   travel agency 407, 9991 "Ghostbusters" 408). The Ghostbusters (0x41e100) ask for a
+   room number and then a credit card number; `atol` of it = 0x32a079 (**3317881**)
+   stores the room for good (later calls say "still busy in room %d"), any other
+   number stores −1; the next call ("you again, the number was wrong") then probably
+   resets to 0 (its prompts have no input fields and the room is read from an empty
+   buffer), a wrong number in that path stores −2 (never again). From the code only,
+   not tried in the game; not modelled (it is game state, not level data).
    `RandObj(O_X, min, max)` (0x4073a0, `randomPlacement`) keeps the room's number of
    tile type O_X between min and max: it counts what is there, removes random ones above
    and adds missing ones on empty cells (20 tries each), robots and androids within ±10
@@ -319,6 +331,7 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
 | 0x44c5a0, 0x44c680           | hero walks off an edge (sets the RandObj reference point); pending room change |
 | 0x44dc60, 0x44d520           | create an actor (kind, x, y); factory lookup by class                          |
 | 0x4073a0, 0x407650           | script RandObj; count a tile type in the room                                  |
+| 0x41e4d0, 0x47efe0, 0x41e100 | telephone (episode II): dial; numbers → handlers; Ghostbusters (robot-free)    |
 | 0x4827f0                     | base palette (episode III: 0x477c10)                                           |
 | 0x481170                     | 8×8 font                                                                       |
 
