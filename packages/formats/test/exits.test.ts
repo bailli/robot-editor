@@ -9,11 +9,15 @@ import {
   RETURN_PASSAGE,
   arrivalCell,
   edgeCells,
+  edgeExits,
+  exitMode,
+  exitsByte,
   roomExits,
   roomPassages,
   roomScript,
   roomScriptExits,
   roomTeleports,
+  withExitMode,
 } from "../src/exits.ts";
 import { EPISODES, Game, START_ROOMS } from "../src/game.ts";
 import { exe } from "./data.ts";
@@ -28,6 +32,36 @@ test("the exits byte gives grid neighbours, room 2 or nothing", () => {
   const ids3 = new Set(game.episode(3).rooms.map((r) => r.id));
   assert.equal(roomExits(game.room(3, 11), ids3).north, OUTSIDE_ROOM);
   assert.deepEqual(roomExits(game.room(3, 2), ids3), { north: 2, south: 2, west: 2, east: 2 });
+});
+
+test("exit modes are written back like the original scenes keep them", () => {
+  for (const episode of EPISODES) {
+    for (const room of game.episode(episode).rooms) {
+      for (const d of DIRECTIONS) {
+        expect(withExitMode(room, d, exitMode(room, d)).tags).toEqual(room.tags);
+      }
+    }
+  }
+  const room = game.room(1, 43); // exits byte 0x20: west none
+  expect(DIRECTIONS.map((d) => exitMode(room, d))).toEqual([
+    "neighbour",
+    "neighbour",
+    "none",
+    "neighbour",
+  ]);
+  const opened = withExitMode(room, "west", "neighbour");
+  expect(exitsByte(opened)).toBe(0);
+  expect(opened.tags.some((t) => t.kind === 1)).toBe(false);
+  const outside = withExitMode(opened, "east", "outside");
+  expect(exitsByte(outside)).toBe(0x40);
+  expect(outside.tags[0]).toEqual({ kind: 1, value: 0x40 });
+});
+
+test("edge exits say which exit cells arrive on exit cells", () => {
+  // episode I room 21's south edge: 1 of 5 cells does not arrive on an exit cell of 31
+  const { cells, matching } = edgeExits(game.room(1, 21), "south", game.room(1, 31));
+  expect([cells.length, matching.length]).toEqual([5, 4]);
+  expect(edgeExits(game.room(1, 21), "south").matching).toEqual([]);
 });
 
 for (const episode of EPISODES) {

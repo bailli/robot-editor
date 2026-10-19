@@ -8,6 +8,7 @@ import {
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
   displayText,
+  exitMode,
   renderRoom,
   roomScript,
   toRgba,
@@ -130,7 +131,10 @@ test("the exits of a room link to the rooms they lead to", async () => {
   // room 43: north 33, south 53, east 44; west closed, opened by the script at a high score
   await expect.element(exits().getByRole("button", { name: "33" })).toBeVisible();
   const west = document.querySelector('[data-direction="west"]');
-  expect(west?.textContent).toBe("← West—42");
+  const targets = (item: Element | null) =>
+    [...(item?.querySelectorAll(".target") ?? [])].map((t) => t.textContent);
+  expect(targets(west)).toEqual(["—", "42"]);
+  expect(west?.querySelector("select")?.value).toBe("none");
   expect(west?.querySelector(".conditional")?.getAttribute("title")).toBe(
     "room 42 – ORT DER VERTEIDIGUNG (set by the script, depending on the game state)",
   );
@@ -426,7 +430,22 @@ test("the script explains itself and can be edited", async () => {
   await scriptView().getByRole("button", { name: "Apply" }).click();
   expect(roomScript(defined(app.editor).room(1, 43))).toBe("RoomWest = 42;");
   // the exits follow the script; undo brings the old script back
-  expect(document.querySelector('[data-direction="west"]')?.textContent).toBe("← West—42");
+  expect(document.querySelector('[data-direction="west"] .scripted')?.textContent).toBe("42");
   app.undo();
   expect(document.querySelector(".script-source")?.textContent).toContain("Message(700, 25)");
+});
+
+test("the exits byte can be changed per direction, undoably", async () => {
+  // episode I room 43: west is closed in its exits byte
+  const west = () => defined(document.querySelector('[data-direction="west"]') ?? undefined);
+  await userEvent.selectOptions(page.getByRole("combobox", { name: "west exit" }), "neighbour");
+  expect(exitMode(defined(app.editor).room(1, 43), "west")).toBe("neighbour");
+  // room 42 exists: west now leads there
+  expect(west().querySelector(".target.default")?.textContent).toBe("42");
+  await userEvent.selectOptions(page.getByRole("combobox", { name: "east exit" }), "outside");
+  expect(document.querySelector('[data-direction="east"] .target')?.textContent).toBe("2 outside");
+  app.undo();
+  app.undo();
+  expect(defined(app.editor).isEdited(1, 43)).toBe(false);
+  expect(west().querySelector("select")?.value).toBe("none");
 });

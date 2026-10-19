@@ -2,6 +2,7 @@ import {
   DIRECTIONS,
   type Direction,
   type EpisodeClasses,
+  type ExitMode,
   type Exits,
   OUTSIDE_ROOM,
   type Passage,
@@ -12,6 +13,7 @@ import {
   type ScriptBus,
   type ScriptExit,
   type ScriptTeleport,
+  exitMode,
   roomExits,
   roomPassages,
   roomScript,
@@ -20,6 +22,8 @@ import {
 } from "@robot/formats";
 
 export interface Connections {
+  /** What the room's exits byte says per direction. */
+  modes: Readonly<Record<Direction, ExitMode>>;
   /** From the room's exits byte, on entering the room. */
   exits: Exits;
   /** Changes made by the room's script. */
@@ -40,7 +44,19 @@ export function connections(
   const { exits, teleports, buses } = roomScriptExits(roomScript(room));
   const passages = roomPassages(room, classes, ids);
   const records = roomTeleports(room);
-  return { exits: roomExits(room, ids), scripted: exits, teleports, buses, passages, records };
+  const modes = Object.fromEntries(DIRECTIONS.map((d) => [d, exitMode(room, d)])) as Record<
+    Direction,
+    ExitMode
+  >;
+  return {
+    modes,
+    exits: roomExits(room, ids),
+    scripted: exits,
+    teleports,
+    buses,
+    passages,
+    records,
+  };
 }
 
 /** Where a direction leads regardless of the game state: the last fixed script assignment, else the exits byte. */
@@ -58,16 +74,27 @@ const LABELS: Readonly<Record<Direction, string>> = {
   east: "→ East",
 };
 
+export const MODE_LABELS: Readonly<Record<ExitMode, string>> = {
+  neighbour: "neighbour",
+  outside: "outside",
+  none: "none",
+};
+
+export interface ExitsViewEvents {
+  go(room: number): void;
+  /** Names a room in tooltips. */
+  label(room: number): string;
+  /** Changes what the exits byte says for a direction. */
+  setMode(direction: Direction, mode: ExitMode): void;
+}
+
 /** The exits of the shown room as links to the rooms they lead to. */
 export class ExitsView {
   readonly element = document.createElement("nav");
-  private readonly go: (room: number) => void;
-  private readonly label: (room: number) => string;
+  private readonly events: ExitsViewEvents;
 
-  /** `label` names a room in tooltips. */
-  constructor(go: (room: number) => void, label: (room: number) => string) {
-    this.go = go;
-    this.label = label;
+  constructor(events: ExitsViewEvents) {
+    this.events = events;
     this.element.className = "exits";
     this.element.setAttribute("aria-label", "Exits");
   }
@@ -80,7 +107,11 @@ export class ExitsView {
       const label = document.createElement("span");
       label.className = "label";
       label.textContent = LABELS[direction];
-      item.append(label, this.target(c.exits[direction], "from the room's exits byte"));
+      item.append(
+        label,
+        this.modeSelect(direction, c.modes[direction]),
+        this.target(c.exits[direction], "from the room's exits byte"),
+      );
       for (const s of c.scripted.filter((x) => x.direction === direction)) {
         const how = s.conditional
           ? "set by the script, depending on the game state"
@@ -165,6 +196,28 @@ export class ExitsView {
     this.element.append(item);
   }
 
+  /** The exits byte's setting for a direction, changeable. */
+  private modeSelect(direction: Direction, mode: ExitMode): HTMLSelectElement {
+    const select = document.createElement("select");
+    select.className = "exit-mode";
+    select.setAttribute("aria-label", `${direction} exit`);
+    select.title =
+      "What the room's exits byte says: the grid neighbour (room ∓10 north/south, ∓1 " +
+      'west/east, if it exists), room 2 ("outside") or no exit. The room\'s exit tiles open ' +
+      "or close accordingly; its script may change it.";
+    for (const m of Object.keys(MODE_LABELS) as ExitMode[]) {
+      const option = document.createElement("option");
+      option.value = m;
+      option.textContent = MODE_LABELS[m];
+      option.selected = m === mode;
+      select.append(option);
+    }
+    select.addEventListener("change", () => {
+      this.events.setMode(direction, select.value as ExitMode);
+    });
+    return select;
+  }
+
   private target(room: number, how: string, kind = "default"): HTMLElement {
     if (room === 0) {
       const none = document.createElement("span");
@@ -176,9 +229,9 @@ export class ExitsView {
     const button = document.createElement("button");
     button.className = `target ${kind}`;
     button.textContent = room === OUTSIDE_ROOM ? `${room} outside` : String(room);
-    button.title = `${this.label(room)} (${how})`;
+    button.title = `${this.events.label(room)} (${how})`;
     button.addEventListener("click", () => {
-      this.go(room);
+      this.events.go(room);
     });
     return button;
   }

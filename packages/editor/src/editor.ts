@@ -1,12 +1,16 @@
 import {
+  type Direction,
+  type ExitMode,
   Game,
   LOGIC_CELL,
   type LogicRecord,
   ROOM_CELLS,
   type Room,
   type RoomTag,
+  exitMode,
   recordCell,
   roomScript,
+  withExitMode,
   withRoomScript,
 } from "@robot/formats";
 
@@ -194,10 +198,27 @@ export class Editor {
       constants: this.game.scriptConstants(episode),
       keywords: this.game.scriptKeywords(),
     };
-    const tags = withRoomScript(room, source, options).tags;
+    return this.commitTags(episode, room, withRoomScript(room, source, options).tags);
+  }
+
+  /** Sets what the room's exits byte says for one direction; one undo step. */
+  setExitMode(
+    episode: number,
+    roomId: number,
+    direction: Direction,
+    mode: ExitMode,
+  ): Edit | undefined {
+    this.endStroke();
+    const room = this.room(episode, roomId);
+    if (exitMode(room, direction) === mode) return undefined;
+    return this.commitTags(episode, room, withExitMode(room, direction, mode).tags);
+  }
+
+  /** Gives a room new tags as one undo step. */
+  private commitTags(episode: number, room: Room, tags: readonly RoomTag[]): Edit {
     const step: Edit = {
       episode,
-      room: roomId,
+      room: room.id,
       layer: "base",
       changes: [],
       tags: { before: room.tags, after: tags },

@@ -122,12 +122,17 @@ export class App {
   private replaceNext = false;
   /** Removes the listeners on window (dispose). */
   private readonly listeners = new AbortController();
-  private readonly exitsView = new ExitsView(
-    (room) => {
+  private readonly exitsView = new ExitsView({
+    go: (room) => {
       this.showRoom(room);
     },
-    (room) => this.roomLabel(this.episode, room),
-  );
+    label: (room) => this.roomLabel(this.episode, room),
+    setMode: (direction, mode) => {
+      this.need().setExitMode(this.episode, this.roomId, direction, mode);
+      this.showRoom(this.roomId);
+      this.refreshButtons();
+    },
+  });
   private connections: Connections | undefined;
   private readonly cellInfo = h("p", { class: "cell-info" }, " ");
   private readonly tileInput = h("input", {

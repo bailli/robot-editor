@@ -104,6 +104,31 @@ export function exitsByte(room: Room): number {
 }
 
 /**
+ * What the exits byte says for one direction (0x439590): the grid neighbour (if that
+ * room exists), room 2 ("outside", not checked) or no exit (2 and 3, the originals use 2).
+ */
+export type ExitMode = "neighbour" | "outside" | "none";
+
+const MODE_BITS: Readonly<Record<ExitMode, number>> = { neighbour: 0, outside: 1, none: 2 };
+
+export function exitMode(room: Room, direction: Direction): ExitMode {
+  const bits = (exitsByte(room) >> (2 * DIRECTIONS.indexOf(direction))) & 3;
+  return bits === 0 ? "neighbour" : bits === 1 ? "outside" : "none";
+}
+
+/**
+ * A copy of `room` whose exits byte says `mode` for `direction`. Like in the original
+ * scenes the tag (kind 1) is there only when the byte is not 0, as the room's first tag.
+ */
+export function withExitMode(room: Room, direction: Direction, mode: ExitMode): Room {
+  const shift = 2 * DIRECTIONS.indexOf(direction);
+  const byte = (exitsByte(room) & ~(3 << shift)) | (MODE_BITS[mode] << shift);
+  const tags = room.tags.filter((t) => t.kind !== EXITS_TAG);
+  if (byte !== 0) tags.unshift({ kind: EXITS_TAG, value: byte });
+  return { ...room, tags };
+}
+
+/**
  * Where each direction leads on entering the room (0 = nowhere), before the room's
  * script runs. `ids` are the ids of the episode's rooms.
  */
@@ -217,6 +242,22 @@ export function arrivalCell(cell: number, direction: Direction): number {
     case "east":
       return y * ROOM_WIDTH;
   }
+}
+
+/**
+ * The exit cells (EXIT_CELL in the base layer) on the room's `direction` edge, and those
+ * of them that arrive on an exit cell of `target` (the room that edge leads to).
+ */
+export function edgeExits(
+  room: Room,
+  direction: Direction,
+  target?: Room,
+): { cells: number[]; matching: number[] } {
+  const cells = edgeCells(direction).filter((c) => room.base[c] === EXIT_CELL);
+  const matching = target
+    ? cells.filter((c) => target.base[arrivalCell(c, direction)] === EXIT_CELL)
+    : [];
+  return { cells, matching };
 }
 
 /**

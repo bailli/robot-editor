@@ -147,7 +147,9 @@ Files in `packages/formats/src`:
   per direction N, S, W, E at 0x439590): 0 = grid neighbour if it exists, 1 = room 2 (the
   "outside", e.g. episode III's sea), 2/3 = none. Walking off the map arrives on the
   opposite edge, same row/column (0x427a9b); row 0 lies under the status line.
-- **Exit tiles** `0x0017` in walls; closed ones become `0x0110` (0x433ae5).
+- **Exit tiles** `0x0017` in walls; closed ones become `0x0110` (0x433ae5). The exits
+  byte (tag kind 1) is present only when not 0 and is then the room's first tag; mode 3
+  works like 2 but no original uses it.
 - **Scripts** (plain text, C-like) change `RoomNorth`…`RoomWest` and `BusWest`/`BusEast`
   (bus line in episode II); parsed with fixed vs. state-dependent marking.
   `Teleport(room, x, y)` does not move the hero: it sets the point returning teleporters
@@ -232,7 +234,8 @@ Supported:
 - painting base or overlay with a tile from the episode's tiles or any hex value; right
   click picks; dragging fills lines; undo/redo per stroke; grid (G)
 - exits line: N/S/W/E targets incl. script changes, doors/stairs, bus, oracles,
-  teleporters, actors; arrow keys follow fixed exits
+  teleporters, actors; arrow keys follow fixed exits; per direction the exits byte's
+  setting (neighbour / outside / none) can be changed, undoably (`withExitMode`)
 - visited rooms go into the browser's history and address (`#3/147`): the browser's
   back/forward (buttons, Alt+←/→, mouse buttons), the editor's own ◀/▶ buttons (showing
   the room they lead to) and Backspace move between them, across episodes; loading the
@@ -262,7 +265,8 @@ Not supported (yet):
 
 - painting over logic cells (use the inspector); records are edited field by field, no
   copy/paste of records between rooms
-- editing tags and exits; adding, deleting or copying rooms
+- editing the other tags (darkness, points, ambient name, kind 3); adding, deleting or
+  copying rooms; painting exit tiles is plain painting (0x0017 in the base layer)
 - fill, copy/paste of areas, tile search/filter
 - English UI texts / English descriptions (German only; English exists for Junior and I)
 - remembering the last exe or unsaved work across reloads

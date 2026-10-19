@@ -24,6 +24,8 @@ export {
   TELEPORTER_RECORD,
   arrivalCell,
   edgeCells,
+  edgeExits,
+  exitMode,
   exitsByte,
   isConditional,
   roomExits,
@@ -31,9 +33,11 @@ export {
   roomPassages,
   roomScriptExits,
   roomTeleports,
+  withExitMode,
 } from "./exits.ts";
 export type {
   Direction,
+  ExitMode,
   Exits,
   Passage,
   PassageKind,
