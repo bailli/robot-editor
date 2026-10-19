@@ -1,4 +1,4 @@
-import { type LogicRecord, describeRecord } from "@robot/formats";
+import { type EpisodeClasses, type LogicRecord, describeRecord } from "@robot/formats";
 
 /** A record field shown as an input: a cell value (hex), a number or a flag. */
 interface Field {
@@ -97,7 +97,12 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
       targetRoom,
       byte(6, "Target x", 39),
       byte(7, "Target y", 28),
-      byte(8, "Actor kind", 255, "kind 0x100 + this"),
+      byte(
+        8,
+        "Actor",
+        255,
+        "0x80 + n: the episode's actor n (0x83 dealer, 0x85 thief); else a tile type",
+      ),
     ],
   },
   {
@@ -190,8 +195,8 @@ export class RecordView {
     this.element.replaceChildren();
   }
 
-  /** Shows a record; `where` names the cell, e.g. "(12, 7) base". */
-  show(record: LogicRecord, where: string): void {
+  /** Shows a record of an episode with these classes; `where` names the cell, e.g. "(12, 7) base". */
+  show(record: LogicRecord, where: string, classes: EpisodeClasses): void {
     this.element.hidden = false;
     const data = record.data.slice();
     const known = RECORD_TYPES.find((t) => t.type === data[0]);
@@ -200,7 +205,7 @@ export class RecordView {
     };
 
     const title = element("h3", undefined, `Logic record ${record.slot} at ${where}`);
-    const summary = element("p", "record-summary", describeRecord(record).summary);
+    const summary = element("p", "record-summary", describeRecord(record, classes).summary);
     const type = element("select");
     type.setAttribute("aria-label", "Record type");
     for (const t of RECORD_TYPES) type.append(new Option(`${t.type} ${t.name}`, String(t.type)));

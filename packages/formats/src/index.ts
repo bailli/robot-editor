@@ -155,10 +155,12 @@ export type { CellDescription } from "./describe.ts";
 export { describeRecord } from "./records.ts";
 export type { RecordInfo, RecordKind } from "./records.ts";
 export {
+  ACTOR_CLASS_NAMES,
   ACTOR_KIND_CLASSES,
   PLACEMENT_AREAS,
   ROBOT_CLASSES,
   actorKindClass,
+  recordActorKind,
   cellActorSource,
   randomPlacement,
   roomActors,

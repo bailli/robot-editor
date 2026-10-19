@@ -160,7 +160,11 @@ export class ExitsView {
       c.records
         .filter((r) => r.kind === "actor")
         .map((r) =>
-          this.target(r.room, `an actor appears${at(r.cell)}, heading for (${r.x}, ${r.y})`),
+          this.target(
+            r.room,
+            `an actor appears${at(r.cell)}; once the hero dealt with it, it leaves through ` +
+              `an edge wall, and following it arrives at (${r.x}, ${r.y})`,
+          ),
         ),
     );
     const teleporters = c.records.filter((r) => r.kind === "teleporter");

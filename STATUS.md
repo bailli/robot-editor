@@ -229,6 +229,20 @@ mode)` places objects, `Possess(obj)` tests the inventory (a state selects the e
   another cell, e.g. drawbridges), 3 buried (dug up with the shovel), 5 spawner (creature
   near the hero), 7 creature, 8 travelling actor, 11 logic-gate circuit node (episode I),
   12 oracle, 13 teleporter.
+- **Travelling actors** (record type 8, `SetMan`): byte 8 is converted on scene load
+  (0x432728): with bit 0x80 an index into the episode's actor kinds (episode +0x34, e.g.
+  episode I 0x475c38: 0x100…0x105), else a tile type (its class); the originals use 0x83
+  = kind 0x103 = **the dealer** (class 0x2c, buys platinum for points, sells items for
+  gold, 0x448440) and 0x85 = kind 0x105 = **the thief** (class 0x4a, tile 0x40 in
+  episodes I/II, "helps poor people": takes about half of the hero's items, 0x41f470).
+  The actor walks towards the hero and stops next to it (no pathfinding; 0x4480d0).
+  Once the hero dealt with it (trade, theft) it wanders at random, and stepping into an
+  edge wall it vanishes and leaves a teleporter there for 1–2 s (0x420c30, task 0x8a) to
+  the record's room at (x, y): following it at once takes the hero there. The actor is
+  not moved into that room. **Verified under Wine:** a type-8 record added to episode I
+  room 43 lets the dealer appear and walk up to the hero (bytes 0x03 and 0x83 alike;
+  tile 3 is class 3, which happens to map to the dealer's kind). Leaving through the
+  wall is from the code only.
 
 ## The editor (`pnpm editor`)
 
@@ -308,11 +322,10 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
    factories registered by class id, 0x44d4e0), which tiles and records produce actors,
    robots' sprites (`_Aliens`, `1E01`) and random colours. Open: the exact sprite order
    (which actors count before a robot), sprites of the other actors (androids etc. use
-   their tile graphic in the editor), travelling actors' kinds 0x183/0x185 (classes
-   0x83/0x85 have no registered factory, so they may never appear), and the six dwords
+   their tile graphic in the editor), and the six dwords
    after the class id in each 0x47ec98 entry. Kinds found so far: 0x100 hero, 0x101
-   robot, 0x102 the hero's double (class 3), 0x103 class 0x2c ("mysterious person"),
-   0x104 android (episode III: snake), 0x105 class 74 (helper, tile 0x40), 0x106 turtle,
+   robot, 0x102 the hero's double (class 3), 0x103 the dealer (class 0x2c), 0x104
+   android (episode III: snake), 0x105 the thief (class 74, tile 0x40), 0x106 turtle,
    0x107 friendly native, 0x108 wild boar (the last three episode III), 0x109 episode IV
    robot, 0x10a episode IV tile 0x0c. **Robot-free room** (0x4fe3bc, a word in the
    saved game state, episode code +0x158): in that room no robots (kind 0x101 / class 2),
@@ -434,6 +447,9 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
   instead. Failure screenshots go to `.vitest/` (ignored).
 - `pkill -f "<pattern>"` in a shell whose command line contains the pattern kills that
   shell; use `pkill -f "[v]ite …"`.
+- The game names its screenshots after the room; a name with `_` (a hard space, 0x1f)
+  makes that fail ("Screenshot ERROR 123", e.g. episode I room 42), so the harness gets
+  no file in such rooms (its `--debug` captures still show the screen).
 - Wine harness: the game sometimes does not come up in time ("xdotool search …" fails);
   just run the shot again. Debug room 99 shows no room banner on a repeated start (the
   harness only warns). After the dialogs the harness presses Return until nothing

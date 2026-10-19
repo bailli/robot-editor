@@ -1,3 +1,5 @@
+import { ACTOR_CLASS_NAMES, actorKindClass, recordActorKind } from "./actors.ts";
+import type { EpisodeClasses } from "./classes.ts";
 import type { LogicRecord } from "./scene.ts";
 
 /**
@@ -14,8 +16,9 @@ import type { LogicRecord } from "./scene.ts";
  *   7   creature (episode III): on entering the room the cell at offset 2 is placed and
  *       a creature of kind 0x107 appears (0x42b78b; parameters at offsets 4, 6, 7)
  *   8   travelling actor: on entering the room the cell at offset 2 is placed and an
- *       actor of kind 0x100 + byte 8 appears, heading for room (offset 4, bits 0-9),
- *       x (byte 6), y (byte 7) (0x42b81d)
+ *       actor appears (byte 8, see recordActorKind: the dealer or the thief). Once the
+ *       hero dealt with it, it leaves through an edge wall, which leads to room (offset
+ *       4, bits 0-9) at x (byte 6), y (byte 7) for 1-2 s (0x42b81d, 0x420c30)
  *   11  circuit (episode I): a node of the logic gate puzzles; byte 7 holds its signal
  *       (0x40f700)
  *   12  oracle, 13 teleporter: see exits.ts
@@ -51,7 +54,8 @@ export interface RecordInfo {
 
 const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 
-export function describeRecord(record: LogicRecord): RecordInfo {
+/** `classes` (the record's episode) name the actors of travelling actor records. */
+export function describeRecord(record: LogicRecord, classes?: EpisodeClasses): RecordInfo {
   const d = record.data;
   const u16 = (at: number) => d[at] | (d[at + 1] << 8);
   const target = () => `room ${u16(4) & 0x3ff} at (${u16(4) >> 10}, ${d[6]})`;
@@ -63,9 +67,17 @@ export function describeRecord(record: LogicRecord): RecordInfo {
       `a creature appears every ${d[5]} ticks while the hero is within ` +
       `${Math.sqrt(d[4]).toFixed(1)} cells`,
     creature: () => `a creature (kind 0x107) appears here when the room is entered`,
-    "travelling actor": () =>
-      `an actor (kind 0x${(0x100 + d[8]).toString(16)}) appears here, heading for ` +
-      `room ${u16(4) & 0x3ff} at (${d[6]}, ${d[7]})`,
+    "travelling actor": () => {
+      const kind = classes && recordActorKind(d[8], classes);
+      const name = kind === undefined ? undefined : ACTOR_CLASS_NAMES[actorKindClass(kind)];
+      const who = name
+        ? `the ${name.toLowerCase()}`
+        : `an actor (${kind === undefined ? `byte 8 = 0x${d[8].toString(16)}` : `kind 0x${kind.toString(16)}`})`;
+      return (
+        `${who} appears here; once the hero dealt with it, it leaves through an edge ` +
+        `wall, and following it leads to room ${u16(4) & 0x3ff} at (${d[6]}, ${d[7]})`
+      );
+    },
     circuit: () => `a node of the logic gate puzzles`,
     oracle: () => `an oracle; walked onto northwards it teleports to ${target()}`,
     teleporter: () => `a teleporter to ${target()}`,

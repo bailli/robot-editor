@@ -1,4 +1,5 @@
 import {
+  ACTOR_CLASS_NAMES,
   type EpisodeClasses,
   type Game,
   type Room,
@@ -23,11 +24,19 @@ const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 /** Names and descriptions of an episode's cells, as the game picks them. */
 export class TileNames {
   private readonly names: Map<number, string>;
+  private readonly actorNames: ReadonlyMap<number, string>;
   private readonly texts: ReadonlyMap<number, readonly string[]>;
   private readonly classes: EpisodeClasses;
   private readonly episode: number;
 
   constructor(game: Game, episode: number) {
+    // actors whose tiles have no script name: the dealer, the thief
+    this.actorNames = new Map(
+      [...game.episode(episode).classes.classes].flatMap(([type, c]) => {
+        const name = c.id === undefined ? undefined : ACTOR_CLASS_NAMES[c.id];
+        return name ? [[type, name] as const] : [];
+      }),
+    );
     this.names = game.objectNames(episode);
     this.texts = game.episodeTexts(episode)?.entries ?? new Map<number, string[]>();
     this.classes = game.episode(episode).classes;
@@ -36,11 +45,14 @@ export class TileNames {
 
   /** `room` describes logic cells by their records. */
   info(value: number, room?: Room): TileInfo {
-    const name = this.names.get(value & 0xff);
+    const object = this.names.get(value & 0xff);
+    const name = object
+      ? object.charAt(0) + object.slice(1).toLowerCase()
+      : this.actorNames.get(value & 0xff);
     const description = describeCell(value, this.classes, this.episode, room);
     const texts = description ? descriptionTexts(description, this.texts) : [];
     return {
-      name: name && name.charAt(0) + name.slice(1).toLowerCase(),
+      name,
       descriptions: texts.map(displayText).filter((d) => d !== ""),
       random: description !== undefined && typeof description.variant !== "number",
     };

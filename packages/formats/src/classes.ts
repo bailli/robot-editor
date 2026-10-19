@@ -91,6 +91,11 @@ export interface EpisodeClasses {
   maskedPatterns: readonly number[];
   /** 8x8 font at 0x481170, 8 bytes per character code. */
   font: Uint8Array;
+  /**
+   * The episode's actor kinds (episode +0x34, 8-byte entries, the kind in the second
+   * dword): logic records name an actor by an index into it (see recordActorKind).
+   */
+  actorKinds: readonly number[];
 }
 
 const CLASS_TABLES: readonly number[] = [0x479ad8, 0x475838, 0x476e00, 0x477ca0, 0x478c40];
@@ -106,6 +111,14 @@ const TYPES = 128;
 const TERRAIN_PATTERNS = 0x47f238;
 const MASKED_PATTERNS = 0x47f20c;
 const FONT = 0x481170;
+/** Per episode the actor table and its length (arguments of the episode constructor). */
+const ACTOR_TABLES: readonly (readonly [number, number])[] = [
+  [0x479ed8, 4],
+  [0x475c38, 6],
+  [0x477200, 6],
+  [0x4780a0, 7],
+  [0x479040, 5],
+];
 
 function u16s(bytes: Uint8Array): number[] {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -173,5 +186,13 @@ export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasse
     terrainPatterns: u16s(readVa(exe, TERRAIN_PATTERNS, 32)),
     maskedPatterns: u16s(readVa(exe, MASKED_PATTERNS, 64)),
     font: readVa(exe, FONT, 128 * 8).slice(),
+    actorKinds: actorKinds(exe, episode),
   };
+}
+
+function actorKinds(exe: PeImage, episode: number): number[] {
+  const table = ACTOR_TABLES.at(episode);
+  if (!table) return [];
+  const [va, count] = table;
+  return Array.from({ length: count }, (_, i) => u32(exe, va + 8 * i + 4) & 0xffff);
 }

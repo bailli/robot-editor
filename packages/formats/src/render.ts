@@ -209,6 +209,7 @@ function letter(shape: Shape, font: Uint8Array, state: number): Uint8Array {
 }
 
 const NO_CLASSES: EpisodeClasses = {
+  actorKinds: [],
   classes: new Map(),
   typeOfClass: new Map(),
   underlays: [],

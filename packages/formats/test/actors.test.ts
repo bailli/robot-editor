@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 
 import { expect, test } from "vitest";
 
-import { randomPlacement, roomActors, scriptActors } from "../src/actors.ts";
+import {
+  ACTOR_CLASS_NAMES,
+  randomPlacement,
+  recordActorKind,
+  roomActors,
+  scriptActors,
+} from "../src/actors.ts";
 import { roomScript } from "../src/exits.ts";
 import { EPISODES, Game } from "../src/game.ts";
 import { exe } from "./data.ts";
@@ -38,6 +44,29 @@ test("records let robots, natives and travelling actors appear", () => {
     (a) => a.source === "travelling",
   );
   expect(travelling?.target).toEqual({ room: 41, x: 14, y: 3 });
+});
+
+test("travelling actors are the dealer and the thief", () => {
+  // byte 8 with bit 0x80 indexes the episode's actor kinds: 0x83 -> 0x103, 0x85 -> 0x105
+  expect(game.episode(1).classes.actorKinds).toEqual([0x100, 0x101, 0x102, 0x103, 0x104, 0x105]);
+  const classes = game.episode(1).classes;
+  expect(recordActorKind(0x83, classes)).toBe(0x103);
+  expect(recordActorKind(0x85, classes)).toBe(0x105);
+  // without the bit a tile type: tile 0x2c is the dealer's class
+  expect(recordActorKind(0x2c, classes)).toBe(0x12c);
+  const names = EPISODES.flatMap((episode) =>
+    game.episode(episode).rooms.flatMap((room) =>
+      roomActors(room, game.episode(episode).classes)
+        .filter((a) => a.source === "travelling")
+        .map((a) => {
+          const id = game.episode(episode).classes.classes.get(a.type ?? -1)?.id ?? -1;
+          return ACTOR_CLASS_NAMES[id] ?? "?";
+        }),
+    ),
+  );
+  expect(names.filter((n) => n === "Dealer").length).toBe(9);
+  expect(names.filter((n) => n === "Thief").length).toBe(10);
+  expect(names.includes("?")).toBe(false);
 });
 
 test("scripts scatter robots, androids and bombs", () => {

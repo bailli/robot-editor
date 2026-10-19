@@ -30,7 +30,8 @@ export function actorOrigin(actor: RoomActor): string {
     creature: () => "appears when the room is entered",
     travelling: () =>
       actor.target
-        ? `heads for room ${actor.target.room} at (${actor.target.x}, ${actor.target.y})`
+        ? `leaves for room ${actor.target.room} once met (follow it: arrive at ` +
+          `(${actor.target.x}, ${actor.target.y}))`
         : "travelling",
   };
   return origins[actor.source]();

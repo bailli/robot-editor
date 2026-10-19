@@ -524,7 +524,7 @@ export class App {
     const where = `(${index % ROOM_WIDTH}, ${Math.floor(index / ROOM_WIDTH)}) ${layer}`;
     const record =
       (cell & 0xff) === LOGIC_CELL ? room.records.find((r) => r.slot === cell >> 8) : undefined;
-    if (record) this.recordView.show(record, where);
+    if (record) this.recordView.show(record, where, this.need().game.episode(this.episode).classes);
     else this.recordView.showEmpty(where);
   }
 
@@ -972,7 +972,10 @@ export class App {
       .filter((c) => (c & 0xff) === LOGIC_CELL)
       .map((c) => room.records.find((r) => r.slot === c >> 8))
       .find((r) => r !== undefined);
-    if (record) this.cellInfo.textContent += `  · ${describeRecord(record).summary}`;
+    if (record) {
+      const classes = this.editor.game.episode(this.episode).classes;
+      this.cellInfo.textContent += `  · ${describeRecord(record, classes).summary}`;
+    }
     const actor = this.actors.find((a) => a.cell === index);
     if (actor) this.cellInfo.textContent += `  · actor: ${actorOrigin(actor)}`;
     // what the hero would see: the overlay object if there is one

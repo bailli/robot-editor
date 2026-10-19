@@ -27,7 +27,11 @@ import { scriptConstants } from "./script.ts";
  *   scorpions  sand heaps (sand states 6, 7) hiding scorpions
  *   spawner    record type 5: robots appear while the hero is near (0x435650)
  *   creature   record type 7: an actor of kind 0x107 appears on entering
- *   travelling record type 8: an actor of kind 0x100 + byte 8 heading for a target
+ *   travelling record type 8: an actor (recordActorKind), in the originals the dealer
+ *              or the thief. It walks towards the hero; once the hero dealt with it (a
+ *              trade, a theft) it wanders off and, stepping into an edge wall, leaves a
+ *              teleporter there for 1-2 s (0x420c30) to the record's room at (x, y): the
+ *              hero can follow it. It is not moved into that room.
  * Scripts keep a random number of them (RandObj, see randomPlacement).
  */
 
@@ -68,6 +72,23 @@ const RECORD_SOURCES: Readonly<Partial<Record<number, ActorSource>>> = {
   8: "travelling",
 };
 
+/** Names of actors whose tiles do not say what they are. */
+export const ACTOR_CLASS_NAMES: Readonly<Partial<Record<number, string>>> = {
+  0x2c: "Dealer", // buys platinum for points, sells items for gold (0x448440)
+  0x4a: "Thief", // takes about half of the hero's items (0x41f470)
+};
+
+/**
+ * The actor kind a travelling actor record names with its byte 8 (converted when the
+ * scene is loaded, 0x432728): with bit 0x80 an index into the episode's actor kinds
+ * (originals: 0x83 the dealer, 0x85 the thief), else a tile type (its class).
+ */
+export function recordActorKind(byte: number, classes: EpisodeClasses): number {
+  const low =
+    byte & 0x80 ? (classes.actorKinds[byte & 0x7f] ?? 0) : (classes.classes.get(byte)?.id ?? byte);
+  return 0x100 | (low & 0xff);
+}
+
 /** The class an actor kind names (kinds below 0x10c through ACTOR_KIND_CLASSES). */
 export function actorKindClass(kind: number): number {
   const n = kind & 0xff;
@@ -106,7 +127,7 @@ export function roomActors(room: Room, classes: EpisodeClasses): RoomActor[] {
           actors.push({ source, cell, layer, type: typeOf(actorKindClass(0x107)), record });
         } else {
           const target = { room: (d[4] | (d[5] << 8)) & 0x3ff, x: d[6], y: d[7] };
-          const type = typeOf(actorKindClass(0x100 | d[8]));
+          const type = typeOf(actorKindClass(recordActorKind(d[8], classes)));
           actors.push({ source, cell, layer, type, record, target });
         }
         continue;
