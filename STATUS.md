@@ -64,6 +64,7 @@ Files in `packages/formats/src`:
 | `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                 |
 | `describe.ts`                | the description the game shows for a cell                                                     |
 | `room-names.ts`              | the name the game shows for a room                                                            |
+| `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants      |
 | `records.ts`                 | what logic records do                                                                         |
 | `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
 | `game.ts`                    | `Game`: loads an exe, episodes lazily, saves edited scenes (`withScene`)                      |
@@ -87,8 +88,9 @@ Files in `packages/formats/src`:
   0x54) shows the name of room id − 100 (caves, cellars). The text is cut to one line
   (0x43bfd0: underlines dropped, an empty line ends it; 0x438850 fetches texts without
   line breaks and with `_` as a hard space). Rooms without a name show "Szene <id>"
-  (rooms 1 and 99, episode II's 600s, a few others). Where the game shows the names
-  and descriptions is not known yet (callers 0x404192, 0x43fe45).
+  (rooms 1 and 99, episode II's 600s, a few others). The game's own screenshots are
+  named after them (`R1-043-DER START.png`); where it shows the descriptions is not
+  known yet (callers 0x404192, 0x43fe45).
 - **Sound tables** (`1E06`): `N:SOUND ;note`; the notes name objects by tile type
   (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names.
 
@@ -102,8 +104,8 @@ Files in `packages/formats/src`:
   = record slot. In memory the game converts types to class ids.
 - **Room tags** (loader 0x438d10, stored at room record +0x14 …): kind 1 = exits byte,
   kind 5 = 8-character name (`BRANDUNG`, `LAVA`, … probably an ambient sound), kind 6 =
-  length-prefixed payload (value 1 = script source, 2 = compiled script, 3 = 4 unknown
-  bytes). Kinds 2, 3, 4 are stored but not understood (see open items).
+  length-prefixed payload (value 1 = script source, 2 = compiled script, 3 = a Unix time
+  1993–2008 in every room, probably when the original editor saved it). Kinds 2, 3, 4 are stored but not understood (see open items).
 - **Saving:** `Game.withScene` writes edited rooms back. The original scenes fill their
   resources exactly, so edits usually grow them; a grown resource moves to the end of
   `.rsrc` (the last section), which grows, and the Authenticode signature is dropped.
@@ -157,6 +159,34 @@ Files in `packages/formats/src`:
   y at offset 6 (actors: x, y at bytes 6, 7).
 - **Reachability** from each start room: everything except debug room 99 and the rooms
   listed under open items (snapshot in `exits.test.ts`).
+
+### Room scripts (`script.ts`)
+
+- **The game runs the compiled script** (tag 6/2); the source (6/1) is only text.
+  **Verified under Wine:** a new compiled script in episode I's start room (a `for` loop
+  placing keys with `SetObj`, source left unchanged) runs in the game.
+- **Bytecode** (interpreter 0x4080e0, documented in `script.ts`): bits 4–5 of an
+  instruction give the size of a signed operand (0/1/2/4 bytes), `b & 0xcf` the
+  operation (push, load, store, arg, drop, call, end, jumps relative to the next
+  instruction); bytes 0x80–0x96 are C operators. Values live on a ring of 30 entries,
+  jumps and stores leave the top in place; arguments go to a separate stack.
+- **Symbol table** at the start (`1e nn`, 14-byte entries: name, kind 1 variable /
+  3 function, argument count). The loader (0x406da0) links it in place (`1e` → `1f`):
+  names starting with an upper-case letter are looked up case-insensitively in the
+  keyword table 0x4750d8 (62 records of 24 bytes: name, flags 0x40 function / 0x8n
+  variable of width n, handler or address, arguments; `Area` exists with 3 and 4
+  arguments); the others are local variables stored in the entry (0 on scene load).
+- **Compiler** (`compileScript`): reproduces **all 128 compiled scripts byte for byte**
+  from their sources: symbols in order of appearance, smallest operands, no constant
+  folding, `&&`/`||` evaluate both sides, jump sizes from a first layout with 2-byte
+  jumps. Statements: expressions, `if`/`else`, `for`, `return`, `?:`. Unknown functions,
+  wrong argument counts and unknown `O_` constants are compile errors.
+- **Constants** (`O_KEY`, …) are tile types: the sound table names plus
+  `SCRIPT_OBJECT_CLASSES`, read from the compiled scripts and stored **by class** (their
+  tile type differs per episode: `O_SAND` is class 39, tile 39 in Junior and 49
+  elsewhere).
+- `pnpm robot script E ROOM` shows a script and its disassembly; with a source file and
+  an output exe it writes the script into the room (`withRoomScript`).
 
 ### Descriptions and logic records
 
@@ -259,19 +289,16 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
    (25, 14), east (15, 14), north (20, 22), south (20, 7); the bus (20, 14); teleporters
    and stairs keep the old one), other objects anywhere. The script's
    `Teleport(room, x, y)` only sets where returning teleporters lead (0x407900). Script
-   object names are tile types (sound tables, plus O_ALIEN 2, O_ANDROID 0x2d, O_BOMB
-   0x13, O_WORM 0x37, O_ISOLATE 9 from compiled scripts). The editor's `RandObj` counts
+   object names are tile types (`scriptConstants`, see room scripts above). The editor's `RandObj` counts
    (`randomPlacement`) look at map cells only; the game also counts actors standing on
    cells (0x407650 via 0x433230), e.g. those from records.
-3. **Scripts.** Only the source (tag 6/1) is read. The game runs the **compiled** script
-   (6/2), whose format is not decoded; editing scripts needs a compiler (the keyword table
-   with variable addresses is at 0x4753c0…, 24-byte records; functions with their handlers
-   from 0x4750d8, e.g. RandObj 0x4073a0, Teleport 0x407900). Tag 6/3 (4 bytes) unknown.
-   First hints at the bytecode: it starts with the names it uses (`LastRoom`, `RandObj`,
-   … zero-padded), and a call like `RandObj(O_ALIEN, 8, 15)` compiles to
-   `11 02 05 11 08 05 11 0f 05 17 03 16 03`: `11 nn` pushes a byte, `17 nn` calls name
-   number nn; `05` and `16 03` are not understood. Arguments with `|` (e.g.
-   `O_KEY | 0x0500`) compile differently.
+3. **Scripts.** Compiled scripts are decoded and the compiler reproduces them (see room
+   scripts above); the editor does not edit scripts yet (the CLI can). Open: what most
+   functions do (handlers are known from the keyword table, e.g. `SetObj` 0x407160,
+   `Event` 0x407c20; `Event(mask)` tests the event the script runs for: 1 take, 2 drop,
+   8 entering the room per the comments, 4 and 16 not known), when exactly the runner
+   (0x407fa4) is called, string variables (kind 2, in no original script) and whether
+   `while`, `break` or compound assignments existed in the original language (not used).
 4. **Room tags kind 2, 3, 4** (record +0x14 byte, +0x16 byte, +0x18 dword; values like
    20/40/60/80, 2/3, 100–2500): meaning unknown; kind 4 × 10 is passed to 0x42b640 on
    entering (score bonus?).
@@ -347,6 +374,8 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
 | 0x41e4d0, 0x47efe0, 0x41e100 | telephone (episode II): dial; numbers → handlers; Ghostbusters (robot-free)    |
 | 0x4827f0                     | base palette (episode III: 0x477c10)                                           |
 | 0x481170                     | 8×8 font                                                                       |
+| 0x4750d8                     | script keywords (functions and variables)                                      |
+| 0x406da0, 0x4080e0, 0x407fa4 | link a compiled script; run it; the runner                                     |
 
 ## Gotchas
 

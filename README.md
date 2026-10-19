@@ -45,6 +45,8 @@ makes a static build in `packages/editor/dist/`.
     pnpm robot shots [EPISODE ...]                          screenshot start rooms (needs Wine)
     pnpm robot shots --room EPISODE ROOM ...                screenshot any rooms (needs Wine)
     pnpm robot shots --update                               recompute shots.json
+    pnpm robot script EPISODE ROOM                          a room's script: source and disassembly
+    pnpm robot script EPISODE ROOM SOURCE OUT.exe           exe whose ROOM runs the script in SOURCE
 
 ## Reference screenshots from the real game
 

@@ -94,6 +94,32 @@ export {
   roomName,
 } from "./room-names.ts";
 export type { RoomName } from "./room-names.ts";
+export {
+  KEYWORD_FUNCTION,
+  KEYWORD_VARIABLE,
+  OPERATORS,
+  Op,
+  SCRIPT_OBJECT_CLASSES,
+  SCRIPT_TAG,
+  ScriptError,
+  ScriptPart,
+  SymbolKind,
+  compileScript,
+  disassemble,
+  isOperator,
+  parseCompiledScript,
+  readScriptKeywords,
+  roomCompiledScript,
+  scriptConstants,
+  withRoomScript,
+} from "./script.ts";
+export type {
+  CompileOptions,
+  CompiledScript,
+  Instruction,
+  ScriptKeyword,
+  ScriptSymbol,
+} from "./script.ts";
 export { findResource, readResources, replaceResource, ResourceType } from "./resources.ts";
 export type { PeResource } from "./resources.ts";
 export { cryptScene, SCENE_KEY } from "./scene-crypt.ts";

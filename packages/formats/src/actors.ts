@@ -8,6 +8,7 @@ import {
 } from "./classes.ts";
 import { isConditional } from "./exits.ts";
 import { LOGIC_CELL, type LogicRecord, ROOM_CELLS, ROOM_WIDTH, type Room } from "./scene.ts";
+import { scriptConstants } from "./script.ts";
 
 /**
  * The moving actors of a room (robots, androids, animals, the bus, …) and where they come
@@ -140,25 +141,13 @@ export function scriptActors(source: string): ScriptActors[] {
   );
 }
 
-/**
- * Script object names are tile types. The sound tables name the items (Game.objectNames);
- * these others are read from compiled scripts (RandObj's first argument).
- */
-const SCRIPT_OBJECTS: Readonly<Record<string, number>> = {
-  ALIEN: 0x02,
-  ANDROID: 0x2d,
-  BOMB: 0x13,
-  WORM: 0x37,
-  ISOLATE: 0x09,
-};
-
-/** The tile type of a script object name ("KEY", "ALIEN"), if known. */
+/** The tile type of a script object name ("KEY", "ALIEN"), if known (see scriptConstants). */
 export function scriptObjectType(
   name: string,
   objectNames: ReadonlyMap<number, string>,
+  classes: EpisodeClasses,
 ): number | undefined {
-  for (const [type, known] of objectNames) if (known === name) return type;
-  return SCRIPT_OBJECTS[name];
+  return scriptConstants(objectNames, classes).get(`O_${name}`);
 }
 
 /** Classes RandObj places in an area away from the hero (0x407588): robots, androids. */
@@ -217,7 +206,7 @@ export function randomPlacement(
   classes: EpisodeClasses,
   objectNames: ReadonlyMap<number, string>,
 ): RandomPlacement {
-  const type = scriptObjectType(call.name, objectNames);
+  const type = scriptObjectType(call.name, objectNames, classes);
   let existing = 0;
   let free = 0;
   for (let cell = 0; cell < ROOM_CELLS; cell++) {

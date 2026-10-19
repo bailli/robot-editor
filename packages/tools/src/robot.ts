@@ -10,13 +10,22 @@
  *   robot shots [EPISODE ...]                        screenshot the start rooms (Wine harness)
  *   robot shots --room EPISODE ROOM ...              screenshot any rooms via patched exes
  *   robot shots --update                             recompute shots.json from the screenshots
+ *   robot script EPISODE ROOM                        a room's script: source and disassembly
+ *   robot script EPISODE ROOM SOURCE OUT.exe         exe whose ROOM runs the script in SOURCE
  *
  * Options: --exe PATH (default reference/GameOfRobot.exe).
  */
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
-import { renderRoom } from "@robot/formats";
+import {
+  disassemble,
+  parseCompiledScript,
+  renderRoom,
+  roomCompiledScript,
+  roomScript,
+  withRoomScript,
+} from "@robot/formats";
 
 import { ROOT, loadGame } from "./game.ts";
 import { patchedExe } from "./patch.ts";
@@ -47,7 +56,7 @@ const [command, ...args] = positionals;
 const game = () => loadGame(values.exe);
 
 function usage(): never {
-  console.error("usage: robot render|compare|eval|patch|shots ... (see src/robot.ts)");
+  console.error("usage: robot render|compare|eval|patch|shots|script ... (see src/robot.ts)");
   process.exit(2);
 }
 
@@ -159,6 +168,27 @@ switch (command) {
       const episodes = args.length > 0 ? args.map((_, i) => int(i)) : [0, 1, 2, 3, 4];
       for (const episode of episodes) add(takeShot(g, episode));
     }
+    break;
+  }
+  case "script": {
+    const [episode, id] = [int(0), int(1)];
+    const g = game();
+    if (args.length > 2) {
+      const [source, out] = [str(2), str(3)];
+      const options = { constants: g.scriptConstants(episode), keywords: g.scriptKeywords() };
+      const rooms = g
+        .episode(episode)
+        .rooms.map((r) =>
+          r.id === id ? withRoomScript(r, readFileSync(source, "utf8"), options) : r,
+        );
+      if (!rooms.some((r) => r.id === id)) usage();
+      writeFileSync(out, g.withScene(episode, rooms));
+      break;
+    }
+    const room = g.room(episode, id);
+    const compiled = roomCompiledScript(room);
+    console.log(roomScript(room) || "(no script)");
+    if (compiled) console.log(`\n${disassemble(parseCompiledScript(compiled))}`);
     break;
   }
   default:

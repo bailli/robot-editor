@@ -7,6 +7,7 @@ import { type PeResource, findResource, readResources, replaceResource } from ".
 import { type RoomName, roomName } from "./room-names.ts";
 import { cryptScene } from "./scene-crypt.ts";
 import { type Room, parseScene, serializeScene } from "./scene.ts";
+import { type ScriptKeyword, readScriptKeywords, scriptConstants } from "./script.ts";
 import { type ShapeTable, parseShapes } from "./shapes.ts";
 import { type Texts, parseObjectNames, parseTexts } from "./texts.ts";
 
@@ -119,6 +120,16 @@ export class Game {
   /** Script names of the episode's objects by tile type, e.g. 21 -> "KEY". */
   objectNames(episode: number): Map<number, string> {
     return parseObjectNames(this.decode(this.resource("CRUNCHED", soundsId(episode)).data));
+  }
+
+  /** The names room scripts can use: the game's functions and variables. */
+  scriptKeywords(): ScriptKeyword[] {
+    return readScriptKeywords(this.image);
+  }
+
+  /** The episode's script constants ("O_KEY" -> tile type, see scriptConstants). */
+  scriptConstants(episode: number): Map<string, number> {
+    return scriptConstants(this.objectNames(episode), this.episode(episode).classes);
   }
 
   private decode(data: Uint8Array): string {
