@@ -5,6 +5,8 @@ with the goal of a cross-platform level editor.
 
 The game itself and everything derived from it are not part of this repository.
 
+What is decoded, what the editor supports and what is still open: [STATUS.md](STATUS.md).
+
 ## Setup
 
 1. Put `GameOfRobotInstall.exe` into `reference/` and unpack it:
