@@ -51,20 +51,21 @@ the exe itself; findings are checked three ways where possible:
 
 Files in `packages/formats/src`:
 
-| File                         | What it covers                                                                               |
-| ---------------------------- | -------------------------------------------------------------------------------------------- |
-| `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc` |
-| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression, CP437                                                             |
-| `texts.ts`                   | text resources: tile descriptions, messages, object names                                    |
-| `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                   |
-| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects), shape tables and frames                               |
-| `palette.ts`                 | the 16-colour palettes per episode                                                           |
-| `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font    |
-| `render.ts`                  | drawing cells and rooms like the game                                                        |
-| `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                |
-| `describe.ts`                | the description the game shows for a cell                                                    |
-| `records.ts`                 | what logic records do                                                                        |
-| `game.ts`                    | `Game`: loads an exe, episodes lazily, saves edited scenes (`withScene`)                     |
+| File                         | What it covers                                                                                |
+| ---------------------------- | --------------------------------------------------------------------------------------------- |
+| `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc`  |
+| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression, CP437                                                              |
+| `texts.ts`                   | text resources: tile descriptions, messages, object names                                     |
+| `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                    |
+| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects), shape tables and frames                                |
+| `palette.ts`                 | the 16-colour palettes per episode                                                            |
+| `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font     |
+| `render.ts`                  | drawing cells and rooms like the game                                                         |
+| `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                 |
+| `describe.ts`                | the description the game shows for a cell                                                     |
+| `records.ts`                 | what logic records do                                                                         |
+| `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
+| `game.ts`                    | `Game`: loads an exe, episodes lazily, saves edited scenes (`withScene`)                      |
 
 ## What is decoded and verified
 
@@ -177,6 +178,11 @@ Supported:
   "Go", arrival position, spawner radius/period, …) and the raw bytes; change the type,
   add a record to a plain cell (it shows the cell it replaces, lowest free slot < 200),
   remove one (the cell becomes what it showed); all undoable
+- actors (toggle "Actors", key A): marks where actors appear (ring: placed in the map;
+  dashed: appear later or from a record; spawner radius; arrow: heading somewhere),
+  robots drawn with the episode's `_Aliens` sprites in turn (their look and colours vary
+  in the game); a list below the map groups them with name, origin and positions (click
+  to select), plus the script's `RandObj(…)` random ones
 - save: downloads the exe with all edited episodes (warns about unsaved changes on leave)
 
 Not supported (yet):
@@ -198,9 +204,13 @@ Roughly by value for the editor.
    11 at (20, 15)) takes the hero exactly there. Other record types are only
    round-tripped through the scene writer. Fields of types 7 and 11 are only partly
    understood.
-2. **Actor kinds.** Records 7/8 and spawners create actors (kinds 0x107, 0x183, 0x185,
-   spawner creatures via 0x44dd60/0x44dc60); which creature each kind is is unknown, and
-   actors are not drawn.
+2. **Actors.** Known: creation (0x44dc60, kinds 0x100 + n → class via 0x47ec98, 20
+   factories registered by class id, 0x44d4e0), which tiles and records produce actors,
+   robots' sprites (`_Aliens`, `1E01`) and random colours. Open: the exact sprite order
+   (which actors count before a robot), sprites of the other actors (androids etc. use
+   their tile graphic in the editor), travelling actors' kinds 0x183/0x185 (classes
+   0x83/0x85 have no registered factory, so they may never appear), how `RandObj` picks
+   places, and what the script names (O_ALIEN, …) are as numbers.
 3. **Scripts.** Only the source (tag 6/1) is read. The game runs the **compiled** script
    (6/2), whose format is not decoded; editing scripts needs a compiler (the keyword table
    with variable addresses is at 0x4753c0…, 24-byte records). Tag 6/3 (4 bytes) unknown.
