@@ -944,7 +944,7 @@ export class App {
           "button",
           {
             "data-tile": String(value),
-            title: this.names().title(value),
+            title: this.tileTitle(value),
             click: () => {
               this.setTile(value);
             },
@@ -997,10 +997,49 @@ export class App {
     this.saveButton.disabled = !editor.dirty;
   }
 
+  /**
+   * A tile for the palette. Tiles that draw nothing show what they are instead: robots
+   * their first sprite (the game turns them into actors), others a hatching (invisible in
+   * the game, e.g. the marker 0x54 of rooms named after the room 100 below).
+   */
   private tileCanvas(value: number): HTMLCanvasElement {
-    return this.layer === "base"
-      ? cellCanvas(this.cache(), value)
-      : cellCanvas(this.cache(), 0, value);
+    const [base, overlay] = this.layer === "base" ? [value, 0] : [0, value];
+    const element = cellCanvas(this.cache(), base, overlay);
+    if (value === 0 || !this.drawsNothing(base, overlay)) return element;
+    const g = element.getContext("2d");
+    const sprite = this.isRobot(value & 0xff) ? this.robotSprite(0) : undefined;
+    if (g && sprite) {
+      g.drawImage(sprite, 0, 0, element.width, element.height);
+    } else if (g) {
+      g.strokeStyle = "rgb(150 150 150)";
+      g.lineWidth = 1;
+      for (let x = -element.height; x < element.width; x += 4) {
+        g.beginPath();
+        g.moveTo(x, element.height);
+        g.lineTo(x + element.height, 0);
+        g.stroke();
+      }
+    }
+    return element;
+  }
+
+  /** Whether a cell looks like an empty one. */
+  private drawsNothing(base: number, overlay: number): boolean {
+    const cell = this.cache().get(base, overlay).data;
+    const empty = this.cache().get(0, 0).data;
+    return cell.every((v, i) => v === empty[i]);
+  }
+
+  /** What a palette tile is, with a note on tiles drawn differently in the palette. */
+  private tileTitle(value: number): string {
+    const title = this.names().title(value);
+    const [base, overlay] = this.layer === "base" ? [value, 0] : [0, value];
+    if (value === 0 || !this.drawsNothing(base, overlay)) return title;
+    const note = this.isRobot(value & 0xff)
+      ? "(a robot: the game turns it into an actor with one of its robot sprites)"
+      : "(draws nothing in the game)";
+    const [head, ...rest] = title.split("\n");
+    return [`${head} ${note}`, ...rest].join("\n");
   }
 
   /** What a name in a script means: a function, a game variable or an object. */

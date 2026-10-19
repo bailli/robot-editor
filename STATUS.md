@@ -240,7 +240,9 @@ Supported:
 - open/drop an exe (in development `reference/GameOfRobot.exe` opens by itself)
 - episode and room selection, room list with edited rooms marked
 - room drawn exactly as the renderer draws it (cell image cache, per-cell redraws)
-- painting base or overlay with a tile from the episode's tiles or any hex value; right
+- painting base or overlay with a tile from the episode's tiles (robots, which draw
+  nothing as tiles, show their first sprite; other invisible tiles a hatching) or any hex
+  value; right
   click picks; dragging fills lines; undo/redo per stroke; grid (G)
 - exits line: N/S/W/E targets incl. script changes, doors/stairs, bus, oracles,
   teleporters, actors; arrow keys follow fixed exits; per direction the exits byte's

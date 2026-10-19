@@ -488,3 +488,23 @@ test("outlines from hovering the actors or the script go when the room changes",
   app.showRoom(167);
   expect(app.view.outlines()).toBe(0);
 });
+
+test("palette tiles that draw nothing show a robot or a hatching instead", () => {
+  const pixels = (value: number) => {
+    const canvas = document.querySelector(`.tile-grid [data-tile="${value}"] canvas`);
+    if (!(canvas instanceof HTMLCanvasElement)) throw new Error(`no tile ${value}`);
+    return [...defined(canvas.getContext("2d") ?? undefined).getImageData(0, 0, 16, 12).data];
+  };
+  const floor = pixels(0);
+  // episode I: robots (type 2) are actors in the game, their tiles draw nothing
+  expect(pixels(0x0002)).not.toEqual(floor);
+  expect(document.querySelector('.tile-grid [data-tile="2"]')?.getAttribute("title")).toMatch(
+    /a robot: the game turns it into an actor/,
+  );
+  app.showEpisode(2, 43);
+  // episode II: the marker of rooms named after the room 100 below draws nothing
+  expect(pixels(0x0054)).not.toEqual(pixels(0));
+  expect(document.querySelector('.tile-grid [data-tile="84"]')?.getAttribute("title")).toMatch(
+    /draws nothing in the game/,
+  );
+});
