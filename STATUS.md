@@ -249,9 +249,19 @@ Files in `packages/formats/src`:
   goal, III's a stool): the hero may cross only with at least **state × 10,000 points**
   (0x4264f0: score / 10000 ≥ state, else message 508 "Du brauchst mindestens %ld
   Punkte…"; e.g. 0x0c32 = 120,000). `requiredPoints`; the editor says it in the tile's
-  description. Passing also calls the room-change check 0x42f7c0 with that number, whose
-  episode method compares it with a random 70,000–100,000 and else checks a key at
-  0x51bb80 (probably the registration; not followed).
+  description. Passing also goes through the registration check (below) with that
+  number instead of the score.
+- **Registration (shareware limit, 0x42f7c0):** every room change (edges 0x44c6b9, doors,
+  stairs) and every expert field checks a number: the score, or the field's threshold.
+  Below a random limit it passes: episode method +0x28, I/II/IV 70,000–100,000 points,
+  III 90,000–120,000, Junior always passes; with episode +4 set, once more than half the
+  episode's rooms are visited (0x4390c0) the number counts as 500,000. Above it the game
+  wants a registration: the licensee name (registry `HKCU\Software\TOM-Productions\Robot`,
+  value `Licensee`, asked for on the first start, message 515) and a registration number
+  (0x4fe2ec, typed into a dialog, 0x42f550, and kept in savegames) that must match a
+  checksum of the name and an episode value (0x42f910, episode +0x2c). Otherwise message
+  999 ("…lass' Dich bitte registrieren", www.tom-games.de) and the room change does not
+  happen. Not tried in the game (no test went above these limits).
 - **Logic records** (`records.ts`), all 1177 in the game classified: 1 stacked (object on
   another cell, e.g. drawbridges), 3 buried (dug up with the shovel), 5 spawner (creature
   near the hero), 7 creature, 8 travelling actor, 11 logic-gate circuit node (episode I),
