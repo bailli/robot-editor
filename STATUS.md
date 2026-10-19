@@ -41,13 +41,13 @@ the exe itself; findings are checked three ways where possible:
 
 ## Repository map
 
-| Path                    | Content                                                                                      |
-| ----------------------- | -------------------------------------------------------------------------------------------- |
-| `packages/formats/src`  | `@robot/formats`: all decoders/encoders, no dependencies, Node and browser                   |
-| `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build)                                     |
-| `packages/tools/src`    | `@robot/tools`: CLI `pnpm robot …` (render, compare, eval, patch, shots), PNG via `fast-png` |
-| `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool                                |
-| `shots.json`            | per reference screenshot: hash, palette offset, cells where our render still differs         |
+| Path                    | Content                                                                                              |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `packages/formats/src`  | `@robot/formats`: all decoders/encoders, no dependencies, Node and browser                           |
+| `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build)                                             |
+| `packages/tools/src`    | `@robot/tools`: CLI `pnpm robot …` (render, compare, eval, patch, shots, script), PNG via `fast-png` |
+| `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool                                        |
+| `shots.json`            | per reference screenshot: hash, palette offset, cells where our render still differs                 |
 
 Files in `packages/formats/src`:
 
@@ -65,6 +65,7 @@ Files in `packages/formats/src`:
 | `describe.ts`                | the description the game shows for a cell                                                     |
 | `room-names.ts`              | the name the game shows for a room                                                            |
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants      |
+| `script-docs.ts`             | what the script functions and variables do, how scripts and events run                        |
 | `records.ts`                 | what logic records do                                                                         |
 | `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
 | `game.ts`                    | `Game`: loads an exe, episodes lazily, saves edited scenes (`withScene`)                      |
@@ -133,9 +134,9 @@ Files in `packages/formats/src`:
   (`calmRoom`): cells whose class becomes an actor on entering the room (vtable +0x28,
   `ACTOR_LOAD_METHODS`: robots, androids, snakes, the worm, …), delayed creature sources
   (`HATCHING_LOAD_METHODS`: eggs, snake basket, "something behind the wall"), bombs
-  (they release robots), sand heaps hiding scorpions (sand states 6/7) and
-  spawner/creature records. Otherwise the hero can die before the
-  screenshot and the death's message box covers the room.
+  (they release robots), sand heaps hiding scorpions (sand states 6/7) and the records
+  that let actors appear (spawners, creatures, travelling actors). Otherwise the hero can
+  die before the screenshot and the death's message box covers the room.
 - **The hero's start** is fixed per episode in the episode code (vtable +0x54: Junior
   0x40e1a0 (2, 14), I 0x408da0 (5, 14), II 0x409fa0 (6, 23), III 0x40b460 (8, 15), IV
   0x40d680 (13, 16)); the hero tile (type 1) in the map is cleared, not used. In a
@@ -163,13 +164,20 @@ Files in `packages/formats/src`:
   (bus line in episode II); parsed with fixed vs. state-dependent marking.
   `Teleport(room, x, y)` does not move the hero: it stores a point (0x4fe358/35a/35b,
   0x407900) that replaces the target of teleporters whose record has flag 0x02 ("script
-  may set the target", 0x44ccb1); room 0 gives them their own target back. A teleporter
-  record's byte 8, if not 0, shows message 1200 + it when used (episode III: texts
-  1201–1207, "Du betrittst einen engen Gang…").
+  may set the target", 0x44ccb1); room 0 gives them their own target back. Episodes
+  whose flags (episode +8) have bit 0x2000 clear that point on every room entry, before
+  the script runs (0x439426): Junior, I, II and IV set it in their constructors, III does
+  not. So in episode I a redirect lasts only while the hero stays in the room (episode
+  I's teleport hubs 36 and 38 send their teleporters back to where the hero came from,
+  by `LastRoom`). A teleporter record's byte 8, if not 0, shows message 1200 + it when
+  used (episode III: texts 1201–1207, "Du betrittst einen engen Gang…").
 - **Passages ±100** ("further in": building interiors, caves): door in = class 98 (tile
   0x53, state 6/7, a roof's door) → +100; door out = class 105 (0x5a) → −100; stairs =
-  class 71 (0x3d), state bit 0 clear → +100 (down), set → −100 (up). All have their
-  counterpart at the same place except 5 recorded one-way stairs.
+  class 71 (0x3d), state bit 0 clear → +100 (down), set → −100 (up). The hero arrives
+  at the same (x, y) in the target room (0x426880), so all have their counterpart at the
+  same place, except 5 recorded one-way stairs. Stairs need nothing but the tile (no
+  record, script or tag); both layers are used (episode IV mostly the overlay); Junior
+  has no stairs.
 - **Logic records with targets:** oracles (type 12, taken walking north), teleporters
   (13), travelling actors (8); target = room in bits 0–9 + x in bits 10–15 of offset 4,
   y at offset 6 (actors: x, y at bytes 6, 7).
@@ -210,15 +218,21 @@ Files in `packages/formats/src`:
   `return` (without one it runs on into the code after the block). Events: 1 take,
   2 drop (filter: tile type, E_Value: the object), 4 walk areas from `SetWarea` (E_Value
   +n entering, −n leaving), 8 entering the room, 16 slots. **Verified under Wine:** in
-  episode I's start room the top-level code and an `Event(8)` block both run. Room 1's script is the
-  global one (episode start, game load); its handlers run when no room handler matches.
+  episode I's start room the top-level code and an `Event(8)` block both run. Room 1's
+  script is the global one (episode start, game load); its handlers run when no room
+  handler matches.
+- **NewRoom** is 1 only on the first visit of a room in a game: entering a room whose
+  record lacks the visited flag (+4 bit 2) sets it, sets NewRoom = 1 and awards the
+  first-visit points; any later entry sets NewRoom = 0 (0x4392dc; loading a savegame
+  restores the saved value). `HaveSeen(room)` reads the same flag.
 - **Functions and variables:** all 62 keywords are described in `script-docs.ts`
   (decoded from their handlers; a few meanings are guesses, marked there): e.g.
   `Message(text, delay)` shows a text after `delay` seconds in the room (all its `|`
-  variants as pages one after another; with delay 0 at once and one variant at random), `SetObj(obj, x, y,
-mode)` places objects, `Possess(obj)` tests the inventory (a state selects the exact
-  variant), `SetMan` sends the dealer somewhere, `Enigma(n)` awards a solved puzzle once,
-  `Wizzard(…)` places episode I's wizard. RoomTime counts seconds (147 ticks each);
+  variants as pages one after another; with delay 0 at once and one variant at random),
+  `SetObj(obj, x, y, mode)` places objects, `Possess(obj)` tests the inventory (a state
+  selects the exact variant), `SetMan` sends the dealer somewhere, `Enigma(n)` awards a
+  solved puzzle once, `Wizzard(x, y, room, rx, ry, …)` places episode I's wizard, who
+  sends the hero to `room` at (rx, ry). RoomTime counts seconds (147 ticks each);
   Val1…Val8 are free variables kept across rooms.
 - `pnpm robot script E ROOM` shows a script and its disassembly; with a source file and
   an output exe it writes the script into the room (`withRoomScript`).
@@ -259,8 +273,7 @@ Supported:
 - room drawn exactly as the renderer draws it (cell image cache, per-cell redraws)
 - painting base or overlay with a tile from the episode's tiles (robots, which draw
   nothing as tiles, show their first sprite; other invisible tiles a hatching) or any hex
-  value; right
-  click picks; dragging fills lines; undo/redo per stroke; grid (G)
+  value; right click picks; dragging fills lines; undo/redo per stroke; grid (G)
 - exits line: N/S/W/E targets incl. script changes, doors/stairs, bus, oracles,
   teleporters, actors; arrow keys follow fixed exits; per direction the exits byte's
   setting (neighbour / outside / none) can be changed, undoably (`withExitMode`)
@@ -317,10 +330,11 @@ Roughly by value for the editor.
    round-tripped through the scene writer. Fields of types 7 and 11 are only partly
    understood. **How to test an edit in the game:** build the exe (`Game.withScene`, or
    the editor's "Save exe"), put the change next to the hero's start (see "The hero's
-   start" above) and run `python3 -I tools/wine/harness.py shot E OUT.png --exe EXE --keys
-Right` (`--debug DIR` saves every step); the game's screenshot file name tells the room
-   it ended in. There is no CLI command for this yet (the teleporter test was a one-off
-   script).
+   start" above) and run `python3 -I tools/wine/harness.py shot E OUT.png --exe EXE
+--keys Right` (`--debug DIR` saves every step); the game's screenshot file name tells
+   the room it ended in. Exits open only once a room's robots are gone, so tests of
+   walking out remove them (`calmRoom`); a 0.3 s key press moves the hero several cells.
+   There is no CLI command for this yet (the tests so far were one-off scripts).
 2. **Actors.** Known: creation (0x44dc60, kinds 0x100 + n → class via 0x47ec98, 20
    factories registered by class id, 0x44d4e0), which tiles and records produce actors,
    robots' sprites (`_Aliens`, `1E01`) and random colours. Open: the exact sprite order
@@ -364,10 +378,13 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
    only `SetObj`, `for` and an `Event(8)` handler are verified in the game.
 4. **Room tag kind 3** (record +0x16 byte, values 2/3): meaning unknown. (Kind 2 is the
    darkness, kind 4 × 10 the first visit's points, see room tags above.)
-5. **Rooms not reached** by any decoded connection: episode I 228 (runs `Wizzard(…)`),
-   episode II 242 (only one-way stairs out), episode III 149 and 3; room 99 is a debug room
-   in every episode. Probably entered via game code (e.g. 0x44bd2b takes a room from a
-   table). The episode II jump to room 600 at 0x40a820 is not understood either.
+5. **Rooms not reached** by any decoded connection: episode I 228 (its wizard sends the
+   hero to room 2, the cinema, at (12, 12) — besides the title room 1 the only way to
+   room 2 in episode I, which uses no "outside" exits), episode II 242 (only one-way
+   stairs out), episode III 149 and 3; room 99 is a debug room in every episode.
+   Probably entered via game code (e.g. 0x44bd2b takes a room from a table; in episode I
+   the puzzle in room 128 creates the way to 228, by the player's account). The episode
+   II jump to room 600 at 0x40a820 is not understood either.
 6. **Renderer gaps** (`pnpm robot eval --types`): empty floor in episodes I/II (runtime:
    actors, hero, animations), episode IV types 95/106/79/99/70, episode III types 83, 37,
    49, 76, episode II 85/77/110/25, Junior 23/25 (animated). Some are runtime effects that
@@ -387,7 +404,13 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
 11. **Two edge-exit code paths:** 0x427a9b (arrival only) and 0x44c5a0 (also sets the
     RandObj reference point; with game flag bit 10 of [0x51bb18]+8 clear, the arrival
     moves one cell further in). Which one runs when is not known.
-12. **Scorpion sand** (sand states 6/7) is confirmed by the texts in episodes II and III
+12. **A level quirk in episode I room 26:** its script places the stairs down to 126 on
+    the first visit or with ≥ 225000 points (`if(NewRoom || (Score >= 225000))`), and the
+    stairs are the only way from the upper level down (room 38's teleporter to 128 is
+    redirected back by its script from every upper room). With the colour-7 key from
+    room 16 (next door) the door to the stairs' corridor opens on the first visit, so the
+    points gate can be skipped. From code and data, not played through.
+13. **Scorpion sand** (sand states 6/7) is confirmed by the texts in episodes II and III
     only; in episode IV those states read "Noch mehr Sand" (one cell in the game, still
     treated as scorpions by `cellActorSource`).
 
@@ -439,7 +462,8 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
 | 0x4750d8                     | script keywords (functions and variables)                                      |
 | 0x406da0, 0x4080e0, 0x407fa4 | link a compiled script; run it; clear a room's handlers                        |
 | 0x407b30, 0x408970           | register an event handler; raise an event                                      |
-| 0x4394f3                     | entering a room runs its script                                                |
+| 0x4392dc, 0x4394f3           | entering a room: visited flag and NewRoom; runs its script                     |
+| 0x439426, 0x44ccb1           | clear the Teleport() point on entering (flag 0x2000); teleporter uses it       |
 
 ## Gotchas
 
