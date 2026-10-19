@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 
 import {
@@ -13,7 +13,7 @@ import {
 
 import { App, line } from "../src/app.ts";
 import "../src/style.css";
-import { exeBytes, firstDifference } from "./game.ts";
+import { defined, exeBytes, firstDifference } from "./game.ts";
 
 const bytes = await exeBytes();
 const game = new Game(bytes);
@@ -215,4 +215,46 @@ test("hovering a logic cell says what its record does", () => {
   expect(document.querySelector(".cell-info")?.textContent).toMatch(
     /· a teleporter to room \d+ at/,
   );
+});
+
+describe("logic records", () => {
+  const teleporterCell = () => {
+    const room = defined(app.editor).room(2, 55);
+    return room.base.findIndex((c) => (c & 0xff) === 0x7f);
+  };
+
+  test("clicking a logic cell opens its record; changing a field edits it", async () => {
+    app.showEpisode(2, 55);
+    const index = teleporterCell();
+    await clickCell(index);
+    await expect.element(page.getByRole("heading", { name: /^Logic record \d+ at/ })).toBeVisible();
+    const room = page.getByRole("textbox", { name: "Target room" });
+    await userEvent.clear(room);
+    await userEvent.type(room, "43{Enter}");
+    const slot = (defined(app.editor).room(2, 55).base[index] ?? 0) >> 8;
+    const record = defined(app.editor)
+      .room(2, 55)
+      .records.find((r) => r.slot === slot);
+    expect(record && (record.data[4] | (record.data[5] << 8)) & 0x3ff).toBe(43);
+    expect(document.querySelector(".teleports")?.textContent).toContain("43");
+    await expect.element(page.getByRole("button", { name: "Save exe" })).toBeEnabled();
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(defined(app.editor).isEdited(2, 55)).toBe(false);
+  });
+
+  test("the inspect tool adds and removes records", async () => {
+    app.showEpisode(1, 43);
+    await page.getByRole("radio", { name: "Inspect" }).click();
+    const index = 5 * ROOM_WIDTH + 20;
+    await clickCell(index);
+    await expect.element(page.getByRole("heading", { name: /^No logic record at/ })).toBeVisible();
+    await userEvent.selectOptions(
+      page.getByRole("combobox", { name: "Record type" }),
+      "13 Teleporter",
+    );
+    await page.getByRole("button", { name: "Add record" }).click();
+    expect((defined(app.editor).room(1, 43).base[index] ?? 0) & 0xff).toBe(0x7f);
+    await page.getByRole("button", { name: "Remove record" }).click();
+    expect(defined(app.editor).room(1, 43).base[index]).toBe(game.room(1, 43).base[index]);
+  });
 });

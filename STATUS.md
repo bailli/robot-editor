@@ -158,11 +158,17 @@ Supported:
   teleporters, actors; arrow keys follow fixed exits
 - tile names (items) and the game's descriptions in tooltips and the hover line; logic
   cells say what their record does
+- logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
+  inspector with the record's fields per type (cells with previews, target room with
+  "Go", arrival position, spawner radius/period, …) and the raw bytes; change the type,
+  add a record to a plain cell (it shows the cell it replaces, lowest free slot < 200),
+  remove one (the cell becomes what it showed); all undoable
 - save: downloads the exe with all edited episodes (warns about unsaved changes on leave)
 
 Not supported (yet):
 
-- editing logic cells or records (magenta cells are locked)
+- painting over logic cells (use the inspector); records are edited field by field, no
+  copy/paste of records between rooms
 - editing tags, scripts, exits; adding, deleting or copying rooms
 - fill, copy/paste of areas, tile search/filter
 - English UI texts / English descriptions (German only; English exists for Junior and I)
@@ -173,9 +179,9 @@ Not supported (yet):
 
 Roughly by value for the editor.
 
-1. **Editing logic records.** Types are understood (`records.ts`); next: an inspector to
-   change a teleporter's target, what is buried, spawner radius/period, and to place new
-   records (free slots: < 200 per room, slot = cell high byte).
+1. **Logic records in play.** The inspector edits all record types, but edited records
+   have not been tried in the real game yet (only round-tripped through the scene
+   writer). Fields of types 7 and 11 are only partly understood.
 2. **Actor kinds.** Records 7/8 and spawners create actors (kinds 0x107, 0x183, 0x185,
    spawner creatures via 0x44dd60/0x44dc60); which creature each kind is is unknown, and
    actors are not drawn.
@@ -200,6 +206,28 @@ Roughly by value for the editor.
    near 0x4828d4 ("Command %s unknown!", probably cheats; two jump ±100 rooms).
 9. **Saving details:** the PE checksum is not updated (Windows does not check it for
    exes); a moved resource leaves zeroed space behind.
+
+## Limits and what is shared between episodes
+
+- **Rooms:** at most 200 per episode (scene loader 0x438d10). Room ids are free 16-bit
+  numbers; the game finds rooms by id (0x4390f0). Practical limits: targets in records
+  have 10 bits (≤ 1023); room names are text entries 1000 + id (e.g. 1043 "DER START"),
+  and new names need a CRUNCHED **encoder**, which does not exist yet. Start rooms are
+  fixed in the episode code (+0x54 of the episode vtable). Adding a room to an episode
+  is therefore possible (new id, link it by grid id, stairs ±100 or a teleporter).
+- **Episodes** are objects with their own vtables (Junior 0x466cd8, I 0x466458, II
+  0x4665a8, III 0x466b08, IV 0x466c38, base 0x46cdf0); 22 of 28 slots are overridden
+  somewhere (start position, special events, episode II's jump to room 600, …).
+- **Engine-wide:** logic record handling (lookup, step-on 0x44cb60, room load 0x42b6f0,
+  the spawner tick 0x435650 in the global task list 0x46cc24…) and the class code itself.
+  Any record type works in any episode, as far as the classes and actors it refers to
+  exist there.
+- **Per episode:** the tile type → class table (128 entries, fixed data in the exe), the
+  shapes (`1E02`), texts (`1E10`), sound table (`1E06`) and palette. Classes only one
+  episode maps: Junior 5, I 3, II 28, III 46, IV 50. Using such a class elsewhere would
+  need a patched class table (an unused tile type), new shapes in that episode's SHAPES
+  resource (OMF) and texts; some class code also checks the episode number (e.g. describe
+  method 0x4145b0).
 
 ## Useful addresses
 

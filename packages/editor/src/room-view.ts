@@ -48,6 +48,7 @@ export class RoomView {
   private room: Room | undefined;
   private cache: CellCache | undefined;
   private hover: number | undefined;
+  private selected: number | undefined;
   private grid = false;
 
   readonly zoom: number;
@@ -81,6 +82,11 @@ export class RoomView {
   /** The room's palette indices as drawn, for tests: RGBA of the room canvas. */
   pixels(): Uint8ClampedArray {
     return this.room2d.getImageData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT).data;
+  }
+
+  setSelected(index: number | undefined): void {
+    this.selected = index;
+    this.drawMarks();
   }
 
   setHover(index: number | undefined): void {
@@ -143,6 +149,16 @@ export class RoomView {
         g.fillRect(x, y, w, h);
         g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
       }
+    }
+    if (this.selected !== undefined) {
+      g.strokeStyle = "rgb(255 140 0)";
+      g.lineWidth = 3;
+      g.strokeRect(
+        (this.selected % ROOM_WIDTH) * w + 1.5,
+        Math.floor(this.selected / ROOM_WIDTH) * h + 1.5,
+        w - 3,
+        h - 3,
+      );
     }
     if (this.hover !== undefined) {
       g.strokeStyle = "rgb(0 120 255)";

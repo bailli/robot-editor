@@ -97,7 +97,7 @@ export function describeCell(
   const state = cell >> 8;
   const cls = classes.classes.get(type);
   if (cls?.id === undefined) return undefined;
-  const textOf = (classId: number) => classes.typeOfClass.get(classId) ?? classId;
+  const textOf = (classId: number) => classes.typeOfClass.get(classId) ?? 0; // the game's table starts zeroed
   if (cls.describeMethod === LOGIC || type === LOGIC_CELL) {
     const record = room?.records.find((r) => r.slot === state);
     // teleporters: class 0x43's text, variant from the record; item-gated cells: 0x34

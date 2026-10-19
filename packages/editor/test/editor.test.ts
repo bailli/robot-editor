@@ -2,8 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import { Game, LOGIC_CELL } from "@robot/formats";
 
-import { Editor, tilesOf } from "../src/editor.ts";
-import { firstDifference, loadGame } from "./game.ts";
+import { Editor, MAX_RECORD_SLOTS, shownCell, tilesOf } from "../src/editor.ts";
+import { defined, firstDifference, loadGame } from "./game.ts";
 
 const game = await loadGame();
 const room = game.room(1, 43);
@@ -95,4 +95,58 @@ test("tilesOf lists the distinct values of a layer, empty first, without logic c
   expect(new Set(tiles).size).toBe(tiles.length);
   expect(tiles.some((t) => (t & 0xff) === LOGIC_CELL)).toBe(false);
   expect(tiles).toContain(room.base[free]);
+});
+
+describe("Editor records", () => {
+  const room55 = game.room(2, 55);
+  const teleporterIndex = room55.base.findIndex((c) => (c & 0xff) === LOGIC_CELL);
+  const teleporter = defined(
+    room55.records.find((r) => r.slot === (room55.base[teleporterIndex] ?? 0) >> 8),
+    "teleporter",
+  );
+
+  test("changing a record is one undo step and survives saving", () => {
+    const editor = new Editor(game);
+    const data = teleporter.data.slice();
+    data[6] = 9; // arrival y
+    expect(editor.setRecord(2, 55, teleporter.slot, data)).toBeDefined();
+    expect(editor.isEdited(2, 55)).toBe(true);
+    expect(game.room(2, 55).records.find((r) => r.slot === teleporter.slot)?.data[6]).not.toBe(9);
+    const saved = new Game(editor.save());
+    expect(saved.room(2, 55).records.find((r) => r.slot === teleporter.slot)?.data[6]).toBe(9);
+    editor.undo();
+    expect(editor.isEdited(2, 55)).toBe(false);
+    expect(editor.setRecord(2, 55, teleporter.slot, teleporter.data)).toBeUndefined(); // no change
+  });
+
+  test("a new record shows the cell it replaces", () => {
+    const editor = new Editor(game);
+    const slot = defined(editor.addRecord(1, 43, "base", free, 13), "slot");
+    const room = editor.room(1, 43);
+    expect(room.base[free]).toBe(LOGIC_CELL | (slot << 8));
+    const record = room.records.find((r) => r.slot === slot);
+    expect(record?.data[0]).toBe(13);
+    expect(shownCell(defined(record))).toBe(game.room(1, 43).base[free]);
+    expect(editor.addRecord(1, 43, "base", free, 13)).toBeUndefined(); // a logic cell already
+    editor.undo();
+    expect(editor.room(1, 43).base[free]).toBe(game.room(1, 43).base[free]);
+    expect(editor.room(1, 43).records).toEqual(game.room(1, 43).records);
+  });
+
+  test("removing a record leaves the cell it showed", () => {
+    const editor = new Editor(game);
+    editor.removeRecord(2, 55, "base", teleporterIndex);
+    const room = editor.room(2, 55);
+    expect(room.base[teleporterIndex]).toBe(shownCell(teleporter));
+    expect(room.records.some((r) => r.slot === teleporter.slot)).toBe(false);
+    editor.undo();
+    expect(editor.room(2, 55).records).toEqual(room55.records);
+  });
+
+  test("new records take the lowest free slot below 200", () => {
+    const editor = new Editor(game);
+    const used = new Set(game.room(1, 43).records.map((r) => r.slot));
+    const lowest = [...Array(MAX_RECORD_SLOTS).keys()].find((k) => !used.has(k));
+    expect(editor.addRecord(1, 43, "overlay", free, 5)).toBe(lowest);
+  });
 });

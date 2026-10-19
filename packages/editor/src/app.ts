@@ -10,6 +10,7 @@ import {
 
 import { type Edit, Editor, type Layer, tilesOf } from "./editor.ts";
 import { type Connections, ExitsView, connections, fixedExit } from "./exits-view.ts";
+import { RecordView } from "./record-view.ts";
 import { CellCache, RoomView, cellCanvas } from "./room-view.ts";
 import { TileNames } from "./tile-info.ts";
 
@@ -46,12 +47,17 @@ export class App {
   episode = 1;
   roomId = START_ROOMS[1] ?? 1;
   layer: Layer = "base";
+  /** Paint cells, or select cells to inspect their logic records. */
+  tool: "paint" | "inspect" = "paint";
+  /** The selected cell (inspect tool, or a logic cell clicked). */
+  selected: { index: number; layer: Layer } | undefined;
   tile = 0;
 
   readonly view = new RoomView(2);
   private readonly caches = new Map<number, CellCache>();
   private fileName = "GameOfRobot.exe";
   private painting = false;
+  private lastRoom: string | undefined;
   private lastPainted: number | undefined;
 
   private readonly fileInput = h("input", { type: "file", accept: ".exe", hidden: true });
@@ -79,6 +85,33 @@ export class App {
   private readonly tileNames = new Map<number, TileNames>();
   private readonly tileGrid = h("div", { class: "tile-grid" });
   private readonly layerInputs = new Map<Layer, HTMLInputElement>();
+  private readonly toolInputs = new Map<"paint" | "inspect", HTMLInputElement>();
+  readonly recordView = new RecordView({
+    change: (data) => {
+      this.recordEdit((editor, room, slot) => editor.setRecord(this.episode, room, slot, data));
+    },
+    add: (type) => {
+      const selected = this.selected;
+      if (!selected) return;
+      this.need().addRecord(this.episode, this.roomId, selected.layer, selected.index, type);
+      this.afterRecordEdit();
+    },
+    remove: () => {
+      const selected = this.selected;
+      if (!selected) return;
+      this.need().removeRecord(this.episode, this.roomId, selected.layer, selected.index);
+      this.afterRecordEdit();
+    },
+    go: (room) => {
+      if (
+        this.need()
+          .rooms(this.episode)
+          .some((r) => r.id === room)
+      )
+        this.showRoom(room);
+    },
+    preview: (value) => this.cellPreview(value),
+  });
   private readonly workspace: HTMLElement;
   private readonly welcome: HTMLElement;
 
@@ -94,6 +127,17 @@ export class App {
       });
       this.layerInputs.set(layer, input);
       layers.append(h("label", {}, input, layer === "base" ? " Base" : " Overlay"));
+    }
+
+    const tools = h("fieldset", { class: "layers" }, h("legend", {}, "Tool"));
+    for (const tool of ["paint", "inspect"] as const) {
+      const input = h("input", { type: "radio", name: "tool", value: tool });
+      input.checked = tool === this.tool;
+      input.addEventListener("change", () => {
+        this.tool = tool;
+      });
+      this.toolInputs.set(tool, input);
+      tools.append(h("label", {}, input, tool === "paint" ? " Paint" : " Inspect"));
     }
 
     this.welcome = h(
@@ -114,10 +158,12 @@ export class App {
         this.view.element,
         this.cellInfo,
         this.cellText,
+        this.recordView.element,
       ),
       h(
         "aside",
         { class: "tiles" },
+        tools,
         layers,
         h("label", { class: "tile-current" }, this.tilePreview, this.tileInput),
         this.tileText,
@@ -212,6 +258,28 @@ export class App {
     );
     this.exitsView.show(this.connections);
     this.refreshRoomList();
+    const shown = `${this.episode} ${id}`;
+    if (this.selected && this.lastRoom !== shown) this.select(undefined);
+    this.lastRoom = shown;
+  }
+
+  /** Selects a cell and shows its logic record (or the offer to add one). */
+  select(index: number | undefined): void {
+    this.view.setSelected(index);
+    if (index === undefined) {
+      this.selected = undefined;
+      this.recordView.hide();
+      return;
+    }
+    const layer = this.logicLayer(index) ?? this.layer;
+    this.selected = { index, layer };
+    const room = this.need().room(this.episode, this.roomId);
+    const cell = room[layer][index] ?? 0;
+    const where = `(${index % ROOM_WIDTH}, ${Math.floor(index / ROOM_WIDTH)}) ${layer}`;
+    const record =
+      (cell & 0xff) === LOGIC_CELL ? room.records.find((r) => r.slot === cell >> 8) : undefined;
+    if (record) this.recordView.show(record, where);
+    else this.recordView.showEmpty(where);
   }
 
   setLayer(layer: Layer): void {
@@ -307,7 +375,9 @@ export class App {
       if (index === undefined) return;
       event.preventDefault();
       if (event.button === 2 || event.altKey) this.pick(index);
-      else if (event.button === 0) {
+      else if (event.button === 0 && (this.tool === "inspect" || this.logicLayer(index))) {
+        this.select(index);
+      } else if (event.button === 0) {
         this.painting = true;
         this.beginStroke();
         this.paintTo(index);
@@ -421,7 +491,11 @@ export class App {
     const editor = this.need();
     if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
     else if (edit.room !== this.roomId) this.showRoom(edit.room);
-    else {
+    else if (edit.records) {
+      // records change what logic cells show and where things lead: redraw everything
+      this.showRoom(this.roomId);
+      if (this.selected) this.select(this.selected.index);
+    } else {
       this.view.update(
         editor.room(this.episode, this.roomId),
         edit.changes.map((c) => c.index),
@@ -429,6 +503,37 @@ export class App {
     }
     this.refreshRoomList();
     this.refreshButtons();
+  }
+
+  /** The layer whose cell at `index` is a logic cell (the current layer first). */
+  private logicLayer(index: number): Layer | undefined {
+    const room = this.need().room(this.episode, this.roomId);
+    const other: Layer = this.layer === "base" ? "overlay" : "base";
+    return [this.layer, other].find((l) => ((room[l][index] ?? 0) & 0xff) === LOGIC_CELL);
+  }
+
+  /** Applies a change to the selected cell's record. */
+  private recordEdit(
+    change: (editor: Editor, room: number, slot: number) => Edit | undefined,
+  ): void {
+    const selected = this.selected;
+    if (!selected) return;
+    const cell = this.need().room(this.episode, this.roomId)[selected.layer][selected.index] ?? 0;
+    if ((cell & 0xff) !== LOGIC_CELL) return;
+    change(this.need(), this.roomId, cell >> 8);
+    this.afterRecordEdit();
+  }
+
+  private afterRecordEdit(): void {
+    this.showRoom(this.roomId);
+    if (this.selected) this.select(this.selected.index);
+    this.refreshButtons();
+  }
+
+  private cellPreview(value: number): HTMLCanvasElement {
+    const preview = cellCanvas(this.cache(), value);
+    preview.title = this.names().title(value);
+    return preview;
   }
 
   private showTiles(): void {

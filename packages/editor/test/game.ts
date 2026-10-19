@@ -22,3 +22,9 @@ export function firstDifference(a: ArrayLike<number>, b: ArrayLike<number>): num
   for (let i = 0; i < n; i++) if (a[i] !== b[i]) return i;
   return a.length === b.length ? -1 : n;
 }
+
+/** The value, or a test failure if it is undefined. */
+export function defined<T>(value: T | undefined, what = "value"): T {
+  if (value === undefined) throw new Error(`${what} is undefined`);
+  return value;
+}

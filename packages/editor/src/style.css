@@ -226,6 +226,59 @@ h2 {
   overflow: hidden;
 }
 
+.record-view {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  display: grid;
+  gap: 6px;
+  max-width: 640px;
+}
+
+.record-view h3 {
+  font-size: 14px;
+  margin: 0;
+}
+
+.record-summary {
+  margin: 0;
+  color: var(--muted);
+}
+
+.record-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.record-label {
+  width: 12em;
+  color: var(--muted);
+}
+
+.record-field,
+.record-bytes {
+  font-family: ui-monospace, monospace;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.record-field {
+  width: 8ch;
+}
+
+.record-bytes {
+  width: 30ch;
+}
+
+.record-view button {
+  justify-self: start;
+}
+
 .tiles {
   display: flex;
   flex-direction: column;
