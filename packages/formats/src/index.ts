@@ -7,14 +7,17 @@ export {
   EXITS_TAG,
   OPPOSITE,
   OUTSIDE_ROOM,
+  STAIRS_DOWN_CLASS,
+  STAIRS_UP_CLASS,
   arrivalCell,
   edgeCells,
   exitsByte,
   roomExits,
   roomScript,
   roomScriptExits,
+  roomStairs,
 } from "./exits.ts";
-export type { Direction, Exits, ScriptExit, ScriptTeleport } from "./exits.ts";
+export type { Direction, Exits, ScriptExit, ScriptTeleport, Stairs } from "./exits.ts";
 export { EPISODE_NAMES, EPISODES, Game, START_ROOMS, sceneId, shapesId } from "./game.ts";
 export type { Episode } from "./game.ts";
 export { decodeCp437, encodeCp437 } from "./cp437.ts";

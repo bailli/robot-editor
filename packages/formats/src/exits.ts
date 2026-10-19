@@ -1,3 +1,4 @@
+import type { EpisodeClasses } from "./classes.ts";
 import { decodeCp437 } from "./cp437.ts";
 import { ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
 
@@ -18,6 +19,12 @@ import { ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
  * edge, in the same row or column. Rows 1 and 28 and columns 0 and 39 are the edges (row
  * 0 lies under the status line). Walled rooms mark their exits with cells 0x0017; the
  * game turns them into 0x0110 (closed) on edges without a target and back (0x433ae5).
+ *
+ * Stairs (episodes II-IV) lead to the room 100 above or below: cells of the stairs-up
+ * class with state 6 (entered walking north) or 7 (walking south) to room + 100
+ * (0x413d30), cells of the stairs-down class to room - 100 (0x4140d0). The hero arrives
+ * at the same column, two cells further in the walking direction; the other room has
+ * the matching stairs at the same place.
  */
 
 export const DIRECTIONS = ["north", "south", "west", "east"] as const;
@@ -29,6 +36,18 @@ export const EXITS_TAG = 1;
 export const OUTSIDE_ROOM = 2;
 export const EXIT_CELL = 0x0017;
 export const CLOSED_EXIT_CELL = 0x0110;
+
+/** Class ids of the stairs (tile types 0x53 and 0x5a in episodes II-IV). */
+export const STAIRS_UP_CLASS = 98;
+export const STAIRS_DOWN_CLASS = 105;
+
+export interface Stairs {
+  /** Cell index in the room. */
+  cell: number;
+  direction: "up" | "down";
+  /** Target room (room id +/- 100), 0 if the episode has no such room. */
+  room: number;
+}
 
 const STEP: Readonly<Record<Direction, number>> = { north: -10, south: 10, west: -1, east: 1 };
 
@@ -60,6 +79,31 @@ export function roomExits(room: Room, ids: ReadonlySet<number>): Exits {
     west: target("west", 2),
     east: target("east", 3),
   };
+}
+
+/** The stairs of a room (base and overlay cells). */
+export function roomStairs(
+  room: Room,
+  classes: EpisodeClasses,
+  ids: ReadonlySet<number>,
+): Stairs[] {
+  const stairs: Stairs[] = [];
+  for (const layer of [room.base, room.overlay]) {
+    layer.forEach((value, cell) => {
+      const id = classes.classes.get(value & 0xff)?.id;
+      const state = (value >> 8) & 0xf;
+      const direction =
+        id === STAIRS_UP_CLASS && (state === 6 || state === 7)
+          ? "up"
+          : id === STAIRS_DOWN_CLASS
+            ? "down"
+            : undefined;
+      if (!direction) return;
+      const target = room.id + (direction === "up" ? 100 : -100);
+      stairs.push({ cell, direction, room: ids.has(target) ? target : 0 });
+    });
+  }
+  return stairs;
 }
 
 /** The cells of an edge, in order along it (west to east, north to south). */

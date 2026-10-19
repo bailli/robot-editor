@@ -1,14 +1,17 @@
 import {
   DIRECTIONS,
   type Direction,
+  type EpisodeClasses,
   type Exits,
   OUTSIDE_ROOM,
   type Room,
   type ScriptExit,
   type ScriptTeleport,
+  type Stairs,
   roomExits,
   roomScript,
   roomScriptExits,
+  roomStairs,
 } from "@robot/formats";
 
 export interface Connections {
@@ -17,11 +20,17 @@ export interface Connections {
   /** Changes made by the room's script. */
   scripted: ScriptExit[];
   teleports: ScriptTeleport[];
+  stairs: Stairs[];
 }
 
-export function connections(room: Room, ids: ReadonlySet<number>): Connections {
+export function connections(
+  room: Room,
+  ids: ReadonlySet<number>,
+  classes: EpisodeClasses,
+): Connections {
   const { exits, teleports } = roomScriptExits(roomScript(room));
-  return { exits: roomExits(room, ids), scripted: exits, teleports };
+  const stairs = roomStairs(room, classes, ids);
+  return { exits: roomExits(room, ids), scripted: exits, teleports, stairs };
 }
 
 /** Where a direction leads regardless of the game state: the last fixed script assignment, else the exits byte. */
@@ -66,6 +75,23 @@ export class ExitsView {
       return item;
     });
     this.element.replaceChildren(...items);
+    for (const direction of ["up", "down"] as const) {
+      const stairs = c.stairs.filter((x) => x.direction === direction);
+      const rooms = [...new Set(stairs.map((x) => x.room))];
+      if (rooms.length === 0) continue;
+      const item = document.createElement("span");
+      item.className = "exit stairs";
+      item.dataset["direction"] = direction;
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = direction === "up" ? "Stairs up" : "Stairs down";
+      item.append(label);
+      for (const room of rooms) {
+        const cells = stairs.filter((x) => x.room === room).length;
+        item.append(this.target(room, `${cells} stairs cell${cells === 1 ? "" : "s"}`));
+      }
+      this.element.append(item);
+    }
     if (c.teleports.length > 0) {
       const item = document.createElement("span");
       item.className = "exit teleports";

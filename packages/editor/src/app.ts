@@ -190,7 +190,11 @@ export class App {
     this.roomTitle.textContent = `${EPISODE_NAMES[this.episode] ?? ""} – room ${id}`;
     const room = editor.room(this.episode, id);
     this.view.show(room, this.cache());
-    this.connections = connections(room, new Set(editor.rooms(this.episode).map((r) => r.id)));
+    this.connections = connections(
+      room,
+      new Set(editor.rooms(this.episode).map((r) => r.id)),
+      editor.game.episode(this.episode).classes,
+    );
     this.exitsView.show(this.connections);
     this.refreshRoomList();
   }

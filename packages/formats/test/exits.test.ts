@@ -11,6 +11,7 @@ import {
   roomExits,
   roomScript,
   roomScriptExits,
+  roomStairs,
 } from "../src/exits.ts";
 import { EPISODES, Game } from "../src/game.ts";
 import { exe } from "./data.ts";
@@ -119,4 +120,30 @@ test("the maze of episode II wires its edges by script", () => {
     { direction: "north", room: 674, conditional: false },
     { direction: "east", room: 631, conditional: false },
   ]);
+});
+
+test("stairs lead 100 rooms up or down onto the matching stairs", () => {
+  const listed: string[] = [];
+  for (const episode of EPISODES) {
+    const { rooms, classes } = game.episode(episode);
+    const ids = new Set(rooms.map((r) => r.id));
+    for (const room of rooms) {
+      for (const s of roomStairs(room, classes, ids)) {
+        const where = `${episode} ${room.id} (${s.cell % 40},${Math.floor(s.cell / 40)}) ${s.direction}`;
+        listed.push(`${where} -> ${s.room}`);
+        if (room.id === OUTSIDE_ROOM) continue; // episode IV's unused tile sheet
+        const target = rooms.find((r) => r.id === s.room);
+        assert.ok(target, `${where}: no room ${room.id} ${s.direction === "up" ? "+" : "-"} 100`);
+        // the matching stairs, at the same place (double stairs: the neighbouring cells)
+        const back = roomStairs(target, classes, ids).filter(
+          (t) =>
+            t.direction !== s.direction &&
+            Math.abs((t.cell % 40) - (s.cell % 40)) <= 1 &&
+            Math.abs(Math.floor(t.cell / 40) - Math.floor(s.cell / 40)) <= 3,
+        );
+        assert.ok(back.length > 0, `${where}: no stairs back in room ${s.room}`);
+      }
+    }
+  }
+  expect(listed).toMatchSnapshot();
 });

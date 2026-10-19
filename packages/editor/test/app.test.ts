@@ -145,3 +145,14 @@ test("teleports are listed with the exits", async () => {
   await button.click();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 129" })).toBeVisible();
 });
+
+test("stairs are listed with the exits", async () => {
+  app.showEpisode(2, 42);
+  const up = document.querySelector('.stairs[data-direction="up"]');
+  expect(up?.textContent).toBe("Stairs up142");
+  await exits().getByRole("button", { name: "142" }).click();
+  await expect.element(page.getByRole("heading", { name: "Robot II – room 142" })).toBeVisible();
+  expect(document.querySelector('.stairs[data-direction="down"]')?.textContent).toBe(
+    "Stairs down42",
+  );
+});
