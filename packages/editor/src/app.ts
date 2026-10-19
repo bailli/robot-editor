@@ -317,9 +317,8 @@ export class App {
       ),
       this.sidePanel.element,
     );
+    this.sidePanel.setHeader(tools, layers);
     this.tilesTab.append(
-      tools,
-      layers,
       h("label", { class: "tile-current" }, this.tilePreview, this.tileInput),
       this.tileText,
       h(

@@ -78,6 +78,14 @@ export class SidePanel {
     }
   }
 
+  /** Puts elements above the tabs, always visible (e.g. the tool settings). */
+  setHeader(...elements: HTMLElement[]): void {
+    const header = document.createElement("div");
+    header.className = "side-header";
+    header.append(...elements);
+    this.bar.before(header);
+  }
+
   get shown(): string {
     return this.current;
   }

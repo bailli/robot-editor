@@ -314,10 +314,9 @@ h2 {
 }
 
 .actors-view {
-  margin-top: 12px;
   display: grid;
-  gap: 4px;
-  max-width: 1280px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
 }
 
 .actors-view h3 {
@@ -327,8 +326,9 @@ h2 {
 
 .actor-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   font-size: 13px;
 }
 
@@ -336,8 +336,12 @@ h2 {
   flex: none;
 }
 
+.actor-row > span {
+  min-width: 0;
+}
+
 .actor-text {
-  max-width: 28em;
+  flex: 1 1 12em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -345,7 +349,6 @@ h2 {
 
 .actor-origin {
   color: var(--muted);
-  white-space: nowrap;
 }
 
 .actor-cells {
@@ -478,10 +481,8 @@ canvas.cell {
 }
 
 .script-view {
-  margin-top: 12px;
   display: grid;
   gap: 6px;
-  max-width: 1280px;
 }
 
 .script-bar {
@@ -719,6 +720,17 @@ header button.pressed {
   bottom: 0;
   width: 8px;
   cursor: col-resize;
+}
+
+.side-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.side-header .layers {
+  margin: 0;
 }
 
 .side-tabs {
