@@ -204,7 +204,7 @@ export class ExitsView {
     select.title =
       "What the room's exits byte says: the grid neighbour (room ∓10 north/south, ∓1 " +
       'west/east, if it exists), room 2 ("outside") or no exit. The room\'s exit tiles open ' +
-      "or close accordingly; its script may change it.";
+      "accordingly once its robots are gone; its script may change it.";
     for (const m of Object.keys(MODE_LABELS) as ExitMode[]) {
       const option = document.createElement("option");
       option.value = m;

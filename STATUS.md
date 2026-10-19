@@ -89,7 +89,8 @@ Files in `packages/formats/src`:
   (0x43bfd0: underlines dropped, an empty line ends it; 0x438850 fetches texts without
   line breaks and with `_` as a hard space). Rooms without a name show "Szene <id>"
   (rooms 1 and 99, episode II's 600s, a few others). The game shows the whole text in
-  the banner on entering a room (0x406560; episode III: name and description) and names
+  the banner on entering a room (0x406560; episode III: name and description; seen under
+  Wine for episode I room 42, underlines included) and names
   its own screenshots after the name (`R1-043-DER START.png`).
 - **Sound tables** (`1E06`): `N:SOUND ;note`; the notes name objects by tile type
   (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names.
@@ -147,7 +148,15 @@ Files in `packages/formats/src`:
   per direction N, S, W, E at 0x439590): 0 = grid neighbour if it exists, 1 = room 2 (the
   "outside", e.g. episode III's sea), 2/3 = none. Walking off the map arrives on the
   opposite edge, same row/column (0x427a9b); row 0 lies under the status line.
-- **Exit tiles** `0x0017` in walls; closed ones become `0x0110` (0x433ae5). The exits
+- **Exit tiles** `0x0017` in walls are **closed** ("…still closed: first get rid of all
+  robots"). Once the room has no robots left, task 0x66 (0x433a60, every 147 ms) opens
+  them on edges whose direction leads somewhere (RoomNorth… ≠ 0), one tile per run and
+  tick, into `0x0110` (north/south) or `0x0010` (west/east, drawn as arrows), and closes
+  open ones on edges that lead nowhere. **Verified under Wine** (episode I room 43 without
+  its robots, the editor's `withExitMode`): east "none" keeps its exit tiles closed,
+  otherwise they open; west "neighbour" opens the west tile and walking out arrives in
+  room 42 (its banner, its darkness, 1000 points = its tag kind 4 × 10); west "outside"
+  arrives in room 2; the original byte (west "none") keeps the hero in the room. The exits
   byte (tag kind 1) is present only when not 0 and is then the room's first tag; mode 3
   works like 2 but no original uses it.
 - **Scripts** (plain text, C-like) change `RoomNorth`…`RoomWest` and `BusWest`/`BusEast`
@@ -394,7 +403,7 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
 | 0x438d10                     | scene loader (tags → room record +0x14…)                                       |
 | 0x439590                     | exit target per direction from the exits byte                                  |
 | 0x427a9b                     | hero leaves the map → `NxtRoom` (0x4fe2f6), arrival x/y 0x4fe309/0x4fe30a      |
-| 0x433ae5, 0x433c30           | open/close exit tiles on the edges                                             |
+| 0x433a60, 0x433c30           | open/close exit tiles on the edges (task 0x66, started on entering a room)     |
 | 0x413d30, 0x4140d0, 0x426880 | door in, door out, stairs                                                      |
 | 0x412ae0, 0x44cc30           | oracle, teleporter (step-on handler 0x44cb60)                                  |
 | 0x42b6f0                     | room load: records 7/8 spawn actors                                            |

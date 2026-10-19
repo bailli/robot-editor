@@ -20,8 +20,11 @@ import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
  *
  * The hero leaves a room by walking off the map (0x427a9b): onto the target's opposite
  * edge, in the same row or column. Rows 1 and 28 and columns 0 and 39 are the edges (row
- * 0 lies under the status line). Walled rooms mark their exits with cells 0x0017; the
- * game turns them into 0x0110 (closed) on edges without a target and back (0x433ae5).
+ * 0 lies under the status line). Walled rooms mark their exits with closed exit tiles
+ * 0x0017. Once the room has no robots left, a task (0x433a60, every 147 ms) opens them
+ * on edges whose direction leads somewhere, one tile per run and tick, into 0x0110
+ * (north, south) or 0x0010 (west, east), and closes them on the others (verified under
+ * Wine).
  *
  * Passages lead to the room 100 "further in" (buildings, caves below) or back out:
  *   door in   class 98 (tile 0x53, episodes II-IV) with state 6, entered walking north,
@@ -48,8 +51,13 @@ export type Exits = Record<Direction, number>;
 /** Tag kind holding the exits byte. */
 export const EXITS_TAG = 1;
 export const OUTSIDE_ROOM = 2;
+/** A closed exit tile, as rooms store them. */
 export const EXIT_CELL = 0x0017;
-export const CLOSED_EXIT_CELL = 0x0110;
+/** What exit tiles become when they open: on the north and south edge, on the west and east. */
+export const OPEN_EXIT_CELLS: Readonly<Record<"vertical" | "horizontal", number>> = {
+  vertical: 0x0110,
+  horizontal: 0x0010,
+};
 
 /** Class ids of passages to room +/- 100 (see above). */
 export const DOOR_IN_CLASS = 98;

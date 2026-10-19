@@ -10,7 +10,7 @@ export {
 export type { EpisodeClasses, ObjectClass } from "./classes.ts";
 export {
   ACTOR_RECORD,
-  CLOSED_EXIT_CELL,
+  OPEN_EXIT_CELLS,
   DIRECTIONS,
   DOOR_IN_CLASS,
   DOOR_OUT_CLASS,
