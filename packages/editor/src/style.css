@@ -757,3 +757,13 @@ header button.pressed {
 .side-record:has(.record-view:not([hidden])) .record-hint {
   display: none;
 }
+
+/* tiles the game draws inside its texts (@14); more specific than canvas.cell */
+canvas.cell.text-tile {
+  display: inline-block;
+  width: auto;
+  height: 1.3em;
+  vertical-align: middle;
+  margin: 0 1px;
+  image-rendering: pixelated;
+}

@@ -56,12 +56,56 @@ export function parseObjectNames(text: string): Map<number, string> {
 
 /**
  * A text as one plain paragraph: colours removed, the line wrapping of the game's text
- * windows (narrow boxes break lines with a backslash, words with "-") undone.
+ * windows (narrow boxes break lines with a backslash, words with "-") undone, `_` (a hard
+ * space) as a non-breaking space. Tile codes (`@14`, see textPieces) stay as they are, or
+ * become `[name]` with `tileName`.
  */
-export function displayText(text: string): string {
-  return text
+export function displayText(text: string, tileName?: (value: number) => string): string {
+  const plain = text
     .replace(/²./g, "")
     .replace(/-\\\n/g, "")
     .replace(/\\?\n\s*/g, " ")
+    .replaceAll("_", "\u00a0")
     .trim();
+  if (!tileName) return plain;
+  return textPieces(plain)
+    .map((p) => (p.kind === "text" ? p.text : `[${tileName(p.value)}]`))
+    .join("");
+}
+
+/**
+ * Text and the tiles the game draws inside it (0x42a56b): `@` and 1-4 hex digits is a
+ * tile (type | state << 8) drawn as a cell, two characters wide; `*0`, `*1`, `*2` after it
+ * draw it three times enlarged, slice by slice on three lines (slice 0 here stands for the
+ * whole tile, 1 and 2 are left out); `@@` is an `@`; `@~` and up to 8 hex digits names a
+ * game object (filled in by the game, dropped here).
+ */
+export type TextPiece =
+  { kind: "text"; text: string } | { kind: "tile"; value: number; slice?: number };
+
+const TILE_CODE = /@@|@~[0-9a-fA-F]{0,8}|@([0-9a-fA-F]{1,4})(?:\*([0-2]))?/g;
+
+export function textPieces(text: string): TextPiece[] {
+  const pieces: TextPiece[] = [];
+  const add = (t: string) => {
+    if (!t) return;
+    const last = pieces.at(-1);
+    if (last?.kind === "text") last.text += t;
+    else pieces.push({ kind: "text", text: t });
+  };
+  let at = 0;
+  for (const m of text.matchAll(TILE_CODE)) {
+    add(text.slice(at, m.index));
+    at = m.index + m[0].length;
+    // the groups are absent (undefined) when they did not take part in the match
+    const [whole, digits, slice] = m as unknown as [string, string?, string?];
+    if (whole === "@@") add("@");
+    else if (digits !== undefined) {
+      const value = Number.parseInt(digits, 16);
+      if (slice === undefined) pieces.push({ kind: "tile", value });
+      else if (slice === "0") pieces.push({ kind: "tile", value, slice: 0 });
+    }
+  }
+  add(text.slice(at));
+  return pieces;
 }

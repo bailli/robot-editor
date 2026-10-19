@@ -19,8 +19,8 @@ function says(episode: number, cell: number, roomId?: number): string[] {
   const room = roomId === undefined ? undefined : game.room(episode, roomId);
   const description = describeCell(cell, classes, episode, room);
   assert.ok(description, `no description for ${cell.toString(16)}`);
-  return descriptionTexts(description, game.episodeTexts(episode)?.entries ?? new Map()).map(
-    displayText,
+  return descriptionTexts(description, game.episodeTexts(episode)?.entries ?? new Map()).map((t) =>
+    displayText(t),
   );
 }
 

@@ -148,8 +148,8 @@ export {
 export type { LogicRecord, Room, RoomTag } from "./scene.ts";
 export { TILE_BACKGROUND, TRANSPARENT, parseShapes, planeBit, shapePixels } from "./shapes.ts";
 export type { Colours, Frame, Shape, ShapeTable } from "./shapes.ts";
-export { displayText, parseObjectNames, parseTexts } from "./texts.ts";
-export type { Texts } from "./texts.ts";
+export { displayText, parseObjectNames, parseTexts, textPieces } from "./texts.ts";
+export type { TextPiece, Texts } from "./texts.ts";
 export {
   EXPERT_CLASS,
   NO_DESCRIPTION,

@@ -558,7 +558,14 @@ export class App {
     this.tile = value;
     this.tileInput.value = hex(value);
     this.tilePreview.replaceChildren(this.tileCanvas(value));
-    this.tileText.textContent = this.names().summary(value);
+    // one inline element: the line clamp (-webkit-box) would put each child on a line
+    this.tileText.replaceChildren(
+      h(
+        "span",
+        {},
+        ...this.names().summaryNodes(value, undefined, (v) => cellCanvas(this.cache(), v)),
+      ),
+    );
     this.tileText.title = this.names().title(value);
     for (const button of this.tileGrid.querySelectorAll<HTMLElement>("button")) {
       button.classList.toggle("selected", Number(button.dataset["tile"]) === value);
@@ -1006,8 +1013,11 @@ export class App {
     const actor = this.actors.find((a) => a.cell === index);
     if (actor) this.cellInfo.textContent += `  · actor: ${actorOrigin(actor)}`;
     // what the hero would see: the overlay object if there is one
-    this.cellText.textContent =
-      this.names().summary(overlay & 0xff ? overlay : base, room) || "\u00a0";
+    const nodes = this.names().summaryNodes(overlay & 0xff ? overlay : base, room, (v) =>
+      cellCanvas(this.cache(), v),
+    );
+    if (nodes.length) this.cellText.replaceChildren(...nodes);
+    else this.cellText.textContent = "\u00a0";
   }
 
   private refreshRoomList(): void {
@@ -1095,7 +1105,10 @@ export class App {
     const game = this.need().game;
     if (kind === "room") return this.roomLabel(this.episode, value);
     if (kind !== "text") return undefined;
-    const variants = game.episodeTexts(this.episode)?.entries.get(value)?.map(displayText);
+    const variants = game
+      .episodeTexts(this.episode)
+      ?.entries.get(value)
+      ?.map((t) => displayText(t, (v) => this.names().tileName(v)));
     if (!variants) return `text ${value} (missing)`;
     if (variants.length === 1) return variants[0];
     const shown = scriptTextVariants(fn, args);

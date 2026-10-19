@@ -415,7 +415,7 @@ test("the script explains itself and can be edited", async () => {
     (e) => e.textContent === "700",
   );
   // Message with a delay shows all of the text's variants as pages, one after another
-  const pages = defined(game.episodeTexts(1)?.entries.get(700)).map(displayText);
+  const pages = defined(game.episodeTexts(1)?.entries.get(700)).map((t) => displayText(t));
   expect(pages.length).toBe(3);
   expect(number?.getAttribute("title")).toBe(
     `3 pages, one after another:\n${pages.map((p, i) => `[${i + 1}/3] ${p}`).join("\n\n")}`,
@@ -571,4 +571,13 @@ test("expert fields say how many points they need", () => {
   expect(document.querySelector(".tile-text")?.textContent).toMatch(
     /^Expert – Needs at least 120000 points to cross\./,
   );
+});
+
+test("tiles the game draws in its texts are drawn in the editor's texts too", () => {
+  app.setTile(0x000a); // gold: "… bei der Bank @14 gegen Punkte eintauschen …"
+  const text = document.querySelector(".tile-text");
+  expect(text?.querySelectorAll("canvas.text-tile").length).toBe(1);
+  expect(text?.textContent).toMatch(/bei der Bank\s+gegen Punkte/);
+  // tooltips name the tile instead
+  expect(text?.getAttribute("title")).toMatch(/bei der Bank \[0x0014\] gegen/);
 });

@@ -82,7 +82,13 @@ Files in `packages/formats/src`:
 - **Texts** (`1E10`): numbered entries `N:k` with `|`-separated variants ending in `;`;
   headers without text share the next text. Entries 0–127 describe tile type N, higher
   numbers are messages (`Message(id, …)`); 510 is "no description". `displayText` removes
-  colour codes (`²x`) and the wrapping of the game's message boxes.
+  colour codes (`²x`) and the wrapping of the game's message boxes; `_` is a hard space.
+  **Tiles in texts** (`textPieces`, drawn by 0x42a56b): `@` + 1–4 hex digits is a tile
+  (type | state << 8, e.g. "bei der Bank @14") drawn as a cell, two characters wide;
+  `*0`/`*1`/`*2` after it draw it three times enlarged, one 12-pixel slice per line;
+  `@@` is `@`; `@~` + up to 8 hex digits is a game object filled in by the code. Menu
+  texts also use letters (`@S`, `@M`, `@T`, …; not traced). The editor draws the tiles in
+  the hover line and the tile text, tooltips name them (`[Sickle]`).
 - **Room names** (`room-names.ts`, 0x43c0b0): text entry 1000 + id (episode vtable
   +0x44); episode III keeps them in its own resource `1320` (name, then a description,
   marked by a leading `!`). A room from 100 on whose base cell (0, 1) has class 99 (tile

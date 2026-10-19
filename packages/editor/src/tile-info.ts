@@ -7,6 +7,7 @@ import {
   descriptionTexts,
   displayText,
   requiredPoints,
+  textPieces,
 } from "@robot/formats";
 
 export interface TileInfo {
@@ -14,9 +15,11 @@ export interface TileInfo {
   name: string | undefined;
   /**
    * What the game says when the hero looks at the cell: one text, or the texts it picks
-   * one of at random.
+   * one of at random; tiles in them as [name].
    */
   descriptions: string[];
+  /** The same with the game's tile codes (`@14`), for drawing them (textPieces). */
+  texts: string[];
   random: boolean;
 }
 
@@ -51,12 +54,14 @@ export class TileNames {
       ? object.charAt(0) + object.slice(1).toLowerCase()
       : this.actorNames.get(value & 0xff);
     const description = describeCell(value, this.classes, this.episode, room);
-    const texts = description ? descriptionTexts(description, this.texts) : [];
+    const raw = description ? descriptionTexts(description, this.texts) : [];
     const points = requiredPoints(value, this.classes);
     const needs = points === undefined ? [] : [`Needs at least ${points} points to cross.`];
+    const texts = [...needs, ...raw.map((t) => displayText(t)).filter((d) => d !== "")];
     return {
       name,
-      descriptions: [...needs, ...texts.map(displayText).filter((d) => d !== "")],
+      descriptions: texts.map((t) => displayText(t, (v) => this.tileName(v))),
+      texts,
       random: description !== undefined && typeof description.variant !== "number",
     };
   }
@@ -73,5 +78,32 @@ export class TileNames {
     const { name, descriptions } = this.info(value, room);
     const text = descriptions.at(0) ?? "";
     return name ? `${name}${text ? ` – ${text}` : ""}` : text;
+  }
+
+  /** The summary with the tiles it mentions drawn (`tile` makes the picture of one). */
+  summaryNodes(value: number, room: Room | undefined, tile: (value: number) => Node): Node[] {
+    const { name, texts } = this.info(value, room);
+    const text = texts.at(0) ?? "";
+    const nodes: Node[] = [];
+    if (name) nodes.push(document.createTextNode(text ? `${name} – ` : name));
+    for (const piece of textPieces(text)) {
+      if (piece.kind === "text") nodes.push(document.createTextNode(piece.text));
+      else {
+        const picture = tile(piece.value);
+        if (picture instanceof HTMLElement) {
+          picture.classList.add("text-tile");
+          picture.title = this.title(piece.value);
+        }
+        nodes.push(picture);
+      }
+    }
+    return nodes;
+  }
+
+  /** A short name for a tile mentioned in a text: its object name, else its value. */
+  tileName(value: number): string {
+    const object = this.names.get(value & 0xff);
+    if (object) return object.charAt(0) + object.slice(1).toLowerCase();
+    return this.actorNames.get(value & 0xff) ?? hex(value);
   }
 }

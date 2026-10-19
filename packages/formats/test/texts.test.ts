@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { expect, test } from "vitest";
 
 import { EPISODES, Game } from "../src/game.ts";
-import { displayText, parseObjectNames, parseTexts } from "../src/texts.ts";
+import { displayText, parseObjectNames, parseTexts, textPieces } from "../src/texts.ts";
 import { exe } from "./data.ts";
 
 const game = new Game(exe());
@@ -70,4 +70,18 @@ test("the sound tables name the episodes' objects", () => {
   expect(
     EPISODES.map((e) => [...game.objectNames(e)].map(([t, n]) => `${t} ${n}`).join(", ")),
   ).toMatchSnapshot();
+});
+
+test("tile codes split texts into text and the tiles drawn in it", () => {
+  expect(textPieces("bei der Bank @14 gegen @a@a, @@ und @0139*0@0139*1")).toEqual([
+    { kind: "text", text: "bei der Bank " },
+    { kind: "tile", value: 0x14 },
+    { kind: "text", text: " gegen " },
+    { kind: "tile", value: 0x0a },
+    { kind: "tile", value: 0x0a },
+    { kind: "text", text: ", @ und " },
+    { kind: "tile", value: 0x0139, slice: 0 },
+  ]);
+  // hard spaces, and names for the tiles
+  expect(displayText("Diese @7@7_Zäune", (v) => `t${v}`)).toBe("Diese [t7][t7] Zäune");
 });
