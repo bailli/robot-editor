@@ -137,7 +137,7 @@ test("arrow keys follow the exits that do not depend on the game state", async (
 test("teleports are listed with the exits", async () => {
   app.showRoom(36);
   const teleports = document.querySelector(".teleports");
-  expect(teleports?.querySelectorAll("button").length).toBe(9);
+  expect(teleports?.querySelectorAll("button.conditional").length).toBe(9); // from the script
   const button = exits().getByRole("button", { name: /^129/ });
   await expect
     .element(button)
@@ -155,4 +155,23 @@ test("stairs are listed with the exits", async () => {
   expect(document.querySelector('.stairs[data-direction="down"]')?.textContent).toBe(
     "Stairs down42",
   );
+});
+
+test("passages and teleporters are listed with the exits", async () => {
+  app.showEpisode(2, 55);
+  const teleporters = document.querySelector(".teleports");
+  expect([...(teleporters?.querySelectorAll("button") ?? [])].map((b) => b.textContent)).toEqual([
+    "155",
+    "105",
+    "106",
+    "113",
+    "51",
+    "53",
+  ]);
+  const button = exits().getByRole("button", { name: "155" });
+  await expect
+    .element(button)
+    .toHaveAttribute("title", "room 155 (teleporter at (38, 2), arriving at (6, 7))");
+  await button.click();
+  await expect.element(page.getByRole("heading", { name: "Robot II – room 155" })).toBeVisible();
 });

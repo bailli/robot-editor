@@ -1,6 +1,6 @@
 import type { EpisodeClasses } from "./classes.ts";
 import { decodeCp437 } from "./cp437.ts";
-import { ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
+import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
 
 /**
  * Room connections (GameOfRobot.exe).
@@ -25,6 +25,13 @@ import { ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
  * (0x413d30), cells of the stairs-down class to room - 100 (0x4140d0). The hero arrives
  * at the same column, two cells further in the walking direction; the other room has
  * the matching stairs at the same place.
+ *
+ * Logic records move the hero to a target in their u16 at data offset 4 (room = bits
+ * 0-9, x = bits 10-15) and y at offset 6:
+ *   type 12  a passage, taken when the hero walks north onto its cell (0x412ae0)
+ *   type 13  a teleporter, taken when the hero steps onto its cell (0x44cc30); a non-zero
+ *            byte at offset 8 shows message 0x4b0 + it, and with bit 1 of offset 1 set
+ *            the hero returns to a point saved at run time instead, if there is one
  */
 
 export const DIRECTIONS = ["north", "south", "west", "east"] as const;
@@ -47,6 +54,20 @@ export interface Stairs {
   direction: "up" | "down";
   /** Target room (room id +/- 100), 0 if the episode has no such room. */
   room: number;
+}
+
+export const PASSAGE_RECORD = 12;
+export const TELEPORTER_RECORD = 13;
+
+export interface RecordTeleport {
+  /** The logic cell (base or overlay) that places the record, undefined if none does. */
+  cell: number | undefined;
+  kind: "passage" | "teleporter";
+  room: number;
+  x: number;
+  y: number;
+  /** Teleporter that returns to a run-time point when there is one (flag 0x02). */
+  returns: boolean;
 }
 
 const STEP: Readonly<Record<Direction, number>> = { north: -10, south: 10, west: -1, east: 1 };
@@ -104,6 +125,34 @@ export function roomStairs(
     });
   }
   return stairs;
+}
+
+/** The passages and teleporters among a room's logic records (with a target room). */
+export function roomTeleports(room: Room): RecordTeleport[] {
+  const cellOf = (slot: number) => {
+    for (const layer of [room.base, room.overlay]) {
+      const cell = layer.findIndex((v) => (v & 0xff) === LOGIC_CELL && v >> 8 === slot);
+      if (cell >= 0) return cell;
+    }
+    return undefined;
+  };
+  return room.records.flatMap((record) => {
+    const [type = 0, flags = 0, , , low = 0, high = 0, y = 0] = record.data;
+    const target = low | (high << 8);
+    if ((type !== PASSAGE_RECORD && type !== TELEPORTER_RECORD) || (target & 0x3ff) === 0) {
+      return [];
+    }
+    return [
+      {
+        cell: cellOf(record.slot),
+        kind: type === PASSAGE_RECORD ? ("passage" as const) : ("teleporter" as const),
+        room: target & 0x3ff,
+        x: target >> 10,
+        y,
+        returns: type === TELEPORTER_RECORD && (flags & 0x02) !== 0,
+      },
+    ];
+  });
 }
 
 /** The cells of an edge, in order along it (west to east, north to south). */

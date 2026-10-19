@@ -12,8 +12,9 @@ import {
   roomScript,
   roomScriptExits,
   roomStairs,
+  roomTeleports,
 } from "../src/exits.ts";
-import { EPISODES, Game } from "../src/game.ts";
+import { EPISODES, Game, START_ROOMS } from "../src/game.ts";
 import { exe } from "./data.ts";
 
 const game = new Game(exe());
@@ -146,4 +147,53 @@ test("stairs lead 100 rooms up or down onto the matching stairs", () => {
     }
   }
   expect(listed).toMatchSnapshot();
+});
+
+test("passages and teleporters lead to rooms of their episode", () => {
+  const listed: string[] = [];
+  for (const episode of EPISODES) {
+    const rooms = game.episode(episode).rooms;
+    const ids = new Set(rooms.map((r) => r.id));
+    for (const room of rooms) {
+      for (const t of roomTeleports(room)) {
+        const at = t.cell === undefined ? "-" : `(${t.cell % 40},${Math.floor(t.cell / 40)})`;
+        const line = `${episode} ${room.id} ${at} ${t.kind} -> ${t.room} (${t.x},${t.y})`;
+        listed.push(line + (t.returns ? " returns" : ""));
+        assert.ok(ids.has(t.room), `${line}: no such room`);
+        assert.ok(t.x < 40 && t.y < 29, `${line}: outside the room`);
+      }
+    }
+  }
+  expect(listed).toMatchSnapshot();
+});
+
+/**
+ * Rooms not reached from the start room through exits, scripts, stairs, passages and
+ * teleporters. Room 99 of every episode is a debug room; the others still lack a
+ * decoded connection.
+ */
+test("rooms reached from the start room", () => {
+  const unreached = EPISODES.map((episode) => {
+    const { rooms, classes } = game.episode(episode);
+    const ids = new Set(rooms.map((r) => r.id));
+    const next = (room: (typeof rooms)[number]) => {
+      const script = roomScriptExits(roomScript(room));
+      return [
+        ...Object.values(roomExits(room, ids)),
+        ...script.exits.map((s) => s.room),
+        ...script.teleports.map((t) => t.room),
+        ...roomStairs(room, classes, ids).map((s) => s.room),
+        ...roomTeleports(room).map((t) => t.room),
+      ];
+    };
+    const start = START_ROOMS[episode] ?? 0;
+    const seen = new Set([start]);
+    for (const id of seen) {
+      const room = rooms.find((r) => r.id === id);
+      if (room) for (const n of next(room)) if (ids.has(n)) seen.add(n);
+    }
+    // rooms 1 and 2: title screen and "outside"
+    return `${episode}: ${[...ids].filter((id) => !seen.has(id) && id > 2).join(" ")}`;
+  });
+  expect(unreached).toMatchSnapshot();
 });

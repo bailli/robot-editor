@@ -4,6 +4,8 @@ import {
   type EpisodeClasses,
   type Exits,
   OUTSIDE_ROOM,
+  ROOM_WIDTH,
+  type RecordTeleport,
   type Room,
   type ScriptExit,
   type ScriptTeleport,
@@ -12,6 +14,7 @@ import {
   roomScript,
   roomScriptExits,
   roomStairs,
+  roomTeleports,
 } from "@robot/formats";
 
 export interface Connections {
@@ -21,6 +24,8 @@ export interface Connections {
   scripted: ScriptExit[];
   teleports: ScriptTeleport[];
   stairs: Stairs[];
+  /** Passages and teleporters among the logic records. */
+  records: RecordTeleport[];
 }
 
 export function connections(
@@ -30,7 +35,8 @@ export function connections(
 ): Connections {
   const { exits, teleports } = roomScriptExits(roomScript(room));
   const stairs = roomStairs(room, classes, ids);
-  return { exits: roomExits(room, ids), scripted: exits, teleports, stairs };
+  const records = roomTeleports(room);
+  return { exits: roomExits(room, ids), scripted: exits, teleports, stairs, records };
 }
 
 /** Where a direction leads regardless of the game state: the last fixed script assignment, else the exits byte. */
@@ -77,34 +83,52 @@ export class ExitsView {
     this.element.replaceChildren(...items);
     for (const direction of ["up", "down"] as const) {
       const stairs = c.stairs.filter((x) => x.direction === direction);
-      const rooms = [...new Set(stairs.map((x) => x.room))];
-      if (rooms.length === 0) continue;
-      const item = document.createElement("span");
-      item.className = "exit stairs";
-      item.dataset["direction"] = direction;
-      const label = document.createElement("span");
-      label.className = "label";
-      label.textContent = direction === "up" ? "Stairs up" : "Stairs down";
-      item.append(label);
-      for (const room of rooms) {
+      const targets = [...new Set(stairs.map((x) => x.room))].map((room) => {
         const cells = stairs.filter((x) => x.room === room).length;
-        item.append(this.target(room, `${cells} stairs cell${cells === 1 ? "" : "s"}`));
-      }
-      this.element.append(item);
+        return this.target(room, `${cells} stairs cell${cells === 1 ? "" : "s"}`);
+      });
+      this.group("stairs", direction === "up" ? "Stairs up" : "Stairs down", targets, direction);
     }
-    if (c.teleports.length > 0) {
-      const item = document.createElement("span");
-      item.className = "exit teleports";
-      const label = document.createElement("span");
-      label.className = "label";
-      label.textContent = "Teleports";
-      item.append(label);
-      for (const t of new Map(c.teleports.map((x) => [x.room, x])).values()) {
-        const how = `Teleport(${t.room}, ${t.x}, ${t.y})${t.conditional ? ", depending on the game state" : ""}`;
-        item.append(this.target(t.room, how, t.conditional ? "conditional" : "scripted"));
-      }
-      this.element.append(item);
-    }
+    const at = (cell: number | undefined) =>
+      cell === undefined ? "" : ` at (${cell % ROOM_WIDTH}, ${Math.floor(cell / ROOM_WIDTH)})`;
+    const passages = c.records.filter((r) => r.kind === "passage");
+    this.group(
+      "passages",
+      "Passages",
+      passages.map((r) =>
+        this.target(r.room, `walking north onto it${at(r.cell)}, arriving at (${r.x}, ${r.y})`),
+      ),
+    );
+    const teleporters = c.records.filter((r) => r.kind === "teleporter");
+    this.group("teleports", "Teleporters", [
+      ...teleporters.map((r) =>
+        this.target(
+          r.room,
+          `teleporter${at(r.cell)}, arriving at (${r.x}, ${r.y})` +
+            (r.returns ? ", or back to where the hero came from" : ""),
+        ),
+      ),
+      ...[...new Map(c.teleports.map((x) => [x.room, x])).values()].map((t) =>
+        this.target(
+          t.room,
+          `Teleport(${t.room}, ${t.x}, ${t.y})${t.conditional ? ", depending on the game state" : ""}`,
+          t.conditional ? "conditional" : "scripted",
+        ),
+      ),
+    ]);
+  }
+
+  /** A labelled group of targets (left out when empty). */
+  private group(className: string, text: string, targets: HTMLElement[], direction?: string): void {
+    if (targets.length === 0) return;
+    const item = document.createElement("span");
+    item.className = `exit ${className}`;
+    if (direction) item.dataset["direction"] = direction;
+    const label = document.createElement("span");
+    label.className = "label";
+    label.textContent = text;
+    item.append(label, ...targets);
+    this.element.append(item);
   }
 
   private target(room: number, how: string, kind = "default"): HTMLElement {
