@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`descriptions of every cell in the game > episode 0 1`] = `"sha256:5c5fefff53d3e88f646aa2867e97f0734786e76e71aba39e07d78bc0dbb4fc2f"`;
+
+exports[`descriptions of every cell in the game > episode 1 1`] = `"sha256:640a924c21e45b53f0b4a48fde04244360a59da7cef8fdcdc240b18fb2cf2749"`;
+
+exports[`descriptions of every cell in the game > episode 2 1`] = `"sha256:aa0a340b14847769ad52ba8d15886155be0b3203a22a65d519e2c0e7e0e2322c"`;
+
+exports[`descriptions of every cell in the game > episode 3 1`] = `"sha256:d4fcb62069db23c200b2042b36b03590bfa0d45808a7fc1596c7ff2a954fbba5"`;
+
+exports[`descriptions of every cell in the game > episode 4 1`] = `"sha256:619682f1ff61f9f92ffab2a01dcf3ef3a7db9a0b773ad02a732a5c161417bb62"`;

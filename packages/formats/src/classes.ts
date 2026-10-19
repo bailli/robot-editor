@@ -41,12 +41,17 @@ export interface ObjectClass {
   /** Class id (vtable +0x00 returns a constant), undefined if it does not. */
   id: number | undefined;
   frameMethod: number;
+  /** vtable +0x54: picks the description variant (see describe.ts). */
+  describeMethod: number;
 }
 
 export interface EpisodeClasses {
   /** Class per tile type, for the types that have one. */
   classes: ReadonlyMap<number, ObjectClass>;
-  /** Class id -> tile type (the game's 0x4c70e0 table: the last type with that id wins). */
+  /**
+   * Class id -> tile type (the game's 0x4c70e0 table, 0x43b46a: the last type with that id
+   * wins; class 0, shared by unused types, is left out, so it means type 0).
+   */
   typeOfClass: ReadonlyMap<number, number>;
   /** Underlay table (episode +0x10): entry k-1 = [class id, state] of underlay k. */
   underlays: readonly (readonly [classId: number, state: number])[];
@@ -100,6 +105,7 @@ function vtables(exe: PeImage): Map<number, number> {
 
 function classId(exe: PeImage, vtable: number): number | undefined {
   const code = readVa(exe, u32(exe, vtable), 6);
+  if (code[0] === 0x33 && code[1] === 0xc0 && code[2] === 0xc3) return 0; // xor eax, eax
   if (code[0] !== 0xb8 || code[5] !== 0xc3) return undefined;
   return new DataView(code.buffer, code.byteOffset + 1, 4).getUint32(0, true);
 }
@@ -114,8 +120,12 @@ export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasse
     const vtable = vts.get(u32(exe, table + 8 * type));
     if (vtable === undefined) continue;
     const id = classId(exe, vtable);
-    classes.set(type, { id, frameMethod: u32(exe, vtable + 8) });
-    if (id !== undefined) typeOfClass.set(id, type);
+    classes.set(type, {
+      id,
+      frameMethod: u32(exe, vtable + 8),
+      describeMethod: u32(exe, vtable + 0x54),
+    });
+    if (id) typeOfClass.set(id, type); // the game skips class 0, the shared empty class
   }
   const underlayTable = UNDERLAY_TABLES.at(episode);
   const underlayBytes =

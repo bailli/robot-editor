@@ -19,7 +19,11 @@ test("glyph rows: bits 7..1 become 14 pixels at x = 2..15, bit 0 is dropped", ()
 
 test("episode 1 classes read from the exe", () => {
   const ep = readEpisodeClasses(image, 1);
-  assert.deepEqual(ep.classes.get(6), { id: 6, frameMethod: FrameMethod.WALL });
+  assert.deepEqual(ep.classes.get(6), {
+    id: 6,
+    frameMethod: FrameMethod.WALL,
+    describeMethod: 0x41b160,
+  });
   assert.equal(ep.classes.get(37)?.frameMethod, FrameMethod.LETTER);
   assert.equal(ep.typeOfClass.get(0x27), 49); // underlay 1 is class 0x27: the grass of type 49
   assert.deepEqual(ep.underlays[0], [0x27, 0]);
