@@ -13,3 +13,6 @@ renders/
 # Wine harness: prefix with a copy of the game, screenshots
 .wine/
 shots/
+
+# Vitest browser mode failure screenshots
+.vitest/

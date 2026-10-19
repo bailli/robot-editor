@@ -10,6 +10,7 @@ import {
 import { type Edit, Editor, type Layer, tilesOf } from "./editor.ts";
 import { type Connections, ExitsView, connections, fixedExit } from "./exits-view.ts";
 import { CellCache, RoomView, cellCanvas } from "./room-view.ts";
+import { TileNames } from "./tile-info.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
 
@@ -72,6 +73,9 @@ export class App {
     spellcheck: "false",
   });
   private readonly tilePreview = h("span", { class: "tile-preview" });
+  private readonly cellText = h("p", { class: "cell-text" }, "\u00a0");
+  private readonly tileText = h("p", { class: "tile-text" });
+  private readonly tileNames = new Map<number, TileNames>();
   private readonly tileGrid = h("div", { class: "tile-grid" });
   private readonly layerInputs = new Map<Layer, HTMLInputElement>();
   private readonly workspace: HTMLElement;
@@ -101,12 +105,21 @@ export class App {
       "div",
       { class: "workspace", hidden: true },
       h("nav", { class: "rooms" }, this.episodeSelect, this.roomList),
-      h("main", {}, this.roomTitle, this.exitsView.element, this.view.element, this.cellInfo),
+      h(
+        "main",
+        {},
+        this.roomTitle,
+        this.exitsView.element,
+        this.view.element,
+        this.cellInfo,
+        this.cellText,
+      ),
       h(
         "aside",
         { class: "tiles" },
         layers,
         h("label", { class: "tile-current" }, this.tilePreview, this.tileInput),
+        this.tileText,
         h(
           "p",
           { class: "hint" },
@@ -154,6 +167,7 @@ export class App {
     }
     this.fileName = name;
     this.caches.clear();
+    this.tileNames.clear();
     this.welcome.hidden = true;
     this.workspace.hidden = false;
     this.showEpisode(this.episode, this.roomId);
@@ -210,6 +224,8 @@ export class App {
     this.tile = value;
     this.tileInput.value = hex(value);
     this.tilePreview.replaceChildren(this.tileCanvas(value));
+    this.tileText.textContent = this.names().summary(value);
+    this.tileText.title = this.names().title(value);
     for (const button of this.tileGrid.querySelectorAll<HTMLElement>("button")) {
       button.classList.toggle("selected", Number(button.dataset["tile"]) === value);
     }
@@ -423,7 +439,7 @@ export class App {
           "button",
           {
             "data-tile": String(value),
-            title: hex(value),
+            title: this.names().title(value),
             click: () => {
               this.setTile(value);
             },
@@ -438,12 +454,17 @@ export class App {
   private showCellInfo(index: number | undefined): void {
     if (index === undefined || !this.editor) {
       this.cellInfo.textContent = " ";
+      this.cellText.textContent = "\u00a0";
       return;
     }
     const room = this.editor.room(this.episode, this.roomId);
     const x = index % ROOM_WIDTH;
     const y = Math.floor(index / ROOM_WIDTH);
-    this.cellInfo.textContent = `(${x}, ${y})  base ${hex(room.base[index] ?? 0)}  overlay ${hex(room.overlay[index] ?? 0)}`;
+    const base = room.base[index] ?? 0;
+    const overlay = room.overlay[index] ?? 0;
+    this.cellInfo.textContent = `(${x}, ${y})  base ${hex(base)}  overlay ${hex(overlay)}`;
+    // what the hero would see: the overlay object if there is one
+    this.cellText.textContent = this.names().summary(overlay & 0xff ? overlay : base) || "\u00a0";
   }
 
   private refreshRoomList(): void {
@@ -467,6 +488,15 @@ export class App {
     return this.layer === "base"
       ? cellCanvas(this.cache(), value)
       : cellCanvas(this.cache(), 0, value);
+  }
+
+  private names(): TileNames {
+    let names = this.tileNames.get(this.episode);
+    if (!names) {
+      names = new TileNames(this.need().game, this.episode);
+      this.tileNames.set(this.episode, names);
+    }
+    return names;
   }
 
   private cache(): CellCache {

@@ -179,3 +179,18 @@ test("oracles and teleporters are listed with the exits", async () => {
   await button.click();
   await expect.element(page.getByRole("heading", { name: "Robot II – room 155" })).toBeVisible();
 });
+
+test("tiles show their names and descriptions", async () => {
+  app.showEpisode(3, 47);
+  const key = document.querySelector<HTMLElement>('.tile-grid [data-tile="277"]'); // 0x0115
+  expect(key?.title).toMatch(/^0x0115 Key\nRichtig, das ist ein Schlüssel\. Du mußt/);
+  if (key) await userEvent.click(key);
+  expect(app.tile).toBe(0x0115);
+  expect(document.querySelector(".tile-text")?.textContent).toMatch(
+    /^Key – Richtig, das ist ein Schlüssel\./,
+  );
+  app.setTile(0x003d);
+  expect(document.querySelector(".tile-text")?.getAttribute("title")).toBe(
+    "0x003d\nDiese Treppen führen hinunter.\nDiese Treppen führen hinauf.",
+  );
+});
