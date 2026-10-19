@@ -195,7 +195,8 @@ Files in `packages/formats/src`:
   happens (0x408970) the script continues at that block with E_Value set, until
   `return` (without one it runs on into the code after the block). Events: 1 take,
   2 drop (filter: tile type, E_Value: the object), 4 walk areas from `SetWarea` (E_Value
-  +n entering, −n leaving), 8 entering the room, 16 slots. Room 1's script is the
+  +n entering, −n leaving), 8 entering the room, 16 slots. **Verified under Wine:** in
+  episode I's start room the top-level code and an `Event(8)` block both run. Room 1's script is the
   global one (episode start, game load); its handlers run when no room handler matches.
 - **Functions and variables:** all 62 keywords are described in `script-docs.ts`
   (decoded from their handlers; a few meanings are guesses, marked there): e.g.
@@ -320,8 +321,8 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
    functions in detail (`ShiftArea`, what triggers `Area(x, y, size)`, `Phone`'s third
    argument, `Enigma`'s table at episode +0x1cc), how E_Value (a class id in memory) is
    compared with tile types, StationBOff/NoSwim, and whether `while`, `break` or compound
-   assignments existed in the original language (no script uses them). Edited scripts
-   are only verified in the game for `SetObj` and `for`.
+   assignments existed in the original language (no script uses them). Of edited scripts
+   only `SetObj`, `for` and an `Event(8)` handler are verified in the game.
 4. **Room tag kind 3** (record +0x16 byte, values 2/3): meaning unknown. (Kind 2 is the
    darkness, kind 4 × 10 the first visit's points, see room tags above.)
 5. **Rooms not reached** by any decoded connection: episode I 228 (runs `Wizzard(…)`),
