@@ -142,6 +142,46 @@ h2 {
   font-weight: 600;
 }
 
+.exits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.exit .label {
+  color: var(--muted);
+}
+
+.exit .target {
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.exit .target.scripted {
+  border-style: dashed;
+}
+
+.exit .target.conditional {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.exit .target.conditional::after {
+  content: "?";
+}
+
+.exit .none {
+  color: var(--muted);
+}
+
 .room-view {
   position: relative;
   aspect-ratio: 640 / 348;

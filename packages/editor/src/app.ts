@@ -1,6 +1,14 @@
-import { EPISODE_NAMES, Game, LOGIC_CELL, ROOM_WIDTH, START_ROOMS } from "@robot/formats";
+import {
+  type Direction,
+  EPISODE_NAMES,
+  Game,
+  LOGIC_CELL,
+  ROOM_WIDTH,
+  START_ROOMS,
+} from "@robot/formats";
 
 import { type Edit, Editor, type Layer, tilesOf } from "./editor.ts";
+import { type Connections, ExitsView, connections, fixedExit } from "./exits-view.ts";
 import { CellCache, RoomView, cellCanvas } from "./room-view.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
@@ -20,6 +28,13 @@ function h<K extends keyof HTMLElementTagNameMap>(
   element.append(...children);
   return element;
 }
+
+const ARROWS: Readonly<Partial<Record<string, Direction>>> = {
+  ArrowUp: "north",
+  ArrowDown: "south",
+  ArrowLeft: "west",
+  ArrowRight: "east",
+};
 
 const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 
@@ -46,6 +61,10 @@ export class App {
   private readonly episodeSelect = h("select", { "aria-label": "Episode" });
   private readonly roomList = h("div", { class: "room-list" });
   private readonly roomTitle = h("h2");
+  private readonly exitsView = new ExitsView((room) => {
+    this.showRoom(room);
+  });
+  private connections: Connections | undefined;
   private readonly cellInfo = h("p", { class: "cell-info" }, " ");
   private readonly tileInput = h("input", {
     class: "tile-input",
@@ -82,7 +101,7 @@ export class App {
       "div",
       { class: "workspace", hidden: true },
       h("nav", { class: "rooms" }, this.episodeSelect, this.roomList),
-      h("main", {}, this.roomTitle, this.view.element, this.cellInfo),
+      h("main", {}, this.roomTitle, this.exitsView.element, this.view.element, this.cellInfo),
       h(
         "aside",
         { class: "tiles" },
@@ -169,7 +188,10 @@ export class App {
     const editor = this.need();
     this.roomId = id;
     this.roomTitle.textContent = `${EPISODE_NAMES[this.episode] ?? ""} – room ${id}`;
-    this.view.show(editor.room(this.episode, id), this.cache());
+    const room = editor.room(this.episode, id);
+    this.view.show(room, this.cache());
+    this.connections = connections(room, new Set(editor.rooms(this.episode).map((r) => r.id)));
+    this.exitsView.show(this.connections);
     this.refreshRoomList();
   }
 
@@ -290,7 +312,22 @@ export class App {
     });
 
     window.addEventListener("keydown", (event) => {
-      if (!this.editor || event.target instanceof HTMLInputElement) return;
+      const target = event.target;
+      if (
+        !this.editor ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      const direction = ARROWS[event.key];
+      if (direction && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        // follow the exit that does not depend on the game state
+        event.preventDefault();
+        const room = this.connections ? fixedExit(this.connections, direction) : 0;
+        if (room !== 0) this.showRoom(room);
+        return;
+      }
       const key = event.key.toLowerCase();
       if ((event.ctrlKey || event.metaKey) && key === "z") {
         event.preventDefault();

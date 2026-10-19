@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 
 import { expect, test } from "vitest";
 
-import { decodeCp437 } from "../src/cp437.ts";
 import {
   DIRECTIONS,
   EXIT_CELL,
@@ -10,18 +9,13 @@ import {
   arrivalCell,
   edgeCells,
   roomExits,
+  roomScript,
   roomScriptExits,
 } from "../src/exits.ts";
 import { EPISODES, Game } from "../src/game.ts";
-import type { Room } from "../src/scene.ts";
 import { exe } from "./data.ts";
 
 const game = new Game(exe());
-
-function script(room: Room): string {
-  const tag = room.tags.find((t) => t.kind === 6 && t.value === 1);
-  return tag?.data ? decodeCp437(tag.data).replace(/\0.*$/s, "") : "";
-}
 
 test("the exits byte gives grid neighbours, room 2 or nothing", () => {
   const ids = new Set(game.episode(1).rooms.map((r) => r.id));
@@ -70,7 +64,7 @@ test("exit cells lead to exit cells of the room their exit or script names", () 
     const ids = new Set(rooms.map((r) => r.id));
     for (const room of rooms) {
       const exits = roomExits(room, ids);
-      const scripted = roomScriptExits(script(room)).exits;
+      const scripted = roomScriptExits(roomScript(room)).exits;
       for (const direction of DIRECTIONS) {
         const cells = edgeCells(direction).filter((c) => room.base[c] === EXIT_CELL);
         if (cells.length === 0) continue;
@@ -120,7 +114,7 @@ test("scripts change exits and teleport, fixed or depending on the game state", 
 });
 
 test("the maze of episode II wires its edges by script", () => {
-  const { exits } = roomScriptExits(script(game.room(2, 624)));
+  const { exits } = roomScriptExits(roomScript(game.room(2, 624)));
   assert.deepEqual(exits, [
     { direction: "north", room: 674, conditional: false },
     { direction: "east", room: 631, conditional: false },

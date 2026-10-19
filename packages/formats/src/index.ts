@@ -11,6 +11,7 @@ export {
   edgeCells,
   exitsByte,
   roomExits,
+  roomScript,
   roomScriptExits,
 } from "./exits.ts";
 export type { Direction, Exits, ScriptExit, ScriptTeleport } from "./exits.ts";

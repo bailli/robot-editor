@@ -34,6 +34,7 @@ export default defineConfig({
     browser: {
       enabled: true,
       headless: true,
+      viewport: { width: 1500, height: 900 }, // a desktop editor
       provider: playwright(),
       instances: [{ browser: "chromium" }],
     },

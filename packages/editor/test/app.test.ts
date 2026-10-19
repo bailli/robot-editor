@@ -111,3 +111,37 @@ test("line connects cells without gaps", () => {
   expect(line(0, 2 * ROOM_WIDTH + 2)).toEqual([0, ROOM_WIDTH + 1, 2 * ROOM_WIDTH + 2]);
   expect(line(5, 5)).toEqual([5]);
 });
+
+const exits = () => page.getByRole("navigation", { name: "Exits" });
+
+test("the exits of a room link to the rooms they lead to", async () => {
+  // room 43: north 33, south 53, east 44; west closed, opened by the script at a high score
+  await expect.element(exits().getByRole("button", { name: "33" })).toBeVisible();
+  const west = document.querySelector('[data-direction="west"]');
+  expect(west?.textContent).toBe("← West—42");
+  expect(west?.querySelector(".conditional")?.getAttribute("title")).toBe(
+    "room 42 (set by the script, depending on the game state)",
+  );
+  await exits().getByRole("button", { name: "44" }).click();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
+});
+
+test("arrow keys follow the exits that do not depend on the game state", async () => {
+  await userEvent.keyboard("{ArrowUp}");
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 33" })).toBeVisible();
+  await userEvent.keyboard("{ArrowDown}{ArrowLeft}");
+  // 43 -> west is closed: stays
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
+});
+
+test("teleports are listed with the exits", async () => {
+  app.showRoom(36);
+  const teleports = document.querySelector(".teleports");
+  expect(teleports?.querySelectorAll("button").length).toBe(9);
+  const button = exits().getByRole("button", { name: /^129/ });
+  await expect
+    .element(button)
+    .toHaveAttribute("title", "room 129 (Teleport(129, 7, 21), depending on the game state)");
+  await button.click();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 129" })).toBeVisible();
+});

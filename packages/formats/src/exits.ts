@@ -1,3 +1,4 @@
+import { decodeCp437 } from "./cp437.ts";
 import { ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
 
 /**
@@ -92,6 +93,12 @@ export function arrivalCell(cell: number, direction: Direction): number {
     case "east":
       return y * ROOM_WIDTH;
   }
+}
+
+/** A room's script source (tag 6/1), empty if it has none. */
+export function roomScript(room: Room): string {
+  const tag = room.tags.find((t) => t.kind === 6 && t.value === 1);
+  return tag?.data ? decodeCp437(tag.data).replace(/\0.*$/s, "") : "";
 }
 
 export interface ScriptExit {
