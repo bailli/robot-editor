@@ -15,7 +15,8 @@ What the screenshot shows: the start room with the status line in row 0 and the
 actors (hero, robots) wherever they are at that moment; animated tiles may show any
 frame. The harness closes the name dialog and the room-name banner first.
 
-Requires Wine (WineHQ packages install to /opt/wine-stable), Xvfb and xdotool.
+Requires Wine (WineHQ packages install to /opt/wine-stable), Xvfb and xdotool. The game
+runs silently (Wine's audio drivers are disabled for it).
 The prefix is sandboxed: user folders are real directories inside the prefix instead
 of links into $HOME, and the Z: drive (the whole filesystem) is removed.
 """
@@ -43,7 +44,12 @@ def env(display=None):
     e = dict(os.environ)
     if os.path.isdir(WINE_BIN):
         e["PATH"] = WINE_BIN + os.pathsep + e["PATH"]
-    e.update(WINEPREFIX=PREFIX, WINEDEBUG="-all", WINEDLLOVERRIDES="mscoree,mshtml=")
+    # Silent: without audio drivers the game plays neither sounds nor (MIDI) music.
+    e.update(
+        WINEPREFIX=PREFIX,
+        WINEDEBUG="-all",
+        WINEDLLOVERRIDES="mscoree,mshtml=;winepulse.drv,winealsa.drv,wineoss.drv=d",
+    )
     if display:
         e["DISPLAY"] = display
     return e
