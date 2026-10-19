@@ -189,8 +189,12 @@ test("tiles show their names and descriptions", async () => {
   expect(document.querySelector(".tile-text")?.textContent).toMatch(
     /^Key – Richtig, das ist ein Schlüssel\./,
   );
-  app.setTile(0x003d);
+  app.setTile(0x003d); // stairs down: the description for this state only
   expect(document.querySelector(".tile-text")?.getAttribute("title")).toBe(
-    "0x003d\nDiese Treppen führen hinunter.\nDiese Treppen führen hinauf.",
+    "0x003d\nDiese Treppen führen hinunter.",
+  );
+  app.setTile(0x0000);
+  expect(document.querySelector(".tile-text")?.getAttribute("title")).toMatch(
+    /^0x0000 \(one of\)\nHier gibt's nichts Interessantes zu sehen\.\n/,
   );
 });

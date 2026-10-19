@@ -1,45 +1,61 @@
-import { type Game, LOGIC_CELL, displayText } from "@robot/formats";
+import {
+  type EpisodeClasses,
+  type Game,
+  type Room,
+  describeCell,
+  descriptionTexts,
+  displayText,
+} from "@robot/formats";
 
 export interface TileInfo {
   /** The object's script name (O_KEY -> "Key"), for the tiles that have one. */
   name: string | undefined;
-  /** What the game says when the hero looks at the tile (variants, often by state). */
+  /**
+   * What the game says when the hero looks at the cell: one text, or the texts it picks
+   * one of at random.
+   */
   descriptions: string[];
+  random: boolean;
 }
 
 const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 
-/** Names and descriptions of an episode's tiles, from its texts. */
+/** Names and descriptions of an episode's cells, as the game picks them. */
 export class TileNames {
   private readonly names: Map<number, string>;
-  private readonly texts: Map<number, string[]>;
+  private readonly texts: ReadonlyMap<number, readonly string[]>;
+  private readonly classes: EpisodeClasses;
+  private readonly episode: number;
 
   constructor(game: Game, episode: number) {
     this.names = game.objectNames(episode);
     this.texts = game.episodeTexts(episode)?.entries ?? new Map<number, string[]>();
+    this.classes = game.episode(episode).classes;
+    this.episode = episode;
   }
 
-  info(value: number): TileInfo {
-    const type = value & 0xff;
-    if (type === LOGIC_CELL) {
-      return { name: "Logic cell", descriptions: ["Drawn and run by the room's logic record."] };
-    }
-    const name = this.names.get(type);
+  /** `room` describes logic cells by their records. */
+  info(value: number, room?: Room): TileInfo {
+    const name = this.names.get(value & 0xff);
+    const description = describeCell(value, this.classes, this.episode, room);
+    const texts = description ? descriptionTexts(description, this.texts) : [];
     return {
       name: name && name.charAt(0) + name.slice(1).toLowerCase(),
-      descriptions: (this.texts.get(type) ?? []).map(displayText).filter((d) => d !== ""),
+      descriptions: texts.map(displayText).filter((d) => d !== ""),
+      random: description !== undefined && typeof description.variant !== "number",
     };
   }
 
-  /** A tooltip: value, name and every description. */
-  title(value: number): string {
-    const { name, descriptions } = this.info(value);
-    return [[hex(value), name].filter(Boolean).join(" "), ...descriptions].join("\n");
+  /** A tooltip: value, name and the descriptions. */
+  title(value: number, room?: Room): string {
+    const { name, descriptions, random } = this.info(value, room);
+    const head = [hex(value), name, random && descriptions.length > 1 ? "(one of)" : undefined];
+    return [head.filter(Boolean).join(" "), ...descriptions].join("\n");
   }
 
-  /** One line: name, else the first description. */
-  summary(value: number): string {
-    const { name, descriptions } = this.info(value);
+  /** One line: name and the first description. */
+  summary(value: number, room?: Room): string {
+    const { name, descriptions } = this.info(value, room);
     const text = descriptions.at(0) ?? "";
     return name ? `${name}${text ? ` – ${text}` : ""}` : text;
   }

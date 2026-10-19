@@ -464,7 +464,8 @@ export class App {
     const overlay = room.overlay[index] ?? 0;
     this.cellInfo.textContent = `(${x}, ${y})  base ${hex(base)}  overlay ${hex(overlay)}`;
     // what the hero would see: the overlay object if there is one
-    this.cellText.textContent = this.names().summary(overlay & 0xff ? overlay : base) || "\u00a0";
+    this.cellText.textContent =
+      this.names().summary(overlay & 0xff ? overlay : base, room) || "\u00a0";
   }
 
   private refreshRoomList(): void {
