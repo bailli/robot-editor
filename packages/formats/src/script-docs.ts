@@ -48,11 +48,11 @@ const HANDLER =
 /** By upper-case name; Area has two forms, keyed AREA/3 and AREA/4. */
 const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
   MESSAGE: {
-    args: ["text", "time"],
+    args: ["text", "delay"],
     kinds: ["text"],
     doc:
-      "time 0: shows one of the text's variants (|) at random at once (0x406450); else, " +
-      "once the hero has been `time` seconds in the room (nothing if that time has " +
+      "delay 0: shows one of the text's variants (|) at random at once (0x406450); else, " +
+      "once the hero has been `delay` seconds in the room (nothing if that time has " +
       "passed), all variants as pages one after another (Enter, arrows; 0x405fe0). A text " +
       "starting with ! opens a different box.",
   },
@@ -65,10 +65,10 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
     doc: "switches beam n on or off (emitters whose state bits 12–15 are n).",
   },
   PHONE: {
-    args: ["text", "time", "n"],
+    args: ["text", "delay", "n"],
     kinds: ["text"],
     doc:
-      "lets the phone ring after `time` seconds in the room; answering plays text `text` " +
+      "lets the phone ring after `delay` seconds in the room; answering plays text `text` " +
       "(n: probably the number of rings). Episode II.",
   },
   PRINTSTR: { args: ["string"], doc: "shows a string in a message box (debugging; unused)." },
@@ -247,9 +247,9 @@ export function scriptTextVariants(
   args: readonly (number | undefined)[],
 ): "pages" | "random" | undefined {
   if (fn.toUpperCase() !== "MESSAGE") return undefined;
-  const time = args[1];
-  if (time === undefined) return undefined;
-  return time === 0 ? "random" : "pages";
+  const delay = args[1];
+  if (delay === undefined) return undefined;
+  return delay === 0 ? "random" : "pages";
 }
 
 /** The function's documentation, by name and number of arguments. */

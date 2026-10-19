@@ -403,11 +403,11 @@ test("the script explains itself and can be edited", async () => {
   const message = [...(source?.querySelectorAll(".function") ?? [])].find(
     (e) => e.textContent === "Message",
   );
-  expect(message?.getAttribute("title")).toMatch(/^Message\(text, time\)/);
+  expect(message?.getAttribute("title")).toMatch(/^Message\(text, delay\)/);
   const number = [...(source?.querySelectorAll(".number") ?? [])].find(
     (e) => e.textContent === "700",
   );
-  // Message with a time shows all of the text's variants as pages, one after another
+  // Message with a delay shows all of the text's variants as pages, one after another
   const pages = defined(game.episodeTexts(1)?.entries.get(700)).map(displayText);
   expect(pages.length).toBe(3);
   expect(number?.getAttribute("title")).toBe(

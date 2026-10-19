@@ -926,7 +926,7 @@ export class App {
     if (shown === "pages") return `${variants.length} pages, one after another:\n${pages}`;
     const how =
       fn.toUpperCase() === "MESSAGE"
-        ? "pages one after another, or one of them at random if the time is 0"
+        ? "pages one after another, or one of them at random if the delay is 0"
         : "how the game shows them is not decoded";
     return `${variants.length} parts (${how}):\n${pages}`;
   }
