@@ -4,16 +4,17 @@ import {
   type EpisodeClasses,
   type Exits,
   OUTSIDE_ROOM,
+  type Passage,
+  type PassageKind,
   ROOM_WIDTH,
   type RecordTeleport,
   type Room,
   type ScriptExit,
   type ScriptTeleport,
-  type Stairs,
   roomExits,
+  roomPassages,
   roomScript,
   roomScriptExits,
-  roomStairs,
   roomTeleports,
 } from "@robot/formats";
 
@@ -23,7 +24,8 @@ export interface Connections {
   /** Changes made by the room's script. */
   scripted: ScriptExit[];
   teleports: ScriptTeleport[];
-  stairs: Stairs[];
+  /** Doors and stairs to room +/- 100. */
+  passages: Passage[];
   /** Oracles and teleporters among the logic records. */
   records: RecordTeleport[];
 }
@@ -34,9 +36,9 @@ export function connections(
   classes: EpisodeClasses,
 ): Connections {
   const { exits, teleports } = roomScriptExits(roomScript(room));
-  const stairs = roomStairs(room, classes, ids);
+  const passages = roomPassages(room, classes, ids);
   const records = roomTeleports(room);
-  return { exits: roomExits(room, ids), scripted: exits, teleports, stairs, records };
+  return { exits: roomExits(room, ids), scripted: exits, teleports, passages, records };
 }
 
 /** Where a direction leads regardless of the game state: the last fixed script assignment, else the exits byte. */
@@ -44,6 +46,8 @@ export function fixedExit(c: Connections, direction: Direction): number {
   const fixed = c.scripted.filter((s) => s.direction === direction && !s.conditional).at(-1);
   return fixed ? fixed.room : c.exits[direction];
 }
+
+const PASSAGE_KINDS: readonly PassageKind[] = ["door in", "door out", "stairs down", "stairs up"];
 
 const LABELS: Readonly<Record<Direction, string>> = {
   north: "↑ North",
@@ -81,13 +85,14 @@ export class ExitsView {
       return item;
     });
     this.element.replaceChildren(...items);
-    for (const direction of ["up", "down"] as const) {
-      const stairs = c.stairs.filter((x) => x.direction === direction);
-      const targets = [...new Set(stairs.map((x) => x.room))].map((room) => {
-        const cells = stairs.filter((x) => x.room === room).length;
-        return this.target(room, `${cells} stairs cell${cells === 1 ? "" : "s"}`);
+    for (const kind of PASSAGE_KINDS) {
+      const passages = c.passages.filter((x) => x.kind === kind);
+      const targets = [...new Set(passages.map((x) => x.room))].map((room) => {
+        const cells = passages.filter((x) => x.room === room).length;
+        return this.target(room, `${cells} cell${cells === 1 ? "" : "s"}`);
       });
-      this.group("stairs", direction === "up" ? "Stairs up" : "Stairs down", targets, direction);
+      const label = kind.charAt(0).toUpperCase() + kind.slice(1);
+      this.group("passage", label, targets, kind);
     }
     const at = (cell: number | undefined) =>
       cell === undefined ? "" : ` at (${cell % ROOM_WIDTH}, ${Math.floor(cell / ROOM_WIDTH)})`;

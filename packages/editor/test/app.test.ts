@@ -146,14 +146,18 @@ test("teleports are listed with the exits", async () => {
   await expect.element(page.getByRole("heading", { name: "Robot I – room 129" })).toBeVisible();
 });
 
-test("stairs are listed with the exits", async () => {
-  app.showEpisode(2, 42);
-  const up = document.querySelector('.stairs[data-direction="up"]');
-  expect(up?.textContent).toBe("Stairs up142");
-  await exits().getByRole("button", { name: "142" }).click();
-  await expect.element(page.getByRole("heading", { name: "Robot II – room 142" })).toBeVisible();
-  expect(document.querySelector('.stairs[data-direction="down"]')?.textContent).toBe(
-    "Stairs down42",
+test("doors and stairs are listed with the exits", async () => {
+  app.showEpisode(3, 47); // a hut: its door leads inside, room 147
+  const door = document.querySelector('.passage[data-direction="door in"]');
+  expect(door?.textContent).toBe("Door in147");
+  await exits().getByRole("button", { name: "147" }).click();
+  await expect.element(page.getByRole("heading", { name: "Robot III – room 147" })).toBeVisible();
+  expect(document.querySelector('.passage[data-direction="door out"]')?.textContent).toBe(
+    "Door out47",
+  );
+  app.showRoom(22); // a hole in the jungle: stairs down into the cave, room 122
+  expect(document.querySelector('.passage[data-direction="stairs down"]')?.textContent).toBe(
+    "Stairs down122",
   );
 });
 

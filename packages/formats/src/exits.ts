@@ -20,11 +20,14 @@ import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
  * 0 lies under the status line). Walled rooms mark their exits with cells 0x0017; the
  * game turns them into 0x0110 (closed) on edges without a target and back (0x433ae5).
  *
- * Stairs (episodes II-IV) lead to the room 100 above or below: cells of the stairs-up
- * class with state 6 (entered walking north) or 7 (walking south) to room + 100
- * (0x413d30), cells of the stairs-down class to room - 100 (0x4140d0). The hero arrives
- * at the same column, two cells further in the walking direction; the other room has
- * the matching stairs at the same place.
+ * Passages lead to the room 100 "further in" (buildings, caves below) or back out:
+ *   door in   class 98 (tile 0x53, episodes II-IV) with state 6, entered walking north,
+ *             or 7, walking south: room + 100 (0x413d30), e.g. a hut's doorway
+ *   door out  class 105 (tile 0x5a): room - 100 (0x4140d0)
+ *   stairs    class 71 (tile 0x3d, episodes I-IV), steps into the ground: room + 100,
+ *             or with state bit 0 set (steps up) room - 100 (0x426880)
+ * The hero keeps the column and moves on in the walking direction (doors: two cells,
+ * stairs: one); the other room has the matching door or stairs at the same place.
  *
  * Logic records move the hero to a target in their u16 at data offset 4 (room = bits
  * 0-9, x = bits 10-15) and y at offset 6:
@@ -45,17 +48,28 @@ export const OUTSIDE_ROOM = 2;
 export const EXIT_CELL = 0x0017;
 export const CLOSED_EXIT_CELL = 0x0110;
 
-/** Class ids of the stairs (tile types 0x53 and 0x5a in episodes II-IV). */
-export const STAIRS_UP_CLASS = 98;
-export const STAIRS_DOWN_CLASS = 105;
+/** Class ids of passages to room +/- 100 (see above). */
+export const DOOR_IN_CLASS = 98;
+export const DOOR_OUT_CLASS = 105;
+export const STAIRS_CLASS = 71;
 
-export interface Stairs {
+export type PassageKind = "door in" | "door out" | "stairs down" | "stairs up";
+
+export interface Passage {
   /** Cell index in the room. */
   cell: number;
-  direction: "up" | "down";
+  kind: PassageKind;
   /** Target room (room id +/- 100), 0 if the episode has no such room. */
   room: number;
 }
+
+/** The kind of passage that leads back. */
+export const RETURN_PASSAGE: Readonly<Record<PassageKind, PassageKind>> = {
+  "door in": "door out",
+  "door out": "door in",
+  "stairs down": "stairs up",
+  "stairs up": "stairs down",
+};
 
 export const ORACLE_RECORD = 12;
 export const TELEPORTER_RECORD = 13;
@@ -103,29 +117,32 @@ export function roomExits(room: Room, ids: ReadonlySet<number>): Exits {
   };
 }
 
-/** The stairs of a room (base and overlay cells). */
-export function roomStairs(
+function passageKind(classes: EpisodeClasses, value: number): PassageKind | undefined {
+  const state = value >> 8;
+  const id = classes.classes.get(value & 0xff)?.id;
+  if (id === DOOR_IN_CLASS)
+    return (state & 0xf) === 6 || (state & 0xf) === 7 ? "door in" : undefined;
+  if (id === DOOR_OUT_CLASS) return "door out";
+  if (id === STAIRS_CLASS) return state & 1 ? "stairs up" : "stairs down";
+  return undefined;
+}
+
+/** The doors and stairs of a room (base and overlay cells). */
+export function roomPassages(
   room: Room,
   classes: EpisodeClasses,
   ids: ReadonlySet<number>,
-): Stairs[] {
-  const stairs: Stairs[] = [];
+): Passage[] {
+  const passages: Passage[] = [];
   for (const layer of [room.base, room.overlay]) {
     layer.forEach((value, cell) => {
-      const id = classes.classes.get(value & 0xff)?.id;
-      const state = (value >> 8) & 0xf;
-      const direction =
-        id === STAIRS_UP_CLASS && (state === 6 || state === 7)
-          ? "up"
-          : id === STAIRS_DOWN_CLASS
-            ? "down"
-            : undefined;
-      if (!direction) return;
-      const target = room.id + (direction === "up" ? 100 : -100);
-      stairs.push({ cell, direction, room: ids.has(target) ? target : 0 });
+      const kind = passageKind(classes, value);
+      if (!kind) return;
+      const target = room.id + (kind === "door in" || kind === "stairs down" ? 100 : -100);
+      passages.push({ cell, kind, room: ids.has(target) ? target : 0 });
     });
   }
-  return stairs;
+  return passages;
 }
 
 /** The oracles and teleporters among a room's logic records (with a target room). */

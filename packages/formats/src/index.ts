@@ -3,30 +3,33 @@ export type { EpisodeClasses, ObjectClass } from "./classes.ts";
 export {
   CLOSED_EXIT_CELL,
   DIRECTIONS,
+  DOOR_IN_CLASS,
+  DOOR_OUT_CLASS,
   EXIT_CELL,
   EXITS_TAG,
   OPPOSITE,
   OUTSIDE_ROOM,
   ORACLE_RECORD,
-  STAIRS_DOWN_CLASS,
-  STAIRS_UP_CLASS,
+  RETURN_PASSAGE,
+  STAIRS_CLASS,
   TELEPORTER_RECORD,
   arrivalCell,
   edgeCells,
   exitsByte,
   roomExits,
   roomScript,
+  roomPassages,
   roomScriptExits,
-  roomStairs,
   roomTeleports,
 } from "./exits.ts";
 export type {
   Direction,
   Exits,
+  Passage,
+  PassageKind,
   RecordTeleport,
   ScriptExit,
   ScriptTeleport,
-  Stairs,
 } from "./exits.ts";
 export { EPISODE_NAMES, EPISODES, Game, START_ROOMS, sceneId, shapesId } from "./game.ts";
 export type { Episode } from "./game.ts";

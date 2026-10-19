@@ -6,12 +6,13 @@ import {
   DIRECTIONS,
   EXIT_CELL,
   OUTSIDE_ROOM,
+  RETURN_PASSAGE,
   arrivalCell,
   edgeCells,
   roomExits,
+  roomPassages,
   roomScript,
   roomScriptExits,
-  roomStairs,
   roomTeleports,
 } from "../src/exits.ts";
 import { EPISODES, Game, START_ROOMS } from "../src/game.ts";
@@ -123,30 +124,41 @@ test("the maze of episode II wires its edges by script", () => {
   ]);
 });
 
-test("stairs lead 100 rooms up or down onto the matching stairs", () => {
+/** Passages without the matching one at the same place in the other room. */
+const ONE_WAY_PASSAGES = [
+  "1 125 (21,14) stairs up",
+  "1 126 (18,4) stairs up",
+  "2 34 (18,22) stairs down",
+  "2 242 (25,18) stairs up",
+  "3 114 (3,17) stairs up",
+];
+
+test("doors and stairs lead 100 rooms in or out onto the matching passage", () => {
   const listed: string[] = [];
+  const oneWay: string[] = [];
   for (const episode of EPISODES) {
     const { rooms, classes } = game.episode(episode);
     const ids = new Set(rooms.map((r) => r.id));
     for (const room of rooms) {
-      for (const s of roomStairs(room, classes, ids)) {
-        const where = `${episode} ${room.id} (${s.cell % 40},${Math.floor(s.cell / 40)}) ${s.direction}`;
-        listed.push(`${where} -> ${s.room}`);
+      for (const p of roomPassages(room, classes, ids)) {
+        const where = `${episode} ${room.id} (${p.cell % 40},${Math.floor(p.cell / 40)}) ${p.kind}`;
+        listed.push(`${where} -> ${p.room}`);
         if (room.id === OUTSIDE_ROOM) continue; // episode IV's unused tile sheet
-        const target = rooms.find((r) => r.id === s.room);
-        assert.ok(target, `${where}: no room ${room.id} ${s.direction === "up" ? "+" : "-"} 100`);
-        // the matching stairs, at the same place (double stairs: the neighbouring cells)
-        const back = roomStairs(target, classes, ids).filter(
+        const target = rooms.find((r) => r.id === p.room);
+        assert.ok(target, `${where}: no room to go to`);
+        // the way back at the same place (double doors: the neighbouring cells)
+        const back = roomPassages(target, classes, ids).filter(
           (t) =>
-            t.direction !== s.direction &&
-            Math.abs((t.cell % 40) - (s.cell % 40)) <= 1 &&
-            Math.abs(Math.floor(t.cell / 40) - Math.floor(s.cell / 40)) <= 3,
+            t.kind === RETURN_PASSAGE[p.kind] &&
+            Math.abs((t.cell % 40) - (p.cell % 40)) <= 1 &&
+            Math.abs(Math.floor(t.cell / 40) - Math.floor(p.cell / 40)) <= 3,
         );
-        assert.ok(back.length > 0, `${where}: no stairs back in room ${s.room}`);
+        if (back.length === 0) oneWay.push(where);
       }
     }
   }
   expect(listed).toMatchSnapshot();
+  assert.deepEqual(oneWay, ONE_WAY_PASSAGES);
 });
 
 test("oracles and teleporters lead to rooms of their episode", () => {
@@ -168,7 +180,7 @@ test("oracles and teleporters lead to rooms of their episode", () => {
 });
 
 /**
- * Rooms not reached from the start room through exits, scripts, stairs, oracles and
+ * Rooms not reached from the start room through exits, scripts, doors, stairs, oracles and
  * teleporters. Room 99 of every episode is a debug room; the others still lack a
  * decoded connection.
  */
@@ -182,7 +194,7 @@ test("rooms reached from the start room", () => {
         ...Object.values(roomExits(room, ids)),
         ...script.exits.map((s) => s.room),
         ...script.teleports.map((t) => t.room),
-        ...roomStairs(room, classes, ids).map((s) => s.room),
+        ...roomPassages(room, classes, ids).map((p) => p.room),
         ...roomTeleports(room).map((t) => t.room),
       ];
     };
