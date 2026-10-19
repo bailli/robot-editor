@@ -236,6 +236,13 @@ Supported:
 - exits line: N/S/W/E targets incl. script changes, doors/stairs, bus, oracles,
   teleporters, actors; arrow keys follow fixed exits; per direction the exits byte's
   setting (neighbour / outside / none) can be changed, undoably (`withExitMode`)
+- map (button "Map", key M): the episode's rooms as thumbnails on their grid (row =
+  tens, column = ones of the id, one block per hundred), named; between grid
+  neighbours one arrow per direction: green open (exits byte), orange open but with exit
+  tiles that do not arrive on exit tiles of the neighbour, dashed opened only by the
+  script, grey closed; clicking an arrow opens or closes that exit (undoable); badges
+  for the other links (doors, stairs, teleporters, oracles, actors, outside, far script
+  exits) go to their room; clicking a room opens it
 - visited rooms go into the browser's history and address (`#3/147`): the browser's
   back/forward (buttons, Alt+←/→, mouse buttons), the editor's own ◀/▶ buttons (showing
   the room they lead to) and Backspace move between them, across episodes; loading the

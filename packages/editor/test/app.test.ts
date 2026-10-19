@@ -449,3 +449,25 @@ test("the exits byte can be changed per direction, undoably", async () => {
   expect(defined(app.editor).isEdited(1, 43)).toBe(false);
   expect(west().querySelector("select")?.value).toBe("none");
 });
+
+test("the map shows the rooms with their exits and opens or closes them", async () => {
+  await page.getByRole("button", { name: "Map" }).click();
+  const map = page.getByRole("region", { name: "Map" });
+  await expect.element(map).toBeVisible();
+  expect(document.querySelector(".map-room.current")?.getAttribute("data-room")).toBe("43");
+  // 43 west is closed in its exits byte and opened by the script: dashed
+  const west = () =>
+    defined(
+      document.querySelector('.map-link[data-from="43"][data-direction="west"]') ?? undefined,
+    );
+  expect(west().classList.contains("scripted")).toBe(true);
+  await userEvent.click(west());
+  expect(exitMode(defined(app.editor).room(1, 43), "west")).toBe("neighbour");
+  expect(west().classList.contains("open")).toBe(true);
+  app.undo();
+  expect(west().classList.contains("scripted")).toBe(true);
+  // a room opens in the room view
+  await map.getByRole("button", { name: /^Room 33/ }).click();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 33" })).toBeVisible();
+  expect(app.mapView.element.hidden).toBe(true);
+});

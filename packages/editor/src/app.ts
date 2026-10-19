@@ -6,12 +6,14 @@ import {
   PLACEMENT_AREAS,
   ROBOT_CLASSES,
   ROOM_WIDTH,
+  type Room,
   type RoomActor,
   START_ROOMS,
   compileScript,
   describeRecord,
   disassemble,
   displayText,
+  exitMode,
   parseCompiledScript,
   randomPlacement,
   roomActors,
@@ -26,8 +28,16 @@ import {
 import { ActorsView, actorOrigin } from "./actors-view.ts";
 import { type Edit, Editor, type Layer, tilesOf } from "./editor.ts";
 import { type Connections, ExitsView, connections, fixedExit } from "./exits-view.ts";
+import { MapView } from "./map-view.ts";
 import { RecordView } from "./record-view.ts";
-import { CellCache, type Highlight, RoomView, cellCanvas, spriteCanvas } from "./room-view.ts";
+import {
+  CellCache,
+  type Highlight,
+  RoomView,
+  cellCanvas,
+  drawRoom,
+  spriteCanvas,
+} from "./room-view.ts";
 import { ScriptView } from "./script-view.ts";
 import { TileNames } from "./tile-info.ts";
 
@@ -95,6 +105,41 @@ export class App {
   private readonly redoButton = h("button", { disabled: true, title: "Ctrl+Y" }, "Redo");
   private readonly gridToggle = h("input", { type: "checkbox" });
   private readonly actorsToggle = h("input", { type: "checkbox", checked: true });
+  private readonly mapButton = h("button", {
+    title: "The episode's rooms on their grid, with the exits between them (M)",
+    "aria-pressed": "false",
+  });
+  readonly mapView = new MapView({
+    open: (room) => {
+      this.setMap(false);
+      this.showRoom(room);
+    },
+    toggle: (room, direction) => {
+      const editor = this.need();
+      const open = exitMode(editor.room(this.episode, room), direction) === "neighbour";
+      editor.setExitMode(this.episode, room, direction, open ? "none" : "neighbour");
+      this.refreshMap();
+      this.refreshRoomList();
+      this.refreshButtons();
+    },
+    exists: (room) =>
+      this.need()
+        .rooms(this.episode)
+        .some((r) => r.id === room),
+    thumbnail: (room) => this.thumbnail(room),
+    name: (room) => {
+      const editor = this.need();
+      return editor.game.roomName(this.episode, room, editor.rooms(this.episode))?.name;
+    },
+    edited: (room) => this.need().isEdited(this.episode, room),
+  });
+  /** Per episode: room id -> a drawing of the room and what it was drawn from. */
+  private readonly thumbnails = new Map<
+    number,
+    Map<number, { key: string; canvas: HTMLCanvasElement }>
+  >();
+  private readonly roomPane = h("div", { class: "room-pane" });
+  private mapShown = false;
   private actors: RoomActor[] = [];
   private readonly robotSprites = new Map<number, HTMLCanvasElement[]>();
   readonly actorsView = new ActorsView({
@@ -242,13 +287,8 @@ export class App {
           this.roomTitle,
           this.roomName,
         ),
-        this.exitsView.element,
-        this.view.element,
-        this.cellInfo,
-        this.cellText,
-        this.recordView.element,
-        this.actorsView.element,
-        this.scriptView.element,
+        this.roomPane,
+        this.mapView.element,
       ),
       h(
         "aside",
@@ -285,11 +325,23 @@ export class App {
         this.redoButton,
         h("label", {}, this.gridToggle, " Grid"),
         h("label", { title: "Where actors appear (A)" }, this.actorsToggle, " Actors"),
+        this.mapButton,
         this.status,
       ),
       this.welcome,
       this.workspace,
     );
+    this.roomPane.append(
+      this.exitsView.element,
+      this.view.element,
+      this.cellInfo,
+      this.cellText,
+      this.recordView.element,
+      this.actorsView.element,
+      this.scriptView.element,
+    );
+    this.mapButton.textContent = "Map";
+    this.mapView.element.hidden = true;
     this.wire();
   }
 
@@ -385,6 +437,7 @@ export class App {
     if (this.selected && this.lastRoom !== shown) this.select(undefined);
     this.lastRoom = shown;
     this.remember(this.episode, id);
+    if (this.mapShown) this.refreshMap();
   }
 
   /** "room 43 – DER START": a room with the name the game shows for it. */
@@ -538,6 +591,9 @@ export class App {
     this.redoButton.addEventListener("click", () => {
       this.redo();
     });
+    this.mapButton.addEventListener("click", () => {
+      this.setMap(!this.mapShown);
+    });
     this.actorsToggle.addEventListener("change", () => {
       this.refreshActors();
     });
@@ -669,6 +725,8 @@ export class App {
         } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "a") {
           this.actorsToggle.checked = !this.actorsToggle.checked;
           this.refreshActors();
+        } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "m") {
+          this.setMap(!this.mapShown);
         }
       },
       { signal: this.listeners.signal },
@@ -779,6 +837,48 @@ export class App {
     }
     this.refreshRoomList();
     this.refreshButtons();
+    if (this.mapShown) this.refreshMap();
+  }
+
+  /** Shows the episode's map instead of the room, or the room again. */
+  setMap(shown: boolean): void {
+    this.mapShown = shown;
+    this.mapButton.setAttribute("aria-pressed", String(shown));
+    this.mapButton.classList.toggle("pressed", shown);
+    this.roomPane.hidden = shown;
+    this.mapView.element.hidden = !shown;
+    this.workspace.classList.toggle("map-mode", shown);
+    if (shown) this.refreshMap();
+  }
+
+  private refreshMap(): void {
+    const editor = this.need();
+    const classes = editor.game.episode(this.episode).classes;
+    this.mapView.show(editor.rooms(this.episode), this.roomId, classes);
+  }
+
+  /**
+   * A drawing of a room for the map: kept while the room's cells and records stay the
+   * same, drawn a little later (rooms are many) when new.
+   */
+  private thumbnail(id: number): HTMLCanvasElement {
+    const editor = this.need();
+    const room = editor.room(this.episode, id);
+    let cache = this.thumbnails.get(this.episode);
+    if (!cache) {
+      cache = new Map();
+      this.thumbnails.set(this.episode, cache);
+    }
+    const key = roomKey(room);
+    const known = cache.get(id);
+    if (known?.key === key) return known.canvas;
+    const canvas = known?.canvas ?? h("canvas", { class: "map-thumbnail" });
+    cache.set(id, { key, canvas });
+    const cells = this.cache();
+    setTimeout(() => {
+      drawRoom(canvas, room, cells);
+    });
+    return canvas;
   }
 
   /** The layer whose cell at `index` is a logic cell (the current layer first). */
@@ -978,6 +1078,21 @@ function isHistoryState(state: unknown): state is HistoryState {
 }
 
 const HISTORY_KEY = "robot-editor-history";
+
+/** A short fingerprint of what a room looks like (its cells and records). */
+function roomKey(room: Room): string {
+  let hash = 0x811c9dc5;
+  const mix = (v: number) => {
+    hash = Math.imul(hash ^ v, 0x01000193);
+  };
+  for (const v of room.base) mix(v);
+  for (const v of room.overlay) mix(v);
+  for (const r of room.records) {
+    mix(r.slot);
+    for (const b of r.data) mix(b);
+  }
+  return `${hash >>> 0} ${room.records.length}`;
+}
 
 /** Keeps the visited rooms for this tab, so a reload can label back/forward again. */
 function saveHistory(history: readonly { episode: number; room: number }[]): void {

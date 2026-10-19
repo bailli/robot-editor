@@ -42,6 +42,21 @@ export class CellCache {
   }
 }
 
+/** Draws a whole room onto a canvas of the screen's size, as the room view does. */
+export function drawRoom(canvas: HTMLCanvasElement, room: Room, cache: CellCache): void {
+  canvas.width = SCREEN_WIDTH;
+  canvas.height = SCREEN_HEIGHT;
+  const g = canvas.getContext("2d");
+  if (!g) return;
+  for (let i = 0; i < ROOM_CELLS; i++) {
+    const image = cache.get(
+      resolveCell(room, room.base[i] ?? 0),
+      resolveCell(room, room.overlay[i] ?? 0),
+    );
+    g.putImageData(image, (i % ROOM_WIDTH) * TILE_WIDTH, Math.floor(i / ROOM_WIDTH) * TILE_HEIGHT);
+  }
+}
+
 /** A rectangle of cells to outline: column, row, width and height in cells. */
 export interface Highlight {
   x: number;

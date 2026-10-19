@@ -111,6 +111,20 @@ h2 {
   display: none;
 }
 
+/* the map needs the room's and the tiles' width */
+.workspace.map-mode {
+  grid-template-columns: 150px minmax(320px, 1fr);
+}
+
+.workspace.map-mode .tiles {
+  display: none;
+}
+
+.workspace.map-mode main {
+  min-width: 0;
+  overflow-x: auto;
+}
+
 .rooms {
   display: flex;
   flex-direction: column;
@@ -505,4 +519,121 @@ canvas.cell {
 .exit .exit-mode {
   font-size: 12px;
   padding: 0 2px;
+}
+
+header button.pressed {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.map-view {
+  --map-room: 152px;
+  --map-link: 22px;
+  display: grid;
+  gap: 16px;
+}
+
+.map-view[hidden] {
+  display: none;
+}
+
+.map-floor h3 {
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+
+.map-grid {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+}
+
+.map-room {
+  width: var(--map-room);
+  display: grid;
+  gap: 2px;
+}
+
+.map-open {
+  display: grid;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  text-align: left;
+}
+
+.map-room.current .map-open {
+  border-color: rgb(255 140 0);
+  outline: 2px solid rgb(255 140 0);
+}
+
+.map-room.edited .map-label {
+  color: var(--edited);
+}
+
+.map-thumbnail {
+  width: 100%;
+  aspect-ratio: 640 / 348;
+  image-rendering: pixelated;
+  background: #000;
+}
+
+.map-label {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.map-badge {
+  padding: 0 3px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.map-links {
+  display: flex;
+  gap: 2px;
+}
+
+.map-links.horizontal {
+  flex-direction: column;
+}
+
+.map-link {
+  padding: 0;
+  width: 20px;
+  height: 18px;
+  font-size: 11px;
+  line-height: 1;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.map-link.open {
+  color: #fff;
+  background: #2e8b3d;
+  border-color: #2e8b3d;
+}
+
+.map-link.broken {
+  color: #fff;
+  background: #d97a00;
+  border-color: #d97a00;
+}
+
+.map-link.scripted {
+  color: var(--accent);
+  border: 1px dashed var(--accent);
+}
+
+.map-link.closed {
+  color: var(--line);
 }
