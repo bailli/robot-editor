@@ -1,6 +1,7 @@
 import {
   type Episode,
   LOGIC_CELL,
+  type PlacementArea,
   ROOM_CELLS,
   ROOM_HEIGHT,
   ROOM_WIDTH,
@@ -56,6 +57,7 @@ export class RoomView {
   private selected: number | undefined;
   private grid = false;
   private actors: readonly RoomActor[] = [];
+  private areas: readonly PlacementArea[] = [];
   private actorSprite: (actor: RoomActor, n: number) => HTMLCanvasElement | undefined = () =>
     undefined;
 
@@ -119,6 +121,12 @@ export class RoomView {
   ): void {
     this.actors = actors;
     this.actorSprite = sprite;
+    this.drawMarks();
+  }
+
+  /** Outlines areas, e.g. where RandObj places robots, labelled by how the hero enters. */
+  setAreas(areas: readonly PlacementArea[]): void {
+    this.areas = areas;
     this.drawMarks();
   }
 
@@ -189,6 +197,28 @@ export class RoomView {
       }
     }
     this.drawActors(g, w, h);
+    for (const area of this.areas) {
+      const x = area.x0 * w;
+      const y = area.y0 * h;
+      const aw = (area.x1 - area.x0 + 1) * w;
+      const ah = (area.y1 - area.y0 + 1) * h;
+      g.fillStyle = "rgb(230 30 30 / 0.08)";
+      g.fillRect(x, y, aw, ah);
+      g.strokeStyle = ACTOR;
+      g.lineWidth = 2;
+      g.setLineDash([8, 4]);
+      g.strokeRect(x + 1, y + 1, aw - 2, ah - 2);
+      g.setLineDash([]);
+      g.fillStyle = ACTOR;
+      g.font = "bold 13px system-ui, sans-serif";
+      // labels in different corners: the areas overlap
+      const label = `hero enters from the ${area.entering}`;
+      const right = area.entering === "west";
+      const bottom = area.entering === "north";
+      g.textAlign = right ? "right" : "left";
+      g.fillText(label, right ? x + aw - 6 : x + 6, bottom ? y + ah - 8 : y + 16);
+      g.textAlign = "left";
+    }
     if (this.selected !== undefined) {
       g.strokeStyle = "rgb(255 140 0)";
       g.lineWidth = 3;

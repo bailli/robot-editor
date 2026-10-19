@@ -150,7 +150,10 @@ test("teleports are listed with the exits", async () => {
   const button = exits().getByRole("button", { name: /^129/ });
   await expect
     .element(button)
-    .toHaveAttribute("title", "room 129 (Teleport(129, 7, 21), depending on the game state)");
+    .toHaveAttribute(
+      "title",
+      "room 129 (the script's Teleport(129, 7, 21) sets where returning teleporters lead, depending on the game state)",
+    );
   await button.click();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 129" })).toBeVisible();
 });
@@ -357,5 +360,22 @@ test("robots keep their sprite when the marks are redrawn", () => {
   const before = app.view.pixelsOfMarks();
   app.view.setHover(5 * ROOM_WIDTH + 5);
   app.view.setHover(undefined);
+  expect(firstDifference(app.view.pixelsOfMarks(), before)).toBe(-1);
+});
+
+test("hovering a RandObj line shows where robots are placed", async () => {
+  app.showEpisode(2, 123);
+  const before = app.view.pixelsOfMarks();
+  expect(document.querySelector(".actors-view")?.textContent).toContain(
+    "Script keeps 2–4 × O_ANDROID: 4 in the room now, so it removes up to 2",
+  );
+  expect(document.querySelector(".actors-view")?.textContent).toContain(
+    "Script keeps 1 × O_BOMB: 1 in the room now, so it leaves them as they are",
+  );
+  const row = page.getByText(/^Script keeps 8–15 × O_ALIEN/);
+  await userEvent.hover(row);
+  expect(firstDifference(app.view.pixelsOfMarks(), before)).not.toBe(-1);
+  await userEvent.unhover(row);
+  app.view.setHover(undefined); // the mouse may now be over the room
   expect(firstDifference(app.view.pixelsOfMarks(), before)).toBe(-1);
 });

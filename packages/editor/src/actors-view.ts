@@ -13,6 +13,8 @@ export interface ActorsViewEvents {
   name(type: number): string;
   /** A canvas showing a tile type. */
   icon(type: number): HTMLCanvasElement;
+  /** Shows or hides where RandObj places robots and androids. */
+  areas(show: boolean): void;
 }
 
 /** How an actor comes into the room, for people. */
@@ -39,15 +41,24 @@ export function randomEffect(call: ScriptActors, placement: RandomPlacement): st
   const { existing } = placement;
   const range = (a: number, b: number) => (a === b ? `${a}` : `${a}–${b}`);
   const target = range(call.min, call.max);
-  const where = placement.nearHero
-    ? "on empty cells within 10 columns and 5 rows of where the hero enters"
+  const where = placement.awayFromHero
+    ? "on empty cells across the room from where the hero enters (hover to see the areas)"
     : "on empty cells anywhere";
+  const add = call.max - existing;
+  const remove = existing - call.min;
   const change =
     existing > call.max
-      ? `removes ${range(existing - call.max, existing - call.min)} at random`
+      ? `removes ${range(existing - call.max, remove)} at random`
       : existing < call.min
-        ? `adds ${range(call.min - existing, call.max - existing)} ${where}`
-        : `adds up to ${call.max - existing} ${where} or removes up to ${existing - call.min}`;
+        ? `adds ${range(call.min - existing, add)} ${where}`
+        : add === 0 && remove === 0
+          ? "leaves them as they are"
+          : [
+              add > 0 ? `adds up to ${add} ${where}` : "",
+              remove > 0 ? `removes up to ${remove}` : "",
+            ]
+              .filter(Boolean)
+              .join(" or ");
   return `keeps ${target} × O_${call.name}: ${existing} in the room now, so it ${change}`;
 }
 
@@ -109,6 +120,14 @@ export class ActorsView {
         `Script ${randomEffect(call, placement)}` +
         (call.conditional ? " (depending on the game state)" : "");
       row.append(text);
+      if (placement.awayFromHero) {
+        row.addEventListener("mouseenter", () => {
+          this.events.areas(true);
+        });
+        row.addEventListener("mouseleave", () => {
+          this.events.areas(false);
+        });
+      }
       return row;
     });
     const heading = document.createElement("h3");

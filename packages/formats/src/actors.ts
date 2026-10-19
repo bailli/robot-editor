@@ -161,19 +161,46 @@ export function scriptObjectType(
   return SCRIPT_OBJECTS[name];
 }
 
-/** Classes RandObj places near the hero (0x407588): robots and androids. */
-const NEAR_HERO_CLASSES: readonly number[] = [...ROBOT_CLASSES, 0x2d];
+/** Classes RandObj places in an area away from the hero (0x407588): robots, androids. */
+const AWAY_FROM_HERO_CLASSES: readonly number[] = [...ROBOT_CLASSES, 0x2d];
+
+export interface PlacementArea {
+  /** The edge the hero enters the room through. */
+  entering: "west" | "east" | "north" | "south";
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/**
+ * Where RandObj places robots and androids: within 10 columns and 5 rows of a reference
+ * point (0x4fe30b/0x4fe30c) on the far side of the room from where the hero entered. The
+ * game sets it when the hero walks off an edge (0x44c5a0); teleporters and stairs keep the
+ * previous one, the bus sets the middle (20, 14).
+ */
+export const PLACEMENT_AREAS: readonly PlacementArea[] = (
+  [
+    ["west", 25, 14],
+    ["east", 15, 14],
+    ["north", 20, 22],
+    ["south", 20, 7],
+  ] as const
+).map(([entering, x, y]) => ({
+  entering,
+  x0: Math.max(0, x - 10),
+  y0: Math.max(1, y - 5),
+  x1: Math.min(ROOM_WIDTH - 1, x + 10),
+  y1: Math.min(28, y + 5),
+}));
 
 export interface RandomPlacement {
   /** The tile type placed, if the name is known. */
   type: number | undefined;
   /** How many the room has already (they count towards min..max). */
   existing: number;
-  /**
-   * Robots and androids are placed within 10 columns and 5 rows of where the hero enters
-   * the room, other objects anywhere.
-   */
-  nearHero: boolean;
+  /** Robots and androids go into one of PLACEMENT_AREAS, other objects anywhere. */
+  awayFromHero: boolean;
   /** Empty cells (no object, no actor): the only ones RandObj places on. */
   free: number;
 }
@@ -200,5 +227,6 @@ export function randomPlacement(
     if (base === 0 && overlay === 0 && cell >= ROOM_WIDTH) free++;
   }
   const id = type === undefined ? undefined : classes.classes.get(type)?.id;
-  return { type, existing, nearHero: id !== undefined && NEAR_HERO_CLASSES.includes(id), free };
+  const awayFromHero = id !== undefined && AWAY_FROM_HERO_CLASSES.includes(id);
+  return { type, existing, awayFromHero, free };
 }

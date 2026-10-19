@@ -141,7 +141,8 @@ export class ExitsView {
       ...[...new Map(c.teleports.map((x) => [x.room, x])).values()].map((t) =>
         this.target(
           t.room,
-          `Teleport(${t.room}, ${t.x}, ${t.y})${t.conditional ? ", depending on the game state" : ""}`,
+          `the script's Teleport(${t.room}, ${t.x}, ${t.y}) sets where returning teleporters lead` +
+            (t.conditional ? ", depending on the game state" : ""),
           t.conditional ? "conditional" : "scripted",
         ),
       ),

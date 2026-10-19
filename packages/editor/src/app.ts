@@ -3,6 +3,7 @@ import {
   EPISODE_NAMES,
   Game,
   LOGIC_CELL,
+  PLACEMENT_AREAS,
   ROBOT_CLASSES,
   ROOM_WIDTH,
   type RoomActor,
@@ -80,6 +81,9 @@ export class App {
       this.select(cell);
     },
     name: (type) => this.names().summary(type),
+    areas: (show) => {
+      this.view.setAreas(show ? PLACEMENT_AREAS : []);
+    },
     icon: (type) =>
       (this.isRobot(type) ? this.robotSprite(0) : undefined) ?? this.cellPreview(type),
   });

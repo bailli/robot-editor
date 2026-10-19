@@ -62,16 +62,16 @@ test("actors in every episode", () => {
   ).toMatchSnapshot();
 });
 
-test("RandObj counts what the room has and places robots near the hero", () => {
+test("RandObj counts what the room has and places robots away from the hero", () => {
   const room = game.room(2, 123);
   const place = (name: string) => {
     const call = scriptActors(roomScript(room)).find((c) => c.name === name);
     assert.ok(call, name);
     return randomPlacement(call, room, game.episode(2).classes, game.objectNames(2));
   };
-  expect(place("ALIEN")).toMatchObject({ type: 2, existing: 20, nearHero: true });
-  expect(place("ANDROID")).toMatchObject({ type: 0x2d, existing: 4, nearHero: true });
-  expect(place("BOMB")).toMatchObject({ type: 0x13, existing: 1, nearHero: false });
+  expect(place("ALIEN")).toMatchObject({ type: 2, existing: 20, awayFromHero: true });
+  expect(place("ANDROID")).toMatchObject({ type: 0x2d, existing: 4, awayFromHero: true });
+  expect(place("BOMB")).toMatchObject({ type: 0x13, existing: 1, awayFromHero: false });
   expect(place("ALIEN").free).toBeGreaterThan(100);
 });
 

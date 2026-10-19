@@ -13,7 +13,8 @@ import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
  *   1  room 2, the episode's "outside" (episode III: the open sea)
  *   2  no exit (3 likewise)
  * Room scripts can then change the four variables (`RoomEast = 45;`, often depending on
- * score or items), move the hero with Teleport(room, x, y), or set where the bus goes
+ * score or items), set where returning teleporters lead with Teleport(room, x, y) (it
+ * only stores that point, 0x407900), or set where the bus goes
  * (BusWest, BusEast: the bus object takes the hero there, 0x44a831); see
  * roomScriptExits.
  *

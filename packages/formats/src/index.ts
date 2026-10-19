@@ -112,6 +112,7 @@ export { describeRecord } from "./records.ts";
 export type { RecordInfo, RecordKind } from "./records.ts";
 export {
   ACTOR_KIND_CLASSES,
+  PLACEMENT_AREAS,
   ROBOT_CLASSES,
   actorKindClass,
   cellActorSource,
@@ -120,4 +121,10 @@ export {
   scriptActors,
   scriptObjectType,
 } from "./actors.ts";
-export type { ActorSource, RandomPlacement, RoomActor, ScriptActors } from "./actors.ts";
+export type {
+  ActorSource,
+  PlacementArea,
+  RandomPlacement,
+  RoomActor,
+  ScriptActors,
+} from "./actors.ts";

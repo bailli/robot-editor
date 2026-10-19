@@ -209,12 +209,15 @@ Roughly by value for the editor.
    robots' sprites (`_Aliens`, `1E01`) and random colours. Open: the exact sprite order
    (which actors count before a robot), sprites of the other actors (androids etc. use
    their tile graphic in the editor), travelling actors' kinds 0x183/0x185 (classes
-   0x83/0x85 have no registered factory, so they may never appear), and where exactly
-   the hero "enters" for RandObj (0x4fe30b/0x4fe30c).
+   0x83/0x85 have no registered factory, so they may never appear).
    `RandObj(O_X, min, max)` (0x4073a0, `randomPlacement`) keeps the room's number of
    tile type O_X between min and max: it counts what is there, removes random ones above
    and adds missing ones on empty cells (20 tries each), robots and androids within ±10
-   columns / ±5 rows of the hero's entry, other objects anywhere. Script object names are
+   columns / ±5 rows of a reference point on the far side from where the hero entered
+   (0x4fe30b/0x4fe30c, set when walking off an edge, 0x44c5a0: entering from the west
+   (25, 14), east (15, 14), north (20, 22), south (20, 7); the bus (20, 14); teleporters
+   and stairs keep the old one), other objects anywhere. The script's
+   `Teleport(room, x, y)` only sets where returning teleporters lead (0x407900). Script object names are
    tile types (sound tables, plus O_ALIEN 2, O_ANDROID 0x2d, O_BOMB 0x13, O_WORM 0x37,
    O_ISOLATE 9 from compiled scripts).
 3. **Scripts.** Only the source (tag 6/1) is read. The game runs the **compiled** script
