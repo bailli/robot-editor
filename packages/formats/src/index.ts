@@ -28,6 +28,7 @@ export type {
   Passage,
   PassageKind,
   RecordTeleport,
+  ScriptBus,
   ScriptExit,
   ScriptTeleport,
 } from "./exits.ts";

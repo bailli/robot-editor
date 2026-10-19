@@ -113,7 +113,12 @@ test("scripts change exits and teleport, fixed or depending on the game state", 
       { direction: "south", room: 3, conditional: true },
     ],
     teleports: [{ room: 11, x: 20, y: 15, conditional: true }],
+    buses: [],
   });
+  expect(roomScriptExits("BusWest = 53;\nBusEast = 5;").buses).toEqual([
+    { direction: "west", room: 53, conditional: false },
+    { direction: "east", room: 5, conditional: false },
+  ]);
 });
 
 test("the maze of episode II wires its edges by script", () => {
@@ -194,6 +199,7 @@ test("rooms reached from the start room", () => {
         ...Object.values(roomExits(room, ids)),
         ...script.exits.map((s) => s.room),
         ...script.teleports.map((t) => t.room),
+        ...script.buses.map((b) => b.room),
         ...roomPassages(room, classes, ids).map((p) => p.room),
         ...roomTeleports(room).map((t) => t.room),
       ];

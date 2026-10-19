@@ -13,7 +13,9 @@ import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
  *   1  room 2, the episode's "outside" (episode III: the open sea)
  *   2  no exit (3 likewise)
  * Room scripts can then change the four variables (`RoomEast = 45;`, often depending on
- * score or items) or move the hero with Teleport(room, x, y); see roomScriptExits.
+ * score or items), move the hero with Teleport(room, x, y), or set where the bus goes
+ * (BusWest, BusEast: the bus object takes the hero there, 0x44a831); see
+ * roomScriptExits.
  *
  * The hero leaves a room by walking off the map (0x427a9b): onto the target's opposite
  * edge, in the same row or column. Rows 1 and 28 and columns 0 and 39 are the edges (row
@@ -220,6 +222,12 @@ export interface ScriptExit {
   conditional: boolean;
 }
 
+export interface ScriptBus {
+  direction: "west" | "east";
+  room: number;
+  conditional: boolean;
+}
+
 export interface ScriptTeleport {
   room: number;
   x: number;
@@ -228,6 +236,7 @@ export interface ScriptTeleport {
 }
 
 const ASSIGNMENT = /\bRoom(North|South|West|East)\s*=\s*(\d+)\s*;/g;
+const BUS = /\bBus(West|East)\s*=\s*(\d+)\s*;/g;
 const TELEPORT = /\bTeleport\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/g;
 
 /**
@@ -238,6 +247,7 @@ const TELEPORT = /\bTeleport\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/g;
 export function roomScriptExits(source: string): {
   exits: ScriptExit[];
   teleports: ScriptTeleport[];
+  buses: ScriptBus[];
 } {
   const conditional = (index: number) => {
     const before = source.slice(0, index);
@@ -249,11 +259,16 @@ export function roomScriptExits(source: string): {
     room: Number(m[2]),
     conditional: conditional(m.index),
   }));
+  const buses = [...source.matchAll(BUS)].map((m) => ({
+    direction: m[1].toLowerCase() as "west" | "east",
+    room: Number(m[2]),
+    conditional: conditional(m.index),
+  }));
   const teleports = [...source.matchAll(TELEPORT)].map((m) => ({
     room: Number(m[1]),
     x: Number(m[2]),
     y: Number(m[3]),
     conditional: conditional(m.index),
   }));
-  return { exits, teleports };
+  return { exits, teleports, buses };
 }

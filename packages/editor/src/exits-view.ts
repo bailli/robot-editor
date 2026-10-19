@@ -9,6 +9,7 @@ import {
   ROOM_WIDTH,
   type RecordTeleport,
   type Room,
+  type ScriptBus,
   type ScriptExit,
   type ScriptTeleport,
   roomExits,
@@ -24,6 +25,7 @@ export interface Connections {
   /** Changes made by the room's script. */
   scripted: ScriptExit[];
   teleports: ScriptTeleport[];
+  buses: ScriptBus[];
   /** Doors and stairs to room +/- 100. */
   passages: Passage[];
   /** Oracles and teleporters among the logic records. */
@@ -35,10 +37,10 @@ export function connections(
   ids: ReadonlySet<number>,
   classes: EpisodeClasses,
 ): Connections {
-  const { exits, teleports } = roomScriptExits(roomScript(room));
+  const { exits, teleports, buses } = roomScriptExits(roomScript(room));
   const passages = roomPassages(room, classes, ids);
   const records = roomTeleports(room);
-  return { exits: roomExits(room, ids), scripted: exits, teleports, passages, records };
+  return { exits: roomExits(room, ids), scripted: exits, teleports, buses, passages, records };
 }
 
 /** Where a direction leads regardless of the game state: the last fixed script assignment, else the exits byte. */
@@ -94,6 +96,17 @@ export class ExitsView {
       const label = kind.charAt(0).toUpperCase() + kind.slice(1);
       this.group("passage", label, targets, kind);
     }
+    this.group(
+      "bus",
+      "Bus",
+      c.buses.map((b) =>
+        this.target(
+          b.room,
+          `bus ${b.direction}, set by the script${b.conditional ? ", depending on the game state" : ""}`,
+          b.conditional ? "conditional" : "scripted",
+        ),
+      ),
+    );
     const at = (cell: number | undefined) =>
       cell === undefined ? "" : ` at (${cell % ROOM_WIDTH}, ${Math.floor(cell / ROOM_WIDTH)})`;
     const oracles = c.records.filter((r) => r.kind === "oracle");
