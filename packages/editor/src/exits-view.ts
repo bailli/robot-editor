@@ -88,26 +88,42 @@ export interface ExitsViewEvents {
   setMode(direction: Direction, mode: ExitMode): void;
 }
 
-/** The exits of the shown room as links to the rooms they lead to. */
+/**
+ * The exits of the shown room as links to the rooms they lead to, around the room: north
+ * above, south below, west and east at its sides; doors, stairs, teleporters and the like
+ * in a line above.
+ */
 export class ExitsView {
   readonly element = document.createElement("nav");
   private readonly events: ExitsViewEvents;
+  private readonly links = document.createElement("div");
+  private readonly sides = new Map<Direction, HTMLElement>();
 
-  constructor(events: ExitsViewEvents) {
+  /** `room` is shown in the middle (the room view's element). */
+  constructor(events: ExitsViewEvents, room: HTMLElement) {
     this.events = events;
     this.element.className = "exits";
     this.element.setAttribute("aria-label", "Exits");
+    this.links.className = "exits-links";
+    room.classList.add("exits-room");
+    this.element.append(this.links, room);
+    for (const direction of DIRECTIONS) {
+      const side = document.createElement("div");
+      side.className = `exit side ${direction}`;
+      side.dataset["direction"] = direction;
+      this.sides.set(direction, side);
+      this.element.append(side);
+    }
   }
 
   show(c: Connections): void {
-    const items = DIRECTIONS.map((direction) => {
-      const item = document.createElement("span");
-      item.className = "exit";
-      item.dataset["direction"] = direction;
+    for (const direction of DIRECTIONS) {
+      const item = this.sides.get(direction);
+      if (!item) continue;
       const label = document.createElement("span");
       label.className = "label";
       label.textContent = LABELS[direction];
-      item.append(
+      item.replaceChildren(
         label,
         this.modeSelect(direction, c.modes[direction]),
         this.target(c.exits[direction], "from the room's exits byte"),
@@ -118,9 +134,8 @@ export class ExitsView {
           : "set by the script";
         item.append(this.target(s.room, how, s.conditional ? "conditional" : "scripted"));
       }
-      return item;
-    });
-    this.element.replaceChildren(...items);
+    }
+    this.links.replaceChildren();
     for (const kind of PASSAGE_KINDS) {
       const passages = c.passages.filter((x) => x.kind === kind);
       const targets = [...new Set(passages.map((x) => x.room))].map((room) => {
@@ -197,7 +212,7 @@ export class ExitsView {
     label.className = "label";
     label.textContent = text;
     item.append(label, ...targets);
-    this.element.append(item);
+    this.links.append(item);
   }
 
   /** The exits byte's setting for a direction, changeable. */

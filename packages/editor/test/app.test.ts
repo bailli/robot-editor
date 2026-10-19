@@ -348,6 +348,7 @@ test("a room in the address is opened on loading", async () => {
 });
 
 test("the actors of a room are listed and can be selected", async () => {
+  await page.getByRole("tab", { name: "Actors" }).click();
   app.showEpisode(2, 123);
   const rows = [...document.querySelectorAll(".actors-view .actor-row")].map((r) =>
     (r.querySelector(".actor-text")?.textContent ?? r.textContent).slice(0, 40),
@@ -382,6 +383,7 @@ test("robots keep their sprite when the marks are redrawn", () => {
 });
 
 test("hovering a RandObj line shows where robots are placed", async () => {
+  app.sidePanel.show("actors");
   app.showEpisode(2, 123);
   const before = app.view.pixelsOfMarks();
   expect(document.querySelector(".actors-view")?.textContent).toContain(
@@ -401,6 +403,7 @@ test("hovering a RandObj line shows where robots are placed", async () => {
 const scriptView = () => page.getByRole("region", { name: "Script" });
 
 test("the script explains itself and can be edited", async () => {
+  await page.getByRole("tab", { name: "Script" }).click();
   // episode I room 43: if(NewRoom) Message(700, 25); ...
   const source = document.querySelector(".script-source");
   expect(source?.textContent).toContain("Message(700, 25)");
@@ -474,12 +477,14 @@ test("the map shows the rooms with their exits and opens or closes them", async 
 
 test("outlines from hovering the actors or the script go when the room changes", async () => {
   // episode I room 43: RandObj(O_ALIEN, …) outlines where robots appear, SetObj-free script
+  app.sidePanel.show("actors");
   await userEvent.hover(defined(document.querySelector(".actor-row.scripted") ?? undefined));
   expect(app.view.outlines()).toBeGreaterThan(0);
   app.back(); // like browser back: the row goes without a mouseleave
   app.showRoom(44);
   expect(app.view.outlines()).toBe(0);
   app.showEpisode(4, 157);
+  app.sidePanel.show("script");
   const area = [...document.querySelectorAll(".script-source .function")].find(
     (e) => e.textContent === "SetWarea",
   );
@@ -537,10 +542,26 @@ test("undoing a painted robot takes it out of the actors", () => {
 test("the script editor notices when undo changes the script underneath", async () => {
   defined(app.editor).setScript(1, 43, "RoomWest = 42;");
   app.showRoom(43);
+  app.sidePanel.show("script");
   await scriptView().getByRole("button", { name: "Edit" }).click();
   app.undo();
   expect(document.querySelector(".script-verdict")?.textContent).toMatch(
     /changed since editing began/,
   );
   await expect.element(scriptView().getByRole("button", { name: "Apply" })).toBeEnabled();
+});
+
+test("the side column shows one panel at a time; clicking a record cell opens the record", async () => {
+  const panel = (name: string) => document.querySelector<HTMLElement>(`.side-${name}`);
+  expect(app.sidePanel.shown).toBe("tiles");
+  expect(panel("script")?.hidden).toBe(true);
+  await page.getByRole("tab", { name: "Script" }).click();
+  expect([panel("tiles")?.hidden, panel("script")?.hidden]).toEqual([true, false]);
+  // episode I room 11 has teleporters (logic cells): clicking one shows its record
+  app.showRoom(11);
+  const logic = game.room(1, 11).base.findIndex((c) => (c & 0xff) === 0x7f);
+  expect(logic).toBeGreaterThan(0);
+  await clickCell(logic);
+  expect(app.sidePanel.shown).toBe("record");
+  expect(panel("record")?.querySelector(".record-view")?.hasAttribute("hidden")).toBe(false);
 });

@@ -223,8 +223,11 @@ Files in `packages/formats/src`:
   handler matches.
 - **NewRoom** is 1 only on the first visit of a room in a game: entering a room whose
   record lacks the visited flag (+4 bit 2) sets it, sets NewRoom = 1 and awards the
-  first-visit points; any later entry sets NewRoom = 0 (0x4392dc; loading a savegame
-  restores the saved value). `HaveSeen(room)` reads the same flag.
+  first-visit points; any later entry sets NewRoom = 0 (0x4392dc). `HaveSeen(room)`
+  reads the same flag. A savegame stores every visited room (with its current state,
+  0x4397d0) and loading marks them visited again (0x439e78), so visits survive saving;
+  it also stores NewRoom itself, so the room saved in runs its script on loading with
+  the value it had then (a game saved on a room's first visit sees NewRoom = 1 again).
 - **Functions and variables:** all 62 keywords are described in `script-docs.ts`
   (decoded from their handlers; a few meanings are guesses, marked there): e.g.
   `Message(text, delay)` shows a text after `delay` seconds in the room (all its `|`
@@ -274,9 +277,14 @@ Supported:
 - painting base or overlay with a tile from the episode's tiles (robots, which draw
   nothing as tiles, show their first sprite; other invisible tiles a hatching) or any hex
   value; right click picks; dragging fills lines; undo/redo per stroke; grid (G)
-- exits line: N/S/W/E targets incl. script changes, doors/stairs, bus, oracles,
-  teleporters, actors; arrow keys follow fixed exits; per direction the exits byte's
-  setting (neighbour / outside / none) can be changed, undoably (`withExitMode`)
+- layout: the room fits the window's height with its exits around it (north above, south
+  below, west and east at the sides; doors, stairs, bus, oracles, teleporters and actors
+  in a line above); the column right of it has tabs (Tiles, Record, Actors, Script) that
+  scroll on their own, its width can be dragged (remembered in the browser); clicking a
+  logic cell opens the Record tab
+- exits: N/S/W/E targets incl. script changes; arrow keys follow fixed exits; per
+  direction the exits byte's setting (neighbour / outside / none) can be changed,
+  undoably (`withExitMode`)
 - map (button "Map", key M): the episode's rooms as thumbnails on their grid (row =
   tens, column = ones of the id, one block per hundred), named; between grid
   neighbours one arrow per direction: green open (exits byte), orange open but with exit

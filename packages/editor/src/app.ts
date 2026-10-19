@@ -39,6 +39,7 @@ import {
   spriteCanvas,
 } from "./room-view.ts";
 import { ScriptView } from "./script-view.ts";
+import { SidePanel } from "./side-panel.ts";
 import { TileNames } from "./tile-info.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
@@ -138,6 +139,16 @@ export class App {
     Map<number, { key: string; canvas: HTMLCanvasElement }>
   >();
   private readonly roomPane = h("div", { class: "room-pane" });
+  private readonly tilesTab = h("div", { class: "tiles" });
+  private readonly recordTab = h(
+    "div",
+    {},
+    h(
+      "p",
+      { class: "hint record-hint" },
+      "Click a magenta cell, or any cell with the Inspect tool, to see its logic record here.",
+    ),
+  );
   private mapShown = false;
   private actors: RoomActor[] = [];
   private readonly robotSprites = new Map<number, HTMLCanvasElement[]>();
@@ -166,17 +177,20 @@ export class App {
   private replaceNext = false;
   /** Removes the listeners on window (dispose). */
   private readonly listeners = new AbortController();
-  private readonly exitsView = new ExitsView({
-    go: (room) => {
-      this.showRoom(room);
+  private readonly exitsView: ExitsView = new ExitsView(
+    {
+      go: (room) => {
+        this.showRoom(room);
+      },
+      label: (room) => this.roomLabel(this.episode, room),
+      setMode: (direction, mode) => {
+        this.need().setExitMode(this.episode, this.roomId, direction, mode);
+        this.showRoom(this.roomId);
+        this.refreshButtons();
+      },
     },
-    label: (room) => this.roomLabel(this.episode, room),
-    setMode: (direction, mode) => {
-      this.need().setExitMode(this.episode, this.roomId, direction, mode);
-      this.showRoom(this.roomId);
-      this.refreshButtons();
-    },
-  });
+    this.view.element,
+  );
   private connections: Connections | undefined;
   private readonly cellInfo = h("p", { class: "cell-info" }, " ");
   private readonly tileInput = h("input", {
@@ -237,6 +251,18 @@ export class App {
     },
     preview: (value) => this.cellPreview(value),
   });
+  /** The column right of the room: tiles, the selected record, the actors, the script. */
+  readonly sidePanel: SidePanel = new SidePanel(
+    [
+      { name: "tiles", label: "Tiles", content: this.tilesTab },
+      { name: "record", label: "Record", content: this.recordTab },
+      { name: "actors", label: "Actors", content: this.actorsView.element },
+      { name: "script", label: "Script", content: this.scriptView.element },
+    ],
+    (width) => {
+      this.workspace.style.setProperty("--side-width", `${width}px`);
+    },
+  );
   private readonly workspace: HTMLElement;
   private readonly welcome: HTMLElement;
 
@@ -289,21 +315,22 @@ export class App {
         this.roomPane,
         this.mapView.element,
       ),
-      h(
-        "aside",
-        { class: "tiles" },
-        tools,
-        layers,
-        h("label", { class: "tile-current" }, this.tilePreview, this.tileInput),
-        this.tileText,
-        h(
-          "p",
-          { class: "hint" },
-          "Paint with the left button, pick with the right. Magenta cells belong to logic records and stay as they are.",
-        ),
-        this.tileGrid,
-      ),
+      this.sidePanel.element,
     );
+    this.tilesTab.append(
+      tools,
+      layers,
+      h("label", { class: "tile-current" }, this.tilePreview, this.tileInput),
+      this.tileText,
+      h(
+        "p",
+        { class: "hint" },
+        "Paint with the left button, pick with the right. Magenta cells belong to logic records and stay as they are.",
+      ),
+      this.tileGrid,
+    );
+    const width = SidePanel.savedWidth();
+    if (width !== undefined) this.workspace.style.setProperty("--side-width", `${width}px`);
     root.append(
       h(
         "header",
@@ -330,15 +357,8 @@ export class App {
       this.welcome,
       this.workspace,
     );
-    this.roomPane.append(
-      this.exitsView.element,
-      this.view.element,
-      this.cellInfo,
-      this.cellText,
-      this.recordView.element,
-      this.actorsView.element,
-      this.scriptView.element,
-    );
+    this.roomPane.append(this.exitsView.element, this.cellInfo, this.cellText);
+    this.recordTab.append(this.recordView.element);
     this.mapButton.textContent = "Map";
     this.mapView.element.hidden = true;
     this.wire();
@@ -629,6 +649,7 @@ export class App {
       if (event.button === 2 || event.altKey) this.pick(index);
       else if (event.button === 0 && (this.tool === "inspect" || this.logicLayer(index))) {
         this.select(index);
+        this.sidePanel.show("record");
       } else if (event.button === 0) {
         this.painting = true;
         this.beginStroke();

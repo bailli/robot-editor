@@ -101,7 +101,7 @@ h2 {
 
 .workspace {
   display: grid;
-  grid-template-columns: 150px minmax(320px, 1280px) minmax(200px, 1fr);
+  grid-template-columns: 150px minmax(320px, 1fr) var(--side-width, 400px);
   gap: 16px;
   padding: 16px;
   align-items: start;
@@ -116,7 +116,7 @@ h2 {
   grid-template-columns: 150px minmax(320px, 1fr);
 }
 
-.workspace.map-mode .tiles {
+.workspace.map-mode .side-panel {
   display: none;
 }
 
@@ -176,18 +176,71 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
+/* the exits around the room: links above, north and south centred, west and east at the sides */
 .exits {
+  display: grid;
+  grid-template:
+    "links links links" auto
+    ". north ." auto
+    "west room east" auto
+    ". south ." auto / auto minmax(0, 1fr) auto;
+  gap: 4px 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.exits-links {
+  grid-area: links;
   display: flex;
   flex-wrap: wrap;
   gap: 4px 16px;
-  margin-bottom: 8px;
-  font-size: 13px;
+}
+
+.exits-links:empty {
+  display: none;
+}
+
+.exits-room {
+  grid-area: room;
 }
 
 .exit {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.exit.side.north,
+.exit.side.south {
+  justify-self: center;
+}
+
+.exit.side.north {
+  grid-area: north;
+}
+
+.exit.side.south {
+  grid-area: south;
+}
+
+.exit.side.west,
+.exit.side.east {
+  flex-direction: column;
+  align-self: center;
+  width: 92px;
+}
+
+.exit.side.west {
+  grid-area: west;
+}
+
+.exit.side.east {
+  grid-area: east;
+}
+
+.exit.side.west .exit-mode,
+.exit.side.east .exit-mode {
+  width: 100%;
 }
 
 .exit .label {
@@ -412,8 +465,6 @@ canvas.cell {
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
-  max-height: calc(100vh - 260px);
-  overflow-y: auto;
 }
 
 .tile-grid button {
@@ -641,4 +692,56 @@ header button.pressed {
 .map-link.outside {
   color: var(--muted);
   border-style: dotted;
+}
+
+/* the room fits the window's height (exits and the hover lines around it) */
+.exits-room {
+  width: 100%;
+  max-width: calc((100vh - 230px) * 640 / 348);
+  justify-self: center;
+}
+
+.side-panel {
+  position: sticky;
+  top: 16px;
+  height: calc(100vh - 90px);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.side-handle {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+}
+
+.side-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.side-tabs button.selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.side-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.side-content[hidden] {
+  display: none;
+}
+
+.side-record:has(.record-view:not([hidden])) .record-hint {
+  display: none;
 }
