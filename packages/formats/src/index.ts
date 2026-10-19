@@ -47,6 +47,7 @@ export {
   EPISODE_NAMES,
   EPISODES,
   Game,
+  roomNamesId,
   START_ROOMS,
   sceneId,
   shapesId,
@@ -84,6 +85,15 @@ export {
   renderRoom,
   toRgba,
 } from "./render.ts";
+export {
+  NAMED_ROOMS,
+  ROOM_NAME_ENTRY,
+  SAME_NAME_CLASS,
+  nameRoom,
+  parseRoomName,
+  roomName,
+} from "./room-names.ts";
+export type { RoomName } from "./room-names.ts";
 export { findResource, readResources, replaceResource, ResourceType } from "./resources.ts";
 export type { PeResource } from "./resources.ts";
 export { cryptScene, SCENE_KEY } from "./scene-crypt.ts";

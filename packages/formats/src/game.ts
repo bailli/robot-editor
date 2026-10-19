@@ -4,6 +4,7 @@ import { uncrunch } from "./crunched.ts";
 import { type Rgb, episodePalette } from "./palette.ts";
 import { type PeImage, parsePe } from "./pe.ts";
 import { type PeResource, findResource, readResources, replaceResource } from "./resources.ts";
+import { type RoomName, roomName } from "./room-names.ts";
 import { cryptScene } from "./scene-crypt.ts";
 import { type Room, parseScene, serializeScene } from "./scene.ts";
 import { type ShapeTable, parseShapes } from "./shapes.ts";
@@ -31,6 +32,10 @@ export const soundsId = (episode: number) => 1006 + 100 * episode;
 export const textsId = (episode: number, language: Language = "de") =>
   (language === "de" ? 1010 : 1011) + 100 * episode;
 
+/** Room names: the episode's texts, except episode III's own resource 1320 (vtable +0x44). */
+export const roomNamesId = (episode: number, language: Language = "de") =>
+  episode === 3 ? 1320 + (language === "de" ? 0 : 1) : textsId(episode, language);
+
 export type Language = "de" | "en";
 
 export interface Episode {
@@ -47,7 +52,7 @@ export class Game {
   readonly image: PeImage;
   readonly resources: PeResource[];
   private readonly episodes = new Map<number, Episode>();
-  private readonly texts = new Map<string, Texts | undefined>();
+  private readonly texts = new Map<number, Texts | undefined>();
 
   constructor(data: Uint8Array) {
     this.image = parsePe(data);
@@ -86,12 +91,29 @@ export class Game {
 
   /** The episode's tile descriptions and messages (see texts.ts), if it has them. */
   episodeTexts(episode: number, language: Language = "de"): Texts | undefined {
-    const key = `${episode} ${language}`;
-    if (!this.texts.has(key)) {
-      const resource = findResource(this.resources, "CRUNCHED", textsId(episode, language));
-      this.texts.set(key, resource && parseTexts(this.decode(resource.data)));
+    return this.textResource(textsId(episode, language));
+  }
+
+  /**
+   * The name the game shows for a room (see room-names.ts), undefined where it shows
+   * "Szene <id>". `rooms` defaults to the episode's own (edits can change the name's room).
+   */
+  roomName(
+    episode: number,
+    id: number,
+    rooms: readonly Room[] = this.episode(episode).rooms,
+    language: Language = "de",
+  ): RoomName | undefined {
+    const texts = this.textResource(roomNamesId(episode, language));
+    return roomName(texts, episode, id, rooms, this.episode(episode).classes);
+  }
+
+  private textResource(id: number): Texts | undefined {
+    if (!this.texts.has(id)) {
+      const resource = findResource(this.resources, "CRUNCHED", id);
+      this.texts.set(id, resource && parseTexts(this.decode(resource.data)));
     }
-    return this.texts.get(key);
+    return this.texts.get(id);
   }
 
   /** Script names of the episode's objects by tile type, e.g. 21 -> "KEY". */

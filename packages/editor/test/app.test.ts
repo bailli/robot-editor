@@ -51,6 +51,7 @@ async function clickCell(index: number, button: "left" | "right" = "left") {
 
 test("shows the start room of Robot I as the renderer draws it", async () => {
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
+  expect(document.querySelector(".room-name")?.textContent).toBe("DER START");
   const ep = game.episode(1);
   const expected = toRgba(renderRoom(game.room(1, 43), ep.objects, ep.classes), ep.palette);
   expect(firstDifference(app.view.pixels(), expected)).toBe(-1);
@@ -129,7 +130,7 @@ test("the exits of a room link to the rooms they lead to", async () => {
   const west = document.querySelector('[data-direction="west"]');
   expect(west?.textContent).toBe("← West—42");
   expect(west?.querySelector(".conditional")?.getAttribute("title")).toBe(
-    "room 42 (set by the script, depending on the game state)",
+    "room 42 – ORT DER VERTEIDIGUNG (set by the script, depending on the game state)",
   );
   await exits().getByRole("button", { name: "44" }).click();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
@@ -152,7 +153,7 @@ test("teleports are listed with the exits", async () => {
     .element(button)
     .toHaveAttribute(
       "title",
-      "room 129 (the script's Teleport(129, 7, 21) sets where returning teleporters lead, depending on the game state)",
+      "room 129 – DER SPURT ZUM SCHALTER (the script's Teleport(129, 7, 21) sets where returning teleporters lead, depending on the game state)",
     );
   await button.click();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 129" })).toBeVisible();
@@ -164,6 +165,10 @@ test("doors and stairs are listed with the exits", async () => {
   expect(door?.textContent).toBe("Door in147");
   await exits().getByRole("button", { name: "147" }).click();
   await expect.element(page.getByRole("heading", { name: "Robot III – room 147" })).toBeVisible();
+  // inside the hut: the village's name and description
+  const name = document.querySelector(".room-name");
+  expect(name?.textContent).toBe('Das große Dorf am "Sila"-Fluß');
+  expect(name?.getAttribute("title")).toMatch(/^the name of room 47\nAm Mündungsdelta /);
   expect(document.querySelector('.passage[data-direction="door out"]')?.textContent).toBe(
     "Door out47",
   );
@@ -187,7 +192,10 @@ test("oracles and teleporters are listed with the exits", async () => {
   const button = exits().getByRole("button", { name: "155" });
   await expect
     .element(button)
-    .toHaveAttribute("title", "room 155 (teleporter at (38, 2), arriving at (6, 7))");
+    .toHaveAttribute(
+      "title",
+      "room 155 – Nord-West-Halle (teleporter at (38, 2), arriving at (6, 7))",
+    );
   await button.click();
   await expect.element(page.getByRole("heading", { name: "Robot II – room 155" })).toBeVisible();
 });
@@ -351,6 +359,10 @@ test("the actors of a room are listed and can be selected", async () => {
 test("a room typed into the address of the open page is shown", async () => {
   window.location.hash = "#3/147";
   await expect.element(page.getByRole("heading", { name: "Robot III – room 147" })).toBeVisible();
+  // inside the hut: the village's name and description
+  const name = document.querySelector(".room-name");
+  expect(name?.textContent).toBe('Das große Dorf am "Sila"-Fluß');
+  expect(name?.getAttribute("title")).toMatch(/^the name of room 47\nAm Mündungsdelta /);
   window.history.back();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
 });

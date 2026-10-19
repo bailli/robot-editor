@@ -62,9 +62,12 @@ const LABELS: Readonly<Record<Direction, string>> = {
 export class ExitsView {
   readonly element = document.createElement("nav");
   private readonly go: (room: number) => void;
+  private readonly label: (room: number) => string;
 
-  constructor(go: (room: number) => void) {
+  /** `label` names a room in tooltips. */
+  constructor(go: (room: number) => void, label: (room: number) => string) {
     this.go = go;
+    this.label = label;
     this.element.className = "exits";
     this.element.setAttribute("aria-label", "Exits");
   }
@@ -173,7 +176,7 @@ export class ExitsView {
     const button = document.createElement("button");
     button.className = `target ${kind}`;
     button.textContent = room === OUTSIDE_ROOM ? `${room} outside` : String(room);
-    button.title = `room ${room} (${how})`;
+    button.title = `${this.label(room)} (${how})`;
     button.addEventListener("click", () => {
       this.go(room);
     });

@@ -153,6 +153,10 @@ h2 {
   margin: 0 0 0 6px;
 }
 
+.room-head .room-name {
+  color: var(--muted);
+}
+
 .room-head .history {
   padding: 1px 8px;
   font-variant-numeric: tabular-nums;

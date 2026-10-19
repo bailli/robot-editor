@@ -63,6 +63,7 @@ Files in `packages/formats/src`:
 | `render.ts`                  | drawing cells and rooms like the game                                                         |
 | `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                 |
 | `describe.ts`                | the description the game shows for a cell                                                     |
+| `room-names.ts`              | the name the game shows for a room                                                            |
 | `records.ts`                 | what logic records do                                                                         |
 | `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
 | `game.ts`                    | `Game`: loads an exe, episodes lazily, saves edited scenes (`withScene`)                      |
@@ -80,6 +81,14 @@ Files in `packages/formats/src`:
   headers without text share the next text. Entries 0–127 describe tile type N, higher
   numbers are messages (`Message(id, …)`); 510 is "no description". `displayText` removes
   colour codes (`²x`) and the wrapping of the game's message boxes.
+- **Room names** (`room-names.ts`, 0x43c0b0): text entry 1000 + id (episode vtable
+  +0x44); episode III keeps them in its own resource `1320` (name, then a description,
+  marked by a leading `!`). A room from 100 on whose base cell (0, 1) has class 99 (tile
+  0x54) shows the name of room id − 100 (caves, cellars). The text is cut to one line
+  (0x43bfd0: underlines dropped, an empty line ends it; 0x438850 fetches texts without
+  line breaks and with `_` as a hard space). Rooms without a name show "Szene <id>"
+  (rooms 1 and 99, episode II's 600s, a few others). Where the game shows the names
+  and descriptions is not known yet (callers 0x404192, 0x43fe45).
 - **Sound tables** (`1E06`): `N:SOUND ;note`; the notes name objects by tile type
   (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names.
 
@@ -177,6 +186,8 @@ Supported:
   back/forward (buttons, Alt+←/→, mouse buttons), the editor's own ◀/▶ buttons (showing
   the room they lead to) and Backspace move between them, across episodes; loading the
   page with a room in the address opens that room
+- the room's name next to the title (and in the room list's, exits' and history's
+  tooltips; episode III's descriptions in the name's tooltip)
 - tile names (items) and the game's descriptions in tooltips and the hover line; logic
   cells say what their record does
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
@@ -295,7 +306,8 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
 
 - **Rooms:** at most 200 per episode (scene loader 0x438d10). Room ids are free 16-bit
   numbers; the game finds rooms by id (0x4390f0). Practical limits: targets in records
-  have 10 bits (≤ 1023); room names are text entries 1000 + id (e.g. 1043 "DER START"),
+  have 10 bits (≤ 1023); room names are text entries 1000 + id (e.g. 1043 "DER START",
+  episode III: resource 1320),
   and new names need a CRUNCHED **encoder**, which does not exist yet. Start rooms are
   fixed in the episode code (+0x54 of the episode vtable). Adding a room to an episode
   is therefore possible (new id, link it by grid id, stairs ±100 or a teleporter).
@@ -326,6 +338,7 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
 | 0x42b6f0                     | room load: records 7/8 spawn actors                                            |
 | 0x432fd0, 0x433110           | logic record lookup; a cell's effective value                                  |
 | 0x406ae0, 0x438850           | describe a cell; fetch a text variant                                          |
+| 0x43c0b0, 0x43bfd0           | a room's name; cut a text down to one line                                     |
 | 0x43b2e0, 0x43b46a           | episode constructor; class tables 0x4c6ce0 (objects) / 0x4c70e0 (class → type) |
 | 0x4fe2fc, 0x4fe35e…0x4fe364  | current room; RoomNorth/South/West/East                                        |
 | 0x44c5a0, 0x44c680           | hero walks off an edge (sets the RandObj reference point); pending room change |

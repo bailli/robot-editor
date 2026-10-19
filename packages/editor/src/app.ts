@@ -91,6 +91,7 @@ export class App {
   private readonly episodeSelect = h("select", { "aria-label": "Episode" });
   private readonly roomList = h("div", { class: "room-list" });
   private readonly roomTitle = h("h2");
+  private readonly roomName = h("span", { class: "room-name" });
   private readonly backButton = h("button", { class: "history", disabled: true }, "◀");
   private readonly forwardButton = h("button", { class: "history", disabled: true }, "▶");
   /** Rooms shown, for going back and forward like in a browser. */
@@ -100,9 +101,12 @@ export class App {
   private replaceNext = false;
   /** Removes the listeners on window (dispose). */
   private readonly listeners = new AbortController();
-  private readonly exitsView = new ExitsView((room) => {
-    this.showRoom(room);
-  });
+  private readonly exitsView = new ExitsView(
+    (room) => {
+      this.showRoom(room);
+    },
+    (room) => this.roomLabel(this.episode, room),
+  );
   private connections: Connections | undefined;
   private readonly cellInfo = h("p", { class: "cell-info" }, " ");
   private readonly tileInput = h("input", {
@@ -184,7 +188,14 @@ export class App {
       h(
         "main",
         {},
-        h("div", { class: "room-head" }, this.backButton, this.forwardButton, this.roomTitle),
+        h(
+          "div",
+          { class: "room-head" },
+          this.backButton,
+          this.forwardButton,
+          this.roomTitle,
+          this.roomName,
+        ),
         this.exitsView.element,
         this.view.element,
         this.cellInfo,
@@ -287,6 +298,7 @@ export class App {
           "button",
           {
             "data-room": String(r.id),
+            title: this.roomLabel(episode, r.id),
             click: () => {
               this.showRoom(r.id);
             },
@@ -302,6 +314,14 @@ export class App {
   showRoom(id: number): void {
     const editor = this.need();
     this.roomId = id;
+    const name = editor.game.roomName(this.episode, id, editor.rooms(this.episode));
+    this.roomName.textContent = name?.name ?? "";
+    this.roomName.title = [
+      name && name.room !== id ? `the name of room ${name.room}` : "",
+      name?.description ?? "",
+    ]
+      .filter(Boolean)
+      .join("\n");
     this.roomTitle.textContent = `${EPISODE_NAMES[this.episode] ?? ""} – room ${id}`;
     const room = editor.room(this.episode, id);
     this.view.show(room, this.cache());
@@ -317,6 +337,16 @@ export class App {
     if (this.selected && this.lastRoom !== shown) this.select(undefined);
     this.lastRoom = shown;
     this.remember(this.episode, id);
+  }
+
+  /** "room 43 – DER START": a room with the name the game shows for it. */
+  private roomLabel(episode: number, id: number): string {
+    const editor = this.need();
+    const rooms = editor.rooms(episode);
+    const name = rooms.some((r) => r.id === id)
+      ? editor.game.roomName(episode, id, rooms)
+      : undefined;
+    return name ? `room ${id} – ${name.name}` : `room ${id}`;
   }
 
   /** Goes back to the previously shown room (the browser's back, also across episodes). */
@@ -362,7 +392,7 @@ export class App {
     this.replaceNext = false;
     const label = (entry: { episode: number; room: number } | undefined, what: string) =>
       entry
-        ? `${what} to ${entry.episode === episode ? "" : `${EPISODE_NAMES[entry.episode] ?? ""} `}room ${entry.room}`
+        ? `${what} to ${entry.episode === episode ? "" : `${EPISODE_NAMES[entry.episode] ?? ""} `}${this.roomLabel(entry.episode, entry.room)}`
         : what;
     const previous = this.entry(this.historyIndex - 1);
     const next = this.entry(this.historyIndex + 1);
