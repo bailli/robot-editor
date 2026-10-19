@@ -18,14 +18,21 @@ import { defined, exeBytes, firstDifference } from "./game.ts";
 const bytes = await exeBytes();
 const game = new Game(bytes);
 let app: App;
+/** Apps created so far: their window listeners are removed before the next test. */
+const apps: App[] = [];
+const track = (created: App) => {
+  apps.push(created);
+  return created;
+};
 
 beforeEach(() => {
+  for (const old of apps.splice(0)) old.dispose();
   // the address names the room shown; start every test without one
   window.history.replaceState(null, "", window.location.pathname + window.location.search);
   document.body.replaceChildren();
   const root = document.createElement("div");
   document.body.append(root);
-  app = new App(root);
+  app = track(new App(root));
   app.load(bytes);
 });
 
@@ -292,7 +299,7 @@ test("an episode that does not exist in the address is ignored", async () => {
   document.body.replaceChildren();
   const root = document.createElement("div");
   document.body.append(root);
-  app = new App(root);
+  app = track(new App(root));
   app.load(bytes);
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
 });
@@ -306,7 +313,7 @@ test("after a reload, back and forward are labelled again", async () => {
   document.body.replaceChildren();
   const root = document.createElement("div");
   document.body.append(root);
-  app = new App(root);
+  app = track(new App(root));
   app.load(bytes);
   await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
   await expect.element(page.getByRole("button", { name: "◀ 43" })).toBeEnabled();
@@ -318,7 +325,28 @@ test("a room in the address is opened on loading", async () => {
   document.body.replaceChildren();
   const root = document.createElement("div");
   document.body.append(root);
-  app = new App(root);
+  app = track(new App(root));
   app.load(bytes);
   await expect.element(page.getByRole("heading", { name: "Robot II – room 55" })).toBeVisible();
+});
+
+test("the actors of a room are listed and can be selected", async () => {
+  app.showEpisode(2, 123);
+  const rows = [...document.querySelectorAll(".actors-view .actor-row")].map((r) =>
+    (r.querySelector(".actor-text")?.textContent ?? r.textContent).slice(0, 40),
+  );
+  expect(rows.some((r) => r.startsWith("20 × "))).toBe(true); // the robots
+  expect(rows.some((r) => r.startsWith("4 × "))).toBe(true); // the androids
+  expect(document.querySelector(".actors-view")?.textContent).toContain(
+    "Script: 8–15 × O_ALIEN at random places, depending on the game state",
+  );
+  await page.getByRole("button", { name: "(12, 6)" }).click(); // an android
+  expect(app.selected?.index).toBe(6 * ROOM_WIDTH + 12);
+});
+
+test("a room typed into the address of the open page is shown", async () => {
+  window.location.hash = "#3/147";
+  await expect.element(page.getByRole("heading", { name: "Robot III – room 147" })).toBeVisible();
+  window.history.back();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
 });

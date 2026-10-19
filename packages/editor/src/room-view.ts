@@ -4,13 +4,18 @@ import {
   ROOM_CELLS,
   ROOM_HEIGHT,
   ROOM_WIDTH,
+  type Rgb,
   type Room,
+  type RoomActor,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
+  type Shape,
   TILE_HEIGHT,
   TILE_WIDTH,
+  TRANSPARENT,
   renderCell,
   resolveCell,
+  shapePixels,
   toRgba,
 } from "@robot/formats";
 
@@ -50,6 +55,9 @@ export class RoomView {
   private hover: number | undefined;
   private selected: number | undefined;
   private grid = false;
+  private actors: readonly RoomActor[] = [];
+  private actorSprite: (actor: RoomActor, n: number) => HTMLCanvasElement | undefined = () =>
+    undefined;
 
   readonly zoom: number;
 
@@ -95,9 +103,33 @@ export class RoomView {
     this.drawMarks();
   }
 
+  /**
+   * Marks where actors appear (empty: none shown); `sprite` draws an actor itself, e.g. a
+   * robot (n counts the actors in the room).
+   */
+  setActors(
+    actors: readonly RoomActor[],
+    sprite: (actor: RoomActor, n: number) => HTMLCanvasElement | undefined = () => undefined,
+  ): void {
+    this.actors = actors;
+    this.actorSprite = sprite;
+    this.drawMarks();
+  }
+
   setGrid(on: boolean): void {
     this.grid = on;
     this.drawMarks();
+  }
+
+  private drawActors(g: CanvasRenderingContext2D, w: number, h: number): void {
+    g.imageSmoothingEnabled = false;
+    this.actors.forEach((actor, n) => {
+      const sprite = this.actorSprite(actor, n);
+      const x = (actor.cell % ROOM_WIDTH) * w;
+      const y = Math.floor(actor.cell / ROOM_WIDTH) * h;
+      if (sprite) g.drawImage(sprite, x, y, w, h);
+      drawActor(g, actor, w, h);
+    });
   }
 
   /** The cell index under a mouse event, or undefined outside the room. */
@@ -136,7 +168,7 @@ export class RoomView {
       g.stroke();
     }
     if (this.room) {
-      // logic cells: drawn by their records, which the editor does not show yet
+      // logic cells: what they show comes from their records (see the inspector)
       g.fillStyle = "rgb(255 0 255 / 0.35)";
       g.strokeStyle = "rgb(160 0 160)";
       for (let i = 0; i < ROOM_CELLS; i++) {
@@ -150,6 +182,7 @@ export class RoomView {
         g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
       }
     }
+    this.drawActors(g, w, h);
     if (this.selected !== undefined) {
       g.strokeStyle = "rgb(255 140 0)";
       g.lineWidth = 3;
@@ -173,6 +206,41 @@ export class RoomView {
   }
 }
 
+const ACTOR = "rgb(230 30 30)";
+
+/**
+ * Actor marks: a ring for actors placed in the map, a dashed ring for sources that let
+ * them appear later (hatcheries, bombs, scorpion sand, spawners, records), the spawner's
+ * radius as a dashed ellipse and an arrow for actors heading somewhere.
+ */
+function drawActor(g: CanvasRenderingContext2D, actor: RoomActor, w: number, h: number) {
+  const cx = ((actor.cell % ROOM_WIDTH) + 0.5) * w;
+  const cy = (Math.floor(actor.cell / ROOM_WIDTH) + 0.5) * h;
+  g.strokeStyle = ACTOR;
+  g.lineWidth = 2;
+  g.setLineDash(actor.source === "tile" ? [] : [3, 2]);
+  g.beginPath();
+  g.ellipse(cx, cy, w / 2 - 1, h / 2 - 1, 0, 0, 2 * Math.PI);
+  g.stroke();
+  if (actor.radius !== undefined) {
+    g.lineWidth = 1;
+    g.setLineDash([6, 4]);
+    g.beginPath();
+    g.ellipse(cx, cy, actor.radius * w, actor.radius * h, 0, 0, 2 * Math.PI);
+    g.stroke();
+  }
+  if (actor.target) {
+    g.setLineDash([]);
+    g.fillStyle = ACTOR;
+    g.beginPath();
+    g.moveTo(cx + w / 2, cy);
+    g.lineTo(cx + w / 2 - 6, cy - 5);
+    g.lineTo(cx + w / 2 - 6, cy + 5);
+    g.fill();
+  }
+  g.setLineDash([]);
+}
+
 function canvas(width: number, height: number, className: string): HTMLCanvasElement {
   const element = document.createElement("canvas");
   element.width = width;
@@ -191,5 +259,17 @@ function context(element: HTMLCanvasElement): CanvasRenderingContext2D {
 export function cellCanvas(cache: CellCache, base: number, overlay = 0): HTMLCanvasElement {
   const element = canvas(TILE_WIDTH, TILE_HEIGHT, "cell");
   context(element).putImageData(cache.get(base, overlay), 0, 0);
+  return element;
+}
+
+/** A shape's frame as a canvas, transparent where the shape does not draw. */
+export function spriteCanvas(shape: Shape, palette: readonly Rgb[], frame = 0): HTMLCanvasElement {
+  const element = canvas(shape.width, shape.height, "cell");
+  const pixels = shapePixels(shape, frame);
+  const rgba = new Uint8ClampedArray(toRgba(pixels, palette));
+  pixels.forEach((c, i) => {
+    if (c === TRANSPARENT) rgba[i * 4 + 3] = 0;
+  });
+  context(element).putImageData(new ImageData(rgba, shape.width, shape.height), 0, 0);
   return element;
 }

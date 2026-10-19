@@ -25,6 +25,7 @@ export {
   arrivalCell,
   edgeCells,
   exitsByte,
+  isConditional,
   roomExits,
   roomScript,
   roomPassages,
@@ -42,6 +43,7 @@ export type {
   ScriptTeleport,
 } from "./exits.ts";
 export {
+  actorShapesId,
   EPISODE_NAMES,
   EPISODES,
   Game,
@@ -108,3 +110,12 @@ export { NO_DESCRIPTION, describeCell, descriptionTexts, knowsDescribeMethod } f
 export type { CellDescription } from "./describe.ts";
 export { describeRecord } from "./records.ts";
 export type { RecordInfo, RecordKind } from "./records.ts";
+export {
+  ACTOR_KIND_CLASSES,
+  ROBOT_CLASSES,
+  actorKindClass,
+  cellActorSource,
+  roomActors,
+  scriptActors,
+} from "./actors.ts";
+export type { ActorSource, RoomActor, ScriptActors } from "./actors.ts";

@@ -3,15 +3,21 @@ import {
   EPISODE_NAMES,
   Game,
   LOGIC_CELL,
+  ROBOT_CLASSES,
   ROOM_WIDTH,
+  type RoomActor,
   START_ROOMS,
   describeRecord,
+  roomActors,
+  roomScript,
+  scriptActors,
 } from "@robot/formats";
 
+import { ActorsView, actorOrigin } from "./actors-view.ts";
 import { type Edit, Editor, type Layer, tilesOf } from "./editor.ts";
 import { type Connections, ExitsView, connections, fixedExit } from "./exits-view.ts";
 import { RecordView } from "./record-view.ts";
-import { CellCache, RoomView, cellCanvas } from "./room-view.ts";
+import { CellCache, RoomView, cellCanvas, spriteCanvas } from "./room-view.ts";
 import { TileNames } from "./tile-info.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
@@ -65,6 +71,17 @@ export class App {
   private readonly undoButton = h("button", { disabled: true, title: "Ctrl+Z" }, "Undo");
   private readonly redoButton = h("button", { disabled: true, title: "Ctrl+Y" }, "Redo");
   private readonly gridToggle = h("input", { type: "checkbox" });
+  private readonly actorsToggle = h("input", { type: "checkbox", checked: true });
+  private actors: RoomActor[] = [];
+  private readonly robotSprites = new Map<number, HTMLCanvasElement[]>();
+  readonly actorsView = new ActorsView({
+    select: (cell) => {
+      this.select(cell);
+    },
+    name: (type) => this.names().summary(type),
+    icon: (type) =>
+      (this.isRobot(type) ? this.robotSprite(0) : undefined) ?? this.cellPreview(type),
+  });
   private readonly status = h("span", { class: "status" });
   private readonly episodeSelect = h("select", { "aria-label": "Episode" });
   private readonly roomList = h("div", { class: "room-list" });
@@ -74,6 +91,10 @@ export class App {
   /** Rooms shown, for going back and forward like in a browser. */
   private readonly history: { episode: number; room: number }[] = [];
   private historyIndex = -1;
+  /** The next room replaces the browser's current history entry instead of adding one. */
+  private replaceNext = false;
+  /** Removes the listeners on window (dispose). */
+  private readonly listeners = new AbortController();
   private readonly exitsView = new ExitsView((room) => {
     this.showRoom(room);
   });
@@ -164,6 +185,7 @@ export class App {
         this.cellInfo,
         this.cellText,
         this.recordView.element,
+        this.actorsView.element,
       ),
       h(
         "aside",
@@ -199,12 +221,18 @@ export class App {
         this.undoButton,
         this.redoButton,
         h("label", {}, this.gridToggle, " Grid"),
+        h("label", { title: "Where actors appear (A)" }, this.actorsToggle, " Actors"),
         this.status,
       ),
       this.welcome,
       this.workspace,
     );
     this.wire();
+  }
+
+  /** Stops listening to the window (keys, history, drops), e.g. before replacing the app. */
+  dispose(): void {
+    this.listeners.abort();
   }
 
   /** Loads an exe; throws (and shows) what went wrong if it is not the game. */
@@ -220,6 +248,7 @@ export class App {
     this.fileName = name;
     this.caches.clear();
     this.tileNames.clear();
+    this.robotSprites.clear();
     this.welcome.hidden = true;
     this.workspace.hidden = false;
     const linked = roomInAddress();
@@ -277,6 +306,7 @@ export class App {
       editor.game.episode(this.episode).classes,
     );
     this.exitsView.show(this.connections);
+    this.refreshActors();
     this.refreshRoomList();
     const shown = `${this.episode} ${id}`;
     if (this.selected && this.lastRoom !== shown) this.select(undefined);
@@ -320,10 +350,11 @@ export class App {
       this.history.splice(this.historyIndex + 1, Infinity, { episode, room });
       this.historyIndex = this.history.length - 1;
       const state: HistoryState = { robot: true, episode, room, index: this.historyIndex };
-      if (first) window.history.replaceState(state, "", `#${episode}/${room}`);
+      if (first || this.replaceNext) window.history.replaceState(state, "", `#${episode}/${room}`);
       else window.history.pushState(state, "", `#${episode}/${room}`);
       saveHistory(this.history);
     }
+    this.replaceNext = false;
     const label = (entry: { episode: number; room: number } | undefined, what: string) =>
       entry
         ? `${what} to ${entry.episode === episode ? "" : `${EPISODE_NAMES[entry.episode] ?? ""} `}room ${entry.room}`
@@ -424,6 +455,9 @@ export class App {
     this.redoButton.addEventListener("click", () => {
       this.redo();
     });
+    this.actorsToggle.addEventListener("change", () => {
+      this.refreshActors();
+    });
     this.gridToggle.addEventListener("change", () => {
       this.view.setGrid(this.gridToggle.checked);
     });
@@ -471,11 +505,15 @@ export class App {
     view.addEventListener("contextmenu", (event) => {
       event.preventDefault();
     });
-    window.addEventListener("mouseup", () => {
-      if (!this.painting) return;
-      this.painting = false;
-      this.endStroke();
-    });
+    window.addEventListener(
+      "mouseup",
+      () => {
+        if (!this.painting) return;
+        this.painting = false;
+        this.endStroke();
+      },
+      { signal: this.listeners.signal },
+    );
 
     this.backButton.addEventListener("click", () => {
       this.back();
@@ -484,60 +522,97 @@ export class App {
       this.forward();
     });
     // the browser's back and forward (buttons, Alt+arrows, mouse buttons) and ours
-    window.addEventListener("popstate", (event) => {
-      this.arrive(event.state);
-    });
+    window.addEventListener(
+      "popstate",
+      (event) => {
+        this.arrive(event.state);
+      },
+      { signal: this.listeners.signal },
+    );
+    // a room typed into the address of the open page (#3/147)
+    window.addEventListener(
+      "hashchange",
+      () => {
+        const linked = roomInAddress();
+        if (!this.editor || !linked || isHistoryState(window.history.state)) return;
+        if (!this.editor.game.episode(linked.episode).rooms.some((r) => r.id === linked.room))
+          return;
+        this.replaceNext = true; // the browser made the history entry already
+        if (linked.episode === this.episode) this.showRoom(linked.room);
+        else this.showEpisode(linked.episode, linked.room);
+      },
+      { signal: this.listeners.signal },
+    );
 
-    window.addEventListener("keydown", (event) => {
-      const target = event.target;
-      if (
-        !this.editor ||
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLSelectElement
-      ) {
-        return;
-      }
-      if (event.key === "Backspace" && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        event.preventDefault();
-        this.back();
-        return;
-      }
-      const direction = ARROWS[event.key];
-      if (direction && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        // follow the exit that does not depend on the game state
-        event.preventDefault();
-        const room = this.connections ? fixedExit(this.connections, direction) : 0;
-        if (room !== 0) this.showRoom(room);
-        return;
-      }
-      const key = event.key.toLowerCase();
-      if ((event.ctrlKey || event.metaKey) && key === "z") {
-        event.preventDefault();
-        if (event.shiftKey) this.redo();
-        else this.undo();
-      } else if ((event.ctrlKey || event.metaKey) && key === "y") {
-        event.preventDefault();
-        this.redo();
-      } else if ((event.ctrlKey || event.metaKey) && key === "s") {
-        event.preventDefault();
-        this.save();
-      } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "g") {
-        this.gridToggle.checked = !this.gridToggle.checked;
-        this.view.setGrid(this.gridToggle.checked);
-      }
-    });
-    window.addEventListener("beforeunload", (event) => {
-      if (this.editor?.dirty) event.preventDefault();
-    });
+    window.addEventListener(
+      "keydown",
+      (event) => {
+        const target = event.target;
+        if (
+          !this.editor ||
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLSelectElement
+        ) {
+          return;
+        }
+        if (event.key === "Backspace" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          this.back();
+          return;
+        }
+        const direction = ARROWS[event.key];
+        if (direction && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          // follow the exit that does not depend on the game state
+          event.preventDefault();
+          const room = this.connections ? fixedExit(this.connections, direction) : 0;
+          if (room !== 0) this.showRoom(room);
+          return;
+        }
+        const key = event.key.toLowerCase();
+        if ((event.ctrlKey || event.metaKey) && key === "z") {
+          event.preventDefault();
+          if (event.shiftKey) this.redo();
+          else this.undo();
+        } else if ((event.ctrlKey || event.metaKey) && key === "y") {
+          event.preventDefault();
+          this.redo();
+        } else if ((event.ctrlKey || event.metaKey) && key === "s") {
+          event.preventDefault();
+          this.save();
+        } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "g") {
+          this.gridToggle.checked = !this.gridToggle.checked;
+          this.view.setGrid(this.gridToggle.checked);
+        } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "a") {
+          this.actorsToggle.checked = !this.actorsToggle.checked;
+          this.refreshActors();
+        }
+      },
+      { signal: this.listeners.signal },
+    );
+    window.addEventListener(
+      "beforeunload",
+      (event) => {
+        if (this.editor?.dirty) event.preventDefault();
+      },
+      { signal: this.listeners.signal },
+    );
 
-    window.addEventListener("dragover", (event) => {
-      event.preventDefault();
-    });
-    window.addEventListener("drop", (event) => {
-      event.preventDefault();
-      const file = event.dataTransfer?.files[0];
-      if (file) void this.loadFile(file);
-    });
+    window.addEventListener(
+      "dragover",
+      (event) => {
+        event.preventDefault();
+      },
+      { signal: this.listeners.signal },
+    );
+    window.addEventListener(
+      "drop",
+      (event) => {
+        event.preventDefault();
+        const file = event.dataTransfer?.files[0];
+        if (file) void this.loadFile(file);
+      },
+      { signal: this.listeners.signal },
+    );
     this.setLayer("base");
   }
 
@@ -568,7 +643,23 @@ export class App {
     if (this.need().endStroke()) {
       this.refreshRoomList();
       this.refreshButtons();
+      this.refreshActors();
     }
+  }
+
+  /** Finds the room's actors again (after painting, record edits, …) and shows them. */
+  private refreshActors(): void {
+    const editor = this.need();
+    const room = editor.room(this.episode, this.roomId);
+    this.actors = roomActors(room, editor.game.episode(this.episode).classes);
+    // robots are drawn with the episode's sprites, one after the other (their look varies)
+    let robots = 0;
+    this.view.setActors(this.actorsToggle.checked ? this.actors : [], (actor) =>
+      actor.source === "tile" && actor.type !== undefined && this.isRobot(actor.type)
+        ? this.robotSprite(robots++)
+        : undefined,
+    );
+    this.actorsView.show(this.actors, scriptActors(roomScript(room)));
   }
 
   private pick(index: number): void {
@@ -621,6 +712,25 @@ export class App {
     this.refreshButtons();
   }
 
+  private isRobot(type: number): boolean {
+    const id = this.need().game.episode(this.episode).classes.classes.get(type)?.id;
+    return id !== undefined && ROBOT_CLASSES.includes(id);
+  }
+
+  /** Robot sprite n (in turn through the episode's sprites), as the game draws robots. */
+  private robotSprite(n: number): HTMLCanvasElement | undefined {
+    let sprites = this.robotSprites.get(this.episode);
+    if (!sprites) {
+      const game = this.need().game;
+      const palette = game.episode(this.episode).palette;
+      sprites = game
+        .aliens(this.episode)
+        .flatMap((shape) => (shape?.frames.length ? [spriteCanvas(shape, palette)] : []));
+      this.robotSprites.set(this.episode, sprites);
+    }
+    return sprites.at(n % Math.max(1, sprites.length));
+  }
+
   private cellPreview(value: number): HTMLCanvasElement {
     const preview = cellCanvas(this.cache(), value);
     preview.title = this.names().title(value);
@@ -665,6 +775,8 @@ export class App {
       .map((c) => room.records.find((r) => r.slot === c >> 8))
       .find((r) => r !== undefined);
     if (record) this.cellInfo.textContent += `  · ${describeRecord(record).summary}`;
+    const actor = this.actors.find((a) => a.cell === index);
+    if (actor) this.cellInfo.textContent += `  · actor: ${actorOrigin(actor)}`;
     // what the hero would see: the overlay object if there is one
     this.cellText.textContent =
       this.names().summary(overlay & 0xff ? overlay : base, room) || "\u00a0";

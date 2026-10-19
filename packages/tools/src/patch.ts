@@ -1,55 +1,42 @@
 import {
-  ACTOR_LOAD_METHODS,
-  BOMB_LOAD_METHOD,
   type EpisodeClasses,
   type Game,
-  HATCHING_LOAD_METHODS,
-  LOGIC_CELL,
+  type LogicRecord,
   type Room,
-  SAND_DESCRIBE_METHOD,
-  SAND_SCORPION_STATES,
   START_ROOMS,
-  resolveCell,
+  cellActorSource,
+  recordCell,
+  roomActors,
 } from "@robot/formats";
 
 /** Room tags holding the script source (6/1) and the compiled script (6/2). */
 const isScript = (kind: number, value: number) => kind === 6 && (value === 1 || value === 2);
 
 /** Logic records that let creatures appear: spawners (5) and creatures (7), records.ts. */
-/** Logic records that let actors appear: spawners (5), creatures (7), travelling actors (8). */
-const ACTOR_RECORDS = new Set([5, 7, 8]);
-
 /**
  * The room without anything that moves or could kill the hero before a screenshot (a
- * death's message box would cover the room): cells whose class becomes an actor on
- * entering (robots, androids, snakes, …, see ACTOR_LOAD_METHODS), hatcheries and other
- * delayed creature sources (HATCHING_LOAD_METHODS) and bombs (they release robots) become
- * empty, sand heaps hiding scorpions plain sand; records that let actors appear are
- * removed and their cells show what the records showed.
+ * death's message box would cover the room): every actor source (roomActors) goes. Actor
+ * tiles, hatcheries and bombs become empty, scorpion sand plain sand; records that let
+ * actors appear are removed and their cells show what the records showed.
  */
 export function calmRoom(room: Room, classes: EpisodeClasses): Room {
-  const removed = room.records.filter((r) => ACTOR_RECORDS.has(r.data[0]));
-  // actor records all have slot 0xff and no logic cell refers to them
-  const removedSlots = new Set(removed.map((r) => r.slot).filter((slot) => slot !== 0xff));
+  const base = room.base.slice();
+  const overlay = room.overlay.slice();
+  const removed = new Set<LogicRecord>();
   const calm = (cell: number): number => {
-    const cls = classes.classes.get(cell & 0xff);
-    const load = cls?.loadMethod ?? 0;
-    if (cls?.describeMethod === SAND_DESCRIBE_METHOD && SAND_SCORPION_STATES.has(cell >> 8)) {
-      return cell & 0xff; // plain sand instead of a heap hiding a scorpion
-    }
-    if (ACTOR_LOAD_METHODS.has(load) || HATCHING_LOAD_METHODS.has(load)) return 0;
-    if (load === BOMB_LOAD_METHOD) return 0;
-    if ((cell & 0xff) === LOGIC_CELL && removedSlots.has(cell >> 8)) {
-      return calm(resolveCell(room, cell));
-    }
-    return cell;
+    const source = cellActorSource(cell, classes);
+    return source === "scorpions" ? cell & 0xff : source ? 0 : cell;
   };
-  return {
-    ...room,
-    base: room.base.map(calm),
-    overlay: room.overlay.map(calm),
-    records: room.records.filter((r) => !removed.includes(r)),
-  };
+  for (const actor of roomActors(room, classes)) {
+    const layer = actor.layer === "base" ? base : overlay;
+    if (actor.record) {
+      removed.add(actor.record);
+      layer[actor.cell] = calm(recordCell(actor.record));
+    } else {
+      layer[actor.cell] = calm(layer[actor.cell] ?? 0);
+    }
+  }
+  return { ...room, base, overlay, records: room.records.filter((r) => !removed.has(r)) };
 }
 
 /**

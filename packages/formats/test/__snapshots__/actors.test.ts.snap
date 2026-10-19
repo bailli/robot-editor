@@ -1,0 +1,39 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`actors in every episode 1`] = `
+[
+  {
+    "bomb": 1,
+    "hatchery": 52,
+    "tile": 14,
+    "travelling": 3,
+  },
+  {
+    "hatchery": 112,
+    "tile": 107,
+    "travelling": 5,
+  },
+  {
+    "bomb": 3,
+    "hatchery": 98,
+    "scorpions": 153,
+    "tile": 192,
+    "travelling": 11,
+  },
+  {
+    "bomb": 20,
+    "creature": 89,
+    "hatchery": 93,
+    "scorpions": 100,
+    "spawner": 158,
+    "tile": 126,
+  },
+  {
+    "bomb": 7,
+    "hatchery": 126,
+    "scorpions": 1,
+    "spawner": 446,
+    "tile": 192,
+  },
+]
+`;

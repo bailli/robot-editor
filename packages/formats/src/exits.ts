@@ -218,6 +218,16 @@ export function arrivalCell(cell: number, direction: Direction): number {
   }
 }
 
+/**
+ * Whether the statement at `index` of a script depends on the game state: it is the
+ * body of an `if (...)` or `else`, or inside braces (the scripts use braces only there).
+ */
+export function isConditional(source: string, index: number): boolean {
+  const before = source.slice(0, index);
+  const depth = (before.match(/\{/g)?.length ?? 0) - (before.match(/\}/g)?.length ?? 0);
+  return depth > 0 || /(\)|\belse)\s*$/.test(before);
+}
+
 /** A room's script source (tag 6/1), empty if it has none. */
 export function roomScript(room: Room): string {
   const tag = room.tags.find((t) => t.kind === 6 && t.value === 1);
@@ -259,11 +269,7 @@ export function roomScriptExits(source: string): {
   teleports: ScriptTeleport[];
   buses: ScriptBus[];
 } {
-  const conditional = (index: number) => {
-    const before = source.slice(0, index);
-    const depth = (before.match(/\{/g)?.length ?? 0) - (before.match(/\}/g)?.length ?? 0);
-    return depth > 0 || /(\)|\belse)\s*$/.test(before);
-  };
+  const conditional = (index: number) => isConditional(source, index);
   const exits = [...source.matchAll(ASSIGNMENT)].map((m) => ({
     direction: m[1].toLowerCase() as Direction,
     room: Number(m[2]),

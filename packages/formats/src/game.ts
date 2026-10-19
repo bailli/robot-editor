@@ -23,6 +23,8 @@ export const START_ROOMS: Readonly<Partial<Record<number, number>>> = {
 
 /** Resource ids of episode n (0 = Junior): shapes 1002, scene 1004, plus 100 n. */
 export const shapesId = (episode: number) => 1002 + 100 * episode;
+/** The robots' sprites (`_Aliens`, 8 per episode, 5 in episode IV) and more. */
+export const actorShapesId = (episode: number) => 1001 + 100 * episode;
 export const sceneId = (episode: number) => 1004 + 100 * episode;
 export const soundsId = (episode: number) => 1006 + 100 * episode;
 /** German texts; English (1011, 1111) exists for Junior and episode I only. */
@@ -75,6 +77,11 @@ export class Game {
       this.episodes.set(number, episode);
     }
     return episode;
+  }
+
+  /** The sprites robots are drawn with (`_Aliens`); each robot takes one, in turn. */
+  aliens(episode: number): ShapeTable {
+    return parseShapes(this.resource("SHAPES", actorShapesId(episode)).data).get("_Aliens") ?? [];
   }
 
   /** The episode's tile descriptions and messages (see texts.ts), if it has them. */
