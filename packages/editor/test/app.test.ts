@@ -20,6 +20,8 @@ const game = new Game(bytes);
 let app: App;
 
 beforeEach(() => {
+  // the address names the room shown; start every test without one
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
   document.body.replaceChildren();
   const root = document.createElement("div");
   document.body.append(root);
@@ -259,25 +261,38 @@ describe("logic records", () => {
   });
 });
 
-test("back and forward return along the rooms visited, also across episodes", async () => {
+test("back and forward use the browser's history, also across episodes", async () => {
   // Robot I room 43 -> 44 (exit) -> episode III room 47 -> 147 (door)
   await exits().getByRole("button", { name: "44" }).click();
   app.showEpisode(3, 47);
   await exits().getByRole("button", { name: "147" }).click();
   const heading = (name: string) => page.getByRole("heading", { name });
   await expect.element(heading("Robot III – room 147")).toBeVisible();
+  expect(window.location.hash).toBe("#3/147");
 
   await page.getByRole("button", { name: "◀ 47" }).click();
   await expect.element(heading("Robot III – room 47")).toBeVisible();
+  window.history.back(); // the browser's own back
+  await expect.element(heading("Robot I – room 44")).toBeVisible();
+  expect(window.location.hash).toBe("#1/44");
+  window.history.forward();
+  await expect.element(heading("Robot III – room 47")).toBeVisible();
   await userEvent.keyboard("{Backspace}");
   await expect.element(heading("Robot I – room 44")).toBeVisible();
-  await userEvent.keyboard("{Alt>}{ArrowRight}{/Alt}");
-  await expect.element(heading("Robot III – room 47")).toBeVisible();
 
   // a new way drops the forward history
-  app.back();
   app.showRoom(45);
   await expect.element(page.getByRole("button", { name: "▶" })).toBeDisabled();
   await page.getByRole("button", { name: "◀ 44" }).click();
   await expect.element(heading("Robot I – room 44")).toBeVisible();
+});
+
+test("a room in the address is opened on loading", async () => {
+  window.history.replaceState(null, "", "#2/55");
+  document.body.replaceChildren();
+  const root = document.createElement("div");
+  document.body.append(root);
+  app = new App(root);
+  app.load(bytes);
+  await expect.element(page.getByRole("heading", { name: "Robot II – room 55" })).toBeVisible();
 });

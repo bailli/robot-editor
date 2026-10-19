@@ -15,7 +15,8 @@ the exe itself; findings are checked three ways where possible:
 2. **Code:** the game's own routines, read with `objdump -d -M intel` (addresses below are
    virtual addresses in the exe; `.text` file offset = address − 0x400000).
 3. **The real game:** screenshots under Wine (`tools/wine/harness.py`, `pnpm robot shots`),
-   compared pixel by pixel with our renderer.
+   compared pixel by pixel with our renderer. The harness runs the game silently and can
+   press keys before the screenshot (`--keys`), e.g. to walk the hero somewhere.
 
 ## Working conventions
 
@@ -36,7 +37,7 @@ the exe itself; findings are checked three ways where possible:
 - **No game data in the repository:** `reference/` (the installer and exe), `resources/`,
   `shots/`, `.wine/`, `renders/` etc. are ignored. Snapshots store hashes, not content.
 - **Wine:** the project prefix `.wine/` is sandboxed (no links into `$HOME`, no `Z:`).
-  Don't run the game in other prefixes.
+  Don't run the game in other prefixes. Sound is off (audio drivers disabled per run).
 
 ## Repository map
 
@@ -111,6 +112,10 @@ Files in `packages/formats/src`:
   frame method (12 methods incl. walls, terrain quarters, masks, doors, letters with the
   game font, underlays); logic cells show their record's cell. **1106 cells differ** in 26
   reference screenshots (`pnpm robot eval`), most from runtime effects (see open items).
+- **Reference screenshots of any room** use a patched exe (`patch.ts`): the room in the
+  start room's slot, without scripts and without enemies (`calmRoom`: tile type 2, the
+  robots/animals, and spawner/creature records), so the hero cannot be killed before
+  the screenshot (that showed a "you have died" box in the middle of two shots).
 
 ### Room connections (`exits.ts`)
 
@@ -156,6 +161,10 @@ Supported:
   click picks; dragging fills lines; undo/redo per stroke; grid (G)
 - exits line: N/S/W/E targets incl. script changes, doors/stairs, bus, oracles,
   teleporters, actors; arrow keys follow fixed exits
+- visited rooms go into the browser's history and address (`#3/147`): the browser's
+  back/forward (buttons, Alt+←/→, mouse buttons), the editor's own ◀/▶ buttons (showing
+  the room they lead to) and Backspace move between them, across episodes; loading the
+  page with a room in the address opens that room
 - tile names (items) and the game's descriptions in tooltips and the hover line; logic
   cells say what their record does
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
@@ -179,9 +188,11 @@ Not supported (yet):
 
 Roughly by value for the editor.
 
-1. **Logic records in play.** The inspector edits all record types, but edited records
-   have not been tried in the real game yet (only round-tripped through the scene
-   writer). Fields of types 7 and 11 are only partly understood.
+1. **Logic records in play.** The inspector edits all record types. Verified in the real
+   game: a teleporter added next to the hero's start (episode I room 43, (6, 14), to room
+   11 at (20, 15)) takes the hero exactly there. Other record types are only
+   round-tripped through the scene writer. Fields of types 7 and 11 are only partly
+   understood.
 2. **Actor kinds.** Records 7/8 and spawners create actors (kinds 0x107, 0x183, 0x185,
    spawner creatures via 0x44dd60/0x44dc60); which creature each kind is is unknown, and
    actors are not drawn.
@@ -198,7 +209,8 @@ Roughly by value for the editor.
 6. **Renderer gaps** (`pnpm robot eval --types`): empty floor in episodes I/II (runtime:
    actors, hero, animations), episode IV types 95/106/79/99/70, episode III types 83, 37,
    49, 76, episode II 85/77/110/25, Junior 23/25 (animated). Some are runtime effects that
-   a static render cannot match.
+   a static render cannot match. Logic cells in some dark rooms (episode I room 11's
+   teleporters) are drawn on black in the game but on colour 15 by us.
 7. **Description extras:** key colours (strings 0x9c50/0x9c51 from the exe's string
    table), messages 200/201 added by two classes, codes formatted by 0x41d2c0/0x40ff80, and
    four describe methods that depend on game flags/options.

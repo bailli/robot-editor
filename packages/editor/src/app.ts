@@ -222,6 +222,14 @@ export class App {
     this.tileNames.clear();
     this.welcome.hidden = true;
     this.workspace.hidden = false;
+    const linked = roomInAddress();
+    if (
+      linked &&
+      this.editor.game.episode(linked.episode).rooms.some((r) => r.id === linked.room)
+    ) {
+      this.episode = linked.episode;
+      this.roomId = linked.room;
+    }
     this.showEpisode(this.episode, this.roomId);
     this.setStatus(`${name} loaded`);
   }
@@ -269,13 +277,13 @@ export class App {
     this.remember(this.episode, id);
   }
 
-  /** Goes back to the previously shown room (also across episodes). */
+  /** Goes back to the previously shown room (the browser's back, also across episodes). */
   back(): void {
-    this.travel(this.historyIndex - 1);
+    if (this.historyIndex > 0) window.history.back();
   }
 
   forward(): void {
-    this.travel(this.historyIndex + 1);
+    if (this.historyIndex < this.history.length - 1) window.history.forward();
   }
 
   /** History entry `index`, undefined outside the history. */
@@ -283,20 +291,29 @@ export class App {
     return index >= 0 ? this.history.at(index) : undefined;
   }
 
-  private travel(index: number): void {
-    const entry = this.entry(index);
-    if (!entry) return;
-    this.historyIndex = index; // set first: showing the room must not record it again
-    if (entry.episode === this.episode) this.showRoom(entry.room);
-    else this.showEpisode(entry.episode, entry.room);
+  /** The browser went back or forward to one of our entries: show its room. */
+  private arrive(state: unknown): void {
+    if (!this.editor || !isHistoryState(state)) return;
+    // set first: showing the room must not record it again
+    this.historyIndex = state.index;
+    this.history[state.index] = { episode: state.episode, room: state.room };
+    if (state.episode === this.episode) this.showRoom(state.room);
+    else this.showEpisode(state.episode, state.room);
   }
 
-  /** Records a shown room, dropping the forward history when it is a new way. */
+  /**
+   * Records a shown room in the browser's history (and the address, e.g. #3/147), dropping
+   * the forward history when it is a new way.
+   */
   private remember(episode: number, room: number): void {
     const current = this.entry(this.historyIndex);
     if (current?.episode !== episode || current.room !== room) {
+      const first = this.historyIndex < 0;
       this.history.splice(this.historyIndex + 1, Infinity, { episode, room });
       this.historyIndex = this.history.length - 1;
+      const state: HistoryState = { robot: true, episode, room, index: this.historyIndex };
+      if (first) window.history.replaceState(state, "", `#${episode}/${room}`);
+      else window.history.pushState(state, "", `#${episode}/${room}`);
     }
     const label = (entry: { episode: number; room: number } | undefined, what: string) =>
       entry
@@ -304,12 +321,12 @@ export class App {
         : what;
     const previous = this.entry(this.historyIndex - 1);
     const next = this.entry(this.historyIndex + 1);
-    this.backButton.disabled = !previous;
-    this.forwardButton.disabled = !next;
+    this.backButton.disabled = this.historyIndex <= 0;
+    this.forwardButton.disabled = this.historyIndex >= this.history.length - 1;
     this.backButton.textContent = previous ? `◀ ${previous.room}` : "◀";
     this.forwardButton.textContent = next ? `${next.room} ▶` : "▶";
-    this.backButton.title = `${label(previous, "Back")} (Alt+←, Backspace)`;
-    this.forwardButton.title = `${label(next, "Forward")} (Alt+→)`;
+    this.backButton.title = `${label(previous, "Back")} (browser back, Alt+←, Backspace)`;
+    this.forwardButton.title = `${label(next, "Forward")} (browser forward, Alt+→)`;
   }
 
   /** Selects a cell and shows its logic record (or the offer to add one). */
@@ -457,12 +474,9 @@ export class App {
     this.forwardButton.addEventListener("click", () => {
       this.forward();
     });
-    // the mouse's back and forward buttons
-    window.addEventListener("mouseup", (event) => {
-      if (!this.editor || (event.button !== 3 && event.button !== 4)) return;
-      event.preventDefault();
-      if (event.button === 3) this.back();
-      else this.forward();
+    // the browser's back and forward (buttons, Alt+arrows, mouse buttons) and ours
+    window.addEventListener("popstate", (event) => {
+      this.arrive(event.state);
     });
 
     window.addEventListener("keydown", (event) => {
@@ -474,17 +488,9 @@ export class App {
       ) {
         return;
       }
-      if (
-        (event.altKey && event.key === "ArrowLeft") ||
-        (event.key === "Backspace" && !event.ctrlKey && !event.metaKey && !event.altKey)
-      ) {
+      if (event.key === "Backspace" && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
         this.back();
-        return;
-      }
-      if (event.altKey && event.key === "ArrowRight") {
-        event.preventDefault();
-        this.forward();
         return;
       }
       const direction = ARROWS[event.key];
@@ -705,6 +711,24 @@ export class App {
     if (!this.editor) throw new Error("no exe loaded");
     return this.editor;
   }
+}
+
+interface HistoryState {
+  robot: true;
+  episode: number;
+  room: number;
+  /** Position in App.history. */
+  index: number;
+}
+
+function isHistoryState(state: unknown): state is HistoryState {
+  return typeof state === "object" && state !== null && "robot" in state;
+}
+
+/** The room in the page address, e.g. #3/147 (episode 3, room 147). */
+function roomInAddress(): { episode: number; room: number } | undefined {
+  const match = /^#(\d)\/(\d+)$/.exec(window.location.hash);
+  return match ? { episode: Number(match[1]), room: Number(match[2]) } : undefined;
 }
 
 /** The cells on a straight line from cell a to cell b (both included). */
