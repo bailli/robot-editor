@@ -142,6 +142,22 @@ h2 {
   font-weight: 600;
 }
 
+.room-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.room-head h2 {
+  margin: 0 0 0 6px;
+}
+
+.room-head .history {
+  padding: 1px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
 .exits {
   display: flex;
   flex-wrap: wrap;

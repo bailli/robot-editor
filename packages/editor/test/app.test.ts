@@ -258,3 +258,26 @@ describe("logic records", () => {
     expect(defined(app.editor).room(1, 43).base[index]).toBe(game.room(1, 43).base[index]);
   });
 });
+
+test("back and forward return along the rooms visited, also across episodes", async () => {
+  // Robot I room 43 -> 44 (exit) -> episode III room 47 -> 147 (door)
+  await exits().getByRole("button", { name: "44" }).click();
+  app.showEpisode(3, 47);
+  await exits().getByRole("button", { name: "147" }).click();
+  const heading = (name: string) => page.getByRole("heading", { name });
+  await expect.element(heading("Robot III – room 147")).toBeVisible();
+
+  await page.getByRole("button", { name: "◀ 47" }).click();
+  await expect.element(heading("Robot III – room 47")).toBeVisible();
+  await userEvent.keyboard("{Backspace}");
+  await expect.element(heading("Robot I – room 44")).toBeVisible();
+  await userEvent.keyboard("{Alt>}{ArrowRight}{/Alt}");
+  await expect.element(heading("Robot III – room 47")).toBeVisible();
+
+  // a new way drops the forward history
+  app.back();
+  app.showRoom(45);
+  await expect.element(page.getByRole("button", { name: "▶" })).toBeDisabled();
+  await page.getByRole("button", { name: "◀ 44" }).click();
+  await expect.element(heading("Robot I – room 44")).toBeVisible();
+});

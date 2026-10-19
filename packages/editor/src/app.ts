@@ -69,6 +69,11 @@ export class App {
   private readonly episodeSelect = h("select", { "aria-label": "Episode" });
   private readonly roomList = h("div", { class: "room-list" });
   private readonly roomTitle = h("h2");
+  private readonly backButton = h("button", { class: "history", disabled: true }, "◀");
+  private readonly forwardButton = h("button", { class: "history", disabled: true }, "▶");
+  /** Rooms shown, for going back and forward like in a browser. */
+  private readonly history: { episode: number; room: number }[] = [];
+  private historyIndex = -1;
   private readonly exitsView = new ExitsView((room) => {
     this.showRoom(room);
   });
@@ -153,7 +158,7 @@ export class App {
       h(
         "main",
         {},
-        this.roomTitle,
+        h("div", { class: "room-head" }, this.backButton, this.forwardButton, this.roomTitle),
         this.exitsView.element,
         this.view.element,
         this.cellInfo,
@@ -261,6 +266,50 @@ export class App {
     const shown = `${this.episode} ${id}`;
     if (this.selected && this.lastRoom !== shown) this.select(undefined);
     this.lastRoom = shown;
+    this.remember(this.episode, id);
+  }
+
+  /** Goes back to the previously shown room (also across episodes). */
+  back(): void {
+    this.travel(this.historyIndex - 1);
+  }
+
+  forward(): void {
+    this.travel(this.historyIndex + 1);
+  }
+
+  /** History entry `index`, undefined outside the history. */
+  private entry(index: number): { episode: number; room: number } | undefined {
+    return index >= 0 ? this.history.at(index) : undefined;
+  }
+
+  private travel(index: number): void {
+    const entry = this.entry(index);
+    if (!entry) return;
+    this.historyIndex = index; // set first: showing the room must not record it again
+    if (entry.episode === this.episode) this.showRoom(entry.room);
+    else this.showEpisode(entry.episode, entry.room);
+  }
+
+  /** Records a shown room, dropping the forward history when it is a new way. */
+  private remember(episode: number, room: number): void {
+    const current = this.entry(this.historyIndex);
+    if (current?.episode !== episode || current.room !== room) {
+      this.history.splice(this.historyIndex + 1, Infinity, { episode, room });
+      this.historyIndex = this.history.length - 1;
+    }
+    const label = (entry: { episode: number; room: number } | undefined, what: string) =>
+      entry
+        ? `${what} to ${entry.episode === episode ? "" : `${EPISODE_NAMES[entry.episode] ?? ""} `}room ${entry.room}`
+        : what;
+    const previous = this.entry(this.historyIndex - 1);
+    const next = this.entry(this.historyIndex + 1);
+    this.backButton.disabled = !previous;
+    this.forwardButton.disabled = !next;
+    this.backButton.textContent = previous ? `◀ ${previous.room}` : "◀";
+    this.forwardButton.textContent = next ? `${next.room} ▶` : "▶";
+    this.backButton.title = `${label(previous, "Back")} (Alt+←, Backspace)`;
+    this.forwardButton.title = `${label(next, "Forward")} (Alt+→)`;
   }
 
   /** Selects a cell and shows its logic record (or the offer to add one). */
@@ -402,6 +451,20 @@ export class App {
       this.endStroke();
     });
 
+    this.backButton.addEventListener("click", () => {
+      this.back();
+    });
+    this.forwardButton.addEventListener("click", () => {
+      this.forward();
+    });
+    // the mouse's back and forward buttons
+    window.addEventListener("mouseup", (event) => {
+      if (!this.editor || (event.button !== 3 && event.button !== 4)) return;
+      event.preventDefault();
+      if (event.button === 3) this.back();
+      else this.forward();
+    });
+
     window.addEventListener("keydown", (event) => {
       const target = event.target;
       if (
@@ -409,6 +472,19 @@ export class App {
         target instanceof HTMLInputElement ||
         target instanceof HTMLSelectElement
       ) {
+        return;
+      }
+      if (
+        (event.altKey && event.key === "ArrowLeft") ||
+        (event.key === "Backspace" && !event.ctrlKey && !event.metaKey && !event.altKey)
+      ) {
+        event.preventDefault();
+        this.back();
+        return;
+      }
+      if (event.altKey && event.key === "ArrowRight") {
+        event.preventDefault();
+        this.forward();
         return;
       }
       const direction = ARROWS[event.key];
