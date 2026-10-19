@@ -97,6 +97,12 @@ export class RoomView {
     this.drawMarks();
   }
 
+  /** The marks canvas as RGBA (actors, grid, selection), for tests. */
+  pixelsOfMarks(): Uint8ClampedArray {
+    const g = this.marks2d;
+    return g.getImageData(0, 0, g.canvas.width, g.canvas.height).data;
+  }
+
   setHover(index: number | undefined): void {
     if (index === this.hover) return;
     this.hover = index;

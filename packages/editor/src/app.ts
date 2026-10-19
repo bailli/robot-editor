@@ -653,12 +653,14 @@ export class App {
     const room = editor.room(this.episode, this.roomId);
     this.actors = roomActors(room, editor.game.episode(this.episode).classes);
     // robots are drawn with the episode's sprites, one after the other (their look varies)
+    // (assigned once here: the view redraws its marks on every mouse move)
     let robots = 0;
-    this.view.setActors(this.actorsToggle.checked ? this.actors : [], (actor) =>
+    const sprites = this.actors.map((actor) =>
       actor.source === "tile" && actor.type !== undefined && this.isRobot(actor.type)
         ? this.robotSprite(robots++)
         : undefined,
     );
+    this.view.setActors(this.actorsToggle.checked ? this.actors : [], (_, n) => sprites[n]);
     this.actorsView.show(this.actors, scriptActors(roomScript(room)));
   }
 

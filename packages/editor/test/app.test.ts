@@ -350,3 +350,11 @@ test("a room typed into the address of the open page is shown", async () => {
   window.history.back();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
 });
+
+test("robots keep their sprite when the marks are redrawn", () => {
+  app.showEpisode(2, 123);
+  const before = app.view.pixelsOfMarks();
+  app.view.setHover(5 * ROOM_WIDTH + 5);
+  app.view.setHover(undefined);
+  expect(firstDifference(app.view.pixelsOfMarks(), before)).toBe(-1);
+});
