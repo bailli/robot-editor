@@ -28,7 +28,8 @@ import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
  *
  * Logic records move the hero to a target in their u16 at data offset 4 (room = bits
  * 0-9, x = bits 10-15) and y at offset 6:
- *   type 12  a passage, taken when the hero walks north onto its cell (0x412ae0)
+ *   type 12  an oracle (0x412ae0): teleports the hero who walks north onto it; walked
+ *            onto otherwise it gives a hint or an item, or kills
  *   type 13  a teleporter, taken when the hero steps onto its cell (0x44cc30); a non-zero
  *            byte at offset 8 shows message 0x4b0 + it, and with bit 1 of offset 1 set
  *            the hero returns to a point saved at run time instead, if there is one
@@ -56,13 +57,13 @@ export interface Stairs {
   room: number;
 }
 
-export const PASSAGE_RECORD = 12;
+export const ORACLE_RECORD = 12;
 export const TELEPORTER_RECORD = 13;
 
 export interface RecordTeleport {
   /** The logic cell (base or overlay) that places the record, undefined if none does. */
   cell: number | undefined;
-  kind: "passage" | "teleporter";
+  kind: "oracle" | "teleporter";
   room: number;
   x: number;
   y: number;
@@ -127,7 +128,7 @@ export function roomStairs(
   return stairs;
 }
 
-/** The passages and teleporters among a room's logic records (with a target room). */
+/** The oracles and teleporters among a room's logic records (with a target room). */
 export function roomTeleports(room: Room): RecordTeleport[] {
   const cellOf = (slot: number) => {
     for (const layer of [room.base, room.overlay]) {
@@ -139,13 +140,13 @@ export function roomTeleports(room: Room): RecordTeleport[] {
   return room.records.flatMap((record) => {
     const [type = 0, flags = 0, , , low = 0, high = 0, y = 0] = record.data;
     const target = low | (high << 8);
-    if ((type !== PASSAGE_RECORD && type !== TELEPORTER_RECORD) || (target & 0x3ff) === 0) {
+    if ((type !== ORACLE_RECORD && type !== TELEPORTER_RECORD) || (target & 0x3ff) === 0) {
       return [];
     }
     return [
       {
         cell: cellOf(record.slot),
-        kind: type === PASSAGE_RECORD ? ("passage" as const) : ("teleporter" as const),
+        kind: type === ORACLE_RECORD ? ("oracle" as const) : ("teleporter" as const),
         room: target & 0x3ff,
         x: target >> 10,
         y,

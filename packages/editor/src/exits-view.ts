@@ -24,7 +24,7 @@ export interface Connections {
   scripted: ScriptExit[];
   teleports: ScriptTeleport[];
   stairs: Stairs[];
-  /** Passages and teleporters among the logic records. */
+  /** Oracles and teleporters among the logic records. */
   records: RecordTeleport[];
 }
 
@@ -91,12 +91,15 @@ export class ExitsView {
     }
     const at = (cell: number | undefined) =>
       cell === undefined ? "" : ` at (${cell % ROOM_WIDTH}, ${Math.floor(cell / ROOM_WIDTH)})`;
-    const passages = c.records.filter((r) => r.kind === "passage");
+    const oracles = c.records.filter((r) => r.kind === "oracle");
     this.group(
-      "passages",
-      "Passages",
-      passages.map((r) =>
-        this.target(r.room, `walking north onto it${at(r.cell)}, arriving at (${r.x}, ${r.y})`),
+      "oracles",
+      "Oracles",
+      oracles.map((r) =>
+        this.target(
+          r.room,
+          `oracle${at(r.cell)}, teleports when walked onto northwards, arriving at (${r.x}, ${r.y})`,
+        ),
       ),
     );
     const teleporters = c.records.filter((r) => r.kind === "teleporter");

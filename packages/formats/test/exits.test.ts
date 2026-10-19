@@ -41,7 +41,7 @@ for (const episode of EPISODES) {
 }
 
 /**
- * Exits whose cells do not all arrive on exit cells of the target room (one-way passages
+ * Exits whose cells do not all arrive on exit cells of the target room (one-way exits
  * or level quirks), and the one exit no script opens.
  */
 const KNOWN = [
@@ -149,7 +149,7 @@ test("stairs lead 100 rooms up or down onto the matching stairs", () => {
   expect(listed).toMatchSnapshot();
 });
 
-test("passages and teleporters lead to rooms of their episode", () => {
+test("oracles and teleporters lead to rooms of their episode", () => {
   const listed: string[] = [];
   for (const episode of EPISODES) {
     const rooms = game.episode(episode).rooms;
@@ -168,7 +168,7 @@ test("passages and teleporters lead to rooms of their episode", () => {
 });
 
 /**
- * Rooms not reached from the start room through exits, scripts, stairs, passages and
+ * Rooms not reached from the start room through exits, scripts, stairs, oracles and
  * teleporters. Room 99 of every episode is a debug room; the others still lack a
  * decoded connection.
  */

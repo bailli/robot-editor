@@ -157,7 +157,7 @@ test("stairs are listed with the exits", async () => {
   );
 });
 
-test("passages and teleporters are listed with the exits", async () => {
+test("oracles and teleporters are listed with the exits", async () => {
   app.showEpisode(2, 55);
   const teleporters = document.querySelector(".teleports");
   expect([...(teleporters?.querySelectorAll("button") ?? [])].map((b) => b.textContent)).toEqual([
