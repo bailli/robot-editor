@@ -106,16 +106,21 @@ Files in `packages/formats/src`:
   `_Aliens` holds the robots.
 - **Palettes** per episode (16 colours; dark rooms use palette offsets at run time).
 - **Object classes:** class table per episode (0x479ad8, 0x475838, 0x476e00, 0x477ca0,
-  0x478c40; 128 entries); vtable +0x00 class id, +0x08 frame method, +0x54 describe method.
+  0x478c40; 128 entries); vtable +0x00 class id, +0x08 frame method, +0x28 room-load
+  method (actors are created there), +0x54 describe method.
   Class 0 is the shared empty class (left out of the class→type table 0x4c70e0, 0x43b46a).
 - **Renderer:** draws base cells as tiles and overlay cells as sprites with each class's
   frame method (12 methods incl. walls, terrain quarters, masks, doors, letters with the
-  game font, underlays); logic cells show their record's cell. **784 cells differ** in 26
+  game font, underlays); logic cells show their record's cell. **698 cells differ** in 26
   reference screenshots (`pnpm robot eval`), most from runtime effects (see open items).
 - **Reference screenshots of any room** use a patched exe (`patch.ts`): the room in the
-  start room's slot, without scripts and without enemies (`calmRoom`: tile types 2,
-  robots/animals, and 0x2d, androids/snakes, and spawner/creature records), so the hero
-  cannot be killed before the screenshot (its message box covered four shots).
+  start room's slot, without scripts and without anything that moves or kills
+  (`calmRoom`): cells whose class becomes an actor on entering the room (vtable +0x28,
+  `ACTOR_LOAD_METHODS`: robots, androids, snakes, the worm, …), delayed creature sources
+  (`HATCHING_LOAD_METHODS`: eggs, snake basket, "something behind the wall"), bombs
+  (they release robots), sand heaps hiding scorpions (sand states 6/7) and
+  spawner/creature records. Otherwise the hero can die before the
+  screenshot and the death's message box covers the room.
 
 ### Room connections (`exits.ts`)
 

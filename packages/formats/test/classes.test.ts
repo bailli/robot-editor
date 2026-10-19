@@ -23,6 +23,7 @@ test("episode 1 classes read from the exe", () => {
     id: 6,
     frameMethod: FrameMethod.WALL,
     describeMethod: 0x41b160,
+    loadMethod: 0x43ec50,
   });
   assert.equal(ep.classes.get(37)?.frameMethod, FrameMethod.LETTER);
   assert.equal(ep.typeOfClass.get(0x27), 49); // underlay 1 is class 0x27: the grass of type 49

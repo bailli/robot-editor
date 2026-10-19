@@ -43,7 +43,37 @@ export interface ObjectClass {
   frameMethod: number;
   /** vtable +0x54: picks the description variant (see describe.ts). */
   describeMethod: number;
+  /** vtable +0x28: called for each cell when a room is entered (0x42b6f0). */
+  loadMethod: number;
 }
+
+/**
+ * Room-load methods (vtable +0x28) that turn their cell into a moving actor (they clear
+ * the cell and call 0x44dc60/0x44dd60): robots, androids, snakes, the worm and the
+ * episodes' other creatures. The hero's own method (0x420960) only clears its cell.
+ */
+export const ACTOR_LOAD_METHODS: ReadonlySet<number> = new Set([
+  0x40a8e0, 0x4244f0, 0x41b190, 0x4104d0, 0x4106f0, 0x412050, 0x412260, 0x412330, 0x412650,
+  0x417df0, 0x417f70, 0x41b370, 0x41b590, 0x41c570,
+]);
+
+/** The bomb's room-load method: it starts the fuse; the explosion lets robots appear. */
+export const BOMB_LOAD_METHOD = 0x421f80;
+
+/**
+ * Room-load methods that start a timer (0x408ae0) after which creatures appear: hatching
+ * eggs, the snake basket, "something behind the wall" (tile types 0x30, 0x3c, 0x22 in
+ * Junior), and episode IV's cylinders (0x68, "don't leave too many lying around").
+ */
+/**
+ * Sand (describe method 0x413430, every episode): states 6 and 7 are small heaps hiding
+ * scorpions ("Unter diesen kleinen Häufchen verbergen sich stachelige, giftige Gesellen")
+ * that come out when disturbed.
+ */
+export const SAND_DESCRIBE_METHOD = 0x413430;
+export const SAND_SCORPION_STATES: ReadonlySet<number> = new Set([6, 7]);
+
+export const HATCHING_LOAD_METHODS: ReadonlySet<number> = new Set([0x426330, 0x4237e0, 0x41b030]);
 
 export interface EpisodeClasses {
   /** Class per tile type, for the types that have one. */
@@ -124,6 +154,7 @@ export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasse
       id,
       frameMethod: u32(exe, vtable + 8),
       describeMethod: u32(exe, vtable + 0x54),
+      loadMethod: u32(exe, vtable + 0x28),
     });
     if (id) typeOfClass.set(id, type); // the game skips class 0, the shared empty class
   }

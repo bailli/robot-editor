@@ -97,7 +97,7 @@ export function shotRoom(
   shot: { episode: number; room: number; patched?: boolean | undefined },
 ) {
   const room = game.room(shot.episode, shot.room);
-  return shot.patched ? calmRoom(room) : room;
+  return shot.patched ? calmRoom(room, game.episode(shot.episode).classes) : room;
 }
 
 function describe(game: Game, episode: number, room: number, file: string, patched: boolean): Shot {
