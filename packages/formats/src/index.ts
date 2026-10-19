@@ -82,6 +82,7 @@ export {
   encodeRoomMap,
   parseRoomMap,
   parseScene,
+  resolveCell,
   ROOM_CELLS,
   ROOM_HEIGHT,
   ROOM_WIDTH,

@@ -10,6 +10,7 @@ import {
   TILE_HEIGHT,
   TILE_WIDTH,
   renderCell,
+  resolveCell,
   toRgba,
 } from "@robot/formats";
 
@@ -103,7 +104,11 @@ export class RoomView {
 
   private drawCell(i: number): void {
     if (!this.room || !this.cache) return;
-    const image = this.cache.get(this.room.base[i] ?? 0, this.room.overlay[i] ?? 0);
+    // logic cells show their record's cell, as in the game
+    const image = this.cache.get(
+      resolveCell(this.room, this.room.base[i] ?? 0),
+      resolveCell(this.room, this.room.overlay[i] ?? 0),
+    );
     this.room2d.putImageData(
       image,
       (i % ROOM_WIDTH) * TILE_WIDTH,

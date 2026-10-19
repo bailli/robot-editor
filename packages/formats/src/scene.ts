@@ -283,3 +283,21 @@ export function serializeScene(rooms: readonly Room[]): Uint8Array {
   }
   return w.result();
 }
+
+/** Record type whose cell is at data offset 4 (the others: offset 2). */
+const CELL_AT_4 = 1;
+
+/**
+ * The cell a logic cell shows: the cell stored in its record (0x433110), followed while
+ * that is a logic cell again; 0 if the record is missing. Other cells are returned as
+ * they are.
+ */
+export function resolveCell(room: Pick<Room, "records">, cell: number): number {
+  for (let depth = 0; (cell & 0xff) === LOGIC_CELL; depth++) {
+    const record = room.records.find((r) => r.slot === cell >> 8);
+    if (!record || depth > 8) return 0;
+    const at = record.data[0] === CELL_AT_4 ? 4 : 2;
+    cell = new DataView(record.data.buffer, record.data.byteOffset).getUint16(at, true);
+  }
+  return cell;
+}

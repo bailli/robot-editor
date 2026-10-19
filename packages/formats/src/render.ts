@@ -1,6 +1,13 @@
 import { type EpisodeClasses, FrameMethod, type ObjectClass } from "./classes.ts";
 import type { Rgb } from "./palette.ts";
-import { LOGIC_CELL, ROOM_CELLS, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
+import {
+  LOGIC_CELL,
+  ROOM_CELLS,
+  ROOM_HEIGHT,
+  ROOM_WIDTH,
+  type Room,
+  resolveCell,
+} from "./scene.ts";
 import {
   type Colours,
   type Shape,
@@ -335,7 +342,9 @@ export function blitCell(image: Uint8Array, index: number, pixels: Uint8Array): 
 export function renderRoom(room: Room, objects: ShapeTable, episode?: EpisodeClasses): Uint8Array {
   const out = new Uint8Array(SCREEN_WIDTH * SCREEN_HEIGHT);
   for (let i = 0; i < ROOM_CELLS; i++) {
-    blitCell(out, i, renderCell(room.base[i] ?? 0, room.overlay[i] ?? 0, objects, episode));
+    const base = resolveCell(room, room.base[i] ?? 0);
+    const overlay = resolveCell(room, room.overlay[i] ?? 0);
+    blitCell(out, i, renderCell(base, overlay, objects, episode));
   }
   return out;
 }
