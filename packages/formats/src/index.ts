@@ -103,6 +103,7 @@ export {
   SCRIPT_TAG,
   ScriptError,
   ScriptPart,
+  scanScript,
   SymbolKind,
   compileScript,
   disassemble,
@@ -118,8 +119,11 @@ export type {
   CompiledScript,
   Instruction,
   ScriptKeyword,
+  ScriptPiece,
   ScriptSymbol,
 } from "./script.ts";
+export { scriptArgument, scriptDoc, scriptFunctionDoc } from "./script-docs.ts";
+export type { ScriptArgumentKind, ScriptFunctionDoc, ScriptPlace } from "./script-docs.ts";
 export { findResource, readResources, replaceResource, ResourceType } from "./resources.ts";
 export type { PeResource } from "./resources.ts";
 export { cryptScene, SCENE_KEY } from "./scene-crypt.ts";

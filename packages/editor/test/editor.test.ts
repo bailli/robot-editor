@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { Game, LOGIC_CELL } from "@robot/formats";
+import { Game, LOGIC_CELL, compileScript, roomCompiledScript, roomScript } from "@robot/formats";
 
 import { Editor, MAX_RECORD_SLOTS, shownCell, tilesOf } from "../src/editor.ts";
 import { defined, firstDifference, loadGame } from "./game.ts";
@@ -148,5 +148,31 @@ describe("Editor records", () => {
     const used = new Set(game.room(1, 43).records.map((r) => r.slot));
     const lowest = [...Array(MAX_RECORD_SLOTS).keys()].find((k) => !used.has(k));
     expect(editor.addRecord(1, 43, "overlay", free, 5)).toBe(lowest);
+  });
+});
+
+describe("Editor scripts", () => {
+  test("a new script is one undo step, compiled into the room and saved", () => {
+    const editor = new Editor(game);
+    const source = "if (NewRoom)\n   Message(700, 25);\nRoomWest = 42;";
+    expect(editor.setScript(1, 43, source)?.tags).toBeDefined();
+    expect(roomScript(editor.room(1, 43))).toBe(source);
+    expect(editor.isEdited(1, 43)).toBe(true);
+    const saved = new Game(editor.save()).room(1, 43);
+    expect(roomScript(saved)).toBe(source);
+    expect(roomCompiledScript(saved)).toEqual(
+      compileScript(source, { constants: game.scriptConstants(1) }),
+    );
+    editor.undo();
+    expect(roomScript(editor.room(1, 43))).toBe(roomScript(room));
+    expect(editor.isEdited(1, 43)).toBe(false);
+  });
+
+  test("a script that does not compile changes nothing", () => {
+    const editor = new Editor(game);
+    expect(() => editor.setScript(1, 43, "Mesage(1, 0);")).toThrow("unknown function Mesage");
+    expect(editor.canUndo).toBe(false);
+    // the same source is no change
+    expect(editor.setScript(1, 43, roomScript(room))).toBeUndefined();
   });
 });

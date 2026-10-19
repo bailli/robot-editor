@@ -88,9 +88,9 @@ Files in `packages/formats/src`:
   0x54) shows the name of room id − 100 (caves, cellars). The text is cut to one line
   (0x43bfd0: underlines dropped, an empty line ends it; 0x438850 fetches texts without
   line breaks and with `_` as a hard space). Rooms without a name show "Szene <id>"
-  (rooms 1 and 99, episode II's 600s, a few others). The game's own screenshots are
-  named after them (`R1-043-DER START.png`); where it shows the descriptions is not
-  known yet (callers 0x404192, 0x43fe45).
+  (rooms 1 and 99, episode II's 600s, a few others). The game shows the whole text in
+  the banner on entering a room (0x406560; episode III: name and description) and names
+  its own screenshots after the name (`R1-043-DER START.png`).
 - **Sound tables** (`1E06`): `N:SOUND ;note`; the notes name objects by tile type
   (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names.
 
@@ -105,7 +105,9 @@ Files in `packages/formats/src`:
 - **Room tags** (loader 0x438d10, stored at room record +0x14 …): kind 1 = exits byte,
   kind 5 = 8-character name (`BRANDUNG`, `LAVA`, … probably an ambient sound), kind 6 =
   length-prefixed payload (value 1 = script source, 2 = compiled script, 3 = a Unix time
-  1993–2008 in every room, probably when the original editor saved it). Kinds 2, 3, 4 are stored but not understood (see open items).
+  1993–2008 in every room, probably when the original editor saved it). Kind 2 = the
+  room's darkness (Night, 20–100, read by `GetNight`), kind 4 × 10 = points for the
+  first visit (0x42b640); kind 3 is not understood (see open items).
 - **Saving:** `Game.withScene` writes edited rooms back. The original scenes fill their
   resources exactly, so edits usually grow them; a grown resource moves to the end of
   `.rsrc` (the last section), which grows, and the Authenticode signature is dropped.
@@ -185,6 +187,23 @@ Files in `packages/formats/src`:
   `SCRIPT_OBJECT_CLASSES`, read from the compiled scripts and stored **by class** (their
   tile type differs per episode: `O_SAND` is class 39, tile 39 in Junior and 49
   elsewhere).
+- **When scripts run** (0x4392e0…): on entering a room its script runs once from the
+  top (after Newroom, RoomTime = 0, Night and the exits are set). The event functions
+  (`Event(mask)`, `E_Take(type)`, `E_Drop`, `E_Area(n)`, `E_NewRoom(room)`, `E_Slot(n)`)
+  register the code after their call as a handler (0x407b30; 20 handlers at 0x4c5df8)
+  and return 0, so `if (Event(…)) { … return; }` is skipped then. When the event
+  happens (0x408970) the script continues at that block with E_Value set, until
+  `return` (without one it runs on into the code after the block). Events: 1 take,
+  2 drop (filter: tile type, E_Value: the object), 4 walk areas from `SetWarea` (E_Value
+  +n entering, −n leaving), 8 entering the room, 16 slots. Room 1's script is the
+  global one (episode start, game load); its handlers run when no room handler matches.
+- **Functions and variables:** all 62 keywords are described in `script-docs.ts`
+  (decoded from their handlers; a few meanings are guesses, marked there): e.g.
+  `Message(text, time)` shows a text after `time` seconds in the room, `SetObj(obj, x, y,
+mode)` places objects, `Possess(obj)` tests the inventory (a state selects the exact
+  variant), `SetMan` sends the dealer somewhere, `Enigma(n)` awards a solved puzzle once,
+  `Wizzard(…)` places episode I's wizard. RoomTime counts seconds (147 ticks each);
+  Val1…Val8 are free variables kept across rooms.
 - `pnpm robot script E ROOM` shows a script and its disassembly; with a source file and
   an output exe it writes the script into the room (`withRoomScript`).
 
@@ -230,13 +249,18 @@ Supported:
   robots drawn with the episode's `_Aliens` sprites in turn (their look and colours vary
   in the game); a list below the map groups them with name, origin and positions (click
   to select), plus what the script's `RandObj(…)` does with the room's current number
+- the room's script below the map: names explain themselves on hover (functions,
+  game variables, `O_` constants as tiles, message ids as their text, room numbers as
+  room names), calls with plain coordinates (`SetWarea`, `SetObj`, `Area`, …) outline
+  their cells on the map; the bytecode on request; Edit compiles while typing (errors
+  with line and column) and Apply sets source and compiled script as one undo step
 - save: downloads the exe with all edited episodes (warns about unsaved changes on leave)
 
 Not supported (yet):
 
 - painting over logic cells (use the inspector); records are edited field by field, no
   copy/paste of records between rooms
-- editing tags, scripts, exits; adding, deleting or copying rooms
+- editing tags and exits; adding, deleting or copying rooms
 - fill, copy/paste of areas, tile search/filter
 - English UI texts / English descriptions (German only; English exists for Junior and I)
 - remembering the last exe or unsaved work across reloads
@@ -292,16 +316,14 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
    object names are tile types (`scriptConstants`, see room scripts above). The editor's `RandObj` counts
    (`randomPlacement`) look at map cells only; the game also counts actors standing on
    cells (0x407650 via 0x433230), e.g. those from records.
-3. **Scripts.** Compiled scripts are decoded and the compiler reproduces them (see room
-   scripts above); the editor does not edit scripts yet (the CLI can). Open: what most
-   functions do (handlers are known from the keyword table, e.g. `SetObj` 0x407160,
-   `Event` 0x407c20; `Event(mask)` tests the event the script runs for: 1 take, 2 drop,
-   8 entering the room per the comments, 4 and 16 not known), when exactly the runner
-   (0x407fa4) is called, string variables (kind 2, in no original script) and whether
-   `while`, `break` or compound assignments existed in the original language (not used).
-4. **Room tags kind 2, 3, 4** (record +0x14 byte, +0x16 byte, +0x18 dword; values like
-   20/40/60/80, 2/3, 100–2500): meaning unknown; kind 4 × 10 is passed to 0x42b640 on
-   entering (score bonus?).
+3. **Scripts.** Decoded, compiled and editable (see room scripts above). Open: a few
+   functions in detail (`ShiftArea`, what triggers `Area(x, y, size)`, `Phone`'s third
+   argument, `Enigma`'s table at episode +0x1cc), how E_Value (a class id in memory) is
+   compared with tile types, StationBOff/NoSwim, and whether `while`, `break` or compound
+   assignments existed in the original language (no script uses them). Edited scripts
+   are only verified in the game for `SetObj` and `for`.
+4. **Room tag kind 3** (record +0x16 byte, values 2/3): meaning unknown. (Kind 2 is the
+   darkness, kind 4 × 10 the first visit's points, see room tags above.)
 5. **Rooms not reached** by any decoded connection: episode I 228 (runs `Wizzard(…)`),
    episode II 242 (only one-way stairs out), episode III 149 and 3; room 99 is a debug room
    in every episode. Probably entered via game code (e.g. 0x44bd2b takes a room from a
@@ -375,7 +397,9 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
 | 0x4827f0                     | base palette (episode III: 0x477c10)                                           |
 | 0x481170                     | 8×8 font                                                                       |
 | 0x4750d8                     | script keywords (functions and variables)                                      |
-| 0x406da0, 0x4080e0, 0x407fa4 | link a compiled script; run it; the runner                                     |
+| 0x406da0, 0x4080e0, 0x407fa4 | link a compiled script; run it; clear a room's handlers                        |
+| 0x407b30, 0x408970           | register an event handler; raise an event                                      |
+| 0x4394f3                     | entering a room runs its script                                                |
 
 ## Gotchas
 

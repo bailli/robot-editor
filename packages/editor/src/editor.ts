@@ -4,7 +4,10 @@ import {
   type LogicRecord,
   ROOM_CELLS,
   type Room,
+  type RoomTag,
   recordCell,
+  roomScript,
+  withRoomScript,
 } from "@robot/formats";
 
 export type Layer = "base" | "overlay";
@@ -23,6 +26,8 @@ export interface Edit {
   changes: CellChange[];
   /** The room's logic records before and after (record edits only). */
   records?: { before: readonly LogicRecord[]; after: readonly LogicRecord[] };
+  /** The room's tags before and after (script edits only). */
+  tags?: { before: readonly RoomTag[]; after: readonly RoomTag[] };
 }
 
 /** Logic record slots the game can address (0x432fd0 looks up slots below 200). */
@@ -74,7 +79,8 @@ export class Editor {
       room !== original &&
       (!sameCells(room.base, original.base) ||
         !sameCells(room.overlay, original.overlay) ||
-        !sameRecords(room.records, original.records))
+        !sameRecords(room.records, original.records) ||
+        !sameTags(room.tags, original.tags))
     );
   }
 
@@ -175,6 +181,33 @@ export class Editor {
     return this.commit({ episode, room: roomId, layer, changes }, room, records);
   }
 
+  /**
+   * Gives the room the script `source` (empty: no script), compiled with the episode's
+   * constants and checked against the game's keywords; one undo step. Throws a
+   * ScriptError if it does not compile.
+   */
+  setScript(episode: number, roomId: number, source: string): Edit | undefined {
+    this.endStroke();
+    const room = this.room(episode, roomId);
+    if (source === roomScript(room)) return undefined;
+    const options = {
+      constants: this.game.scriptConstants(episode),
+      keywords: this.game.scriptKeywords(),
+    };
+    const tags = withRoomScript(room, source, options).tags;
+    const step: Edit = {
+      episode,
+      room: roomId,
+      layer: "base",
+      changes: [],
+      tags: { before: room.tags, after: tags },
+    };
+    this.apply(step, after);
+    this.undoStack.push(step);
+    this.redoStack.length = 0;
+    return step;
+  }
+
   get canUndo(): boolean {
     return this.undoStack.length > 0;
   }
@@ -219,6 +252,7 @@ export class Editor {
     if (edit.records) {
       room.records = [...(value === before ? edit.records.before : edit.records.after)];
     }
+    if (edit.tags) room.tags = [...(value === before ? edit.tags.before : edit.tags.after)];
   }
 
   /** Applies a record edit as one undo step. */
@@ -247,6 +281,7 @@ export class Editor {
       base: room.base.slice(),
       overlay: room.overlay.slice(),
       records: [...room.records],
+      tags: [...room.tags],
     };
     rooms[i] = copy;
     return copy;
@@ -263,6 +298,20 @@ function sameRecords(a: readonly LogicRecord[], b: readonly LogicRecord[]): bool
   return (
     a.length === b.length &&
     a.every((r, i) => r.slot === b[i]?.slot && r.data.every((v, k) => v === b[i]?.data[k]))
+  );
+}
+
+function sameTags(a: readonly RoomTag[], b: readonly RoomTag[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((t, i) => {
+      const u = b[i];
+      if (u.kind !== t.kind || u.value !== t.value) return false;
+      return (
+        (t.data ?? []).length === (u.data ?? []).length &&
+        (t.data ?? []).every((v, k) => v === u.data?.[k])
+      );
+    })
   );
 }
 

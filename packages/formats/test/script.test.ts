@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 
 import { roomScript } from "../src/exits.ts";
 import { EPISODES, Game } from "../src/game.ts";
+import { scriptArgument, scriptDoc } from "../src/script-docs.ts";
 import {
   Op,
   compileScript,
@@ -97,7 +98,9 @@ test("the compiler rejects what the game would not run", () => {
   expect(compile("Foo = 1;")).toThrow("unknown variable Foo");
   expect(compile("RandObj(O_NOTHING, 1, 2);")).toThrow("unknown constant O_NOTHING");
   expect(compile("if (Score > 1 Message(1, 0);")).toThrow('expected ")" at line 1, column 15');
-  expect(compile("Message(1, 0); Message(1);")).toThrow("Message called with 1 and 2 arguments");
+  expect(compile("Message(1, 0); Message(1, 2, 3);")).toThrow(
+    "Message has 3 arguments here, 2 before",
+  );
   // local variables start in lower case
   expect(compile("count = Score;")).not.toThrow();
 });
@@ -116,4 +119,18 @@ test("withRoomScript writes source and compiled script where the game's scenes h
   const added = withRoomScript(withRoomScript(room, ""), "Score = 1;", { keywords });
   expect(added.tags.map((t) => `${t.kind}/${t.value}`)).toEqual(["1/32", "6/1", "6/2", "6/3"]);
   expect(roomScript(added)).toBe("Score = 1;");
+});
+
+test("every keyword of the game is described", () => {
+  for (const k of keywords)
+    expect(scriptDoc(k.name, keywords), k.name).not.toMatch(/not decoded yet|a game variable \(/);
+  expect(scriptDoc("Area", keywords)?.split("\n")).toEqual([
+    "Area(x, y, size): a square of cells whose rings rotate (e.g. episode I's endless labyrinth). (0x407cb0)",
+    "Area(x, y, size, key): a rotating square (up to 4) turned by a switch whose key matches. (0x407cf0)",
+  ]);
+  expect(scriptDoc("score", keywords)).toBe("Score: the points (dword at 0x4fe2f0)");
+  expect(scriptDoc("count", keywords)).toBeUndefined();
+  expect(scriptArgument("Message", 0)).toBe("text");
+  expect(scriptArgument("SetMan", 3)).toBe("room");
+  expect(scriptArgument("Message", 1)).toBeUndefined();
 });

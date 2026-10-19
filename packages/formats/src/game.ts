@@ -54,6 +54,8 @@ export class Game {
   readonly resources: PeResource[];
   private readonly episodes = new Map<number, Episode>();
   private readonly texts = new Map<number, Texts | undefined>();
+  private readonly constants = new Map<number, ReadonlyMap<string, number>>();
+  private keywords: readonly ScriptKeyword[] | undefined;
 
   constructor(data: Uint8Array) {
     this.image = parsePe(data);
@@ -123,13 +125,19 @@ export class Game {
   }
 
   /** The names room scripts can use: the game's functions and variables. */
-  scriptKeywords(): ScriptKeyword[] {
-    return readScriptKeywords(this.image);
+  scriptKeywords(): readonly ScriptKeyword[] {
+    this.keywords ??= readScriptKeywords(this.image);
+    return this.keywords;
   }
 
   /** The episode's script constants ("O_KEY" -> tile type, see scriptConstants). */
-  scriptConstants(episode: number): Map<string, number> {
-    return scriptConstants(this.objectNames(episode), this.episode(episode).classes);
+  scriptConstants(episode: number): ReadonlyMap<string, number> {
+    let constants = this.constants.get(episode);
+    if (!constants) {
+      constants = scriptConstants(this.objectNames(episode), this.episode(episode).classes);
+      this.constants.set(episode, constants);
+    }
+    return constants;
   }
 
   private decode(data: Uint8Array): string {

@@ -304,48 +304,63 @@ type Token =
   | { kind: "punct"; text: string; at: number }
   | { kind: "end"; at: number };
 
-const PUNCTUATION = /&&|\|\||==|!=|<=|>=|<<|>>|[-+*/%&|^~!<>=(){};,?:]/y;
+/** A piece of script source, for showing it (scanScript covers every character). */
+export interface ScriptPiece {
+  kind: "space" | "comment" | "name" | "number" | "string" | "punct" | "invalid";
+  text: string;
+  at: number;
+}
+
+const PIECES: readonly (readonly [ScriptPiece["kind"], RegExp])[] = [
+  ["space", /[\s\0]+/y],
+  ["comment", /\/\*[\s\S]*?(?:\*\/|$)|\/\/[^\n]*/y],
+  ["name", /[A-Za-z_]\w*/y],
+  ["number", /0[xX][0-9a-fA-F]+|\d+/y],
+  ["string", /"[^"]*"?/y],
+  ["punct", /&&|\|\||==|!=|<=|>=|<<|>>|[-+*/%&|^~!<>=(){};,?:]/y],
+];
+
+/** Splits source into pieces; unknown characters become "invalid" pieces. */
+export function scanScript(source: string): ScriptPiece[] {
+  const pieces: ScriptPiece[] = [];
+  let i = 0;
+  while (i < source.length) {
+    let text: string | undefined;
+    let kind: ScriptPiece["kind"] = "invalid";
+    for (const [k, pattern] of PIECES) {
+      pattern.lastIndex = i;
+      text = pattern.exec(source)?.[0];
+      if (text) {
+        kind = k;
+        break;
+      }
+    }
+    text ??= source[i];
+    pieces.push({ kind, text, at: i });
+    i += text.length;
+  }
+  return pieces;
+}
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
-  let i = 0;
-  const fail = (message: string): never => {
-    throw new ScriptError(`${message} at ${position(source, i)}`);
+  const fail = (message: string, at: number): never => {
+    throw new ScriptError(`${message} at ${position(source, at)}`);
   };
-  while (i < source.length) {
-    const c = source[i];
-    if (/\s|\0/.test(c)) {
-      i++;
-    } else if (source.startsWith("/*", i)) {
-      const end = source.indexOf("*/", i + 2);
-      if (end < 0) fail("unterminated comment");
-      i = end + 2;
-    } else if (source.startsWith("//", i)) {
-      const end = source.indexOf("\n", i);
-      i = end < 0 ? source.length : end;
-    } else if (/[A-Za-z_]/.test(c)) {
-      const text = /[A-Za-z_]\w*/y;
-      text.lastIndex = i;
-      const m = text.exec(source)?.[0] ?? "";
-      tokens.push({ kind: "name", text: m, at: i });
-      i += m.length;
-    } else if (/\d/.test(c)) {
-      const number = /0[xX][0-9a-fA-F]+|\d+/y;
-      number.lastIndex = i;
-      const m = number.exec(source)?.[0] ?? "";
-      tokens.push({ kind: "number", value: Number(m), at: i });
-      i += m.length;
-    } else if (c === '"') {
-      const end = source.indexOf('"', i + 1);
-      if (end < 0) fail("unterminated string");
-      tokens.push({ kind: "string", text: source.slice(i + 1, end), at: i });
-      i = end + 1;
+  for (const { kind, text, at } of scanScript(source)) {
+    if (kind === "space") continue;
+    if (kind === "comment") {
+      if (text.startsWith("/*") && (text.length < 4 || !text.endsWith("*/")))
+        fail("unterminated comment", at);
+    } else if (kind === "string") {
+      if (text.length < 2 || !text.endsWith('"')) fail("unterminated string", at);
+      tokens.push({ kind, text: text.slice(1, -1), at });
+    } else if (kind === "number") {
+      tokens.push({ kind, value: Number(text), at });
+    } else if (kind === "invalid") {
+      fail(`unexpected ${JSON.stringify(text)}`, at);
     } else {
-      PUNCTUATION.lastIndex = i;
-      const m = PUNCTUATION.exec(source)?.[0];
-      if (!m) fail(`unexpected ${JSON.stringify(c)}`);
-      tokens.push({ kind: "punct", text: m ?? "", at: i });
-      i += m?.length ?? 1;
+      tokens.push({ kind, text, at });
     }
   }
   tokens.push({ kind: "end", at: source.length });
@@ -469,7 +484,7 @@ export function compileScript(source: string, options: CompileOptions = {}): Uin
         const entry = symbols[index];
         if (entry.args < 0) entry.args = args;
         else if (entry.args !== args)
-          fail(`${token.text} called with ${args} and ${entry.args} arguments`, token);
+          fail(`${token.text} has ${args} arguments here, ${entry.args} before`, token);
         emit(Op.CALL, index);
         emit(Op.DROP, args);
         return;

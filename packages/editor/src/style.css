@@ -411,3 +411,93 @@ canvas.cell {
   border-color: var(--accent);
   outline: 2px solid var(--accent);
 }
+
+.script-view {
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+  max-width: 1280px;
+}
+
+.script-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.script-bar h3 {
+  font-size: 14px;
+  margin: 0;
+}
+
+.script-source,
+.script-code,
+.script-edit {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font:
+    13px/1.45 ui-monospace,
+    monospace;
+  overflow: auto;
+  white-space: pre;
+}
+
+.script-edit {
+  width: 100%;
+  resize: vertical;
+}
+
+.script-code {
+  max-height: 24em;
+  color: var(--muted);
+}
+
+.script-source [title] {
+  cursor: help;
+}
+
+.script-source .statement {
+  font-weight: 600;
+}
+
+.script-source .function {
+  color: var(--accent);
+}
+
+.script-source .variable {
+  color: var(--edited);
+}
+
+.script-source .constant,
+.script-source .number[title] {
+  text-decoration: underline dotted;
+}
+
+.script-source .comment {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.script-source .invalid {
+  color: var(--error);
+}
+
+.script-verdict {
+  margin: 0;
+  color: var(--muted);
+}
+
+.script-verdict.error {
+  color: var(--error);
+}
+
+.script-info {
+  margin: 0;
+  min-height: 2.8em;
+  color: var(--muted);
+  white-space: pre-line;
+}

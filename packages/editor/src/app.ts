@@ -8,18 +8,26 @@ import {
   ROOM_WIDTH,
   type RoomActor,
   START_ROOMS,
+  compileScript,
   describeRecord,
+  disassemble,
+  displayText,
+  parseCompiledScript,
   randomPlacement,
   roomActors,
   roomScript,
   scriptActors,
+  scriptArgument,
+  scriptDoc,
+  scriptFunctionDoc,
 } from "@robot/formats";
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
 import { type Edit, Editor, type Layer, tilesOf } from "./editor.ts";
 import { type Connections, ExitsView, connections, fixedExit } from "./exits-view.ts";
 import { RecordView } from "./record-view.ts";
-import { CellCache, RoomView, cellCanvas, spriteCanvas } from "./room-view.ts";
+import { CellCache, type Highlight, RoomView, cellCanvas, spriteCanvas } from "./room-view.ts";
+import { ScriptView } from "./script-view.ts";
 import { TileNames } from "./tile-info.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
@@ -38,6 +46,18 @@ function h<K extends keyof HTMLElementTagNameMap>(
   }
   element.append(...children);
   return element;
+}
+
+/** The cells or areas a script call names, where its arguments are plain numbers. */
+export function scriptPlaces(fn: string, args: readonly (number | undefined)[]): Highlight[] {
+  const places = scriptFunctionDoc(fn, args.length)?.places ?? [];
+  return places.flatMap((place) => {
+    const [x, y] = [args[place.x], args[place.y]];
+    const w = place.w === undefined ? 1 : args[place.w];
+    const h = place.h === undefined ? 1 : args[place.h];
+    if (x === undefined || y === undefined || w === undefined || h === undefined) return [];
+    return [{ x, y, w, h }];
+  });
 }
 
 const ARROWS: Readonly<Partial<Record<string, Direction>>> = {
@@ -121,6 +141,26 @@ export class App {
   private readonly tileGrid = h("div", { class: "tile-grid" });
   private readonly layerInputs = new Map<Layer, HTMLInputElement>();
   private readonly toolInputs = new Map<"paint" | "inspect", HTMLInputElement>();
+  readonly scriptView = new ScriptView({
+    explain: (name) => this.explain(name),
+    argument: (fn, index, value) => this.explainArgument(fn, index, value),
+    compile: (source) => {
+      const game = this.need().game;
+      const options = {
+        constants: game.scriptConstants(this.episode),
+        keywords: game.scriptKeywords(),
+      };
+      return disassemble(parseCompiledScript(compileScript(source, options)));
+    },
+    apply: (source) => {
+      this.need().setScript(this.episode, this.roomId, source);
+      this.showRoom(this.roomId);
+      this.refreshButtons();
+    },
+    hover: (fn, args) => {
+      this.view.setHighlights(fn === undefined ? [] : scriptPlaces(fn, args));
+    },
+  });
   readonly recordView = new RecordView({
     change: (data) => {
       this.recordEdit((editor, room, slot) => editor.setRecord(this.episode, room, slot, data));
@@ -202,6 +242,7 @@ export class App {
         this.cellText,
         this.recordView.element,
         this.actorsView.element,
+        this.scriptView.element,
       ),
       h(
         "aside",
@@ -331,6 +372,7 @@ export class App {
       editor.game.episode(this.episode).classes,
     );
     this.exitsView.show(this.connections);
+    this.scriptView.show(roomScript(room), `${this.episode} ${id}`);
     this.refreshActors();
     this.refreshRoomList();
     const shown = `${this.episode} ${id}`;
@@ -586,6 +628,7 @@ export class App {
         if (
           !this.editor ||
           target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
           target instanceof HTMLSelectElement
         ) {
           return;
@@ -718,7 +761,7 @@ export class App {
     const editor = this.need();
     if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
     else if (edit.room !== this.roomId) this.showRoom(edit.room);
-    else if (edit.records) {
+    else if (edit.records || edit.tags) {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);
       if (this.selected) this.select(this.selected.index);
@@ -848,6 +891,29 @@ export class App {
     return this.layer === "base"
       ? cellCanvas(this.cache(), value)
       : cellCanvas(this.cache(), 0, value);
+  }
+
+  /** What a name in a script means: a function, a game variable or an object. */
+  private explain(name: string): string | undefined {
+    const game = this.need().game;
+    const type = game.scriptConstants(this.episode).get(name);
+    if (type !== undefined) {
+      const what = this.names().summary(type);
+      return `tile type ${type} (0x${type.toString(16)})${what ? `: ${what}` : ""}`;
+    }
+    return scriptDoc(name, game.scriptKeywords());
+  }
+
+  /** What a number passed to a script function refers to (a text, a room), if known. */
+  private explainArgument(fn: string, index: number, value: number): string | undefined {
+    const kind = scriptArgument(fn, index);
+    const game = this.need().game;
+    if (kind === "text") {
+      const text = game.episodeTexts(this.episode)?.entries.get(value);
+      return text ? text.map(displayText).join("\n– or –\n") : `text ${value} (missing)`;
+    }
+    if (kind === "room") return this.roomLabel(this.episode, value);
+    return undefined;
   }
 
   private names(): TileNames {

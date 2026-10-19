@@ -42,6 +42,14 @@ export class CellCache {
   }
 }
 
+/** A rectangle of cells to outline: column, row, width and height in cells. */
+export interface Highlight {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /**
  * A room on two stacked canvases, scaled by CSS to the available width: the room at its
  * native 640x348 and, at `zoom` times that, the grid, logic cell markers and the hovered
@@ -58,6 +66,7 @@ export class RoomView {
   private grid = false;
   private actors: readonly RoomActor[] = [];
   private areas: readonly PlacementArea[] = [];
+  private highlights: readonly Highlight[] = [];
   private actorSprite: (actor: RoomActor, n: number) => HTMLCanvasElement | undefined = () =>
     undefined;
 
@@ -127,6 +136,12 @@ export class RoomView {
   /** Outlines areas, e.g. where RandObj places robots, labelled by how the hero enters. */
   setAreas(areas: readonly PlacementArea[]): void {
     this.areas = areas;
+    this.drawMarks();
+  }
+
+  /** Outlines cells or areas a script names (empty: none). */
+  setHighlights(highlights: readonly Highlight[]): void {
+    this.highlights = highlights;
     this.drawMarks();
   }
 
@@ -218,6 +233,13 @@ export class RoomView {
       g.textAlign = right ? "right" : "left";
       g.fillText(label, right ? x + aw - 6 : x + 6, bottom ? y + ah - 8 : y + 16);
       g.textAlign = "left";
+    }
+    for (const area of this.highlights) {
+      g.fillStyle = "rgb(0 110 255 / 0.3)";
+      g.fillRect(area.x * w, area.y * h, area.w * w, area.h * h);
+      g.strokeStyle = "rgb(0 90 230)";
+      g.lineWidth = 3;
+      g.strokeRect(area.x * w + 1.5, area.y * h + 1.5, area.w * w - 3, area.h * h - 3);
     }
     if (this.selected !== undefined) {
       g.strokeStyle = "rgb(255 140 0)";

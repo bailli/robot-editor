@@ -7,7 +7,9 @@ import {
   ROOM_WIDTH,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
+  displayText,
   renderRoom,
+  roomScript,
   toRgba,
 } from "@robot/formats";
 
@@ -390,4 +392,38 @@ test("hovering a RandObj line shows where robots are placed", async () => {
   await userEvent.unhover(row);
   app.view.setHover(undefined); // the mouse may now be over the room
   expect(firstDifference(app.view.pixelsOfMarks(), before)).toBe(-1);
+});
+
+const scriptView = () => page.getByRole("region", { name: "Script" });
+
+test("the script explains itself and can be edited", async () => {
+  // episode I room 43: if(NewRoom) Message(700, 25); ...
+  const source = document.querySelector(".script-source");
+  expect(source?.textContent).toContain("Message(700, 25)");
+  const message = [...(source?.querySelectorAll(".function") ?? [])].find(
+    (e) => e.textContent === "Message",
+  );
+  expect(message?.getAttribute("title")).toMatch(/^Message\(text, time\)/);
+  const number = [...(source?.querySelectorAll(".number") ?? [])].find(
+    (e) => e.textContent === "700",
+  );
+  expect(number?.getAttribute("title")).toBe(
+    game.episodeTexts(1)?.entries.get(700)?.map(displayText).join("\n– or –\n"),
+  );
+  await scriptView().getByRole("button", { name: "Bytecode" }).click();
+  expect(document.querySelector(".script-code")?.textContent).toMatch(/call Message/);
+
+  await scriptView().getByRole("button", { name: "Edit" }).click();
+  const area = defined(document.querySelector("textarea") ?? undefined);
+  await userEvent.fill(area, "RoomWest = 42;\nMesage(1, 0);");
+  expect(document.querySelector(".script-verdict")?.textContent).toMatch(/unknown function Mesage/);
+  await expect.element(scriptView().getByRole("button", { name: "Apply" })).toBeDisabled();
+  await userEvent.fill(area, "RoomWest = 42;");
+  expect(document.querySelector(".script-verdict")?.textContent).toBe("Compiles.");
+  await scriptView().getByRole("button", { name: "Apply" }).click();
+  expect(roomScript(defined(app.editor).room(1, 43))).toBe("RoomWest = 42;");
+  // the exits follow the script; undo brings the old script back
+  expect(document.querySelector('[data-direction="west"]')?.textContent).toBe("← West—42");
+  app.undo();
+  expect(document.querySelector(".script-source")?.textContent).toContain("Message(700, 25)");
 });
