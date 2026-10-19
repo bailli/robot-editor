@@ -20,6 +20,7 @@ import {
   scriptArgument,
   scriptDoc,
   scriptFunctionDoc,
+  scriptTextVariants,
 } from "@robot/formats";
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
@@ -143,7 +144,7 @@ export class App {
   private readonly toolInputs = new Map<"paint" | "inspect", HTMLInputElement>();
   readonly scriptView = new ScriptView({
     explain: (name) => this.explain(name),
-    argument: (fn, index, value) => this.explainArgument(fn, index, value),
+    argument: (fn, index, args) => this.explainArgument(fn, index, args),
     compile: (source) => {
       const game = this.need().game;
       const options = {
@@ -905,15 +906,29 @@ export class App {
   }
 
   /** What a number passed to a script function refers to (a text, a room), if known. */
-  private explainArgument(fn: string, index: number, value: number): string | undefined {
+  private explainArgument(
+    fn: string,
+    index: number,
+    args: readonly (number | undefined)[],
+  ): string | undefined {
+    const value = args[index];
+    if (value === undefined) return undefined;
     const kind = scriptArgument(fn, index);
     const game = this.need().game;
-    if (kind === "text") {
-      const text = game.episodeTexts(this.episode)?.entries.get(value);
-      return text ? text.map(displayText).join("\n– or –\n") : `text ${value} (missing)`;
-    }
     if (kind === "room") return this.roomLabel(this.episode, value);
-    return undefined;
+    if (kind !== "text") return undefined;
+    const variants = game.episodeTexts(this.episode)?.entries.get(value)?.map(displayText);
+    if (!variants) return `text ${value} (missing)`;
+    if (variants.length === 1) return variants[0];
+    const shown = scriptTextVariants(fn, args);
+    if (shown === "random") return `One of these at random:\n${variants.join("\n– or –\n")}`;
+    const pages = variants.map((v, i) => `[${i + 1}/${variants.length}] ${v}`).join("\n\n");
+    if (shown === "pages") return `${variants.length} pages, one after another:\n${pages}`;
+    const how =
+      fn.toUpperCase() === "MESSAGE"
+        ? "pages one after another, or one of them at random if the time is 0"
+        : "how the game shows them is not decoded";
+    return `${variants.length} parts (${how}):\n${pages}`;
   }
 
   private names(): TileNames {

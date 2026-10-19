@@ -3,8 +3,11 @@ import { type ScriptPiece, scanScript } from "@robot/formats";
 export interface ScriptViewEvents {
   /** What a name means (function, game variable, constant), undefined if unknown. */
   explain(name: string): string | undefined;
-  /** What argument `index` (0 = first) of a call to `fn` with value `value` refers to. */
-  argument(fn: string, index: number, value: number): string | undefined;
+  /**
+   * What argument `index` (0 = first) of a call to `fn` refers to; `args` are the call's
+   * arguments where they are plain numbers (the one asked about always is).
+   */
+  argument(fn: string, index: number, args: readonly (number | undefined)[]): string | undefined;
   /** Compiles a source; the disassembly, or throws a ScriptError. */
   compile(source: string): string;
   /** Gives the room this source (one undo step); throws a ScriptError. */
@@ -64,7 +67,7 @@ export function markUp(source: string, events: ScriptViewEvents): Shown[] {
   const index = new Map(code.map((p, i) => [p, i]));
   const text = (i: number) => code[i]?.text;
   // one frame per open parenthesis: the function it calls ("" for grouping) and argument
-  const frames: { fn: string; arg: number }[] = [];
+  const frames: { fn: string; arg: number; open: number }[] = [];
   return pieces.map((piece) => {
     const shown: Shown = { piece, className: piece.kind };
     const i = index.get(piece) ?? -1;
@@ -85,7 +88,7 @@ export function markUp(source: string, events: ScriptViewEvents): Shown[] {
     } else if (piece.text === "(") {
       const before = i > 0 ? code[i - 1] : undefined;
       const fn = before?.kind === "name" && !STATEMENTS.has(before.text) ? before.text : "";
-      frames.push({ fn, arg: 0 });
+      frames.push({ fn, arg: 0, open: i });
     } else if (piece.text === ")") {
       frames.pop();
     } else if (piece.text === ",") {
@@ -99,8 +102,7 @@ export function markUp(source: string, events: ScriptViewEvents): Shown[] {
         (text(start - 1) === "(" || text(start - 1) === ",") &&
         (text(i + 1) === ")" || text(i + 1) === ",");
       if (frame?.fn && whole) {
-        const value = Number(piece.text) * (negative ? -1 : 1);
-        const title = events.argument(frame.fn, frame.arg, value);
+        const title = events.argument(frame.fn, frame.arg, callArguments(code, frame.open));
         if (title) shown.title = title;
       }
     }

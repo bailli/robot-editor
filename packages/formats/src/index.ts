@@ -122,7 +122,7 @@ export type {
   ScriptPiece,
   ScriptSymbol,
 } from "./script.ts";
-export { scriptArgument, scriptDoc, scriptFunctionDoc } from "./script-docs.ts";
+export { scriptArgument, scriptDoc, scriptFunctionDoc, scriptTextVariants } from "./script-docs.ts";
 export type { ScriptArgumentKind, ScriptFunctionDoc, ScriptPlace } from "./script-docs.ts";
 export { findResource, readResources, replaceResource, ResourceType } from "./resources.ts";
 export type { PeResource } from "./resources.ts";

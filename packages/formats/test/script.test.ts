@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 
 import { roomScript } from "../src/exits.ts";
 import { EPISODES, Game } from "../src/game.ts";
-import { scriptArgument, scriptDoc } from "../src/script-docs.ts";
+import { scriptArgument, scriptDoc, scriptTextVariants } from "../src/script-docs.ts";
 import {
   Op,
   compileScript,
@@ -133,4 +133,7 @@ test("every keyword of the game is described", () => {
   expect(scriptArgument("Message", 0)).toBe("text");
   expect(scriptArgument("SetMan", 3)).toBe("room");
   expect(scriptArgument("Message", 1)).toBeUndefined();
+  expect(scriptTextVariants("Message", [700, 25])).toBe("pages");
+  expect(scriptTextVariants("Message", [700, 0])).toBe("random");
+  expect(scriptTextVariants("Message", [700, undefined])).toBeUndefined();
 });

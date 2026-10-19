@@ -407,8 +407,11 @@ test("the script explains itself and can be edited", async () => {
   const number = [...(source?.querySelectorAll(".number") ?? [])].find(
     (e) => e.textContent === "700",
   );
+  // Message with a time shows all of the text's variants as pages, one after another
+  const pages = defined(game.episodeTexts(1)?.entries.get(700)).map(displayText);
+  expect(pages.length).toBe(3);
   expect(number?.getAttribute("title")).toBe(
-    game.episodeTexts(1)?.entries.get(700)?.map(displayText).join("\n– or –\n"),
+    `3 pages, one after another:\n${pages.map((p, i) => `[${i + 1}/3] ${p}`).join("\n\n")}`,
   );
   await scriptView().getByRole("button", { name: "Bytecode" }).click();
   expect(document.querySelector(".script-code")?.textContent).toMatch(/call Message/);

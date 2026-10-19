@@ -51,8 +51,9 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
     args: ["text", "time"],
     kinds: ["text"],
     doc:
-      "shows message `text` (a random variant) at once if time is 0, else once the hero " +
-      "has been `time` seconds in the room (nothing if that time has passed). A text " +
+      "time 0: shows one of the text's variants (|) at random at once (0x406450); else, " +
+      "once the hero has been `time` seconds in the room (nothing if that time has " +
+      "passed), all variants as pages one after another (Enter, arrows; 0x405fe0). A text " +
       "starting with ! opens a different box.",
   },
   ARROWS: {
@@ -235,6 +236,21 @@ const VARIABLES: Readonly<Partial<Record<string, string>>> = {
   STATIONBOFF: "an episode IV flag (probably: power station B is off)",
   NOSWIM: "an episode III/IV flag (probably: swimming is not possible)",
 };
+
+/**
+ * How the game shows a text with several variants (separated by |) that a call names:
+ * as pages one after another, one of them at random, or not known (also when it depends
+ * on an argument that is not a plain number).
+ */
+export function scriptTextVariants(
+  fn: string,
+  args: readonly (number | undefined)[],
+): "pages" | "random" | undefined {
+  if (fn.toUpperCase() !== "MESSAGE") return undefined;
+  const time = args[1];
+  if (time === undefined) return undefined;
+  return time === 0 ? "random" : "pages";
+}
 
 /** The function's documentation, by name and number of arguments. */
 export function scriptFunctionDoc(name: string, args?: number): ScriptFunctionDoc | undefined {

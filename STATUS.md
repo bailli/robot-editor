@@ -200,7 +200,8 @@ Files in `packages/formats/src`:
   global one (episode start, game load); its handlers run when no room handler matches.
 - **Functions and variables:** all 62 keywords are described in `script-docs.ts`
   (decoded from their handlers; a few meanings are guesses, marked there): e.g.
-  `Message(text, time)` shows a text after `time` seconds in the room, `SetObj(obj, x, y,
+  `Message(text, time)` shows a text after `time` seconds in the room (all its `|`
+  variants as pages one after another; with time 0 at once and one variant at random), `SetObj(obj, x, y,
 mode)` places objects, `Possess(obj)` tests the inventory (a state selects the exact
   variant), `SetMan` sends the dealer somewhere, `Enigma(n)` awards a solved puzzle once,
   `Wizzard(…)` places episode I's wizard. RoomTime counts seconds (147 ticks each);

@@ -5,7 +5,7 @@ import { type ScriptViewEvents, markUp } from "../src/script-view.ts";
 
 const events: ScriptViewEvents = {
   explain: (name) => (name === "Message" ? "Message(text, time)" : undefined),
-  argument: (fn, index, value) => `${fn} ${index} ${value}`,
+  argument: (fn, index, args) => `${fn} ${index} ${args.map(String).join(" ")}`,
   compile: () => "",
   apply: () => undefined,
   hover: () => undefined,
@@ -19,7 +19,8 @@ test("markUp names what each piece is and explains whole number arguments", () =
   expect(by("Message")).toMatchObject({ className: "function", title: "Message(text, time)" });
   expect(by("Message")?.call).toEqual({ fn: "Message", args: [700, undefined] });
   expect(by("t")?.className).toBe("local");
-  expect(by("700")?.title).toBe("Message 0 700");
+  // the call's other arguments come along (undefined where not a plain number)
+  expect(by("700")?.title).toBe("Message 0 700 undefined");
   // part of an expression: not explained
   expect(by("1")?.title).toBeUndefined();
   expect(by("/* hi */")?.className).toBe("comment");
