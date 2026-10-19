@@ -161,8 +161,11 @@ Files in `packages/formats/src`:
   works like 2 but no original uses it.
 - **Scripts** (plain text, C-like) change `RoomNorth`…`RoomWest` and `BusWest`/`BusEast`
   (bus line in episode II); parsed with fixed vs. state-dependent marking.
-  `Teleport(room, x, y)` does not move the hero: it sets the point returning teleporters
-  (records with flag 0x02) lead to (0x4fe358/35a/35b, 0x407900).
+  `Teleport(room, x, y)` does not move the hero: it stores a point (0x4fe358/35a/35b,
+  0x407900) that replaces the target of teleporters whose record has flag 0x02 ("script
+  may set the target", 0x44ccb1); room 0 gives them their own target back. A teleporter
+  record's byte 8, if not 0, shows message 1200 + it when used (episode III: texts
+  1201–1207, "Du betrittst einen engen Gang…").
 - **Passages ±100** ("further in": building interiors, caves): door in = class 98 (tile
   0x53, state 6/7, a roof's door) → +100; door out = class 105 (0x5a) → −100; stairs =
   class 71 (0x3d), state bit 0 clear → +100 (down), set → −100 (up). All have their
@@ -349,7 +352,7 @@ Right` (`--debug DIR` saves every step); the game's screenshot file name tells t
    (0x4fe30b/0x4fe30c, set when walking off an edge, 0x44c5a0: entering from the west
    (25, 14), east (15, 14), north (20, 22), south (20, 7); the bus (20, 14); teleporters
    and stairs keep the old one), other objects anywhere. The script's
-   `Teleport(room, x, y)` only sets where returning teleporters lead (0x407900). Script
+   `Teleport(room, x, y)` only redirects teleporters that allow it (0x407900). Script
    object names are tile types (`scriptConstants`, see room scripts above). The editor's `RandObj` counts
    (`randomPlacement`) look at map cells only; the game also counts actors standing on
    cells (0x407650 via 0x433230), e.g. those from records.

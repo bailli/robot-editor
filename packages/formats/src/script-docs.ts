@@ -165,7 +165,10 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
   TELEPORT: {
     args: ["room", "x", "y"],
     kinds: ["room"],
-    doc: "sets where returning teleporters lead (does not move the hero).",
+    doc:
+      "redirects the teleporters whose record allows a script target (flag 0x02) to `room` " +
+      "at (x, y), from now on; room 0 gives them their own target back. Does not move the " +
+      "hero.",
   },
   SETNIGHT: { args: ["level"], doc: "sets the darkness (Night, 0–100) and redraws the room." },
   GETNIGHT: {

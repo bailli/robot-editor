@@ -209,7 +209,7 @@ test("oracles and teleporters lead to rooms of their episode", () => {
       for (const t of roomTeleports(room)) {
         const at = t.cell === undefined ? "-" : `(${t.cell % 40},${Math.floor(t.cell / 40)})`;
         const line = `${episode} ${room.id} ${at} ${t.kind} -> ${t.room} (${t.x},${t.y})`;
-        listed.push(line + (t.returns ? " returns" : ""));
+        listed.push(line + (t.scriptTarget ? " script target" : ""));
         assert.ok(ids.has(t.room), `${line}: no such room`);
         assert.ok(t.x < 40 && t.y < 29, `${line}: outside the room`);
       }

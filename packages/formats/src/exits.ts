@@ -13,7 +13,7 @@ import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
  *   1  room 2, the episode's "outside" (episode III: the open sea)
  *   2  no exit (3 likewise)
  * Room scripts can then change the four variables (`RoomEast = 45;`, often depending on
- * score or items), set where returning teleporters lead with Teleport(room, x, y) (it
+ * score or items), redirect teleporters that allow it with Teleport(room, x, y) (it
  * only stores that point, 0x407900), or set where the bus goes
  * (BusWest, BusEast: the bus object takes the hero there, 0x44a831); see
  * roomScriptExits.
@@ -40,8 +40,9 @@ import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
  *   type 12  an oracle (0x412ae0): teleports the hero who walks north onto it; walked
  *            onto otherwise it gives a hint or an item, or kills
  *   type 13  a teleporter, taken when the hero steps onto its cell (0x44cc30); a non-zero
- *            byte at offset 8 shows message 0x4b0 + it, and with bit 1 of offset 1 set
- *            the hero returns to a point saved at run time instead, if there is one
+ *            byte at offset 8 shows message 1200 + it, and with bit 1 of offset 1 set
+ *            the script's Teleport(room, x, y) replaces its target once a script called
+ *            it with a room other than 0 (0x44ccb1)
  */
 
 export const DIRECTIONS = ["north", "south", "west", "east"] as const;
@@ -94,8 +95,8 @@ export interface RecordTeleport {
   room: number;
   x: number;
   y: number;
-  /** Teleporter that returns to a run-time point when there is one (flag 0x02). */
-  returns: boolean;
+  /** Teleporter whose target a script's Teleport(room, x, y) replaces (flag 0x02). */
+  scriptTarget: boolean;
 }
 
 const STEP: Readonly<Record<Direction, number>> = { north: -10, south: 10, west: -1, east: 1 };
@@ -200,7 +201,7 @@ export function roomTeleports(room: Room): RecordTeleport[] {
     const [type = 0, flags = 0, , , low = 0, high = 0, b6 = 0, b7 = 0] = record.data;
     const target = low | (high << 8);
     if (target & 0x3ff && type === ACTOR_RECORD) {
-      const actor = { kind: "actor" as const, x: b6 & 0x3f, y: b7 & 0x3f, returns: false };
+      const actor = { kind: "actor" as const, x: b6 & 0x3f, y: b7 & 0x3f, scriptTarget: false };
       return [{ cell: cellOf(record.slot), room: target & 0x3ff, ...actor }];
     }
     if ((type !== ORACLE_RECORD && type !== TELEPORTER_RECORD) || (target & 0x3ff) === 0) {
@@ -213,7 +214,7 @@ export function roomTeleports(room: Room): RecordTeleport[] {
         room: target & 0x3ff,
         x: target >> 10,
         y: b6,
-        returns: type === TELEPORTER_RECORD && (flags & 0x02) !== 0,
+        scriptTarget: type === TELEPORTER_RECORD && (flags & 0x02) !== 0,
       },
     ];
   });

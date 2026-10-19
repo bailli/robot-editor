@@ -110,7 +110,11 @@ export function mapBadges(room: Room, c: Connections): MapBadge[] {
   for (const p of c.passages) add(p.room, p.kind, `${p.kind} to room ${p.room}`);
   for (const r of c.records) add(r.room, r.kind, `${r.kind} to room ${r.room} at (${r.x}, ${r.y})`);
   for (const t of c.teleports)
-    add(t.room, "returns", `the script's Teleport: returning teleporters lead to room ${t.room}`);
+    add(
+      t.room,
+      "Teleport()",
+      `the script's Teleport() redirects teleporters that allow it to room ${t.room}`,
+    );
   for (const b of c.buses) add(b.room, "bus", `the bus ${b.direction} to room ${b.room}`);
   return [...badges.values()];
 }

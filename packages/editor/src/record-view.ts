@@ -71,17 +71,17 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
       packedX,
       byte(6, "Arrival y", 28),
       {
-        label: "Return to the saved point",
+        label: "Script may set the target",
         kind: "flag",
         max: 1,
         get: (d) => (d[1] >> 1) & 1,
         set: (d, v) => {
           d[1] = (d[1] & ~2) | (v << 1);
         },
-        hint: "goes back to a point the game saved at run time, if there is one",
+        hint: "a script's Teleport(room, x, y) (room not 0) replaces the target",
       },
       byte(7, "Description variant"),
-      byte(8, "Message", 255, "0: none, else message 0x4b0 + this"),
+      byte(8, "Message", 255, "0: none, else message 1200 + this when used"),
     ],
   },
   {

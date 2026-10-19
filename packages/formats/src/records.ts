@@ -80,7 +80,10 @@ export function describeRecord(record: LogicRecord, classes?: EpisodeClasses): R
     },
     circuit: () => `a node of the logic gate puzzles`,
     oracle: () => `an oracle; walked onto northwards it teleports to ${target()}`,
-    teleporter: () => `a teleporter to ${target()}`,
+    teleporter: () =>
+      `a teleporter to ${target()}` +
+      (d[1] & 0x02 ? ", or where a script's Teleport() says" : "") +
+      (d[8] ? `; shows message ${1200 + d[8]}` : ""),
     unknown: () => `record type ${d[0]}`,
   };
   return { kind, summary: summaries[kind]() };

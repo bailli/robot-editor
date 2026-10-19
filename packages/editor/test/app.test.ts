@@ -159,7 +159,7 @@ test("teleports are listed with the exits", async () => {
     .element(button)
     .toHaveAttribute(
       "title",
-      "room 129 – DER SPURT ZUM SCHALTER (the script's Teleport(129, 7, 21) sets where returning teleporters lead, depending on the game state)",
+      "room 129 – DER SPURT ZUM SCHALTER (the script's Teleport(129, 7, 21) redirects the teleporters that allow it, depending on the game state)",
     );
   await button.click();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 129" })).toBeVisible();

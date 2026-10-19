@@ -173,13 +173,13 @@ export class ExitsView {
         this.target(
           r.room,
           `teleporter${at(r.cell)}, arriving at (${r.x}, ${r.y})` +
-            (r.returns ? ", or back to where the hero came from" : ""),
+            (r.scriptTarget ? ", or where the script's Teleport() says" : ""),
         ),
       ),
       ...[...new Map(c.teleports.map((x) => [x.room, x])).values()].map((t) =>
         this.target(
           t.room,
-          `the script's Teleport(${t.room}, ${t.x}, ${t.y}) sets where returning teleporters lead` +
+          `the script's Teleport(${t.room}, ${t.x}, ${t.y}) redirects the teleporters that allow it` +
             (t.conditional ? ", depending on the game state" : ""),
           t.conditional ? "conditional" : "scripted",
         ),
