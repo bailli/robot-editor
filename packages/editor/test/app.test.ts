@@ -287,6 +287,32 @@ test("back and forward use the browser's history, also across episodes", async (
   await expect.element(heading("Robot I – room 44")).toBeVisible();
 });
 
+test("an episode that does not exist in the address is ignored", async () => {
+  window.history.replaceState(null, "", "#7/43");
+  document.body.replaceChildren();
+  const root = document.createElement("div");
+  document.body.append(root);
+  app = new App(root);
+  app.load(bytes);
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
+});
+
+test("after a reload, back and forward are labelled again", async () => {
+  app.showRoom(44);
+  app.showRoom(45);
+  window.history.back();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
+  // a new page on the same history entry
+  document.body.replaceChildren();
+  const root = document.createElement("div");
+  document.body.append(root);
+  app = new App(root);
+  app.load(bytes);
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "◀ 43" })).toBeEnabled();
+  await expect.element(page.getByRole("button", { name: "45 ▶" })).toBeEnabled();
+});
+
 test("a room in the address is opened on loading", async () => {
   window.history.replaceState(null, "", "#2/55");
   document.body.replaceChildren();

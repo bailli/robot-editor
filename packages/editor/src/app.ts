@@ -229,6 +229,13 @@ export class App {
     ) {
       this.episode = linked.episode;
       this.roomId = linked.room;
+      // after a reload: our entries in the browser's history are still there
+      const state: unknown = window.history.state;
+      const saved = loadHistory();
+      if (isHistoryState(state) && saved.at(state.index)?.room === state.room) {
+        this.history.splice(0, Infinity, ...saved);
+        this.historyIndex = state.index;
+      }
     }
     this.showEpisode(this.episode, this.roomId);
     this.setStatus(`${name} loaded`);
@@ -297,6 +304,7 @@ export class App {
     // set first: showing the room must not record it again
     this.historyIndex = state.index;
     this.history[state.index] = { episode: state.episode, room: state.room };
+    saveHistory(this.history);
     if (state.episode === this.episode) this.showRoom(state.room);
     else this.showEpisode(state.episode, state.room);
   }
@@ -314,6 +322,7 @@ export class App {
       const state: HistoryState = { robot: true, episode, room, index: this.historyIndex };
       if (first) window.history.replaceState(state, "", `#${episode}/${room}`);
       else window.history.pushState(state, "", `#${episode}/${room}`);
+      saveHistory(this.history);
     }
     const label = (entry: { episode: number; room: number } | undefined, what: string) =>
       entry
@@ -725,9 +734,29 @@ function isHistoryState(state: unknown): state is HistoryState {
   return typeof state === "object" && state !== null && "robot" in state;
 }
 
+const HISTORY_KEY = "robot-editor-history";
+
+/** Keeps the visited rooms for this tab, so a reload can label back/forward again. */
+function saveHistory(history: readonly { episode: number; room: number }[]): void {
+  try {
+    sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch {
+    // storage unavailable: back/forward still work, only their labels are lost on reload
+  }
+}
+
+function loadHistory(): { episode: number; room: number }[] {
+  try {
+    const saved: unknown = JSON.parse(sessionStorage.getItem(HISTORY_KEY) ?? "[]");
+    return Array.isArray(saved) ? (saved as { episode: number; room: number }[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** The room in the page address, e.g. #3/147 (episode 3, room 147). */
 function roomInAddress(): { episode: number; room: number } | undefined {
-  const match = /^#(\d)\/(\d+)$/.exec(window.location.hash);
+  const match = /^#([0-4])\/(\d+)$/.exec(window.location.hash);
   return match ? { episode: Number(match[1]), room: Number(match[2]) } : undefined;
 }
 
