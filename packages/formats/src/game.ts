@@ -1,10 +1,13 @@
 import { type EpisodeClasses, readEpisodeClasses } from "./classes.ts";
+import { decodeCp437 } from "./cp437.ts";
+import { uncrunch } from "./crunched.ts";
 import { type Rgb, episodePalette } from "./palette.ts";
 import { type PeImage, parsePe } from "./pe.ts";
 import { type PeResource, findResource, readResources, replaceResource } from "./resources.ts";
 import { cryptScene } from "./scene-crypt.ts";
 import { type Room, parseScene, serializeScene } from "./scene.ts";
 import { type ShapeTable, parseShapes } from "./shapes.ts";
+import { type Texts, parseObjectNames, parseTexts } from "./texts.ts";
 
 export const EPISODES = [0, 1, 2, 3, 4] as const;
 export const EPISODE_NAMES = ["Robot Junior", "Robot I", "Robot II", "Robot III", "Robot IV"];
@@ -21,6 +24,12 @@ export const START_ROOMS: Readonly<Partial<Record<number, number>>> = {
 /** Resource ids of episode n (0 = Junior): shapes 1002, scene 1004, plus 100 n. */
 export const shapesId = (episode: number) => 1002 + 100 * episode;
 export const sceneId = (episode: number) => 1004 + 100 * episode;
+export const soundsId = (episode: number) => 1006 + 100 * episode;
+/** German texts; English (1011, 1111) exists for Junior and episode I only. */
+export const textsId = (episode: number, language: Language = "de") =>
+  (language === "de" ? 1010 : 1011) + 100 * episode;
+
+export type Language = "de" | "en";
 
 export interface Episode {
   number: number;
@@ -36,6 +45,7 @@ export class Game {
   readonly image: PeImage;
   readonly resources: PeResource[];
   private readonly episodes = new Map<number, Episode>();
+  private readonly texts = new Map<string, Texts | undefined>();
 
   constructor(data: Uint8Array) {
     this.image = parsePe(data);
@@ -65,6 +75,25 @@ export class Game {
       this.episodes.set(number, episode);
     }
     return episode;
+  }
+
+  /** The episode's tile descriptions and messages (see texts.ts), if it has them. */
+  episodeTexts(episode: number, language: Language = "de"): Texts | undefined {
+    const key = `${episode} ${language}`;
+    if (!this.texts.has(key)) {
+      const resource = findResource(this.resources, "CRUNCHED", textsId(episode, language));
+      this.texts.set(key, resource && parseTexts(this.decode(resource.data)));
+    }
+    return this.texts.get(key);
+  }
+
+  /** Script names of the episode's objects by tile type, e.g. 21 -> "KEY". */
+  objectNames(episode: number): Map<number, string> {
+    return parseObjectNames(this.decode(this.resource("CRUNCHED", soundsId(episode)).data));
+  }
+
+  private decode(data: Uint8Array): string {
+    return decodeCp437(uncrunch(data).text);
   }
 
   room(episode: number, id: number): Room {

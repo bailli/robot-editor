@@ -32,8 +32,17 @@ export type {
   ScriptExit,
   ScriptTeleport,
 } from "./exits.ts";
-export { EPISODE_NAMES, EPISODES, Game, START_ROOMS, sceneId, shapesId } from "./game.ts";
-export type { Episode } from "./game.ts";
+export {
+  EPISODE_NAMES,
+  EPISODES,
+  Game,
+  START_ROOMS,
+  sceneId,
+  shapesId,
+  soundsId,
+  textsId,
+} from "./game.ts";
+export type { Episode, Language } from "./game.ts";
 export { decodeCp437, encodeCp437 } from "./cp437.ts";
 export { CrunchedFormatError, SYMBOL_TABLE_SIZE, uncrunch } from "./crunched.ts";
 export type { Crunched } from "./crunched.ts";
@@ -82,3 +91,5 @@ export {
 export type { LogicRecord, Room, RoomTag } from "./scene.ts";
 export { TILE_BACKGROUND, TRANSPARENT, parseShapes, planeBit, shapePixels } from "./shapes.ts";
 export type { Colours, Frame, Shape, ShapeTable } from "./shapes.ts";
+export { displayText, parseObjectNames, parseTexts } from "./texts.ts";
+export type { Texts } from "./texts.ts";
