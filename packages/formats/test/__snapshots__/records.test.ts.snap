@@ -1,0 +1,14 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`every logic record in the game has a known type 1`] = `
+{
+  "buried": 133,
+  "circuit": 11,
+  "creature": 89,
+  "oracle": 26,
+  "spawner": 604,
+  "stacked": 23,
+  "teleporter": 272,
+  "travelling actor": 19,
+}
+`;

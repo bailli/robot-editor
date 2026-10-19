@@ -5,6 +5,7 @@ import {
   LOGIC_CELL,
   ROOM_WIDTH,
   START_ROOMS,
+  describeRecord,
 } from "@robot/formats";
 
 import { type Edit, Editor, type Layer, tilesOf } from "./editor.ts";
@@ -463,6 +464,11 @@ export class App {
     const base = room.base[index] ?? 0;
     const overlay = room.overlay[index] ?? 0;
     this.cellInfo.textContent = `(${x}, ${y})  base ${hex(base)}  overlay ${hex(overlay)}`;
+    const record = [base, overlay]
+      .filter((c) => (c & 0xff) === LOGIC_CELL)
+      .map((c) => room.records.find((r) => r.slot === c >> 8))
+      .find((r) => r !== undefined);
+    if (record) this.cellInfo.textContent += `  · ${describeRecord(record).summary}`;
     // what the hero would see: the overlay object if there is one
     this.cellText.textContent =
       this.names().summary(overlay & 0xff ? overlay : base, room) || "\u00a0";

@@ -1,6 +1,7 @@
 export { FrameMethod, readEpisodeClasses } from "./classes.ts";
 export type { EpisodeClasses, ObjectClass } from "./classes.ts";
 export {
+  ACTOR_RECORD,
   CLOSED_EXIT_CELL,
   DIRECTIONS,
   DOOR_IN_CLASS,
@@ -96,3 +97,5 @@ export { displayText, parseObjectNames, parseTexts } from "./texts.ts";
 export type { Texts } from "./texts.ts";
 export { NO_DESCRIPTION, describeCell, descriptionTexts, knowsDescribeMethod } from "./describe.ts";
 export type { CellDescription } from "./describe.ts";
+export { describeRecord } from "./records.ts";
+export type { RecordInfo, RecordKind } from "./records.ts";

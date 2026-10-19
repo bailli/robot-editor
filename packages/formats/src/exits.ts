@@ -73,13 +73,15 @@ export const RETURN_PASSAGE: Readonly<Record<PassageKind, PassageKind>> = {
   "stairs up": "stairs down",
 };
 
+/** Actors that appear on entering the room, heading for a target (see records.ts). */
+export const ACTOR_RECORD = 8;
 export const ORACLE_RECORD = 12;
 export const TELEPORTER_RECORD = 13;
 
 export interface RecordTeleport {
   /** The logic cell (base or overlay) that places the record, undefined if none does. */
   cell: number | undefined;
-  kind: "oracle" | "teleporter";
+  kind: "oracle" | "teleporter" | "actor";
   room: number;
   x: number;
   y: number;
@@ -147,7 +149,11 @@ export function roomPassages(
   return passages;
 }
 
-/** The oracles and teleporters among a room's logic records (with a target room). */
+/**
+ * The oracles, teleporters and travelling actors among a room's logic records (those with
+ * a target room). Actors (type 8) keep their target as room (offset 4), x and y (bytes
+ * 6, 7).
+ */
 export function roomTeleports(room: Room): RecordTeleport[] {
   const cellOf = (slot: number) => {
     for (const layer of [room.base, room.overlay]) {
@@ -156,9 +162,13 @@ export function roomTeleports(room: Room): RecordTeleport[] {
     }
     return undefined;
   };
-  return room.records.flatMap((record) => {
-    const [type = 0, flags = 0, , , low = 0, high = 0, y = 0] = record.data;
+  return room.records.flatMap((record): RecordTeleport[] => {
+    const [type = 0, flags = 0, , , low = 0, high = 0, b6 = 0, b7 = 0] = record.data;
     const target = low | (high << 8);
+    if (target & 0x3ff && type === ACTOR_RECORD) {
+      const actor = { kind: "actor" as const, x: b6 & 0x3f, y: b7 & 0x3f, returns: false };
+      return [{ cell: cellOf(record.slot), room: target & 0x3ff, ...actor }];
+    }
     if ((type !== ORACLE_RECORD && type !== TELEPORTER_RECORD) || (target & 0x3ff) === 0) {
       return [];
     }
@@ -168,7 +178,7 @@ export function roomTeleports(room: Room): RecordTeleport[] {
         kind: type === ORACLE_RECORD ? ("oracle" as const) : ("teleporter" as const),
         room: target & 0x3ff,
         x: target >> 10,
-        y,
+        y: b6,
         returns: type === TELEPORTER_RECORD && (flags & 0x02) !== 0,
       },
     ];

@@ -198,3 +198,21 @@ test("tiles show their names and descriptions", async () => {
     /^0x0000 \(one of\)\nHier gibt's nichts Interessantes zu sehen\.\n/,
   );
 });
+
+test("hovering a logic cell says what its record does", () => {
+  app.showEpisode(2, 55);
+  const room = app.editor?.room(2, 55);
+  const index = room?.base.findIndex((c) => (c & 0xff) === 0x7f) ?? -1;
+  expect(index).toBeGreaterThanOrEqual(0);
+  const rect = app.view.element.getBoundingClientRect();
+  app.view.element.dispatchEvent(
+    new MouseEvent("mousemove", {
+      bubbles: true,
+      clientX: rect.left + ((index % 40) + 0.5) * (rect.width / 40),
+      clientY: rect.top + (Math.floor(index / 40) + 0.5) * (rect.height / 29),
+    }),
+  );
+  expect(document.querySelector(".cell-info")?.textContent).toMatch(
+    /· a teleporter to room \d+ at/,
+  );
+});
