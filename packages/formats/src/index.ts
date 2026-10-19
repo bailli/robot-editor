@@ -115,7 +115,9 @@ export {
   ROBOT_CLASSES,
   actorKindClass,
   cellActorSource,
+  randomPlacement,
   roomActors,
   scriptActors,
+  scriptObjectType,
 } from "./actors.ts";
-export type { ActorSource, RoomActor, ScriptActors } from "./actors.ts";
+export type { ActorSource, RandomPlacement, RoomActor, ScriptActors } from "./actors.ts";

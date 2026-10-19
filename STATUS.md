@@ -182,7 +182,7 @@ Supported:
   dashed: appear later or from a record; spawner radius; arrow: heading somewhere),
   robots drawn with the episode's `_Aliens` sprites in turn (their look and colours vary
   in the game); a list below the map groups them with name, origin and positions (click
-  to select), plus the script's `RandObj(…)` random ones
+  to select), plus what the script's `RandObj(…)` does with the room's current number
 - save: downloads the exe with all edited episodes (warns about unsaved changes on leave)
 
 Not supported (yet):
@@ -209,8 +209,14 @@ Roughly by value for the editor.
    robots' sprites (`_Aliens`, `1E01`) and random colours. Open: the exact sprite order
    (which actors count before a robot), sprites of the other actors (androids etc. use
    their tile graphic in the editor), travelling actors' kinds 0x183/0x185 (classes
-   0x83/0x85 have no registered factory, so they may never appear), how `RandObj` picks
-   places, and what the script names (O_ALIEN, …) are as numbers.
+   0x83/0x85 have no registered factory, so they may never appear), and where exactly
+   the hero "enters" for RandObj (0x4fe30b/0x4fe30c).
+   `RandObj(O_X, min, max)` (0x4073a0, `randomPlacement`) keeps the room's number of
+   tile type O_X between min and max: it counts what is there, removes random ones above
+   and adds missing ones on empty cells (20 tries each), robots and androids within ±10
+   columns / ±5 rows of the hero's entry, other objects anywhere. Script object names are
+   tile types (sound tables, plus O_ALIEN 2, O_ANDROID 0x2d, O_BOMB 0x13, O_WORM 0x37,
+   O_ISOLATE 9 from compiled scripts).
 3. **Scripts.** Only the source (tag 6/1) is read. The game runs the **compiled** script
    (6/2), whose format is not decoded; editing scripts needs a compiler (the keyword table
    with variable addresses is at 0x4753c0…, 24-byte records). Tag 6/3 (4 bytes) unknown.

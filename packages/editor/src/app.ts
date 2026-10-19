@@ -8,6 +8,7 @@ import {
   type RoomActor,
   START_ROOMS,
   describeRecord,
+  randomPlacement,
   roomActors,
   roomScript,
   scriptActors,
@@ -661,7 +662,15 @@ export class App {
         : undefined,
     );
     this.view.setActors(this.actorsToggle.checked ? this.actors : [], (_, n) => sprites[n]);
-    this.actorsView.show(this.actors, scriptActors(roomScript(room)));
+    const classes = editor.game.episode(this.episode).classes;
+    const names = editor.game.objectNames(this.episode);
+    this.actorsView.show(
+      this.actors,
+      scriptActors(roomScript(room)).map((call) => ({
+        call,
+        placement: randomPlacement(call, room, classes, names),
+      })),
+    );
   }
 
   private pick(index: number): void {

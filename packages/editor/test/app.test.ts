@@ -338,7 +338,8 @@ test("the actors of a room are listed and can be selected", async () => {
   expect(rows.some((r) => r.startsWith("20 × "))).toBe(true); // the robots
   expect(rows.some((r) => r.startsWith("4 × "))).toBe(true); // the androids
   expect(document.querySelector(".actors-view")?.textContent).toContain(
-    "Script: 8–15 × O_ALIEN at random places, depending on the game state",
+    "Script keeps 8–15 × O_ALIEN: 20 in the room now, so it removes 5–12 at random " +
+      "(depending on the game state)",
   );
   await page.getByRole("button", { name: "(12, 6)" }).click(); // an android
   expect(app.selected?.index).toBe(6 * ROOM_WIDTH + 12);

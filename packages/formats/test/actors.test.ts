@@ -1,6 +1,8 @@
+import assert from "node:assert/strict";
+
 import { expect, test } from "vitest";
 
-import { roomActors, scriptActors } from "../src/actors.ts";
+import { randomPlacement, roomActors, scriptActors } from "../src/actors.ts";
 import { roomScript } from "../src/exits.ts";
 import { EPISODES, Game } from "../src/game.ts";
 import { exe } from "./data.ts";
@@ -58,4 +60,25 @@ test("actors in every episode", () => {
       return counts;
     }),
   ).toMatchSnapshot();
+});
+
+test("RandObj counts what the room has and places robots near the hero", () => {
+  const room = game.room(2, 123);
+  const place = (name: string) => {
+    const call = scriptActors(roomScript(room)).find((c) => c.name === name);
+    assert.ok(call, name);
+    return randomPlacement(call, room, game.episode(2).classes, game.objectNames(2));
+  };
+  expect(place("ALIEN")).toMatchObject({ type: 2, existing: 20, nearHero: true });
+  expect(place("ANDROID")).toMatchObject({ type: 0x2d, existing: 4, nearHero: true });
+  expect(place("BOMB")).toMatchObject({ type: 0x13, existing: 1, nearHero: false });
+  expect(place("ALIEN").free).toBeGreaterThan(100);
+});
+
+test("script object names resolve through the sound tables first", () => {
+  const room = game.room(1, 35); // RandObj(O_TREE, 1, 1)
+  const tree = scriptActors(roomScript(room)).find((c) => c.name === "TREE");
+  expect(
+    tree && randomPlacement(tree, room, game.episode(1).classes, game.objectNames(1)).type,
+  ).toBe(11);
 });

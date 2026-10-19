@@ -1,4 +1,10 @@
-import { type ActorSource, ROOM_WIDTH, type RoomActor, type ScriptActors } from "@robot/formats";
+import {
+  type ActorSource,
+  ROOM_WIDTH,
+  type RandomPlacement,
+  type RoomActor,
+  type ScriptActors,
+} from "@robot/formats";
 
 export interface ActorsViewEvents {
   /** Selects a cell (e.g. to inspect the record behind an actor). */
@@ -28,6 +34,23 @@ export function actorOrigin(actor: RoomActor): string {
   return origins[actor.source]();
 }
 
+/** What RandObj does with the room's current number, for people. */
+export function randomEffect(call: ScriptActors, placement: RandomPlacement): string {
+  const { existing } = placement;
+  const range = (a: number, b: number) => (a === b ? `${a}` : `${a}–${b}`);
+  const target = range(call.min, call.max);
+  const where = placement.nearHero
+    ? "on empty cells within 10 columns and 5 rows of where the hero enters"
+    : "on empty cells anywhere";
+  const change =
+    existing > call.max
+      ? `removes ${range(existing - call.max, existing - call.min)} at random`
+      : existing < call.min
+        ? `adds ${range(call.min - existing, call.max - existing)} ${where}`
+        : `adds up to ${call.max - existing} ${where} or removes up to ${existing - call.min}`;
+  return `keeps ${target} × O_${call.name}: ${existing} in the room now, so it ${change}`;
+}
+
 const where = (cell: number) => `(${cell % ROOM_WIDTH}, ${Math.floor(cell / ROOM_WIDTH)})`;
 
 /** The room's actors, grouped by what they are and how they appear. */
@@ -41,7 +64,10 @@ export class ActorsView {
     this.element.setAttribute("aria-label", "Actors");
   }
 
-  show(actors: readonly RoomActor[], scripted: readonly ScriptActors[]): void {
+  show(
+    actors: readonly RoomActor[],
+    scripted: readonly { call: ScriptActors; placement: RandomPlacement }[],
+  ): void {
     const groups = new Map<string, RoomActor[]>();
     for (const actor of actors) {
       const key = `${actor.source} ${actor.type ?? "?"} ${actorOrigin(actor)}`;
@@ -74,13 +100,15 @@ export class ActorsView {
       row.append(text, origin, cells);
       return row;
     });
-    const scriptRows = scripted.map((s) => {
+    const scriptRows = scripted.map(({ call, placement }) => {
       const row = document.createElement("div");
       row.className = "actor-row scripted";
-      const count = s.min === s.max ? `${s.min}` : `${s.min}–${s.max}`;
-      row.textContent =
-        `Script: ${count} × O_${s.name} at random places` +
-        (s.conditional ? ", depending on the game state" : "");
+      if (placement.type !== undefined) row.append(this.events.icon(placement.type));
+      const text = document.createElement("span");
+      text.textContent =
+        `Script ${randomEffect(call, placement)}` +
+        (call.conditional ? " (depending on the game state)" : "");
+      row.append(text);
       return row;
     });
     const heading = document.createElement("h3");

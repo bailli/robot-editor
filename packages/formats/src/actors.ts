@@ -7,7 +7,7 @@ import {
   SAND_SCORPION_STATES,
 } from "./classes.ts";
 import { isConditional } from "./exits.ts";
-import { LOGIC_CELL, type LogicRecord, ROOM_CELLS, type Room } from "./scene.ts";
+import { LOGIC_CELL, type LogicRecord, ROOM_CELLS, ROOM_WIDTH, type Room } from "./scene.ts";
 
 /**
  * The moving actors of a room (robots, androids, animals, the bus, …) and where they come
@@ -27,7 +27,7 @@ import { LOGIC_CELL, type LogicRecord, ROOM_CELLS, type Room } from "./scene.ts"
  *   spawner    record type 5: robots appear while the hero is near (0x435650)
  *   creature   record type 7: an actor of kind 0x107 appears on entering
  *   travelling record type 8: an actor of kind 0x100 + byte 8 heading for a target
- * Scripts add more at random places (RandObj, see scriptActors).
+ * Scripts keep a random number of them (RandObj, see randomPlacement).
  */
 
 export type ActorSource =
@@ -126,7 +126,7 @@ export interface ScriptActors {
 }
 
 /**
- * Objects a room script scatters at random places: RandObj(O_NAME, min, max), e.g.
+ * Objects a room script keeps at a random number: RandObj(O_NAME, min, max), e.g.
  * RandObj(O_ALIEN, 8, 15) for 8 to 15 robots (see isConditional).
  */
 export function scriptActors(source: string): ScriptActors[] {
@@ -138,4 +138,67 @@ export function scriptActors(source: string): ScriptActors[] {
       conditional: isConditional(source, m.index),
     }),
   );
+}
+
+/**
+ * Script object names are tile types. The sound tables name the items (Game.objectNames);
+ * these others are read from compiled scripts (RandObj's first argument).
+ */
+const SCRIPT_OBJECTS: Readonly<Record<string, number>> = {
+  ALIEN: 0x02,
+  ANDROID: 0x2d,
+  BOMB: 0x13,
+  WORM: 0x37,
+  ISOLATE: 0x09,
+};
+
+/** The tile type of a script object name ("KEY", "ALIEN"), if known. */
+export function scriptObjectType(
+  name: string,
+  objectNames: ReadonlyMap<number, string>,
+): number | undefined {
+  for (const [type, known] of objectNames) if (known === name) return type;
+  return SCRIPT_OBJECTS[name];
+}
+
+/** Classes RandObj places near the hero (0x407588): robots and androids. */
+const NEAR_HERO_CLASSES: readonly number[] = [...ROBOT_CLASSES, 0x2d];
+
+export interface RandomPlacement {
+  /** The tile type placed, if the name is known. */
+  type: number | undefined;
+  /** How many the room has already (they count towards min..max). */
+  existing: number;
+  /**
+   * Robots and androids are placed within 10 columns and 5 rows of where the hero enters
+   * the room, other objects anywhere.
+   */
+  nearHero: boolean;
+  /** Empty cells (no object, no actor): the only ones RandObj places on. */
+  free: number;
+}
+
+/**
+ * What RandObj(O_NAME, min, max) does in a room (0x4073a0): it counts the room's objects
+ * of that tile type (map cells and actors, 0x407650), draws a number between min and max,
+ * removes random ones above it and adds new ones below it, each on an empty cell found
+ * with up to 20 random tries (0x433230, 0x433420).
+ */
+export function randomPlacement(
+  call: ScriptActors,
+  room: Room,
+  classes: EpisodeClasses,
+  objectNames: ReadonlyMap<number, string>,
+): RandomPlacement {
+  const type = scriptObjectType(call.name, objectNames);
+  let existing = 0;
+  let free = 0;
+  for (let cell = 0; cell < ROOM_CELLS; cell++) {
+    const base = room.base[cell] ?? 0;
+    const overlay = room.overlay[cell] ?? 0;
+    if (type !== undefined && ((base & 0xff) === type || (overlay & 0xff) === type)) existing++;
+    if (base === 0 && overlay === 0 && cell >= ROOM_WIDTH) free++;
+  }
+  const id = type === undefined ? undefined : classes.classes.get(type)?.id;
+  return { type, existing, nearHero: id !== undefined && NEAR_HERO_CLASSES.includes(id), free };
 }
