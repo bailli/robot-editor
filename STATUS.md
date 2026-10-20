@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-10-19.
+Setup and commands are in the [README](README.md). Last updated: 2026-10-20.
 
 ## Goal and approach
 
@@ -54,8 +54,8 @@ Files in `packages/formats/src`:
 | File                         | What it covers                                                                                |
 | ---------------------------- | --------------------------------------------------------------------------------------------- |
 | `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc`  |
-| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression, CP437                                                              |
-| `texts.ts`                   | text resources: tile descriptions, messages, object names                                     |
+| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression (decoder and encoder), CP437                                        |
+| `texts.ts`                   | text resources: tile descriptions, messages, object names; setting an entry                   |
 | `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                    |
 | `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects), shape tables and frames                                |
 | `palette.ts`                 | the 16-colour palettes per episode                                                            |
@@ -63,7 +63,8 @@ Files in `packages/formats/src`:
 | `render.ts`                  | drawing cells and rooms like the game                                                         |
 | `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                 |
 | `describe.ts`                | the description the game shows for a cell                                                     |
-| `room-names.ts`              | the name the game shows for a room                                                            |
+| `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                      |
+| `start.ts`                   | the room and cell an episode starts in, and patching them                                     |
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants      |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                        |
 | `records.ts`                 | what logic records do                                                                         |
@@ -78,7 +79,17 @@ Files in `packages/formats/src`:
   comparison). Resource ids per episode E (0–4): `1E02` shapes, `1E04` scene, `1E05` music,
   `1E06` sound table, `1E10` German texts, `1E11` English texts (Junior and I only);
   `9900`/`9901` episode list.
-- **CRUNCHED** texts decode completely (all 15).
+- **CRUNCHED** texts decode completely (all 15) and are encoded again (`crunch`): the 90
+  most frequent characters in the table (the originals' order of equally frequent ones is
+  not reproduced, the code lengths and sizes are). The game reads bytes until the
+  resource ends and decodes a symbol only while more than 8 bits are left (0x4314b0), so
+  the originals lose their last line feed or letters; `crunch` adds line feeds at the end
+  so nothing of the text is lost. The text loader (0x438710) ignores the size, allocates
+  size + 8 × entries and indexes every line starting with digits and a colon (0x431300,
+  `countEntries`; equal to the header's count in all 13 texts, the sound tables are read
+  elsewhere); lookups are linear (0x438850), so the order of entries does not matter.
+  **Verified under Wine:** a re-encoded episode I text with a new room name entry shows
+  that name in the banner and the screenshot's name.
 - **Texts** (`1E10`): numbered entries `N:k` with `|`-separated variants ending in `;`;
   headers without text share the next text. Entries 0–127 describe tile type N, higher
   numbers are messages (`Message(id, …)`); 510 is "no description". `displayText` removes
@@ -98,7 +109,9 @@ Files in `packages/formats/src`:
   (rooms 1 and 99, episode II's 600s, a few others). The game shows the whole text in
   the banner on entering a room (0x406560; episode III: name and description; seen under
   Wine for episode I room 42, underlines included) and names
-  its own screenshots after the name (`R1-043-DER START.png`).
+  its own screenshots after the name (`R1-043-DER START.png`). Styles: episode I
+  underlines (`DER START\` + a line of `═`), Junior and II frame with stars
+  (`*** Die Festung ***`), III and IV write plainly; `roomNameText` writes new names so.
 - **Sound tables** (`1E06`): `N:SOUND ;note`; the notes name objects by tile type
   (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names.
 
@@ -143,11 +156,15 @@ Files in `packages/formats/src`:
   (they release robots), sand heaps hiding scorpions (sand states 6/7) and the records
   that let actors appear (spawners, creatures, travelling actors). Otherwise the hero can
   die before the screenshot and the death's message box covers the room.
-- **The hero's start** is fixed per episode in the episode code (vtable +0x54: Junior
-  0x40e1a0 (2, 14), I 0x408da0 (5, 14), II 0x409fa0 (6, 23), III 0x40b460 (8, 15), IV
-  0x40d680 (13, 16)); the hero tile (type 1) in the map is cleared, not used. In a
-  patched exe the hero therefore lands at that position in whatever room was put into
-  the start slot (possibly in a wall or water).
+- **The start room and the hero's start** are fixed per episode in the episode code
+  (vtable +0x54: Junior 0x40e1a0 room 43 (2, 14), I 0x408da0 43 (5, 14), II 0x409fa0
+  43 (6, 23), III 0x40b460 41 (8, 15), IV 0x40d680 53 (13, 16)): three `mov`s set the
+  arrival cell (0x4fe309/0x4fe30a) and NxtRoom (0x4fe2f6), then a word at 0x4fe0c0
+  (unknown: 50, 38, 60, 200, 120). `start.ts` reads and patches them (`robot start`,
+  the editor's "Test in game"; **verified under Wine** for episode I: a copied room 250
+  and another start cell). The hero tile (type 1) in the map is cleared, not used. In
+  a `robot patch` exe the hero lands at the episode's position in whatever room was put
+  into the start slot (possibly in a wall or water).
 
 ### Room connections (`exits.ts`)
 
@@ -321,7 +338,16 @@ Supported:
   the room they lead to) and Backspace move between them, across episodes; loading the
   page with a room in the address opens that room
 - the room's name next to the title (and in the room list's, exits' and history's
-  tooltips; episode III's descriptions in the name's tooltip)
+  tooltips; episode III's descriptions in the name's tooltip), editable in place: written
+  in the episode's style into the German texts (episode III: resource 1320, keeping a
+  description), saved CRUNCHED; rooms showing the name of the room 100 below rename
+  that room; empty removes the name; undoable
+- rooms added by id (1–1023, at most 200 per episode): empty, or a copy of the shown
+  room (cells, records, tags, script); undoable
+- "Test in game": the edited exe with the episode starting in the shown room, the hero
+  at the selected cell or the episode's start cell; `pnpm editor` runs it under Wine
+  (`/play` on the dev server, `harness.py play`, the game window on this display; the
+  episode is chosen by hand), the static build downloads it
 - tile names (items) and the game's descriptions in tooltips and the hover line; logic
   cells say what their record does
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
@@ -339,14 +365,17 @@ Supported:
   room names), calls with plain coordinates (`SetWarea`, `SetObj`, `Area`, …) outline
   their cells on the map; the bytecode on request; Edit compiles while typing (errors
   with line and column) and Apply sets source and compiled script as one undo step
-- save: downloads the exe with all edited episodes (warns about unsaved changes on leave)
+- save: downloads the exe with all edited episodes and texts (warns about unsaved changes
+  on leave)
 
 Not supported (yet):
 
 - painting over logic cells (use the inspector); records are edited field by field, no
   copy/paste of records between rooms
-- editing the other tags (darkness, points, ambient name, kind 3); adding, deleting or
-  copying rooms; painting exit tiles is plain painting (0x0017 in the base layer)
+- editing the other tags (darkness, points, ambient name, kind 3); deleting rooms;
+  painting exit tiles is plain painting (0x0017 in the base layer)
+- English texts: room names are edited in the German texts only (Junior and I also
+  have English ones, which keep the old names, or none for new rooms)
 - fill, copy/paste of areas, tile search/filter
 - English UI texts / English descriptions (German only; English exists for Junior and I)
 - remembering the last exe or unsaved work across reloads
@@ -366,7 +395,9 @@ Roughly by value for the editor.
 --keys Right` (`--debug DIR` saves every step); the game's screenshot file name tells
    the room it ended in. Exits open only once a room's robots are gone, so tests of
    walking out remove them (`calmRoom`); a 0.3 s key press moves the hero several cells.
-   There is no CLI command for this yet (the tests so far were one-off scripts).
+   `robot start E ROOM OUT.exe --at X,Y` makes an exe starting the hero anywhere (the
+   whole episode stays as it is), `robot play` and the editor's "Test in game" run one
+   to be played by hand.
 2. **Actors.** Known: creation (0x44dc60, kinds 0x100 + n → class via 0x47ec98, 20
    factories registered by class id, 0x44d4e0), which tiles and records produce actors,
    robots' sprites (`_Aliens`, `1E01`) and random colours. Open: the exact sprite order
@@ -451,10 +482,10 @@ Roughly by value for the editor.
 - **Rooms:** at most 200 per episode (scene loader 0x438d10). Room ids are free 16-bit
   numbers; the game finds rooms by id (0x4390f0). Practical limits: targets in records
   have 10 bits (≤ 1023); room names are text entries 1000 + id (e.g. 1043 "DER START",
-  episode III: resource 1320),
-  and new names need a CRUNCHED **encoder**, which does not exist yet. Start rooms are
-  fixed in the episode code (+0x54 of the episode vtable). Adding a room to an episode
-  is therefore possible (new id, link it by grid id, stairs ±100 or a teleporter).
+  episode III: resource 1320) below a limit per episode (`NAMED_ROOMS`: 200, 300, 700,
+  200, none), written with `crunch`. Start rooms are fixed in the episode code (+0x54
+  of the episode vtable, `start.ts`). Adding a room to an episode is therefore possible
+  (new id, link it by grid id, stairs ±100 or a teleporter); the editor does it.
 - **Episodes** are objects with their own vtables (Junior 0x466cd8, I 0x466458, II
   0x4665a8, III 0x466b08, IV 0x466c38, base 0x46cdf0); 22 of 28 slots are overridden
   somewhere (start position, special events, episode II's jump to room 600, …).
@@ -490,6 +521,8 @@ Roughly by value for the editor.
 | 0x4073a0, 0x407650           | script RandObj; count a tile type in the room                                  |
 | 0x41e4d0, 0x47efe0, 0x41e100 | telephone (episode II): dial; numbers → handlers; Ghostbusters (robot-free)    |
 | 0x4827f0                     | base palette (episode III: 0x477c10)                                           |
+| 0x4314b0, 0x438710, 0x431300 | CRUNCHED: next character; load a text resource; parse an entry header          |
+| 0x408da0 (per episode)       | episode start: arrival cell, start room (vtable +0x54, see `start.ts`)         |
 | 0x481170                     | 8×8 font                                                                       |
 | 0x4750d8                     | script keywords (functions and variables)                                      |
 | 0x406da0, 0x4080e0, 0x407fa4 | link a compiled script; run it; clear a room's handlers                        |
@@ -516,3 +549,6 @@ Roughly by value for the editor.
   (not seen so far, review finding).
 - Each `App` in the editor listens on `window`; tests must `dispose()` old instances,
   or they react to history and key events too.
+- `harness.py play` and `shot` share the prefix: each ends a game the other started
+  (`wineserver -k`), and `shot` deletes `Documents/Robot` in the prefix, i.e. also the
+  screenshots and saved games of played games.

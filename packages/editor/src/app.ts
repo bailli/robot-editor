@@ -3,6 +3,7 @@ import {
   EPISODE_NAMES,
   Game,
   LOGIC_CELL,
+  NAMED_ROOMS,
   PLACEMENT_AREAS,
   ROBOT_CLASSES,
   ROOM_WIDTH,
@@ -26,7 +27,7 @@ import {
 } from "@robot/formats";
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
-import { type Edit, Editor, type Layer, tilesOf } from "./editor.ts";
+import { type Edit, Editor, type Layer, MAX_ROOM_ID, tilesOf } from "./editor.ts";
 import { type Connections, ExitsView, connections, fixedExit } from "./exits-view.ts";
 import { MapView } from "./map-view.ts";
 import { RecordView } from "./record-view.ts";
@@ -81,6 +82,16 @@ const ARROWS: Readonly<Partial<Record<string, Direction>>> = {
 
 const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 
+export interface AppOptions {
+  /**
+   * Runs an exe in the game (e.g. via the development server and Wine); without it,
+   * "Test in game" downloads the exe.
+   */
+  play?: (exe: Uint8Array, episode: number) => Promise<void>;
+}
+
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
 /** The editor's user interface; everything happens in the browser, nothing is uploaded. */
 export class App {
   editor: Editor | undefined;
@@ -102,6 +113,15 @@ export class App {
 
   private readonly fileInput = h("input", { type: "file", accept: ".exe", hidden: true });
   private readonly saveButton = h("button", { disabled: true }, "Save exe");
+  private readonly testButton = h(
+    "button",
+    {
+      disabled: true,
+      title:
+        "Start the game in this room, with all edits: the hero starts at the selected cell, else where the episode puts it",
+    },
+    "Test in game",
+  );
   private readonly undoButton = h("button", { disabled: true, title: "Ctrl+Z" }, "Undo");
   private readonly redoButton = h("button", { disabled: true, title: "Ctrl+Y" }, "Redo");
   private readonly gridToggle = h("input", { type: "checkbox" });
@@ -129,7 +149,7 @@ export class App {
     thumbnail: (room) => this.thumbnail(room),
     name: (room) => {
       const editor = this.need();
-      return editor.game.roomName(this.episode, room, editor.rooms(this.episode))?.name;
+      return editor.roomName(this.episode, room)?.name;
     },
     edited: (room) => this.need().isEdited(this.episode, room),
   });
@@ -167,7 +187,19 @@ export class App {
   private readonly episodeSelect = h("select", { "aria-label": "Episode" });
   private readonly roomList = h("div", { class: "room-list" });
   private readonly roomTitle = h("h2");
-  private readonly roomName = h("span", { class: "room-name" });
+  private readonly roomName = h("input", {
+    class: "room-name",
+    "aria-label": "Room name",
+    spellcheck: "false",
+  });
+  private readonly newRoomInput = h("input", {
+    type: "number",
+    min: "1",
+    max: String(MAX_ROOM_ID),
+    class: "new-room-id",
+    "aria-label": "New room id",
+    title: "The id of a new room (Enter: add an empty one, Shift+Enter: copy the shown one)",
+  });
   private readonly backButton = h("button", { class: "history", disabled: true }, "◀");
   private readonly forwardButton = h("button", { class: "history", disabled: true }, "▶");
   /** Rooms shown, for going back and forward like in a browser. */
@@ -266,7 +298,10 @@ export class App {
   private readonly workspace: HTMLElement;
   private readonly welcome: HTMLElement;
 
-  constructor(root: HTMLElement) {
+  private readonly options: AppOptions;
+
+  constructor(root: HTMLElement, options: AppOptions = {}) {
+    this.options = options;
     for (const [i, name] of EPISODE_NAMES.entries()) {
       this.episodeSelect.append(h("option", { value: String(i) }, name));
     }
@@ -300,7 +335,37 @@ export class App {
     this.workspace = h(
       "div",
       { class: "workspace", hidden: true },
-      h("nav", { class: "rooms" }, this.episodeSelect, this.roomList),
+      h(
+        "nav",
+        { class: "rooms" },
+        this.episodeSelect,
+        h(
+          "div",
+          { class: "room-add" },
+          this.newRoomInput,
+          h(
+            "button",
+            {
+              title: "Add an empty room with this id",
+              click: () => {
+                this.addRoom(Number(this.newRoomInput.value), false);
+              },
+            },
+            "Add",
+          ),
+          h(
+            "button",
+            {
+              title: "Copy the shown room (cells, records, tags, script) to this id",
+              click: () => {
+                this.addRoom(Number(this.newRoomInput.value), true);
+              },
+            },
+            "Copy",
+          ),
+        ),
+        this.roomList,
+      ),
       h(
         "main",
         {},
@@ -346,6 +411,7 @@ export class App {
         ),
         this.fileInput,
         this.saveButton,
+        this.testButton,
         this.undoButton,
         this.redoButton,
         h("label", {}, this.gridToggle, " Grid"),
@@ -385,6 +451,7 @@ export class App {
     this.thumbnails.clear();
     this.welcome.hidden = true;
     this.workspace.hidden = false;
+    this.testButton.disabled = false;
     const linked = roomInAddress();
     if (
       linked &&
@@ -432,14 +499,8 @@ export class App {
   showRoom(id: number): void {
     const editor = this.need();
     this.roomId = id;
-    const name = editor.game.roomName(this.episode, id, editor.rooms(this.episode));
-    this.roomName.textContent = name?.name ?? "";
-    this.roomName.title = [
-      name && name.room !== id ? `the name of room ${name.room}` : "",
-      name?.description ?? "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    this.showRoomName(id);
+    this.newRoomInput.value = String(editor.freeRoomId(this.episode, id) ?? "");
     this.roomTitle.textContent = `${EPISODE_NAMES[this.episode] ?? ""} – room ${id}`;
     const room = editor.room(this.episode, id);
     // outlines shown while hovering the actor list or the script belong to the old room:
@@ -463,12 +524,96 @@ export class App {
     if (this.mapShown) this.refreshMap();
   }
 
+  /** The name field: the name the game shows, editable where the game shows names. */
+  private showRoomName(id: number): void {
+    const editor = this.need();
+    const name = editor.roomName(this.episode, id);
+    const named = editor.nameRoom(this.episode, id);
+    this.roomName.value = name?.name ?? "";
+    this.roomName.placeholder = named === undefined ? `Szene ${id}` : `Szene ${id} (no name)`;
+    this.roomName.disabled = named === undefined;
+    this.roomName.title = [
+      named !== undefined && named !== id ? `the name of room ${named}` : "",
+      name?.description ?? "",
+      named === undefined
+        ? `The game shows no names for rooms from ${String(NAMED_ROOMS[this.episode])} on.`
+        : "Type a new name and press Enter (empty: none).",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  /** Renames the shown room (see Editor.setRoomName). */
+  setRoomName(name: string): void {
+    try {
+      if (this.need().setRoomName(this.episode, this.roomId, name)) this.afterRename();
+    } catch (error) {
+      this.setStatus(`Cannot rename: ${message(error)}`, true);
+    }
+    this.showRoomName(this.roomId);
+  }
+
+  private afterRename(): void {
+    this.refreshRoomList();
+    this.refreshButtons();
+    this.remember(this.episode, this.roomId); // labels of back/forward
+    if (this.mapShown) this.refreshMap();
+  }
+
+  /** Adds room `id`, empty or a copy of the shown room, and shows it. */
+  addRoom(id: number, copy: boolean): void {
+    const from = this.roomId;
+    try {
+      this.need().addRoom(this.episode, id, copy ? from : undefined);
+    } catch (error) {
+      this.setStatus(`Cannot add room ${id}: ${message(error)}`, true);
+      return;
+    }
+    this.showEpisode(this.episode, id);
+    this.refreshButtons();
+    this.setStatus(copy ? `Room ${from} copied to room ${id}` : `Room ${id} added`);
+  }
+
+  /**
+   * Starts the game in the shown room with all edits (Editor.testExe): the hero at the
+   * selected cell, else where the episode puts it. Without a way to run the game the
+   * exe is downloaded.
+   */
+  async testInGame(): Promise<void> {
+    const editor = this.need();
+    const index = this.selected?.index;
+    const at =
+      index === undefined
+        ? undefined
+        : { x: index % ROOM_WIDTH, y: Math.floor(index / ROOM_WIDTH) };
+    let exe: Uint8Array;
+    try {
+      exe = editor.testExe(this.episode, this.roomId, at);
+    } catch (error) {
+      this.setStatus(`Cannot build the exe: ${message(error)}`, true);
+      return;
+    }
+    const episode = EPISODE_NAMES[this.episode] ?? "";
+    const where = `${episode} starts in room ${this.roomId}${at ? ` at (${at.x}, ${at.y})` : ""}`;
+    if (this.options.play) {
+      try {
+        await this.options.play(exe, this.episode);
+        this.setStatus(`Game started: choose ${episode}, it ${where.slice(episode.length + 1)}`);
+        return;
+      } catch (error) {
+        this.setStatus(`Cannot start the game (${message(error)}), downloading the exe`, true);
+      }
+    }
+    const name = this.fileName.replace(/(\.exe)?$/i, `-room${this.roomId}.exe`);
+    download(exe, name);
+    if (!this.options.play) this.setStatus(`Saved ${name}: ${where}`);
+  }
+
   /** "room 43 – DER START": a room with the name the game shows for it. */
   private roomLabel(episode: number, id: number): string {
     const editor = this.need();
-    const rooms = editor.rooms(episode);
-    const name = rooms.some((r) => r.id === id)
-      ? editor.game.roomName(episode, id, rooms)
+    const name = editor.rooms(episode).some((r) => r.id === id)
+      ? editor.roomName(episode, id)
       : undefined;
     return name ? `room ${id} – ${name.name}` : `room ${id}`;
   }
@@ -490,6 +635,8 @@ export class App {
   /** The browser went back or forward to one of our entries: show its room. */
   private arrive(state: unknown): void {
     if (!this.editor || !isHistoryState(state)) return;
+    // a room added and undone again
+    if (!this.editor.rooms(state.episode).some((r) => r.id === state.room)) return;
     // set first: showing the room must not record it again
     this.historyIndex = state.index;
     this.history[state.index] = { episode: state.episode, room: state.room };
@@ -591,14 +738,7 @@ export class App {
     const editor = this.need();
     try {
       const bytes = editor.save();
-      const url = URL.createObjectURL(
-        new Blob([bytes as BlobPart], { type: "application/vnd.microsoft.portable-executable" }),
-      );
-      const link = h("a", { href: url, download: this.fileName });
-      link.click();
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, 1000);
+      download(bytes, this.fileName);
       this.setStatus(`Saved ${this.fileName}`);
       this.refreshButtons();
       return bytes;
@@ -615,6 +755,22 @@ export class App {
       this.fileInput.value = "";
     });
     this.saveButton.addEventListener("click", () => this.save());
+    this.testButton.addEventListener("click", () => {
+      void this.testInGame();
+    });
+    this.roomName.addEventListener("change", () => {
+      this.setRoomName(this.roomName.value);
+    });
+    this.roomName.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") this.roomName.blur();
+      else if (event.key === "Escape") {
+        this.showRoomName(this.roomId);
+        this.roomName.blur();
+      }
+    });
+    this.newRoomInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") this.addRoom(Number(this.newRoomInput.value), event.shiftKey);
+    });
     this.undoButton.addEventListener("click", () => {
       this.undo();
     });
@@ -705,8 +861,7 @@ export class App {
       () => {
         const linked = roomInAddress();
         if (!this.editor || !linked || isHistoryState(window.history.state)) return;
-        if (!this.editor.game.episode(linked.episode).rooms.some((r) => r.id === linked.room))
-          return;
+        if (!this.editor.rooms(linked.episode).some((r) => r.id === linked.room)) return;
         this.replaceNext = true; // the browser made the history entry already
         if (linked.episode === this.episode) this.showRoom(linked.room);
         else this.showEpisode(linked.episode, linked.room);
@@ -854,9 +1009,19 @@ export class App {
   private revisit(edit: Edit | undefined): void {
     if (!edit) return;
     const editor = this.need();
-    if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
+    if (edit.added) {
+      // the room list changes: show the added room, or the last room seen that still exists
+      const rooms = editor.rooms(edit.episode);
+      const seen = this.history
+        .slice(0, this.historyIndex + 1)
+        .reverse()
+        .filter((entry) => entry.episode === edit.episode)
+        .map((entry) => entry.room);
+      const shown = [edit.room, ...seen].find((id) => rooms.some((r) => r.id === id));
+      this.showEpisode(edit.episode, shown);
+    } else if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
     else if (edit.room !== this.roomId) this.showRoom(edit.room);
-    else if (edit.records || edit.tags) {
+    else if (edit.records || edit.tags || edit.text) {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);
       if (this.selected) this.select(this.selected.index);
@@ -1026,6 +1191,7 @@ export class App {
       const id = Number(button.dataset["room"]);
       button.classList.toggle("current", id === this.roomId);
       button.classList.toggle("edited", editor.isEdited(this.episode, id));
+      button.title = this.roomLabel(this.episode, id);
     }
     this.roomList.querySelector(".current")?.scrollIntoView({ block: "nearest" });
   }
@@ -1196,6 +1362,17 @@ function loadHistory(): { episode: number; room: number }[] {
   } catch {
     return [];
   }
+}
+
+/** Offers bytes as a file download. */
+function download(bytes: Uint8Array, name: string): void {
+  const url = URL.createObjectURL(
+    new Blob([bytes as BlobPart], { type: "application/vnd.microsoft.portable-executable" }),
+  );
+  h("a", { href: url, download: name }).click();
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 1000);
 }
 
 /** The room in the page address, e.g. #3/147 (episode 3, room 147). */

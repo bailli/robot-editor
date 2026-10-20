@@ -60,7 +60,13 @@ export {
 } from "./game.ts";
 export type { Episode, Language } from "./game.ts";
 export { decodeCp437, encodeCp437 } from "./cp437.ts";
-export { CrunchedFormatError, SYMBOL_TABLE_SIZE, uncrunch } from "./crunched.ts";
+export {
+  CrunchedFormatError,
+  SYMBOL_TABLE_SIZE,
+  countEntries,
+  crunch,
+  uncrunch,
+} from "./crunched.ts";
 export type { Crunched } from "./crunched.ts";
 export { OmfFormatError, parseOmf } from "./omf.ts";
 export type { OmfFixup, OmfModule, OmfPublic, OmfSegment } from "./omf.ts";
@@ -96,6 +102,7 @@ export {
   nameRoom,
   parseRoomName,
   roomName,
+  roomNameText,
 } from "./room-names.ts";
 export type { RoomName } from "./room-names.ts";
 export {
@@ -148,7 +155,16 @@ export {
 export type { LogicRecord, Room, RoomTag } from "./scene.ts";
 export { TILE_BACKGROUND, TRANSPARENT, parseShapes, planeBit, shapePixels } from "./shapes.ts";
 export type { Colours, Frame, Shape, ShapeTable } from "./shapes.ts";
-export { displayText, parseObjectNames, parseTexts, textPieces } from "./texts.ts";
+export {
+  displayText,
+  parseObjectNames,
+  parseTexts,
+  textEntryProblem,
+  textPieces,
+  withTextEntry,
+} from "./texts.ts";
+export { EPISODE_VTABLES, readEpisodeStart, withEpisodeStart } from "./start.ts";
+export type { EpisodeStart } from "./start.ts";
 export type { TextPiece, Texts } from "./texts.ts";
 export {
   EXPERT_CLASS,

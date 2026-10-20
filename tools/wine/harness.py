@@ -4,6 +4,7 @@
 usage:
   harness.py setup                         create the sandboxed Wine prefix in .wine/
   harness.py shot EPISODE OUT.png [--exe PATH] [--wait SECONDS] [--keep] [--debug DIR] [--keys KEY...]
+  harness.py play [EPISODE] [--exe PATH] [--mute]
 
 `shot` starts a new game of EPISODE (0 = Junior .. 4 = IV) and saves the game's own
 screenshot (Ctrl+Alt+P) of the start room: a 640x348 PNG whose pixel values are the
@@ -14,6 +15,11 @@ briefly, the game polls the keyboard) before it; --keep leaves the game running.
 What the screenshot shows: the start room with the status line in row 0 and the
 actors (hero, robots) wherever they are at that moment; animated tiles may show any
 frame. The harness closes the name dialog and the room-name banner first.
+
+`play` runs the game on this display (DISPLAY) to be played, with sound unless --mute,
+in a window of its own (a Wine virtual desktop). It presses nothing: choose the episode
+in the game (its number is only printed). It ends when the game ends; a game started
+by an earlier `play` is ended first. Screenshots and saved games stay in the prefix.
 
 Requires Wine (WineHQ packages install to /opt/wine-stable), Xvfb and xdotool. The game
 runs silently (Wine's audio drivers are disabled for it).
@@ -40,16 +46,13 @@ WINE_BIN = "/opt/wine-stable/bin"
 EPISODE_BUTTONS = {e: (340, 313 + 51 * e) for e in range(5)}
 
 
-def env(display=None):
+def env(display=None, sound=False):
     e = dict(os.environ)
     if os.path.isdir(WINE_BIN):
         e["PATH"] = WINE_BIN + os.pathsep + e["PATH"]
     # Silent: without audio drivers the game plays neither sounds nor (MIDI) music.
-    e.update(
-        WINEPREFIX=PREFIX,
-        WINEDEBUG="-all",
-        WINEDLLOVERRIDES="mscoree,mshtml=;winepulse.drv,winealsa.drv,wineoss.drv=d",
-    )
+    audio = "" if sound else ";winepulse.drv,winealsa.drv,wineoss.drv=d"
+    e.update(WINEPREFIX=PREFIX, WINEDEBUG="-all", WINEDLLOVERRIDES="mscoree,mshtml=" + audio)
     if display:
         e["DISPLAY"] = display
     return e
@@ -229,6 +232,27 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
             xvfb.terminate()
 
 
+PLAY_DIR = os.path.join(PREFIX, "drive_c", "robot-play")
+EPISODE_NAMES = ["Robot Junior", "Robot I", "Robot II", "Robot III", "Robot IV"]
+
+
+def play(episode=None, exe=EXE, mute=False):
+    """Run the game on this display to be played (see the module doc)."""
+    if not os.path.isdir(GAME_DIR):
+        sys.exit("run `harness.py setup` first")
+    if not os.environ.get("DISPLAY"):
+        sys.exit("no DISPLAY to show the game on")
+    sandbox()
+    run("wineserver", "-k", check=False)  # an earlier game (also one of `shot`)
+    os.makedirs(PLAY_DIR, exist_ok=True)
+    shutil.copyfile(exe, os.path.join(PLAY_DIR, "GameOfRobot.exe"))
+    if episode is not None:
+        print(f"choose {EPISODE_NAMES[episode]} in the game")
+    subprocess.run(["wine", "explorer", "/desktop=robot,1024x768", "C:\\robot-play\\GameOfRobot.exe"],
+                   cwd=PLAY_DIR, env=env(sound=not mute), stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL, check=False)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -241,9 +265,15 @@ def main():
     s.add_argument("--keep", action="store_true")
     s.add_argument("--debug", metavar="DIR", help="save the whole screen after each step")
     s.add_argument("--keys", nargs="*", default=[], help="xdotool key names to press before the screenshot")
+    s = sub.add_parser("play")
+    s.add_argument("episode", type=int, choices=range(5), nargs="?")
+    s.add_argument("--exe", default=EXE)
+    s.add_argument("--mute", action="store_true")
     a = p.parse_args()
     if a.cmd == "setup":
         setup()
+    elif a.cmd == "play":
+        play(a.episode, os.path.abspath(a.exe), a.mute)
     else:
         shot(a.episode, os.path.abspath(a.out), a.exe, a.wait, a.keep, a.debug, a.keys)
 

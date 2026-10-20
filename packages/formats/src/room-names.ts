@@ -113,3 +113,37 @@ export function roomName(
   const text = texts?.entries.get(ROOM_NAME_ENTRY + room)?.[0];
   return text === undefined ? undefined : { room, ...parseRoomName(text) };
 }
+
+/** How an episode writes room names when a room has none yet (see roomNameText). */
+const NAME_STYLES: readonly ("stars" | "underlined" | "plain")[] = [
+  "stars",
+  "underlined",
+  "stars",
+  "plain",
+  "plain",
+];
+
+/**
+ * The text of a room's name entry for `name`, in the style of the entry it replaces
+ * (`old`) or else the episode's: episode I underlines its names ("DER START\" + a line
+ * of "═"), Junior and II frame them with stars ("*** Die Festung ***"), III and IV write
+ * them plainly. Episode III's "!" entries keep their description. The game shows the
+ * whole text in the banner on entering the room.
+ */
+export function roomNameText(name: string, episode: number, old?: string): string {
+  const trimmed = name.trim();
+  const style =
+    old === undefined
+      ? (NAME_STYLES[episode] ?? "plain")
+      : old.includes("═")
+        ? "underlined"
+        : /^\s*\*/.test(old)
+          ? "stars"
+          : "plain";
+  if (old?.startsWith("!") && !old.startsWith("!!")) {
+    const end = old.indexOf("\\");
+    return `!${trimmed}${end >= 0 ? old.slice(end) : ""}`;
+  }
+  if (style === "underlined") return `${trimmed}\\\n${"═".repeat(trimmed.length)}`;
+  return style === "stars" ? `*** ${trimmed} ***` : trimmed;
+}

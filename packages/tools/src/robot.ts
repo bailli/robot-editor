@@ -12,18 +12,24 @@
  *   robot shots --update                             recompute shots.json from the screenshots
  *   robot script EPISODE ROOM                        a room's script: source and disassembly
  *   robot script EPISODE ROOM SOURCE OUT.exe         exe whose ROOM runs the script in SOURCE
+ *   robot start EPISODE ROOM OUT.exe [--at X,Y]      exe whose episode starts in ROOM (the hero at X, Y)
+ *   robot play EPISODE ROOM [--at X,Y] [--mute]      play the episode from ROOM in the game (Wine)
  *
  * Options: --exe PATH (default reference/GameOfRobot.exe).
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import {
   disassemble,
   parseCompiledScript,
+  readEpisodeStart,
   renderRoom,
   roomCompiledScript,
   roomScript,
+  withEpisodeStart,
   withRoomScript,
 } from "@robot/formats";
 
@@ -50,13 +56,17 @@ const { values, positionals } = parseArgs({
     types: { type: "boolean", default: false },
     room: { type: "boolean", default: false },
     update: { type: "boolean", default: false },
+    at: { type: "string" },
+    mute: { type: "boolean", default: false },
   },
 });
 const [command, ...args] = positionals;
 const game = () => loadGame(values.exe);
 
 function usage(): never {
-  console.error("usage: robot render|compare|eval|patch|shots|script ... (see src/robot.ts)");
+  console.error(
+    "usage: robot render|compare|eval|patch|shots|script|start|play ... (see src/robot.ts)",
+  );
   process.exit(2);
 }
 
@@ -69,6 +79,15 @@ function int(i: number): number {
 /** Positional argument i as a string, or usage(). */
 function str(i: number): string {
   return args.at(i) ?? usage();
+}
+
+/** The exe whose episode starts in `room`, the hero at --at X,Y or the episode's start. */
+function startExe(episode: number, room: number): Uint8Array {
+  const g = game();
+  g.room(episode, room);
+  const at = values.at?.split(",").map(Number);
+  const start = at ? { room, x: at[0], y: at[1] } : { ...readEpisodeStart(g.image, episode), room };
+  return withEpisodeStart(g.image, episode, start);
 }
 
 function render(episode: number, room: number) {
@@ -189,6 +208,24 @@ switch (command) {
     const compiled = roomCompiledScript(room);
     console.log(roomScript(room) || "(no script)");
     if (compiled) console.log(`\n${disassemble(parseCompiledScript(compiled))}`);
+    break;
+  }
+  case "start": {
+    const [episode, room, out] = [int(0), int(1), str(2)];
+    writeFileSync(out, startExe(episode, room));
+    break;
+  }
+  case "play": {
+    const [episode, room] = [int(0), int(1)];
+    const exe = new URL(".wine/play.exe", ROOT);
+    mkdirSync(new URL(".wine/", ROOT), { recursive: true });
+    writeFileSync(exe, startExe(episode, room));
+    const harness = fileURLToPath(new URL("tools/wine/harness.py", ROOT));
+    const args = ["-I", harness, "play", String(episode), "--exe", fileURLToPath(exe)];
+    const result = spawnSync("python3", values.mute ? [...args, "--mute"] : args, {
+      stdio: "inherit",
+    });
+    process.exitCode = result.status ?? 1;
     break;
   }
   default:

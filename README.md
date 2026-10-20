@@ -31,9 +31,14 @@ What is decoded, what the editor supports and what is still open: [STATUS.md](ST
 by itself; otherwise open or drop an exe (it never leaves the browser). Pick an episode
 and a room, then paint the base or overlay layer: left button paints, right button picks
 the tile under the cursor, Ctrl+Z / Ctrl+Y undo and redo, G shows the grid. "Save exe"
-downloads a copy with the edited scenes. Scenes that grow move to the end of the
-resource section (the exe's signature is dropped). Logic cells (magenta) refer to the
-room's logic records and cannot be painted yet. `pnpm --filter @robot/editor build`
+downloads a copy with the edited scenes and texts. Scenes that grow move to the end of
+the resource section (the exe's signature is dropped). Logic cells (magenta) refer to
+the room's logic records and cannot be painted yet. The room's name is edited in the
+field next to the title; new rooms are added (empty or as a copy of the shown one)
+below the episode selection. "Test in game" starts the game in the shown room with all
+edits (the hero at the selected cell): under `pnpm editor` in Wine on this display
+(after `python3 tools/wine/harness.py setup`; choose the episode in the game),
+otherwise the exe is downloaded. `pnpm --filter @robot/editor build`
 makes a static build in `packages/editor/dist/`.
 
 ## Command line
@@ -47,6 +52,8 @@ makes a static build in `packages/editor/dist/`.
     pnpm robot shots --update                               recompute shots.json
     pnpm robot script EPISODE ROOM                          a room's script: source and disassembly
     pnpm robot script EPISODE ROOM SOURCE OUT.exe           exe whose ROOM runs the script in SOURCE
+    pnpm robot start EPISODE ROOM OUT.exe [--at X,Y]        exe whose episode starts in ROOM
+    pnpm robot play EPISODE ROOM [--at X,Y] [--mute]        play the episode from ROOM (needs Wine)
 
 ## Reference screenshots from the real game
 

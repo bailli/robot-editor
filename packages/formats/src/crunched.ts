@@ -15,11 +15,21 @@
  *   1 1 yyyy     y != 0   table[10 + y]        6 bits
  *   1 1 0000 bbbbbbbb     literal byte b      14 bits
  * A decoded 0x7f stands for a line feed.
+ *
+ * The game reads bytes until the resource ends and decodes a symbol only while more than
+ * 8 bits are left (0x4314b0), so the last symbols of a stream can get lost; the originals
+ * lose a trailing line feed or a few letters of their sound tables. It ignores the size
+ * and allocates room for `size` characters and `entries` index entries of the texts it
+ * reads (0x438710; see countEntries).
  */
 
 export const SYMBOL_TABLE_SIZE = 90;
 const HEADER_SIZE = SYMBOL_TABLE_SIZE + 6;
 const NEWLINE_SYMBOL = 0x7f;
+const LINE_FEED = 0x0a;
+const MARKER = 0x5555;
+/** Bits the game wants left in the stream before it decodes another symbol. */
+const LOOKAHEAD_BITS = 9;
 
 export class CrunchedFormatError extends Error {
   override name = "CrunchedFormatError";
@@ -101,4 +111,108 @@ export function uncrunch(data: Uint8Array): Crunched {
     text[length++] = symbol === NEWLINE_SYMBOL ? 0x0a : symbol;
   }
   return { marker, size, entryCount, text: text.subarray(0, length) };
+}
+
+class BitWriter {
+  private readonly out: number[] = [];
+  private buf = 0;
+  private count = 0;
+  bits = 0;
+
+  /** Writes the n <= 16 low bits of value, LSB first. */
+  write(value: number, n: number): void {
+    this.buf |= (value & ((1 << n) - 1)) << this.count;
+    this.count += n;
+    this.bits += n;
+    while (this.count >= 8) {
+      this.out.push(this.buf & 0xff);
+      this.buf >>>= 8;
+      this.count -= 8;
+    }
+  }
+
+  result(): Uint8Array {
+    return Uint8Array.from(this.count > 0 ? [...this.out, this.buf & 0xff] : this.out);
+  }
+}
+
+/** Writes the code of symbol `s` (see the prefix codes above). */
+function writeSymbol(bits: BitWriter, index: ReadonlyMap<number, number>, s: number): void {
+  const i = index.get(s);
+  if (i === undefined) {
+    bits.write(0b11, 2);
+    bits.write(0, 4);
+    bits.write(s, 8);
+  } else if (i < 3) {
+    bits.write(0, 1);
+    bits.write(i + 1, 2);
+  } else if (i < 11) {
+    bits.write(0b01, 2);
+    bits.write(i - 3, 3);
+  } else if (i < 26) {
+    bits.write(0b11, 2);
+    bits.write(i - 10, 4);
+  } else {
+    bits.write(0, 3);
+    bits.write(i - 26, 6);
+  }
+}
+
+/**
+ * The number of entries the text loader indexes (0x438710 via 0x431300): lines that
+ * start with digits and a colon ("1043:"). Sound tables are read differently and store
+ * other counts.
+ */
+export function countEntries(text: Uint8Array): number {
+  let count = 0;
+  let start = 0;
+  while (start < text.length) {
+    let i = start;
+    while (i < text.length && text[i] >= 0x30 && text[i] <= 0x39) i++;
+    if (text[i] === 0x3a) count++;
+    const end = text.indexOf(LINE_FEED, start);
+    start = end < 0 ? text.length : end + 1;
+  }
+  return count;
+}
+
+/**
+ * Compresses text (code page 437, "\n" line endings) into a CRUNCHED resource: the 90
+ * most frequent characters in the table, the others as literals. Line feeds are added
+ * at the end where the game would otherwise lose characters of the text (see above),
+ * so uncrunch returns the text with possibly a few more line feeds.
+ */
+export function crunch(text: Uint8Array, entryCount = countEntries(text)): Uint8Array {
+  if (text.includes(NEWLINE_SYMBOL)) {
+    throw new CrunchedFormatError("byte 0x7f cannot be stored: it decodes as a line feed");
+  }
+  const symbols = Array.from(text, (b) => (b === LINE_FEED ? NEWLINE_SYMBOL : b));
+  const counts = new Map<number, number>();
+  for (const s of symbols) counts.set(s, (counts.get(s) ?? 0) + 1);
+  const table = [...counts]
+    .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+    .slice(0, SYMBOL_TABLE_SIZE)
+    .map(([s]) => s);
+  // the rest of the table: distinct unused bytes (never decoded)
+  for (let b = 0; table.length < SYMBOL_TABLE_SIZE; b++) if (!counts.has(b)) table.push(b);
+  const index = new Map(table.map((s, i) => [s, i]));
+
+  const bits = new BitWriter();
+  for (const s of symbols) writeSymbol(bits, index, s);
+  const end = bits.bits;
+  let size = symbols.length;
+  while (Math.ceil(bits.bits / 8) * 8 - end < LOOKAHEAD_BITS) {
+    writeSymbol(bits, index, NEWLINE_SYMBOL);
+    size++;
+  }
+  if (size > 0xffff) throw new RangeError(`text too long for CRUNCHED: ${size} bytes`);
+  const stream = bits.result();
+  const out = new Uint8Array(HEADER_SIZE + stream.length);
+  out.set(table);
+  const view = new DataView(out.buffer);
+  view.setUint16(SYMBOL_TABLE_SIZE, MARKER, true);
+  view.setUint16(SYMBOL_TABLE_SIZE + 2, size, true);
+  view.setUint16(SYMBOL_TABLE_SIZE + 4, entryCount, true);
+  out.set(stream, HEADER_SIZE);
+  return out;
 }

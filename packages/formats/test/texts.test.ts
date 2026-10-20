@@ -2,8 +2,15 @@ import assert from "node:assert/strict";
 
 import { expect, test } from "vitest";
 
-import { EPISODES, Game } from "../src/game.ts";
-import { displayText, parseObjectNames, parseTexts, textPieces } from "../src/texts.ts";
+import { EPISODES, Game, textsId } from "../src/game.ts";
+import {
+  displayText,
+  parseObjectNames,
+  parseTexts,
+  textEntryProblem,
+  textPieces,
+  withTextEntry,
+} from "../src/texts.ts";
 import { exe } from "./data.ts";
 
 const game = new Game(exe());
@@ -84,4 +91,41 @@ test("tile codes split texts into text and the tiles drawn in it", () => {
   ]);
   // hard spaces, and names for the tiles
   expect(displayText("Diese @7@7_Zäune", (v) => `t${v}`)).toBe("Diese [t7][t7] Zäune");
+});
+
+test("entries can be set, added and removed; shared texts stay with the others", () => {
+  const text = "1.0\n1:\none;\n\n2:\n3:2\nshared|\nby two;\n\n4:\nfour;\n";
+  const before = parseTexts(text).entries;
+  const check = (id: number, variants: string[] | undefined) => {
+    const after = parseTexts(withTextEntry(text, id, variants)).entries;
+    const expected = new Map(before);
+    if (variants) expected.set(id, variants);
+    else expected.delete(id);
+    expect(after, `${id} ${String(variants)}`).toEqual(expected);
+  };
+  for (const id of [1, 2, 3, 4, 5]) {
+    check(id, ["new"]);
+    check(id, ["a", "b"]);
+    if (id !== 5) check(id, undefined);
+  }
+  expect(withTextEntry(text, 4, ["vier"])).toBe(
+    "1.0\n1:\none;\n\n2:\n3:2\nshared|\nby two;\n\n4:\nvier;\n",
+  );
+  expect(withTextEntry(text, 7, ["sieben"])).toBe(`${text}\n7:\nsieben;\n`);
+  expect(textEntryProblem("a;b")).toBeDefined();
+  expect(textEntryProblem("ok\n12: no")).toBeDefined();
+  expect(textEntryProblem("Raum 12 ist hier")).toBeUndefined();
+  expect(() => withTextEntry(text, 1, ["a|b"])).toThrow(RangeError);
+});
+
+test("every original entry can be rewritten without changing the others", () => {
+  const source = game.textSource(textsId(1));
+  assert.ok(source);
+  const before = parseTexts(source).entries;
+  for (const id of [0, 0x3d, 1043, 999]) {
+    const after = parseTexts(withTextEntry(source, id, ["neu"])).entries;
+    for (const [n, variants] of before)
+      if (n !== id) expect(after.get(n), `${id}: ${n}`).toEqual(variants);
+    expect(after.get(id)).toEqual(["neu"]);
+  }
 });

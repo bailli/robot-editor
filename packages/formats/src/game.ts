@@ -1,6 +1,6 @@
 import { type EpisodeClasses, readEpisodeClasses } from "./classes.ts";
-import { decodeCp437 } from "./cp437.ts";
-import { uncrunch } from "./crunched.ts";
+import { decodeCp437, encodeCp437 } from "./cp437.ts";
+import { crunch, uncrunch } from "./crunched.ts";
 import { type Rgb, episodePalette } from "./palette.ts";
 import { type PeImage, parsePe } from "./pe.ts";
 import { type PeResource, findResource, readResources, replaceResource } from "./resources.ts";
@@ -53,7 +53,7 @@ export class Game {
   readonly image: PeImage;
   readonly resources: PeResource[];
   private readonly episodes = new Map<number, Episode>();
-  private readonly texts = new Map<number, Texts | undefined>();
+  private readonly parsedTexts = new Map<number, Texts | undefined>();
   private readonly constants = new Map<number, ReadonlyMap<string, number>>();
   private keywords: readonly ScriptKeyword[] | undefined;
 
@@ -94,7 +94,7 @@ export class Game {
 
   /** The episode's tile descriptions and messages (see texts.ts), if it has them. */
   episodeTexts(episode: number, language: Language = "de"): Texts | undefined {
-    return this.textResource(textsId(episode, language));
+    return this.texts(textsId(episode, language));
   }
 
   /**
@@ -107,16 +107,36 @@ export class Game {
     rooms: readonly Room[] = this.episode(episode).rooms,
     language: Language = "de",
   ): RoomName | undefined {
-    const texts = this.textResource(roomNamesId(episode, language));
+    const texts = this.texts(roomNamesId(episode, language));
     return roomName(texts, episode, id, rooms, this.episode(episode).classes);
   }
 
-  private textResource(id: number): Texts | undefined {
-    if (!this.texts.has(id)) {
-      const resource = findResource(this.resources, "CRUNCHED", id);
-      this.texts.set(id, resource && parseTexts(this.decode(resource.data)));
+  /** A text resource's entries (see texts.ts), undefined if missing. */
+  texts(id: number): Texts | undefined {
+    if (!this.parsedTexts.has(id)) {
+      const source = this.textSource(id);
+      this.parsedTexts.set(id, source === undefined ? undefined : parseTexts(source));
     }
-    return this.texts.get(id);
+    return this.parsedTexts.get(id);
+  }
+
+  /** A text resource as the game unpacks it (see texts.ts), undefined if missing. */
+  textSource(id: number): string | undefined {
+    const resource = findResource(this.resources, "CRUNCHED", id);
+    return resource && this.decode(resource.data);
+  }
+
+  /**
+   * A copy of the exe whose text resource `id` holds `text` (compressed with crunch; it
+   * moves to the end of the resources if it grows, see replaceResource). Throws a
+   * RangeError for characters outside code page 437.
+   */
+  withText(id: number, text: string): Uint8Array {
+    return replaceResource(
+      this.image,
+      this.resource("CRUNCHED", id),
+      crunch(encodeCp437(text.replace(/\n*$/, "\n"))),
+    );
   }
 
   /** Script names of the episode's objects by tile type, e.g. 21 -> "KEY". */

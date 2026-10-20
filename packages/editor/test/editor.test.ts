@@ -1,6 +1,14 @@
 import { describe, expect, test } from "vitest";
 
-import { Game, LOGIC_CELL, compileScript, roomCompiledScript, roomScript } from "@robot/formats";
+import {
+  Game,
+  LOGIC_CELL,
+  compileScript,
+  parsePe,
+  readEpisodeStart,
+  roomCompiledScript,
+  roomScript,
+} from "@robot/formats";
 
 import { Editor, MAX_RECORD_SLOTS, shownCell, tilesOf } from "../src/editor.ts";
 import { defined, firstDifference, loadGame } from "./game.ts";
@@ -174,5 +182,84 @@ describe("Editor scripts", () => {
     expect(editor.canUndo).toBe(false);
     // the same source is no change
     expect(editor.setScript(1, 43, roomScript(room))).toBeUndefined();
+  });
+});
+
+describe("Editor rooms and names", () => {
+  test("a copied room is a new room with the same content, undone as one step", () => {
+    const editor = new Editor(game);
+    const id = defined(editor.freeRoomId(1, 43));
+    expect(game.episode(1).rooms.some((r) => r.id === id)).toBe(false);
+    expect(editor.addRoom(1, id, 43).added?.id).toBe(id);
+    const copy = editor.room(1, id);
+    expect(firstDifference(copy.base, room.base)).toBe(-1);
+    expect(copy.records).toEqual(room.records);
+    expect(roomScript(copy)).toBe(roomScript(room));
+    expect(editor.isEdited(1, id)).toBe(true);
+    // the copy is its own: painting it leaves the original alone
+    editor.beginStroke(1, id, "base");
+    editor.paint(free, 0x0105);
+    editor.endStroke();
+    expect(editor.room(1, 43).base[free]).toBe(room.base[free]);
+    const saved = new Game(editor.save());
+    expect(saved.room(1, id).base[free]).toBe(0x0105);
+    expect(saved.episode(1).rooms.map((r) => r.id)).toEqual(
+      [...game.episode(1).rooms.map((r) => r.id), id].sort((a, b) => a - b),
+    );
+    editor.undo();
+    editor.undo();
+    expect(editor.rooms(1).some((r) => r.id === id)).toBe(false);
+    editor.redo();
+    expect(editor.room(1, id).base[free]).toBe(room.base[free]);
+  });
+
+  test("an added room is empty; ids must be free and in range", () => {
+    const editor = new Editor(game);
+    editor.addRoom(1, 999);
+    expect(editor.room(1, 999).base.every((c) => c === 0)).toBe(true);
+    expect(editor.room(1, 999).tags).toEqual([]);
+    expect(() => editor.addRoom(1, 999)).toThrow(RangeError);
+    expect(() => editor.addRoom(1, 43)).toThrow(RangeError);
+    expect(() => editor.addRoom(1, 1024)).toThrow(RangeError);
+    expect(() => editor.addRoom(1, 0)).toThrow(RangeError);
+  });
+
+  test("room names are set in the episode's style, saved and undone", () => {
+    const editor = new Editor(game);
+    expect(editor.setRoomName(1, 43, "NEUER START")?.text).toBeDefined();
+    expect(editor.roomName(1, 43)).toEqual({ room: 43, name: "NEUER START" });
+    expect(editor.roomName(1, 42)).toEqual(game.roomName(1, 42));
+    expect(editor.isEdited(1, 43)).toBe(true);
+    expect(editor.isEdited(1, 42)).toBe(false);
+    const saved = new Game(editor.save());
+    expect(saved.roomName(1, 43)?.name).toBe("NEUER START");
+    expect(saved.episodeTexts(1)?.entries.get(1043)).toEqual(["NEUER START\\\n═══════════"]);
+    editor.undo();
+    expect(editor.roomName(1, 43)?.name).toBe("DER START");
+    expect(editor.isEdited(1, 43)).toBe(false);
+    // a new room gets a name; caves name the room above; no name: "Szene <id>"
+    editor.addRoom(2, 599);
+    editor.setRoomName(2, 599, "Der neue Raum");
+    expect(editor.roomName(2, 599)?.name).toBe("Der neue Raum");
+    expect(editor.nameRoom(2, 143)).toBe(43);
+    editor.setRoomName(2, 143, "Die Pyramiden");
+    expect(editor.roomName(2, 43)?.name).toBe("Die Pyramiden");
+    editor.setRoomName(2, 43, "");
+    expect(editor.roomName(2, 43)).toBeUndefined();
+    editor.addRoom(1, 300); // episode I names rooms below 300 only
+    expect(() => editor.setRoomName(1, 300, "x")).toThrow(RangeError);
+    expect(() => editor.setRoomName(2, 44, "a;b")).toThrow(RangeError);
+    expect(() => editor.setRoomName(2, 44, "€")).toThrow(RangeError);
+  });
+
+  test("the test exe starts the episode in the room, with the edits", () => {
+    const editor = new Editor(game);
+    editor.addRoom(1, 999, 43);
+    const exe = editor.testExe(1, 999, { x: 10, y: 12 });
+    expect(readEpisodeStart(parsePe(exe), 1)).toEqual({ room: 999, x: 10, y: 12 });
+    expect(new Game(exe).episode(1).rooms.some((r) => r.id === 999)).toBe(true);
+    expect(readEpisodeStart(parsePe(editor.testExe(1, 44)), 1)).toEqual({ room: 44, x: 5, y: 14 });
+    expect(editor.dirty).toBe(true); // not saved
+    expect(() => editor.testExe(1, 998)).toThrow();
   });
 });

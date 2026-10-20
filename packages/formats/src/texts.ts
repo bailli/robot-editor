@@ -109,3 +109,59 @@ export function textPieces(text: string): TextPiece[] {
   add(text.slice(at));
   return pieces;
 }
+
+/** The longest line the game reads in one piece (0x431620 reads up to 255 bytes). */
+const MAX_LINE = 254;
+
+/**
+ * Why a variant cannot be stored as it is, or undefined: "|" and ";" end variants, a
+ * line of digits and a colon is a header for the game (0x431300), long lines get split.
+ */
+export function textEntryProblem(variant: string): string | undefined {
+  if (/[|;]/.test(variant)) return `"|" and ";" separate texts`;
+  for (const line of variant.split("\n")) {
+    if (/^\d*:/.test(line)) return `a line must not start with digits and ":"`;
+    if (line.length > MAX_LINE) return `lines are at most ${MAX_LINE} characters long`;
+  }
+  return undefined;
+}
+
+/**
+ * A text resource (as decoded, see parseTexts) with entry `id` set to `variants`, or
+ * removed (undefined). Headers sharing the entry's text keep it: the one before gets a
+ * copy. A new entry is added at the end.
+ */
+export function withTextEntry(
+  text: string,
+  id: number,
+  variants: readonly string[] | undefined,
+): string {
+  const problem = variants?.map(textEntryProblem).find((p) => p !== undefined);
+  if (problem) throw new RangeError(problem);
+  const headers = [...text.matchAll(HEADER)];
+  const bounds = (i: number) => {
+    const header = headers[i];
+    const start = Math.min(text.length, header.index + header[0].length + 1);
+    return { header, start, end: headers.at(i + 1)?.index ?? text.length };
+  };
+  const body = (i: number) => {
+    const { start, end } = bounds(i);
+    return text.slice(start, end);
+  };
+  const entry =
+    variants && `${id}:${variants.length > 1 ? variants.length : ""}\n${variants.join("|\n")};`;
+  const at = headers.findIndex((h) => Number(h[1]) === id);
+  if (at < 0) return entry ? `${text.trimEnd()}\n\n${entry}\n` : text;
+
+  const { header, end } = bounds(at);
+  const own = body(at);
+  const shared = at > 0 && body(at - 1).trim() === "";
+  // the text the entry shows now: its own, or the next one's
+  let next = at;
+  while (next < headers.length - 1 && body(next).trim() === "") next++;
+  const old = body(next).trimEnd();
+  const trailing = own.trim() === "" ? "\n" : own.slice(own.trimEnd().length);
+  // headers sharing the text it shows now keep that text: the one before gets a copy
+  const keep = shared && (entry !== undefined || own.trim() !== "") ? `${old}\n` : "";
+  return text.slice(0, header.index) + keep + (entry ? entry + trailing : "") + text.slice(end);
+}

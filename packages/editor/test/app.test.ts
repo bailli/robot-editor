@@ -9,6 +9,8 @@ import {
   SCREEN_WIDTH,
   displayText,
   exitMode,
+  parsePe,
+  readEpisodeStart,
   renderRoom,
   roomScript,
   toRgba,
@@ -48,13 +50,17 @@ function cellCentre(index: number) {
   };
 }
 
+function roomNameField(): HTMLInputElement {
+  return defined(document.querySelector<HTMLInputElement>(".room-name") ?? undefined, "the name");
+}
+
 async function clickCell(index: number, button: "left" | "right" = "left") {
   await userEvent.click(app.view.element, { position: cellCentre(index), button });
 }
 
 test("shows the start room of Robot I as the renderer draws it", async () => {
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
-  expect(document.querySelector(".room-name")?.textContent).toBe("DER START");
+  expect(roomNameField().value).toBe("DER START");
   const ep = game.episode(1);
   const expected = toRgba(renderRoom(game.room(1, 43), ep.objects, ep.classes), ep.palette);
   expect(firstDifference(app.view.pixels(), expected)).toBe(-1);
@@ -172,9 +178,9 @@ test("doors and stairs are listed with the exits", async () => {
   await exits().getByRole("button", { name: "147" }).click();
   await expect.element(page.getByRole("heading", { name: "Robot III – room 147" })).toBeVisible();
   // inside the hut: the village's name and description
-  const name = document.querySelector(".room-name");
-  expect(name?.textContent).toBe('Das große Dorf am "Sila"-Fluß');
-  expect(name?.getAttribute("title")).toMatch(/^the name of room 47\nAm Mündungsdelta /);
+  const name = roomNameField();
+  expect(name.value).toBe('Das große Dorf am "Sila"-Fluß');
+  expect(name.getAttribute("title")).toMatch(/^the name of room 47\nAm Mündungsdelta /);
   expect(document.querySelector('.passage[data-direction="door out"]')?.textContent).toBe(
     "Door out47",
   );
@@ -367,9 +373,9 @@ test("a room typed into the address of the open page is shown", async () => {
   window.location.hash = "#3/147";
   await expect.element(page.getByRole("heading", { name: "Robot III – room 147" })).toBeVisible();
   // inside the hut: the village's name and description
-  const name = document.querySelector(".room-name");
-  expect(name?.textContent).toBe('Das große Dorf am "Sila"-Fluß');
-  expect(name?.getAttribute("title")).toMatch(/^the name of room 47\nAm Mündungsdelta /);
+  const name = roomNameField();
+  expect(name.value).toBe('Das große Dorf am "Sila"-Fluß');
+  expect(name.getAttribute("title")).toMatch(/^the name of room 47\nAm Mündungsdelta /);
   window.history.back();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
 });
@@ -580,4 +586,81 @@ test("tiles the game draws in its texts are drawn in the editor's texts too", ()
   expect(text?.textContent).toMatch(/bei der Bank\s+gegen Punkte/);
   // tooltips name the tile instead
   expect(text?.getAttribute("title")).toMatch(/bei der Bank \[0x0014\] gegen/);
+});
+
+test("the room's name is edited in place", async () => {
+  const name = roomNameField();
+  await userEvent.fill(name, "NEUER START");
+  await userEvent.keyboard("{Enter}");
+  expect(app.editor?.roomName(1, 43)?.name).toBe("NEUER START");
+  expect(document.querySelector('.room-list [data-room="43"]')?.classList.contains("edited")).toBe(
+    true,
+  );
+  expect(document.querySelector('.room-list [data-room="43"]')?.getAttribute("title")).toBe(
+    "room 43 – NEUER START",
+  );
+  // a name the game cannot store changes nothing
+  await userEvent.fill(name, "A;B");
+  await userEvent.keyboard("{Enter}");
+  expect(name.value).toBe("NEUER START");
+  expect(document.querySelector(".status")?.classList.contains("error")).toBe(true);
+  app.undo();
+  expect(name.value).toBe("DER START");
+  // rooms whose names the game does not show
+  app.showEpisode(2, 600);
+  expect(name.disabled).toBe(false);
+  expect(name.placeholder).toBe("Szene 600 (no name)");
+});
+
+test("rooms are added empty or as a copy of the shown room", async () => {
+  const id = page.getByRole("spinbutton", { name: "New room id" });
+  await userEvent.fill(id.element(), "250");
+  await page.getByRole("button", { name: "Copy", exact: true }).click();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 250" })).toBeVisible();
+  const ep = game.episode(1);
+  const expected = toRgba(renderRoom(game.room(1, 43), ep.objects, ep.classes), ep.palette);
+  expect(firstDifference(app.view.pixels(), expected)).toBe(-1);
+  expect(document.querySelector('.room-list [data-room="250"]')?.classList.contains("edited")).toBe(
+    true,
+  );
+  expect(roomNameField().placeholder).toBe("Szene 250 (no name)");
+  // the next free id is offered
+  expect((id.element() as HTMLInputElement).value).toBe("251");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 251" })).toBeVisible();
+  expect(app.editor?.room(1, 251).base.every((c) => c === 0)).toBe(true);
+  // ids in use are refused
+  await userEvent.fill(id.element(), "43");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  expect(document.querySelector(".status")?.textContent).toMatch(/room 43 exists/);
+  app.undo();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 250" })).toBeVisible();
+  expect(document.querySelector('.room-list [data-room="251"]')).toBeNull();
+  app.undo();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
+  expect(document.querySelector('.room-list [data-room="250"]')).toBeNull();
+});
+
+test("Test in game runs an exe that starts in the room, at the selected cell", async () => {
+  const runs: { exe: Uint8Array; episode: number }[] = [];
+  const root = document.createElement("div");
+  document.body.replaceChildren(root);
+  app = track(
+    new App(root, {
+      play: (exe, episode) => {
+        runs.push({ exe, episode });
+        return Promise.resolve();
+      },
+    }),
+  );
+  app.load(bytes);
+  app.showEpisode(2, 44);
+  app.select(10 * ROOM_WIDTH + 7);
+  await page.getByRole("button", { name: "Test in game" }).click();
+  await expect.poll(() => runs.length).toBe(1);
+  expect(runs[0]?.episode).toBe(2);
+  expect(readEpisodeStart(parsePe(defined(runs[0]).exe), 2)).toEqual({ room: 44, x: 7, y: 10 });
+  expect(document.querySelector(".status")?.textContent).toBe(
+    "Game started: choose Robot II, it starts in room 44 at (7, 10)",
+  );
 });

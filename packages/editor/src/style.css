@@ -133,11 +133,30 @@ h2 {
   top: 16px;
 }
 
+.room-add {
+  display: flex;
+  gap: 3px;
+}
+
+.room-add input {
+  width: 0;
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.room-add button {
+  padding: 2px 5px;
+}
+
 .room-list {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 3px;
-  max-height: calc(100vh - 120px);
+  max-height: calc(100vh - 160px);
   overflow-y: auto;
 }
 
@@ -168,7 +187,21 @@ h2 {
 }
 
 .room-head .room-name {
+  flex: 1;
+  min-width: 0;
+  max-width: 360px;
+  padding: 1px 4px;
   color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.room-head .room-name:enabled:hover,
+.room-head .room-name:focus {
+  color: var(--text);
+  background: var(--panel);
+  border-color: var(--line);
 }
 
 .room-head .history {

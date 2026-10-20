@@ -1,17 +1,33 @@
 import {
   type Direction,
+  type EpisodeStart,
   type ExitMode,
   Game,
   LOGIC_CELL,
   type LogicRecord,
+  MAX_ROOMS,
+  NAMED_ROOMS,
   ROOM_CELLS,
+  ROOM_NAME_ENTRY,
   type Room,
+  type RoomName,
   type RoomTag,
+  type Texts,
+  encodeCp437,
   exitMode,
+  nameRoom,
+  parsePe,
+  parseTexts,
+  readEpisodeStart,
   recordCell,
+  roomName,
+  roomNameText,
+  roomNamesId,
   roomScript,
+  withEpisodeStart,
   withExitMode,
   withRoomScript,
+  withTextEntry,
 } from "@robot/formats";
 
 export type Layer = "base" | "overlay";
@@ -32,10 +48,17 @@ export interface Edit {
   records?: { before: readonly LogicRecord[]; after: readonly LogicRecord[] };
   /** The room's tags before and after (script edits only). */
   tags?: { before: readonly RoomTag[]; after: readonly RoomTag[] };
+  /** The room was added (undo removes it). */
+  added?: Room;
+  /** A text resource before and after (room names). */
+  text?: { id: number; before: string; after: string };
 }
 
 /** Logic record slots the game can address (0x432fd0 looks up slots below 200). */
 export const MAX_RECORD_SLOTS = 200;
+
+/** The highest room id records can lead to (their targets have 10 bits). */
+export const MAX_ROOM_ID = 1023;
 
 /** Record type whose shown cell is at offset 4 (the others: offset 2). */
 const CELL_AT_4 = 1;
@@ -53,6 +76,9 @@ const inRoom = (index: number) => Number.isInteger(index) && index >= 0 && index
  */
 export class Editor {
   private readonly edited = new Map<number, Room[]>();
+  /** Edited text resources by id, and the last one parsed. */
+  private readonly texts = new Map<number, string>();
+  private readonly parsed = new Map<number, { source: string; texts: Texts }>();
   private readonly undoStack: Edit[] = [];
   private readonly redoStack: Edit[] = [];
   private stroke: Edit | undefined;
@@ -75,17 +101,120 @@ export class Editor {
     return room;
   }
 
-  /** Whether a room differs from the one in the loaded exe. */
+  /** Whether a room or its name differs from the one in the loaded exe (or is new). */
   isEdited(episode: number, id: number): boolean {
     const room = this.room(episode, id);
-    const original = this.game.room(episode, id);
-    return (
+    const original = this.original(episode, id);
+    if (!original) return true;
+    const changed =
       room !== original &&
       (!sameCells(room.base, original.base) ||
         !sameCells(room.overlay, original.overlay) ||
         !sameRecords(room.records, original.records) ||
-        !sameTags(room.tags, original.tags))
-    );
+        !sameTags(room.tags, original.tags));
+    const resource = roomNamesId(episode);
+    const entry = (texts: Texts | undefined) => texts?.entries.get(ROOM_NAME_ENTRY + id)?.join("|");
+    const renamed =
+      this.texts.has(resource) &&
+      entry(this.textEntries(resource)) !== entry(this.game.texts(resource));
+    return changed || renamed;
+  }
+
+  /** A text resource as edited (see texts.ts), undefined if the exe has none. */
+  textSource(id: number): string | undefined {
+    return this.texts.get(id) ?? this.game.textSource(id);
+  }
+
+  /** The name the game shows for a room, with the edited names. */
+  roomName(episode: number, id: number): RoomName | undefined {
+    const rooms = this.rooms(episode);
+    const resource = roomNamesId(episode);
+    if (!this.texts.has(resource)) return this.game.roomName(episode, id, rooms);
+    const classes = this.game.episode(episode).classes;
+    return roomName(this.textEntries(resource), episode, id, rooms, classes);
+  }
+
+  /** The room whose name entry names room `id`, undefined if the game shows no name. */
+  nameRoom(episode: number, id: number): number | undefined {
+    const room = nameRoom(id, this.rooms(episode), this.game.episode(episode).classes);
+    return room < (NAMED_ROOMS[episode] ?? Infinity) ? room : undefined;
+  }
+
+  /**
+   * Gives room `id` the name `name` (empty: none, the game shows "Szene <id>") in the
+   * episode's style (roomNameText); rooms that show the name of a room below change
+   * that room's name. One undo step. Throws a RangeError for names the game cannot
+   * store or rooms without names.
+   */
+  setRoomName(episode: number, id: number, name: string): Edit | undefined {
+    this.endStroke();
+    const named = this.nameRoom(episode, id);
+    if (named === undefined)
+      throw new RangeError(`rooms from ${NAMED_ROOMS[episode]} on have no name`);
+    const resource = roomNamesId(episode);
+    const before = this.textSource(resource);
+    if (before === undefined) throw new RangeError("the exe has no room names");
+    const entry = ROOM_NAME_ENTRY + named;
+    const old = this.textEntries(resource)?.entries.get(entry)?.[0];
+    const text = name.trim() === "" ? undefined : roomNameText(name, episode, old);
+    if (text !== undefined) encodeCp437(text);
+    const renamed = withTextEntry(before, entry, text === undefined ? undefined : [text]);
+    if (renamed === before) return undefined;
+    const step: Edit = {
+      episode,
+      room: id,
+      layer: "base",
+      changes: [],
+      text: { id: resource, before, after: renamed },
+    };
+    this.apply(step, after);
+    this.push(step);
+    return step;
+  }
+
+  /**
+   * Adds room `id` to the episode: a copy of room `from` (cells, records and tags, the
+   * script too) or an empty one; one undo step. Throws a RangeError if the id is taken
+   * or out of range, or the episode is full.
+   */
+  addRoom(episode: number, id: number, from?: number): Edit {
+    this.endStroke();
+    const rooms = this.rooms(episode);
+    if (!Number.isInteger(id) || id < 1 || id > MAX_ROOM_ID) {
+      throw new RangeError(`room ids go from 1 to ${MAX_ROOM_ID}`);
+    }
+    if (rooms.some((r) => r.id === id)) throw new RangeError(`room ${id} exists`);
+    if (rooms.length >= MAX_ROOMS)
+      throw new RangeError(`an episode has at most ${MAX_ROOMS} rooms`);
+    const source = from === undefined ? undefined : this.room(episode, from);
+    const room: Room = source
+      ? {
+          id,
+          tags: source.tags.map((t) => ({ ...t, ...(t.data ? { data: t.data.slice() } : {}) })),
+          base: source.base.slice(),
+          overlay: source.overlay.slice(),
+          records: source.records.map((r) => ({ ...r, data: r.data.slice() })),
+          trailing: source.trailing.slice(),
+        }
+      : {
+          id,
+          tags: [],
+          base: new Uint16Array(ROOM_CELLS),
+          overlay: new Uint16Array(ROOM_CELLS),
+          records: [],
+          trailing: new Uint8Array(),
+        };
+    const step: Edit = { episode, room: id, layer: "base", changes: [], added: room };
+    this.apply(step, after);
+    this.push(step);
+    return step;
+  }
+
+  /** A free room id: the first after `near`, else the first one. */
+  freeRoomId(episode: number, near = 0): number | undefined {
+    const used = new Set(this.rooms(episode).map((r) => r.id));
+    const ids = Array.from({ length: MAX_ROOM_ID }, (_, k) => k + 1);
+    return ids.find((k) => k > near && !used.has(k)) ?? ids.find((k) => !used.has(k));
   }
 
   /** Changes since loading or the last save. */
@@ -224,9 +353,13 @@ export class Editor {
       tags: { before: room.tags, after: tags },
     };
     this.apply(step, after);
+    this.push(step);
+    return step;
+  }
+
+  private push(step: Edit): void {
     this.undoStack.push(step);
     this.redoStack.length = 0;
-    return step;
   }
 
   get canUndo(): boolean {
@@ -256,18 +389,61 @@ export class Editor {
     return edit;
   }
 
-  /** The loaded exe with every edited episode's scene replaced. */
+  /** The loaded exe with every edited episode's scene and text replaced. */
   save(): Uint8Array {
+    const exe = this.build();
+    this.saved = this.undoStack.at(-1);
+    return exe;
+  }
+
+  /**
+   * The edited exe in which `episode` starts in room `room`, the hero at `at` (else
+   * where the episode puts it), to try the room out in the game.
+   */
+  testExe(episode: number, room: number, at?: { x: number; y: number }): Uint8Array {
+    this.room(episode, room);
+    const start: EpisodeStart = { ...(at ?? readEpisodeStart(this.game.image, episode)), room };
+    return withEpisodeStart(parsePe(this.build()), episode, start);
+  }
+
+  private build(): Uint8Array {
     this.endStroke();
     let exe = this.game.image.data;
     for (const [episode, rooms] of this.edited) {
       exe = new Game(exe).withScene(episode, rooms);
     }
-    this.saved = this.undoStack.at(-1);
+    for (const [id, text] of this.texts) {
+      if (text !== this.game.textSource(id)) exe = new Game(exe).withText(id, text);
+    }
     return exe;
   }
 
+  /** The parsed entries of a text resource as edited. */
+  private textEntries(id: number): Texts | undefined {
+    const source = this.textSource(id);
+    if (source === undefined) return undefined;
+    let known = this.parsed.get(id);
+    if (known?.source !== source) {
+      known = { source, texts: parseTexts(source) };
+      this.parsed.set(id, known);
+    }
+    return known.texts;
+  }
+
   private apply(edit: Edit, value: (change: CellChange) => number): void {
+    if (edit.text) {
+      this.texts.set(edit.text.id, value === before ? edit.text.before : edit.text.after);
+      return;
+    }
+    if (edit.added) {
+      const rooms = this.writableList(edit.episode).filter((r) => r.id !== edit.room);
+      if (value === after) rooms.push(edit.added);
+      this.edited.set(
+        edit.episode,
+        rooms.sort((a, b) => a.id - b.id),
+      );
+      return;
+    }
     const room = this.writable(edit.episode, edit.room);
     for (const change of edit.changes) room[edit.layer][change.index] = value(change);
     if (edit.records) {
@@ -281,22 +457,32 @@ export class Editor {
     this.endStroke();
     const step = { ...edit, records: { before: room.records, after: records } };
     this.apply(step, after);
-    this.undoStack.push(step);
-    this.redoStack.length = 0;
+    this.push(step);
     return step;
   }
 
-  /** The room as an editable copy (made on first use). */
-  private writable(episode: number, id: number): Room {
+  /** The room in the loaded exe, undefined for added rooms. */
+  private original(episode: number, id: number): Room | undefined {
+    return this.game.episode(episode).rooms.find((r) => r.id === id);
+  }
+
+  /** The episode's rooms as an editable list (made on first use). */
+  private writableList(episode: number): Room[] {
     let rooms = this.edited.get(episode);
     if (!rooms) {
       rooms = [...this.game.episode(episode).rooms];
       this.edited.set(episode, rooms);
     }
+    return rooms;
+  }
+
+  /** The room as an editable copy (made on first use). */
+  private writable(episode: number, id: number): Room {
+    const rooms = this.writableList(episode);
     const i = rooms.findIndex((r) => r.id === id);
     if (i < 0) throw new Error(`episode ${episode} has no room ${id}`);
     const room = rooms[i];
-    if (room !== this.game.room(episode, id)) return room;
+    if (room !== this.original(episode, id)) return room;
     const copy = {
       ...room,
       base: room.base.slice(),
