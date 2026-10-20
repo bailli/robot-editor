@@ -17,6 +17,8 @@ import {
   START_ROOMS,
   compileScript,
   cryptScene,
+  darkPalette,
+  darknessBlock,
   describeRecord,
   disassemble,
   displayText,
@@ -158,7 +160,7 @@ export class App {
   tile = 0;
 
   readonly view = new RoomView(2);
-  private readonly caches = new Map<number, CellCache>();
+  private readonly caches = new Map<string, CellCache>();
   private fileName = "GameOfRobot.exe";
   private painting = false;
   private lastRoom: string | undefined;
@@ -184,6 +186,8 @@ export class App {
   private readonly undoButton = h("button", { disabled: true, title: "Ctrl+Z" }, "Undo");
   private readonly redoButton = h("button", { disabled: true, title: "Ctrl+Y" }, "Redo");
   private readonly gridToggle = h("input", { type: "checkbox" });
+  /** Draws rooms as dark as the game does on entering them (their darkness setting). */
+  private readonly darkToggle = h("input", { type: "checkbox" });
   private readonly actorsToggle = h("input", { type: "checkbox", checked: true });
   private readonly mapButton = h("button", {
     title: "The episode's rooms on their grid, with the exits between them (M)",
@@ -569,6 +573,15 @@ export class App {
         this.undoButton,
         this.redoButton,
         h("label", {}, this.gridToggle, " Grid"),
+        h(
+          "label",
+          {
+            title:
+              "Draw rooms as dark as the game does on entering them (their darkness, tab Room; scripts and lamps can change it in the game) (D)",
+          },
+          this.darkToggle,
+          " Dark",
+        ),
         h("label", { title: "Where actors appear (A)" }, this.actorsToggle, " Actors"),
         this.mapButton,
         this.status,
@@ -667,7 +680,7 @@ export class App {
     // their rows are replaced without a mouseleave
     this.view.setAreas([]);
     this.view.setHighlights([]);
-    this.view.show(room, this.cache());
+    this.view.show(room, this.roomCache(room));
     this.connections = connections(
       room,
       new Set(editor.rooms(this.episode).map((r) => r.id)),
@@ -686,6 +699,14 @@ export class App {
     this.lastRoom = shown;
     this.remember(this.episode, id);
     if (this.mapShown) this.refreshMap();
+  }
+
+  /** Draws rooms (and the map) as dark as in the game, or as they are. */
+  setDark(dark: boolean): void {
+    this.darkToggle.checked = dark;
+    if (!this.editor) return;
+    if (this.mapShown) this.refreshMap();
+    else this.showRoom(this.roomId);
   }
 
   /** The Room tab: the shown room's tags (darkness, points, music, flags). */
@@ -1275,6 +1296,9 @@ export class App {
     this.gridToggle.addEventListener("change", () => {
       this.view.setGrid(this.gridToggle.checked);
     });
+    this.darkToggle.addEventListener("change", () => {
+      this.setDark(this.darkToggle.checked);
+    });
     this.episodeSelect.addEventListener("change", () => {
       this.showEpisode(Number(this.episodeSelect.value));
     });
@@ -1433,6 +1457,8 @@ export class App {
         } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "g") {
           this.gridToggle.checked = !this.gridToggle.checked;
           this.view.setGrid(this.gridToggle.checked);
+        } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "d") {
+          this.setDark(!this.darkToggle.checked);
         } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "a") {
           this.actorsToggle.checked = !this.actorsToggle.checked;
           this.refreshActors();
@@ -1596,12 +1622,12 @@ export class App {
       cache = new Map();
       this.thumbnails.set(this.episode, cache);
     }
-    const key = roomKey(room);
+    const cells = this.roomCache(room);
+    const key = `${roomKey(room)} ${cells.palette.map((c) => c.join()).join()}`;
     const known = cache.get(id);
     if (known?.key === key) return known.canvas;
     const canvas = known?.canvas ?? h("canvas", { class: "map-thumbnail" });
     cache.set(id, { key, canvas });
-    const cells = this.cache();
     setTimeout(() => {
       drawRoom(canvas, room, cells);
     });
@@ -1831,13 +1857,22 @@ export class App {
     return names;
   }
 
-  private cache(): CellCache {
-    let cache = this.caches.get(this.episode);
+  /** The episode's cells, in the palette block `block` (darknessBlock; 0: as they are). */
+  private cache(block = 0): CellCache {
+    const key = `${this.episode} ${block}`;
+    let cache = this.caches.get(key);
     if (!cache) {
-      cache = new CellCache(this.need().game.episode(this.episode));
-      this.caches.set(this.episode, cache);
+      const episode = this.need().game.episode(this.episode);
+      cache = new CellCache(episode, darkPalette(episode.palette, block));
+      this.caches.set(key, cache);
     }
     return cache;
+  }
+
+  /** The cells a room is drawn with: as dark as in the game with the Dark toggle on. */
+  private roomCache(room: Room): CellCache {
+    const dark = this.darkToggle.checked;
+    return this.cache(dark ? darknessBlock(roomSettings(room).darkness) : 0);
   }
 
   private setStatus(text: string, error = false): void {

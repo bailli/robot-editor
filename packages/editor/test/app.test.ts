@@ -7,6 +7,8 @@ import {
   ROOM_WIDTH,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
+  darkPalette,
+  darknessBlock,
   displayText,
   exitMode,
   parsePe,
@@ -66,6 +68,21 @@ test("shows the start room of Robot I as the renderer draws it", async () => {
   const ep = game.episode(1);
   const expected = toRgba(renderRoom(game.room(1, 43), ep.objects, ep.classes), ep.palette);
   expect(firstDifference(app.view.pixels(), expected)).toBe(-1);
+});
+
+test("the Dark toggle draws rooms as dark as the game on entering them", async () => {
+  const ep = game.episode(1);
+  const drawn = (id: number, block: number) =>
+    toRgba(renderRoom(game.room(1, id), ep.objects, ep.classes), darkPalette(ep.palette, block));
+  await page.getByRole("checkbox", { name: "Dark" }).click();
+  // room 43 has no darkness
+  expect(firstDifference(app.view.pixels(), drawn(43, 0))).toBe(-1);
+  app.showRoom(42); // darkness 80: palette block 11
+  expect(darknessBlock(80)).toBe(11);
+  expect(firstDifference(app.view.pixels(), drawn(42, 11))).toBe(-1);
+  // the key D toggles it
+  await userEvent.keyboard("d");
+  expect(firstDifference(app.view.pixels(), drawn(42, 0))).toBe(-1);
 });
 
 test("every room of every episode is drawn as the renderer draws it", () => {

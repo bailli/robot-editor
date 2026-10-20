@@ -20,14 +20,19 @@ import {
   toRgba,
 } from "@robot/formats";
 
-/** RGBA pixels of map positions (base, overlay) of one episode, drawn once each. */
+/**
+ * RGBA pixels of map positions (base, overlay) of one episode, drawn once each, in the
+ * episode's palette or another (e.g. a dark one, darkPalette).
+ */
 export class CellCache {
   private readonly cells = new Map<number, ImageData>();
 
   readonly episode: Episode;
+  readonly palette: readonly Rgb[];
 
-  constructor(episode: Episode) {
+  constructor(episode: Episode, palette: readonly Rgb[] = episode.palette) {
     this.episode = episode;
+    this.palette = palette;
   }
 
   get(base: number, overlay: number): ImageData {
@@ -35,7 +40,7 @@ export class CellCache {
     let image = this.cells.get(key);
     if (!image) {
       const pixels = renderCell(base, overlay, this.episode.objects, this.episode.classes);
-      image = new ImageData(toRgba(pixels, this.episode.palette), TILE_WIDTH, TILE_HEIGHT);
+      image = new ImageData(toRgba(pixels, this.palette), TILE_WIDTH, TILE_HEIGHT);
       this.cells.set(key, image);
     }
     return image;

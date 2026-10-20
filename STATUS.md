@@ -168,7 +168,15 @@ Files in `packages/formats/src`:
 - **Shapes:** OMF objects with shape tables; descriptors of 12 bytes, frames of four 1-bit
   planes; pixel = 15 XOR the plane colours. `_Rob_object` is indexed by tile type,
   `_Aliens` holds the robots.
-- **Palettes** per episode (16 colours; dark rooms use palette offsets at run time).
+- **Palettes** per episode (16 colours, `palette.ts`). The game expands them into 14
+  blocks of 16 (0x4023d0; its screenshots carry them all): 0 the palette, 1 brighter
+  (+64), 2 grey, 3–11 darker and greyer (`darkPalette`), 12 black, 13 a grey ramp.
+  **Darkness** (Night) redraws the screen in one block (0x42b170, 0x42b0b0,
+  `darknessBlock`): 0 none, else the table at 0x481974 at (1100 − 11 × min(Night, 100)) /
+  100, e.g. 40 → 7, 60 → 9, 80 → 11, 100 → 12 (black); light sources (0x42b230: up to 10,
+  added by lamps, fires and other objects at run time) brighten circles of radius 50.
+  **Verified:** the dark blocks match the game's screenshot palette exactly, and episode I
+  room 43 at darkness 60 differs from its screenshot only where the actors are.
 - **Object classes:** class table per episode (0x479ad8, 0x475838, 0x476e00, 0x477ca0,
   0x478c40; 128 entries); vtable +0x00 class id, +0x08 frame method, +0x28 room-load
   method (actors are created there), +0x54 describe method.
@@ -218,7 +226,16 @@ Files in `packages/formats/src`:
   room 42 (its banner, its darkness, 1000 points = its tag kind 4 × 10); west "outside"
   arrives in room 2; the original byte (west "none") keeps the hero in the room. The exits
   byte (tag kind 1) is present only when not 0 and is then the room's first tag; mode 3
-  works like 2 but no original uses it.
+  works like 2 but no original uses it. Both depend on the byte 0x4fe308: exit tiles
+  stay closed while it is above 0 (enemies about; it counts down by one per run).
+- **Barriers** (tile 0x55, class 100, "Eine Barriere für unvorsichtige Abenteurer",
+  state 0 open, 1 closed; on room edges in episodes II–IV, III's only exits) work like
+  exit tiles but on every edge: while the flag 0x4c7270 is set, the same task scans one
+  map row per run and turns open barriers (class value 0x64 in the game's map) into closed
+  ones (0x164) while 0x4fe308 is above 0, closed into open ones otherwise. **Verified under
+  Wine** (a walled episode III room without enemies, barriers placed closed): the game
+  shows them open and the hero walks out. Where 0x4c7270 is set is not traced (it is
+  written through a pointer).
 - **Scripts** (plain text, C-like) change `RoomNorth`…`RoomWest` and `BusWest`/`BusEast`
   (bus line in episode II); parsed with fixed vs. state-dependent marking.
   `Teleport(room, x, y)` does not move the hero: it stores a point (0x4fe358/35a/35b,
@@ -407,7 +424,8 @@ Supported:
 - painting base or overlay with a tile from the episode's tiles (robots, which draw
   nothing as tiles, show their first sprite; other invisible tiles a hatching; a filter
   by name, text or hex value) or any hex value; right click picks; dragging fills lines;
-  undo/redo per stroke; grid (G)
+  undo/redo per stroke; grid (G); Dark (D) draws the room and the map as dark as the game
+  on entering (the darkness setting; scripts and light sources are not modelled)
 - tools Paint, Fill (the connected cells of the clicked value, 4 neighbours, within the
   selected area if clicked inside it), Select (drag a rectangle) and Inspect; the Area
   buttons and keys work on the selection in both layers: Copy (Ctrl+C), Cut (Ctrl+X),
@@ -449,9 +467,9 @@ Supported:
   walls and exits (a wall chosen from the episode's wall tiles most used on the originals'
   edges, by class: 6, 199 walls, 93 rock, 215/216 episode IV's walls; five exit cells in
   the middle of each edge, like most Junior and I rooms: exit tiles, or the barriers
-  the originals have on edges (class 100, tile 0x55; the default in episode III, whose
-  rooms have no exit tiles; under Wine the hero walked through them in state 0 "open"
-  and 1 "closed" alike, what toggles them is not decoded); **verified under Wine**
+  the originals have on edges (class 100, tile 0x55, closed like exit tiles while
+  enemies are about, see room connections; the default in episode III, whose rooms
+  have no exit tiles); **verified under Wine**
   in episodes I, III and IV: the tiles towards existing rooms open, walking out arrives
   there; III's originals use no exit tiles at all), empty floor
   or a copy of any room (the shown one by default; cells, records, tags, script); and

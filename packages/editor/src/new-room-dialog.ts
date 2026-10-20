@@ -130,7 +130,7 @@ export class NewRoomDialog {
     }
     const walledLabel = document.createElement("label");
     walledLabel.title =
-      "A wall all around, with five exit cells in the middle of each edge (exit tiles open once the room's robots are gone; barriers let the hero through)";
+      "A wall all around, with five exit cells in the middle of each edge (exit tiles and barriers are closed while the room has enemies, exit tiles only open on edges that lead somewhere)";
     walledLabel.append(this.walled, " Walls and exits");
     const tiles = document.createElement("div");
     tiles.className = "new-room-tile-rows";
