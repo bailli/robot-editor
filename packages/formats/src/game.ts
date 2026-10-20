@@ -1,6 +1,7 @@
 import { type EpisodeClasses, readEpisodeClasses } from "./classes.ts";
 import { decodeCp437, encodeCp437 } from "./cp437.ts";
 import { crunch, uncrunch } from "./crunched.ts";
+import { musicPieces } from "./music.ts";
 import { type Rgb, episodePalette } from "./palette.ts";
 import { type PeImage, parsePe } from "./pe.ts";
 import { type PeResource, findResource, readResources, replaceResource } from "./resources.ts";
@@ -28,6 +29,7 @@ export const shapesId = (episode: number) => 1002 + 100 * episode;
 /** The robots' sprites (`_Aliens`, 8 per episode, 5 in episode IV) and more. */
 export const actorShapesId = (episode: number) => 1001 + 100 * episode;
 export const sceneId = (episode: number) => 1004 + 100 * episode;
+export const musicId = (episode: number) => 1005 + 100 * episode;
 export const soundsId = (episode: number) => 1006 + 100 * episode;
 /** German texts; English (1011, 1111) exists for Junior and episode I only. */
 export const textsId = (episode: number, language: Language = "de") =>
@@ -137,6 +139,11 @@ export class Game {
       this.resource("CRUNCHED", id),
       crunch(encodeCp437(text.replace(/\n*$/, "\n"))),
     );
+  }
+
+  /** The pieces of the episode's MUSIC resource (songs and sound effects). */
+  musicPieces(episode: number): string[] {
+    return musicPieces(this.resource("MUSIC", musicId(episode)).data);
   }
 
   /** Script names of the episode's objects by tile type, e.g. 21 -> "KEY". */

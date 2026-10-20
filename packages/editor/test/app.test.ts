@@ -14,6 +14,7 @@ import {
   readEventTable,
   renderRoom,
   roomScript,
+  roomSettings,
   toRgba,
 } from "@robot/formats";
 
@@ -458,6 +459,43 @@ test("the exits byte can be changed per direction, undoably", async () => {
   app.undo();
   expect(defined(app.editor).isEdited(1, 43)).toBe(false);
   expect(west().querySelector("select")?.value).toBe("none");
+});
+
+test("the Room tab edits darkness, points, music and episode III's flags, undoably", async () => {
+  const settings = () => roomSettings(defined(app.editor).room(app.episode, app.roomId));
+  app.showRoom(42); // episode I room 42: darkness 80, 1000 points
+  await page.getByRole("tab", { name: "Room" }).click();
+  const darkness = page.getByRole("spinbutton", { name: "Darkness" });
+  const points = page.getByRole("spinbutton", { name: "First visit points" });
+  expect((darkness.element() as HTMLInputElement).value).toBe("80");
+  await userEvent.fill(darkness, "50");
+  await userEvent.keyboard("{Enter}");
+  expect(settings().darkness).toBe(50);
+  await userEvent.fill(points, "15");
+  await userEvent.keyboard("{Enter}");
+  expect(settings().points).toBe(1000);
+  expect(document.querySelector(".status.error")?.textContent).toContain("multiple of 10");
+  expect((points.element() as HTMLInputElement).value).toBe("1000");
+  const music = page.getByRole("combobox", { name: "Music" });
+  // Robot I's rooms play nothing; its MUSIC resource has episode II's SADMELO
+  expect((music.element() as HTMLSelectElement).value).toBe("");
+  await userEvent.selectOptions(music, "SADMELO");
+  expect(settings().music).toBe("SADMELO");
+  expect(document.querySelector<HTMLElement>(".settings-flags")?.hidden).toBe(true);
+  app.undo();
+  app.undo();
+  expect(defined(app.editor).isEdited(1, 42)).toBe(false);
+
+  // episode III room 144: the labyrinth and dizziness; room 1 (the title screen) plays HUMBA, which its MUSIC lacks
+  app.showEpisode(3, 144);
+  const dizzy = page.getByRole("checkbox", { name: "Hero gets dizzy" });
+  expect((dizzy.element() as HTMLInputElement).checked).toBe(true);
+  await dizzy.click();
+  expect(settings().flags).toBe(1);
+  app.showRoom(1);
+  expect((music.element() as HTMLSelectElement).selectedOptions[0].textContent).toBe(
+    "HUMBA (missing: silence)",
+  );
 });
 
 test("the map shows the rooms with their exits and opens or closes them", async () => {

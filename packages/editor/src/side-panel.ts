@@ -11,7 +11,7 @@ const MAX_WIDTH = 900;
 
 /**
  * The column right of the room: tabs (tiles, the selected cell's record, the actors, the
- * script), one shown at a time and scrolling on its own, so nothing pushes the room out
+ * script, the room's settings), one shown at a time and scrolling on its own, so nothing pushes the room out
  * of the window. Its left edge can be dragged; the width is remembered in this browser.
  */
 export class SidePanel {

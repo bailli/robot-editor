@@ -55,6 +55,7 @@ export {
   START_ROOMS,
   sceneId,
   shapesId,
+  musicId,
   soundsId,
   textsId,
 } from "./game.ts";
@@ -106,6 +107,20 @@ export {
 } from "./room-names.ts";
 export type { RoomName } from "./room-names.ts";
 export {
+  DARKNESS_TAG,
+  FLAGS_TAG,
+  MAX_DARKNESS,
+  MAX_VISIT_POINTS,
+  MUSIC_TAG,
+  POINTS_STEP,
+  POINTS_TAG,
+  RoomFlag,
+  roomSaveTime,
+  roomSettings,
+  withRoomSettings,
+} from "./room-tags.ts";
+export type { RoomSettings } from "./room-tags.ts";
+export {
   KEYWORD_FUNCTION,
   KEYWORD_VARIABLE,
   OPERATORS,
@@ -135,6 +150,7 @@ export type {
 } from "./script.ts";
 export { scriptArgument, scriptDoc, scriptFunctionDoc, scriptTextVariants } from "./script-docs.ts";
 export type { ScriptArgumentKind, ScriptFunctionDoc, ScriptPlace } from "./script-docs.ts";
+export { MUSIC_NAME_LENGTH, MusicFormatError, musicName, musicPieces } from "./music.ts";
 export { findResource, readResources, replaceResource, ResourceType } from "./resources.ts";
 export type { PeResource } from "./resources.ts";
 export { cryptScene, SCENE_KEY } from "./scene-crypt.ts";

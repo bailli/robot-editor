@@ -69,6 +69,8 @@ Files in `packages/formats/src`:
 | `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                  |
 | `describe.ts`                | the description the game shows for a cell                                                      |
 | `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                       |
+| `room-tags.ts`               | a room's darkness, points for the first visit, music and episode III flags; changing them      |
+| `music.ts`                   | MUSIC resources: the names of their pieces                                                     |
 | `start.ts`                   | the room and cell an episode starts in, and patching them                                      |
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants       |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                         |
@@ -118,6 +120,11 @@ Files in `packages/formats/src`:
   its own screenshots after the name (`R1-043-DER START.png`). Styles: episode I
   underlines (`DER START\` + a line of `═`), Junior and II frame with stars
   (`*** Die Festung ***`), III and IV write plainly; `roomNameText` writes new names so.
+- **MUSIC** (`1E05`, `music.ts`): "MUC1" at 0x1a, the number of instruments (u32 at
+  0x22, 32-byte entries from 0x30, name first), the number of pieces (u16 at 0x2e), then
+  86-byte piece entries starting with an 8-byte CP437 name (sorted; songs and sound
+  effects alike: 26, 48, 72, 55, 64 pieces), then the music data (not decoded). Every
+  room's music names a piece of its episode, but for `HUMBA`.
 - **Sound tables** (`1E06`): `N:SOUND ;note`; the notes name objects by tile type
   (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names.
 
@@ -135,8 +142,8 @@ Files in `packages/formats/src`:
   `GetNight`; +0x14), kind 4 × 10 = points for the first visit (+0x18, 0x42b640; at most
   40,950), kind 5 = the **background music** (8 characters, +0x1c: a piece of the
   episode's MUSIC resource 1E05, started looping on entering, 0x4393e8; a piece already
-  playing goes on, no tag or an unknown name (episode III's `HUMBA`) is silence; Junior
-  and I have none), kind 6 = length-prefixed payload (value 2 = compiled script, the only
+  playing goes on, no tag or an unknown name (episode III's title room 1: `HUMBA`) is
+  silence; Junior and I have none), kind 6 = length-prefixed payload (value 2 = compiled script, the only
   one read; 1 = script source, 3 = a Unix time 1993–2008 in every room, probably when the
   original editor saved it). Kind 3 (+0x16) holds two **episode III flags** (rooms
   136, 143–146, 154, 155; the other episodes ignore it): bit 0 (only room 144) builds the
@@ -146,7 +153,9 @@ Files in `packages/formats/src`:
   makes the hero dizzy: message 944 ("…Dir wird plötzlich schwindelig…") after 15 s in
   the room, once per game unless three herb tubers were eaten (vtable +0x60, 0x40ca70;
   **verified under Wine:** in room 41 with the tag, not without; the controls still
-  worked normally right after). Kinds 1–3 are bytes (higher values are cut). Payloads
+  worked normally right after). **Verified under Wine** (episode I room 43, the start
+  room, which has neither tag): darkness 100 shows the room black, 60 dimmed; 5000 points
+  for the first visit are on the status line at the start. Kinds 1–3 are bytes (higher values are cut). Payloads
   and map bodies longer than 19,998 bytes overflow the loader's stack buffer
   (`MAX_ROOM_DATA`, refused by the scene writer).
 - **Saving:** `Game.withScene` writes edited rooms back. The original scenes fill their
@@ -394,7 +403,7 @@ Supported:
 - layout: the room fits the window's height with its exits around it (north above, south
   below, west and east at the sides; doors, stairs, bus, oracles, teleporters and actors
   in a line above); the column right of it has the tool and layer settings (always
-  visible) and tabs (Tiles, Record, Actors, Script) that
+  visible) and tabs (Tiles, Record, Actors, Script, Room) that
   scroll on their own, its width can be dragged (remembered in the browser); clicking a
   logic cell opens the Record tab
 - exits: N/S/W/E targets incl. script changes; arrow keys follow fixed exits; per
@@ -440,6 +449,9 @@ Supported:
   robots drawn with the episode's `_Aliens` sprites in turn (their look and colours vary
   in the game); a list below the map groups them with name, origin and positions (click
   to select), plus what the script's `RandObj(…)` does with the room's current number
+- the room's settings (tab Room): darkness, points for the first visit, music (the
+  episode's pieces, the ones rooms play first), episode III's flags (dizzy, labyrinth),
+  each change one undo step; the original editor's save date
 - the room's script below the map: names explain themselves on hover (functions,
   game variables, `O_` constants as tiles, message ids as their text, room numbers as
   room names, `Enigma` entries as their points and text), calls with plain coordinates (`SetWarea`, `SetObj`, `Area`, …) outline
@@ -452,8 +464,7 @@ Not supported (yet):
 
 - painting over logic cells (use the inspector); records are edited field by field, no
   copy/paste of records between rooms
-- editing the other tags (darkness, points, music, kind 3); painting exit tiles is plain
-  painting (0x0017 in the base layer)
+- painting exit tiles is plain painting (0x0017 in the base layer)
 - English texts: room names are edited in the German texts only (Junior and I also
   have English ones, which keep the old names, or none for new rooms)
 - fill, copy/paste of areas, tile search/filter
@@ -527,7 +538,8 @@ Roughly by value for the editor.
    answered after 60 s), whether `Area`/`ShiftArea` settings survive leaving the room,
    RIGHT and the wand words. Possibly worth adding to the compiler: `while`,
    `break`, compound assignments (they compile to existing operations).
-4. **Room tags:** all kinds decoded (see room tags above). Not tried in the game: bit 0 of
+4. **Room tags:** all kinds decoded (see room tags above) and editable. Not tried in the
+   game: room music in Junior and I (their MUSIC resources have pieces, their rooms none), bit 0 of
    kind 3 (the labyrinth: entering room 144 from 146 generates a new maze of teleporters,
    0x40c910; the booklet confirms the labyrinth "changes its size and its paths"; a test
    starting in 146 could not reach its teleporters, which lie in the cave wall), the
@@ -551,7 +563,7 @@ Roughly by value for the editor.
 7. **Description extras:** key colours (strings 0x9c50/0x9c51 from the exe's string
    table), messages 200/201 added by two classes, codes formatted by 0x41d2c0/0x40ff80, and
    four describe methods that depend on game flags/options.
-8. **Not decoded at all:** MUSIC (only its piece names, see room tags) and PCXBITMAP
+8. **Not decoded at all:** MUSIC (only its instrument and piece names) and PCXBITMAP
    resources, the obfuscated command strings
    near 0x4828d4 ("Command %s unknown!", probably cheats; two jump ±100 rooms).
 9. **Saving details:** the PE checksum is not updated (Windows does not check it for

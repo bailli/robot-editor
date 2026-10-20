@@ -1,5 +1,6 @@
 import {
   type Direction,
+  EPISODES,
   EPISODE_NAMES,
   EVENT_TEXT,
   Game,
@@ -12,16 +13,21 @@ import {
   type RoomActor,
   START_ROOMS,
   compileScript,
+  cryptScene,
   describeRecord,
   disassemble,
   displayText,
   exitMode,
   parseCompiledScript,
+  parseScene,
   randomPlacement,
   readEventTable,
   readOracleSymbols,
   roomActors,
+  roomSaveTime,
   roomScript,
+  roomSettings,
+  sceneId,
   scriptActors,
   scriptArgument,
   scriptDoc,
@@ -51,6 +57,7 @@ import {
   spriteCanvas,
 } from "./room-view.ts";
 import { ScriptView } from "./script-view.ts";
+import { SettingsView } from "./settings-view.ts";
 import { SidePanel } from "./side-panel.ts";
 import { TileNames } from "./tile-info.ts";
 
@@ -312,13 +319,32 @@ export class App {
       return texts?.map((t) => displayText(t, tile)).join(" – or – ");
     },
   });
-  /** The column right of the room: tiles, the selected record, the actors, the script. */
+  readonly settingsView = new SettingsView({
+    change: (settings) => {
+      try {
+        this.need().setRoomSettings(this.episode, this.roomId, settings);
+      } catch (error) {
+        this.setStatus(`Cannot change the room: ${message(error)}`, true);
+      }
+      this.showRoom(this.roomId);
+      this.refreshButtons();
+    },
+  });
+  /** Per episode: the pieces of its MUSIC resource. */
+  private readonly musicPieces = new Map<number, string[]>();
+  /** The pieces some room of the loaded exe plays. */
+  private roomMusic: Set<string> | undefined;
+  /**
+   * The column right of the room: tiles, the selected record, the actors, the script,
+   * the room's settings.
+   */
   readonly sidePanel: SidePanel = new SidePanel(
     [
       { name: "tiles", label: "Tiles", content: this.tilesTab },
       { name: "record", label: "Record", content: this.recordTab },
       { name: "actors", label: "Actors", content: this.actorsView.element },
       { name: "script", label: "Script", content: this.scriptView.element },
+      { name: "room", label: "Room", content: this.settingsView.element },
     ],
     (width) => {
       this.workspace.style.setProperty("--side-width", `${width}px`);
@@ -488,6 +514,8 @@ export class App {
     this.tileNames.clear();
     this.robotSprites.clear();
     this.thumbnails.clear();
+    this.musicPieces.clear();
+    this.roomMusic = undefined;
     this.welcome.hidden = true;
     this.workspace.hidden = false;
     this.testButton.disabled = false;
@@ -554,6 +582,7 @@ export class App {
     );
     this.exitsView.show(this.connections);
     this.scriptView.show(roomScript(room), `${this.episode} ${id}`);
+    this.showSettings(room);
     this.refreshActors();
     this.refreshRoomList();
     const shown = `${this.episode} ${id}`;
@@ -561,6 +590,34 @@ export class App {
     this.lastRoom = shown;
     this.remember(this.episode, id);
     if (this.mapShown) this.refreshMap();
+  }
+
+  /** The Room tab: the shown room's tags (darkness, points, music, flags). */
+  private showSettings(room: Room): void {
+    const game = this.need().game;
+    let pieces = this.musicPieces.get(this.episode);
+    if (!pieces) {
+      try {
+        pieces = game.musicPieces(this.episode);
+      } catch {
+        pieces = []; // a MUSIC resource that is not understood: offer no pieces
+      }
+      this.musicPieces.set(this.episode, pieces);
+    }
+    // from the scenes only: loading every episode (shapes, classes) would take long
+    this.roomMusic ??= new Set(
+      EPISODES.flatMap((e) =>
+        parseScene(cryptScene(game.resource("SCENE", sceneId(e)).data)).map(
+          (r) => roomSettings(r).music,
+        ),
+      ),
+    );
+    this.settingsView.show(roomSettings(room), {
+      episode: this.episode,
+      pieces,
+      roomMusic: this.roomMusic,
+      saved: roomSaveTime(room),
+    });
   }
 
   /** The name field: the name the game shows, editable where the game shows names. */

@@ -11,6 +11,7 @@ import {
   ROOM_NAME_ENTRY,
   type Room,
   type RoomName,
+  type RoomSettings,
   type RoomTag,
   type Texts,
   encodeCp437,
@@ -24,9 +25,11 @@ import {
   roomNameText,
   roomNamesId,
   roomScript,
+  roomSettings,
   withEpisodeStart,
   withExitMode,
   withRoomScript,
+  withRoomSettings,
   withTextEntry,
 } from "@robot/formats";
 
@@ -46,7 +49,7 @@ export interface Edit {
   changes: CellChange[];
   /** The room's logic records before and after (record edits only). */
   records?: { before: readonly LogicRecord[]; after: readonly LogicRecord[] };
-  /** The room's tags before and after (script edits only). */
+  /** The room's tags before and after (script, exits and settings edits). */
   tags?: { before: readonly RoomTag[]; after: readonly RoomTag[] };
   /** The room was added (undo removes it). */
   added?: Room;
@@ -365,6 +368,25 @@ export class Editor {
     const room = this.room(episode, roomId);
     if (exitMode(room, direction) === mode) return undefined;
     return this.commitTags(episode, room, withExitMode(room, direction, mode).tags);
+  }
+
+  /**
+   * Changes the room's darkness, points for the first visit, music or flags (see
+   * room-tags.ts); one undo step. Throws a RangeError for values the tags cannot hold.
+   */
+  setRoomSettings(
+    episode: number,
+    roomId: number,
+    settings: Partial<RoomSettings>,
+  ): Edit | undefined {
+    this.endStroke();
+    const room = this.room(episode, roomId);
+    const old = roomSettings(room);
+    const changed = (Object.keys(settings) as (keyof RoomSettings)[]).some(
+      (key) => settings[key] !== undefined && settings[key] !== old[key],
+    );
+    if (!changed) return undefined;
+    return this.commitTags(episode, room, withRoomSettings(room, settings).tags);
   }
 
   /** Gives a room new tags as one undo step. */

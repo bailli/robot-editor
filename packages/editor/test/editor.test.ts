@@ -9,6 +9,7 @@ import {
   readEpisodeStart,
   roomCompiledScript,
   roomScript,
+  roomSettings,
 } from "@robot/formats";
 
 import { Editor, MAX_RECORD_SLOTS, recordCapacity, shownCell, tilesOf } from "../src/editor.ts";
@@ -197,6 +198,26 @@ describe("Editor scripts", () => {
     expect(editor.canUndo).toBe(false);
     // the same source is no change
     expect(editor.setScript(1, 43, roomScript(room))).toBeUndefined();
+  });
+});
+
+describe("Editor room settings", () => {
+  test("a setting is one undo step and saved", () => {
+    const editor = new Editor(game);
+    expect(editor.setRoomSettings(1, 43, { darkness: 70, music: "SADMELO" })?.tags).toBeDefined();
+    const saved = new Game(editor.save()).room(1, 43);
+    expect(roomSettings(saved)).toMatchObject({ darkness: 70, music: "SADMELO" });
+    editor.undo();
+    expect(editor.room(1, 43).tags).toEqual(room.tags);
+    expect(editor.isEdited(1, 43)).toBe(false);
+  });
+
+  test("an unchanged or impossible setting changes nothing", () => {
+    const editor = new Editor(game);
+    const { points } = roomSettings(room);
+    expect(editor.setRoomSettings(1, 43, { points })).toBeUndefined();
+    expect(() => editor.setRoomSettings(1, 43, { darkness: 200 })).toThrow(RangeError);
+    expect(editor.canUndo).toBe(false);
   });
 });
 
