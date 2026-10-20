@@ -392,6 +392,7 @@ rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry
   actor where the type is one, e.g. robots in II's "poisoned" presents); an electric
   fence (class 7) kills the hero (message 951). Used: robots, walls, gold, bottles,
   garlic, ammunition, suits, tonic, save clocks, jokers, food, fins, shovels, …
+  From the code and data; not yet tried in the game.
 - **Registration (shareware limit, 0x42f7c0):** every room change (edges 0x44c6b9, doors,
   stairs) and every expert field checks a number: the score, or the field's threshold.
   Below a random limit it passes: episode method +0x28, I/II/IV 70,000–100,000 points,
@@ -685,6 +686,11 @@ Roughly by value for the editor.
 13. **Scorpion sand** (sand states 6/7) is confirmed by the texts in episodes II and III
     only; in episode IV those states read "Noch mehr Sand" (one cell in the game, still
     treated as scorpions by `cellActorSource`).
+14. **Notes and packages in the game** (see Descriptions above, decoded from code and
+    data only): to try a note with state bit 7 (read on stepping onto it, 800 + state &
+    0x7f), one without (picked up; no vowels without the dictionary, IV: recorder
+    needed), a diary page and a package (its object appears on opening, a robot from
+    one in episode II).
 
 ## Limits and what is shared between episodes
 
@@ -747,6 +753,8 @@ Roughly by value for the editor.
 | 0x407b30, 0x408970           | register an event handler; raise an event                                      |
 | 0x4392dc, 0x4394f3           | entering a room: visited flag and NewRoom; runs its script                     |
 | 0x439426, 0x44ccb1           | clear the Teleport() point on entering (flag 0x2000); teleporter uses it       |
+| 0x421660, 0x4216e0, 0x4066a0 | note: step on (bit 7), read from the rucksack; show message (dictionary/tape)  |
+| 0x416400, 0x414150           | episode III diary page; open a package (its state = the tile type inside)      |
 
 ## Gotchas
 
