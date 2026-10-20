@@ -260,7 +260,9 @@ Files in `packages/formats/src`:
   south (state 7), who then moves on two cells; unless the episode's flag 0x80000
   (`[0x51bb18]+8`) is set, he must carry the key 0x0f15 (0x42bcd0 searches the
   inventory slots, their count at 0x4fe0c0; in episode II it lies in room 42 at
-  (16, 19)), and a second check (0x42f7c0 on 0x42b600(0x4fe098), not traced) must pass.
+  (16, 19)), and the score must pass the registration check (0x42f7c0, below). The
+  score is kept obfuscated at 0x4fe098: 0x42b600 reads it as ~[+4] ^ [+0] ^ 0x7895321e,
+  0x42b610 sets it ([+4] = [+4] × 0xbb38435 + 0x3619636b, then [+0] to match).
   **Verified under Wine** in episode II room 15: without the key the hero stops at
   the door, with it he enters 115.
 - **Backdrops** (`backdropRoom`, `shownCells`): a room whose cell (0, 1) or (39, 1) is
