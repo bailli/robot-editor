@@ -69,9 +69,10 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
     args: ["text", "delay", "n"],
     kinds: ["text"],
     doc:
-      "lets the phone ring after `delay` seconds in the room (not if that time has passed), " +
-      "n times plus one; answering it (using the phone) while it rings shows text `text`, " +
-      "after the last ring the caller gives up (0x41e320). Episode II.",
+      "lets the phone ring from `delay` seconds in the room on (not if that time has " +
+      "passed); walking into the phone then shows text `text` (tried in the game). By the " +
+      "code n + 1 rings before the caller gives up (0x41e320), but in the game it still " +
+      "answered after 60 s with n = 3. Episode II.",
   },
   PRINTSTR: { args: ["string"], doc: "shows a string in a message box (debugging; unused)." },
   PRINTVAL: { args: ["value"], doc: "shows a number in a message box (debugging; unused)." },
@@ -206,16 +207,17 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
     args: ["x", "y", "size", "key"],
     places: [{ x: 0, y: 1, w: 2, h: 2 }],
     doc:
-      "one of up to 4 squares that a punch card used at a card reader turns, the one " +
-      "whose key is the card's state (0x419b30). Episode IV.",
+      "one of up to 4 squares that a punch card used next to a card reader turns a quarter " +
+      "clockwise, the one whose key is the card's state (0x419b30; tried in the game). " +
+      "Episode IV.",
   },
   SHIFTAREA: {
     args: ["x", "y", "w", "h", "d"],
     places: [RECT(0)],
     doc:
       "sets up the area that episode IV's remote control (O_CONTROL, state 6) shifts once " +
-      "by one cell with wrap-around: d 0 up, 1 left, 2 down, 3 right; actors on the cells " +
-      "move along (0x407d80, 0x42fdc0). Kept across rooms.",
+      "by one cell with wrap-around when used: d 0 up (tried in the game), 1 left, 2 down, " +
+      "3 right; actors on the cells move along (0x407d80, 0x42fdc0). Kept across rooms.",
   },
   WIZZARD: {
     args: ["x", "y", "room", "rx", "ry", "ax", "ay", "aw", "ah"],

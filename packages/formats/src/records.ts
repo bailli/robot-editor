@@ -15,10 +15,13 @@ import type { LogicRecord } from "./scene.ts";
  *
  *   1   stacked: the object at offset 4 lies on the cell at offset 2 (0x44cd56); taking it
  *       leaves the lower cell (tried in the game). Byte 1 bits 6-7: the object's level,
- *       actors reach it only from that level up (episode IV's bridges; level tiles 0x6c)
+ *       actors reach it only from that level up (episode IV's bridges: level tiles 0x6c,
+ *       state bits 4-6 the level, bit 7 a ramp, bit 0 the axis, 0x41f730; the hero walks
+ *       up a ramp and along a bridge over a canal, and across under it, tried)
  *   3   buried (episode III): the object at offset 4 lies under the cell at offset 2 until
- *       dug up with the shovel (0x4130b0), then it lies on that cell (a type 1 record);
- *       a detector item senses it nearby (0x417070)
+ *       the hero uses the shovel standing on it (0x4130b0), then it lies on that cell (a
+ *       type 1 record; tried: the first dig's bonus, the gold found); a detector item
+ *       senses it nearby (0x417070)
  *   5   spawner (episodes III, IV): while the hero is within sqrt(byte 4) cells, a robot
  *       appears every byte 5 ticks (0x435650; byte 6 counts down, byte 7 animates). Not
  *       while episode IV's StationBOff is 4 or more (both tried in the game)
@@ -27,21 +30,31 @@ import type { LogicRecord } from "./scene.ts";
  *       chats (texts 300 + byte 7 or 310 + byte 7) he sells the object at offset 4 for
  *       byte 6 gold (0x42b78b, 0x415c10)
  *   8   travelling actor: on entering the room the cell at offset 2 is placed and an
- *       actor appears (byte 8, see recordActorKind: the dealer or the thief). Once the
- *       hero dealt with it, it leaves through an edge wall, which leads to room (offset
- *       4, bits 0-9) at x (byte 6), y (byte 7) for 1-2 s (0x42b81d, 0x420c30)
- *   11  circuit node (episodes I, II): lit by a signal through the wires west of it
- *       (0x40f700, byte 7). While lit it places stairs (up if byte 6, else down) at
- *       (byte 4, byte 5), if byte 5 is not 0; a final node (byte 1 bit 0) only once all
- *       the room's nodes are lit (episode I room 128: the stairs to room 228)
+ *       actor appears (byte 8, see recordActorKind: the dealer or the thief) and walks up
+ *       to the hero. Walked into, the dealer offers items for gold (cursor keys, Enter
+ *       buys, Esc ends) or buys platinum for points (text 507, 0x448440). Once the hero
+ *       dealt with it, it wanders and leaves through an edge wall, which stays open for
+ *       1-2 s and leads to room (offset 4, bits 0-9) at x (byte 6), y (byte 7) (0x42b81d,
+ *       0x420c30; tried: the dealer came, sold, left through the wall)
+ *   11  circuit node (episodes I, II, 0x40f700): its input is traced westwards from it
+ *       (0x40f9a0): letters 1 and 0 (tile 0x25) are the sources, pieces of tile 0x42 the
+ *       wiring by state: 0x0a/0x0b wire across/down, 0x0c/0x0d corners, 0x09 NOT, 0x00-0x08
+ *       a gate's operator cell (OR, AND, NOR, NAND, XOR, B or not A, A or not B, B and not
+ *       A, A and not B) with 0x0e, its left half, west of it; the inputs come from above
+ *       and below the left half. The game evaluates all nodes when such a piece is taken
+ *       or put down. A lit node (byte 7) places stairs (up if byte 6, else down) at (byte
+ *       4, byte 5), if byte 5 is not 0; a final node (byte 1 bit 0) only once all the
+ *       room's nodes are lit (episode I room 128: the stairs to room 228). Tried: a 1
+ *       directly, through a wire, through AND with 1 and 1 lit their nodes, AND with 1
+ *       and 0 did not
  *   12  oracle (episodes II, III, tile 0x51): it only works once its symbol lies in the
  *       room, a 2×2 block of tangram pieces (tile 0x50) whose states are pattern n of
  *       readOracleSymbols (n: low 4 bits of the oracle's state; 0x412860, which then shows
  *       the pieces as solved). Then, walked into (0x412ae0), northwards it sends to the
  *       target (see exits.ts), eastwards it shows its hint, message 330 + n (episode II has
  *       331, 332, 334 and 339), and vanishes, westwards it turns into the object at offset
- *       8, southwards it kills (all but south tried in the game; without the symbol
- *       nothing happens)
+ *       8, southwards it vanishes and kills (text 945; all tried in the game, without the
+ *       symbol nothing happens)
  *   13  teleporter (see exits.ts): byte 1 bit 1 lets a script's Teleport() set the target
  *       (tried in the game), bit 0 lets the shown cell act first while byte 7 is 0, bit 3
  *       adds a visual effect; message 1200 + byte 8 when used. A target room that does

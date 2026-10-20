@@ -287,13 +287,18 @@ rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry
   events; points, a sound, text 1800 + n with the bonus text 516) once per game, the same
   mechanism as the first take of an object (the key's 500 points; **verified:**
   `Enigma(112)` twice in episode II gives 5000 points once and returns 0 the second
-  time); `Phone(text, delay, n)` rings n + 1 times; `Area(x, y, size)` is the square that
+  time); `Phone(text, delay, n)` rings from `delay` seconds on, walking into the phone
+  then shows `text` (**verified**; by the code n + 1 rings, but it still answered after 60
+  s with n = 3); `Area(x, y, size)` is the square that
   the magic words LEFT/RIGHT (LINKS/RECHTS) rotate: the player lays them with letters
   from the rucksack (words of text 514, some only with the wand in the rucksack; placing
   letters with `SetObj` does not count; **verified:** putting down L, E, F, T turns the
-  square's rings a quarter anticlockwise); `Area(x, y, size, key)` the squares episode IV's punch cards
-  turn at card readers; `ShiftArea(x, y, w, h, d)` the area episode IV's remote control
-  shifts once with wrap-around (d 0 up, 1 left, 2 down, 3 right). StationBOff counts
+  square's rings a quarter anticlockwise); `Area(x, y, size, key)` the squares episode
+  IV's punch cards turn a quarter clockwise when used next to a card reader;
+  `ShiftArea(x, y, w, h, d)` the area episode IV's remote control shifts once with
+  wrap-around when used (d 0 up, 1 left, 2 down, 3 right; both **verified**, each with a
+  bonus box: "Sieh' an, da hat sich etwas gedreht!", "Bravo, das hast Du richtig
+  gemacht!"). Items are used from the rucksack ("Benutzen"). StationBOff counts
   episode IV's switched power station groups (from 4 spawners stop: **verified**),
   NoSwim (episode II) forbids swimming until the ship ticket is used. The interpreter
   knows no operations beyond those our compiler emits (opcodes 0x01–0x09, 0x0e/0x0f,
@@ -345,8 +350,13 @@ rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry
   room 43): with the symbol, an oracle walked into northwards sends the hero to its target,
   eastwards it shows its hint, message 330 + n, and vanishes (the tested
   oracle 0 has none in episode II, which has 331, 332, 334 and 339), westwards it turns
-  into its object; with one piece wrong nothing happens. The editor shows the symbol and the
-  hint in the record inspector.
+  into its object, southwards it vanishes and kills (text 945); with one piece wrong
+  nothing happens. The editor shows the symbol and the hint in the record inspector.
+  Also **verified:** using the shovel on a buried record digs it up (bonus "…gelernt,
+  die Schaufel zu benutzen!"); a circuit of letters 1/0, wires and an AND gate lights
+  its nodes, which place their stairs, once a circuit piece is taken (the game evaluates
+  circuits only then); the hero walks up a ramp and along an episode IV bridge over a
+  canal, and across under its deck.
 - **Travelling actors** (record type 8, `SetMan`): byte 8 is converted on scene load
   (0x432728): with bit 0x80 an index into the episode's actor kinds (episode +0x34, e.g.
   episode I 0x475c38: 0x100…0x105), else a tile type (its class); the originals use 0x83
@@ -359,8 +369,9 @@ rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry
   the record's room at (x, y): following it at once takes the hero there. The actor is
   not moved into that room. **Verified under Wine:** a type-8 record added to episode I
   room 43 lets the dealer appear and walk up to the hero (bytes 0x03 and 0x83 alike;
-  tile 3 is class 3, which happens to map to the dealer's kind). Leaving through the
-  wall is from the code only.
+  tile 3 is class 3, which happens to map to the dealer's kind); walked into, he offers
+  his items (cursor keys, Enter buys, Esc ends); after the purchase he wandered off and
+  left through the bottom wall, which stood open briefly.
 
 ## The editor (`pnpm editor`)
 
@@ -448,9 +459,9 @@ Not supported (yet):
 Roughly by value for the editor.
 
 1. **Logic records in play.** All types are decoded byte by byte and most are tried in
-   the game (see logic records above). Open: buried records (digging needs the shovel; its use is not tried), circuit
-   signals through wires and gates, a travelling actor leaving through a wall, an oracle
-   walked into southwards and the stacked level only from the code. **How to test
+   the game (see logic records above). Open: the thief (not tried), following a leaving
+   actor through its wall opening, circuits with the other gates and NOT (only AND
+   tried), records in rooms whose objects and records exceed the table. **How to test
    an edit in the game:** build the exe (`Game.withScene`, or the editor's "Save exe"),
    put the change next to the hero's start (see "The hero's start" above) and run
    `python3 -I tools/wine/harness.py shot E OUT.png --exe EXE --keys Right:0.1 wait:2`
@@ -502,13 +513,15 @@ Roughly by value for the editor.
    (`randomPlacement`) look at map cells only; the game also counts actors standing on
    cells (0x407650 via 0x433230), e.g. those from records.
 3. **Scripts.** Decoded, compiled and editable; every function is decoded (see room
-   scripts above) and many are tried in the game. Not tried: `ShiftArea` and punch
-   cards (episode IV's use key), `Phone` (silent harness), whether `Area`/`ShiftArea`
-   settings survive leaving the room. Possibly worth adding to the compiler: `while`,
+   scripts above) and most are tried in the game. Open: what `Phone`'s n limits (still
+   answered after 60 s), whether `Area`/`ShiftArea` settings survive leaving the room,
+   RIGHT and the wand words. Possibly worth adding to the compiler: `while`,
    `break`, compound assignments (they compile to existing operations).
 4. **Room tags:** all kinds decoded (see room tags above). Not tried in the game: bit 0 of
-   kind 3 (the labyrinth's teleporters), the music (the harness is silent; listen with
-   `robot play`). The word 0x4fe0c0 each episode's start method sets is probably the
+   kind 3 (the labyrinth: entering room 144 from 146 generates a new maze of teleporters,
+   0x40c910; the booklet confirms the labyrinth "changes its size and its paths"; a test
+   starting in 146 could not reach its teleporters, which lie in the cave wall), the
+   music (the harness is silent; listen with `robot play`). The word 0x4fe0c0 each episode's start method sets is probably the
    number of inventory slots (50, 38, 60, 200, 120; compared by the debug tracer
    0x439170).
 5. **Rooms not reached** by any decoded connection: episode I 228 (its wizard sends the
