@@ -102,7 +102,14 @@ export interface GridNeighbour {
 export const MAX_RECORD_SLOTS = 200;
 
 /** What a new room holds (Editor.addRoom). */
-export type NewRoomContent = "empty" | "walled" | { copy: number };
+export type NewRoomContent = "empty" | { walls: number } | { copy: number };
+
+/**
+ * Classes of walls, by the episodes' descriptions: walls (6: "Diese Mauer kann keiner
+ * überwinden", 199: "ein Stück Mauer"), rock (93: "Gestein, Fels, Gemäuer"), episode IV's
+ * walls (215, 216: "Mauern aus einer Art Kunststoff").
+ */
+export const WALL_CLASSES: readonly number[] = [6, 93, 199, 215, 216];
 
 /**
  * The cells of a room's walls: the top two rows (row 0 lies under the status line), the
@@ -260,24 +267,30 @@ export class Editor {
   }
 
   /**
-   * The episode's wall: the most frequent cell on the original rooms' outer ring (leaving
-   * out empty floor and exit tiles), e.g. 0x0006 in Junior and I.
+   * The episode's walls for new rooms, most used first: the wall cells (WALL_CLASSES) on
+   * the original rooms' outer ring, e.g. 0x0006 in Junior and I, 0x0026 in II, rock 0x0a4e
+   * in IV; at most `count`.
    */
-  wallCell(episode: number): number {
+  wallCells(episode: number, count = 6): number[] {
+    const { rooms, classes } = this.game.episode(episode);
     const counts = new Map<number, number>();
-    for (const room of this.game.episode(episode).rooms) {
+    for (const room of rooms) {
       for (const i of RING) {
         const cell = room.base[i] ?? 0;
-        if (cell !== 0 && cell !== EXIT_CELL && !isLogicCell(cell))
+        const id = classes.classes.get(cell & 0xff)?.id;
+        if (id !== undefined && WALL_CLASSES.includes(id))
           counts.set(cell, (counts.get(cell) ?? 0) + 1);
       }
     }
-    return [...counts].reduce((best, c) => (c[1] > best[1] ? c : best), [0, 0])[0];
+    return [...counts]
+      .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+      .slice(0, count)
+      .map(([cell]) => cell);
   }
 
   /**
-   * Adds room `id` to the episode: empty, walled (the episode's wall all around with five
-   * closed exit tiles in the middle of each edge, like most rooms of Junior and I) or a copy
+   * Adds room `id` to the episode: empty, walled (the cell `content.walls` all around with
+   * five closed exit tiles in the middle of each edge, like most rooms of Junior and I) or a copy
    * of room `content.copy` (cells, records and tags, the script too); with `openNeighbours`
    * the grid neighbours whose exits towards it are closed ("none") open them. One undo
    * step. Throws a RangeError if the id is taken or out of range, or the episode is full.
@@ -291,11 +304,14 @@ export class Editor {
     this.endStroke();
     const problem = this.roomIdProblem(episode, id);
     if (problem) throw new RangeError(problem);
-    const source = typeof content === "object" ? this.room(episode, content.copy) : undefined;
+    const source =
+      typeof content === "object" && "copy" in content
+        ? this.room(episode, content.copy)
+        : undefined;
     const base = new Uint16Array(ROOM_CELLS);
-    if (content === "walled") {
-      const wall = this.wallCell(episode);
-      for (const i of RING) base[i] = wall;
+    if (typeof content === "object" && "walls" in content) {
+      if (isLogicCell(content.walls)) throw new RangeError("walls cannot be logic cells");
+      for (const i of RING) base[i] = content.walls;
       for (const i of EXIT_GAPS) base[i] = EXIT_CELL;
     }
     const room: Room = source

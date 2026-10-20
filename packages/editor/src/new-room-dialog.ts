@@ -14,6 +14,10 @@ export interface NewRoomDialogEvents {
   check(id: number): NewRoomCheck;
   /** The room to copy, named ("room 43 – DER START"), undefined if there is none. */
   source(id: number): string | undefined;
+  /** The episode's walls to offer, the most used first. */
+  walls(): readonly number[];
+  /** A cell drawn small (with its name as title). */
+  preview(value: number): HTMLCanvasElement;
   /** Adds the room; returns whether it worked (else the dialog stays open). */
   create(id: number, content: NewRoomContent, openNeighbours: boolean): boolean;
 }
@@ -33,6 +37,8 @@ export class NewRoomDialog {
   private readonly copy = document.createElement("input");
   private readonly copyFrom = document.createElement("input");
   private readonly copyName = document.createElement("span");
+  private readonly wallChoice = document.createElement("div");
+  private wall: number | undefined;
   private readonly open = document.createElement("input");
   private readonly openLabel = document.createElement("label");
   private readonly create = document.createElement("button");
@@ -60,7 +66,7 @@ export class NewRoomDialog {
     const legend = document.createElement("legend");
     legend.textContent = "Content";
     for (const [input, value] of [
-      [this.walled, "walled"],
+      [this.walled, "walls"],
       [this.empty, "empty"],
       [this.copy, "copy"],
     ] as const) {
@@ -75,6 +81,12 @@ export class NewRoomDialog {
     walledLabel.title =
       "The episode's wall all around, with five closed exit tiles in the middle of each edge (they open once the room's robots are gone)";
     walledLabel.append(this.walled, " Walls and exits");
+    this.wallChoice.className = "new-room-walls";
+    this.wallChoice.setAttribute("role", "group");
+    this.wallChoice.setAttribute("aria-label", "Wall");
+    const walledRow = document.createElement("div");
+    walledRow.className = "new-room-copy";
+    walledRow.append(walledLabel, this.wallChoice);
     const emptyLabel = document.createElement("label");
     emptyLabel.append(this.empty, " Empty floor");
     this.copyFrom.type = "number";
@@ -91,7 +103,7 @@ export class NewRoomDialog {
     const copyRow = document.createElement("div");
     copyRow.className = "new-room-copy";
     copyRow.append(copyLabel, this.copyFrom, this.copyName);
-    content.append(legend, walledLabel, emptyLabel, copyRow);
+    content.append(legend, walledRow, emptyLabel, copyRow);
 
     this.open.type = "checkbox";
     this.open.checked = true;
@@ -131,6 +143,25 @@ export class NewRoomDialog {
     this.heading.textContent = `New room in ${episode}`;
     this.id.value = id === undefined ? "" : String(id);
     this.copyFrom.value = String(from);
+    const walls = this.events.walls();
+    this.wall = walls.includes(this.wall ?? -1) ? this.wall : walls[0];
+    this.wallChoice.replaceChildren(
+      ...walls.map((value) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset["tile"] = String(value);
+        const preview = this.events.preview(value);
+        button.title = preview.title;
+        button.setAttribute("aria-label", `Wall 0x${value.toString(16).padStart(4, "0")}`);
+        button.append(preview);
+        button.addEventListener("click", () => {
+          this.wall = value;
+          this.walled.checked = true;
+          this.refresh();
+        });
+        return button;
+      }),
+    );
     if (![this.walled, this.empty, this.copy].some((input) => input.checked))
       this.walled.checked = true;
     this.refresh();
@@ -140,13 +171,16 @@ export class NewRoomDialog {
 
   /** The content chosen, undefined for a copy of a room that does not exist. */
   private content(): NewRoomContent | undefined {
-    if (this.walled.checked) return "walled";
+    if (this.walled.checked) return this.wall === undefined ? undefined : { walls: this.wall };
     if (this.empty.checked) return "empty";
     const from = Number(this.copyFrom.value);
     return this.events.source(from) === undefined ? undefined : { copy: from };
   }
 
   private refresh(): void {
+    for (const button of this.wallChoice.querySelectorAll<HTMLElement>("button")) {
+      button.setAttribute("aria-pressed", String(Number(button.dataset["tile"]) === this.wall));
+    }
     const source = this.events.source(Number(this.copyFrom.value));
     this.copyName.textContent = source?.replace(/^room \d+( – )?/, "") ?? "(no such room)";
     this.copyName.classList.toggle("error", source === undefined);

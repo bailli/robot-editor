@@ -446,9 +446,11 @@ Supported:
   (1–1023, at most 200 per episode; a free one after the shown room is offered, never one
   ending in 0), checked while typing (taken, out of range; its grid neighbours and how
   their exits stand, also across a row's end or a hundred; rooms ± 100); the content:
-  walls and exits (the episode's most frequent wall on the originals' edges, five closed
-  exit tiles in the middle of each edge, like most Junior and I rooms; **verified under
-  Wine**: the tiles towards existing rooms open, walking out arrives there), empty floor
+  walls and exits (a wall chosen from the episode's wall tiles most used on the originals'
+  edges, by class: 6, 199 walls, 93 rock, 215/216 episode IV's walls; five closed exit
+  tiles in the middle of each edge, like most Junior and I rooms; **verified under Wine**
+  in episodes I, III and IV: the tiles towards existing rooms open, walking out arrives
+  there; III's originals use no exit tiles at all), empty floor
   or a copy of any room (the shown one by default; cells, records, tags, script); and
   whether closed exits of its neighbours open towards it; one undo step. "Go to room"
   opens a room by id. Rooms deleted ("Delete room…" next to the name; not room 1, the

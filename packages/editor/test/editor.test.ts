@@ -322,8 +322,10 @@ describe("Editor room settings", () => {
 describe("Editor rooms and names", () => {
   test("a walled room has the episode's wall all around and five exit tiles per edge", () => {
     const editor = new Editor(game);
-    expect(editor.wallCell(1)).toBe(0x0006);
-    const room = defined(editor.addRoom(1, 251, "walled").added);
+    expect(editor.wallCells(1)[0]).toBe(0x0006);
+    expect(editor.wallCells(2)[0]).toBe(0x0026);
+    expect(editor.wallCells(4)[0]).toBe(0x0a4e);
+    const room = defined(editor.addRoom(1, 251, { walls: 6 }).added);
     const row = (y: number) => Array.from(room.base.subarray(y * 40, y * 40 + 40));
     const exits = (cells: number[]) => cells.flatMap((c, k) => (c === 0x17 ? [k] : []));
     expect(row(0).every((c) => c === 6)).toBe(true); // under the status line

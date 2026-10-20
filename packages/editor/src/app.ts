@@ -272,6 +272,8 @@ export class App {
         ? this.roomLabel(this.episode, id)
         : undefined,
     create: (id, content, openNeighbours) => this.addRoom(id, content, openNeighbours),
+    walls: () => this.need().wallCells(this.episode),
+    preview: (value) => this.cellPreview(value),
   });
   private readonly backButton = h("button", { class: "history", disabled: true }, "◀");
   private readonly forwardButton = h("button", { class: "history", disabled: true }, "▶");
@@ -765,7 +767,7 @@ export class App {
     const opened = (edit.parts ?? []).slice(1).map((p) => p.room);
     const exits = opened.length ? `, exits of ${opened.join(", ")} opened towards it` : "";
     const added =
-      typeof content === "object"
+      typeof content === "object" && "copy" in content
         ? `Room ${content.copy} copied to room ${id}`
         : `Room ${id} added`;
     this.setStatus(`${added}${exits}`);

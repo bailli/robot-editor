@@ -943,3 +943,20 @@ canvas.cell.text-tile {
 .new-room-source.error {
   color: var(--error);
 }
+
+.new-room-walls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.new-room-walls button {
+  padding: 1px;
+  border-radius: 2px;
+  line-height: 0;
+}
+
+.new-room-walls button[aria-pressed="true"] {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+}
