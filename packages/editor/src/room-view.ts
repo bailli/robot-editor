@@ -192,15 +192,28 @@ export class RoomView {
     this.drawMarks();
   }
 
-  private drawActors(g: CanvasRenderingContext2D, w: number, h: number): void {
+  /** Draws the actors that have a picture; returns their cells. */
+  private drawActors(g: CanvasRenderingContext2D, w: number, h: number): Set<number> {
     g.imageSmoothingEnabled = false;
+    const drawn = new Set<number>();
     this.actors.forEach((actor, n) => {
       const sprite = this.actorSprite(actor, n);
-      const x = (actor.cell % ROOM_WIDTH) * w;
-      const y = Math.floor(actor.cell / ROOM_WIDTH) * h;
-      if (sprite) g.drawImage(sprite, x, y, w, h);
-      drawActor(g, actor, w, h);
+      if (!sprite) return;
+      g.drawImage(
+        sprite,
+        (actor.cell % ROOM_WIDTH) * w,
+        Math.floor(actor.cell / ROOM_WIDTH) * h,
+        w,
+        h,
+      );
+      drawn.add(actor.cell);
     });
+    return drawn;
+  }
+
+  /** The actors' rings, radii and arrows, over the logic cell marks. */
+  private drawActorMarks(g: CanvasRenderingContext2D, w: number, h: number): void {
+    for (const actor of this.actors) drawActor(g, actor, w, h);
   }
 
   /** The cell index under a mouse event, or undefined outside the room. */
@@ -238,10 +251,13 @@ export class RoomView {
       for (let y = 1; y < ROOM_HEIGHT; y++) g.rect(-1, y * h - 0.5, g.canvas.width + 2, 0);
       g.stroke();
     }
+    // actors drawn as themselves: their logic cells get only the frame, not the fill
+    const drawn = this.drawActors(g, w, h);
     if (this.room) {
       // logic cells: what they show comes from their records (see the inspector)
       g.fillStyle = "rgb(255 0 255 / 0.35)";
       g.strokeStyle = "rgb(160 0 160)";
+      g.lineWidth = 1;
       for (let i = 0; i < ROOM_CELLS; i++) {
         const isLogic = [this.room.base[i], this.room.overlay[i]].some(
           (c) => (c & 0xff) === LOGIC_CELL,
@@ -249,11 +265,11 @@ export class RoomView {
         if (!isLogic) continue;
         const x = (i % ROOM_WIDTH) * w;
         const y = Math.floor(i / ROOM_WIDTH) * h;
-        g.fillRect(x, y, w, h);
+        if (!drawn.has(i)) g.fillRect(x, y, w, h);
         g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
       }
     }
-    this.drawActors(g, w, h);
+    this.drawActorMarks(g, w, h);
     for (const area of this.areas) {
       const x = area.x0 * w;
       const y = area.y0 * h;

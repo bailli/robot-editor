@@ -495,7 +495,9 @@ Supported:
 - actors (toggle "Actors", key A): marks where actors appear (ring: placed in the map;
   dashed: appear later or from a record; spawner radius; arrow: heading somewhere),
   robots drawn with the episode's `_Aliens` sprites in turn (their look and colours vary
-  in the game); a list below the map groups them with name, origin and positions (click
+  in the game), actors from records (dealer 0x2c, thief 0x40, natives) with the tile
+  that names them, their logic cell then only framed; the hover line describes such an
+  actor once (by its record); a list below the map groups them with name, origin and positions (click
   to select), plus what the script's `RandObj(…)` does with the room's current number
 - the room's settings (tab Room): darkness, points for the first visit, music (the
   episode's pieces, the ones rooms play first), episode III's flags (dizzy, labyrinth),

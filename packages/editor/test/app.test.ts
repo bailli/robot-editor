@@ -332,6 +332,20 @@ test("tiles show their names and descriptions", async () => {
   );
 });
 
+test("actors from records are drawn as themselves and described once", () => {
+  app.showRoom(42); // episode I room 42: the dealer's record at (10, 10)
+  const index = 10 * ROOM_WIDTH + 10;
+  // the cell's centre on the marks canvas is the dealer's tile, not the logic cell's fill
+  const marks = app.view.pixelsOfMarks();
+  const width = SCREEN_WIDTH * app.view.zoom;
+  const centre = ((10 * 12 + 6) * app.view.zoom * width + (10 * 16 + 8) * app.view.zoom) * 4;
+  expect(marks[centre + 3]).toBe(255); // opaque: the tile, not the translucent magenta
+  fireAt("mousemove", index);
+  const info = document.querySelector(".cell-info")?.textContent ?? "";
+  expect(info).toMatch(/the dealer appears here/);
+  expect(info).not.toMatch(/actor:/);
+});
+
 test("hovering a logic cell says what its record does", () => {
   app.showEpisode(2, 55);
   const room = app.editor?.room(2, 55);

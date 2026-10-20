@@ -1537,14 +1537,20 @@ export class App {
     const editor = this.need();
     const room = editor.room(this.episode, this.roomId);
     this.actors = roomActors(room, editor.game.episode(this.episode).classes);
-    // robots are drawn with the episode's sprites, one after the other (their look varies)
+    // robots are drawn with the episode's sprites, one after the other (their look varies);
+    // actors from records (the dealer, the thief, natives) with the tile that names them
     // (assigned once here: the view redraws its marks on every mouse move)
     let robots = 0;
-    const sprites = this.actors.map((actor) =>
-      actor.source === "tile" && actor.type !== undefined && this.isRobot(actor.type)
-        ? this.robotSprite(robots++)
-        : undefined,
-    );
+    const sprites = this.actors.map((actor) => {
+      if (actor.type === undefined) return undefined;
+      if (actor.source === "tile")
+        return this.isRobot(actor.type) ? this.robotSprite(robots++) : undefined;
+      if (actor.source === "travelling" || actor.source === "creature") {
+        // a tile that draws nothing leaves just the marks
+        return this.drawsNothing(actor.type, 0) ? undefined : cellCanvas(this.cache(), actor.type);
+      }
+      return undefined;
+    });
     this.view.setActors(this.actorsToggle.checked ? this.actors : [], (_, n) => sprites[n]);
     const classes = editor.game.episode(this.episode).classes;
     const constants = editor.game.scriptConstants(this.episode);
@@ -1726,7 +1732,8 @@ export class App {
       const classes = this.editor.game.episode(this.episode).classes;
       this.cellInfo.textContent += `  · ${describeRecord(record, classes).summary}`;
     }
-    const actor = this.actors.find((a) => a.cell === index);
+    // actors from a record: the record's summary above says what they do
+    const actor = this.actors.find((a) => a.cell === index && !a.record);
     if (actor) this.cellInfo.textContent += `  · actor: ${actorOrigin(actor)}`;
     // what the hero would see: the overlay object if there is one
     const nodes = this.names().summaryNodes(overlay & 0xff ? overlay : base, room, (v) =>
