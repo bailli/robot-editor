@@ -6,7 +6,10 @@ import {
   describeCell,
   descriptionTexts,
   displayText,
+  noteText,
+  packageContents,
   requiredPoints,
+  roomNamesId,
   textPieces,
 } from "@robot/formats";
 
@@ -15,11 +18,13 @@ export interface TileInfo {
   name: string | undefined;
   /**
    * What the game says when the hero looks at the cell: one text, or the texts it picks
-   * one of at random; tiles in them as [name].
+   * one of at random; tiles in them as [name]. Before them the points an expert field
+   * needs, what a note says or what a package holds.
    */
   descriptions: string[];
   /** The same with the game's tile codes (`@14`), for drawing them (textPieces). */
   texts: string[];
+  /** Whether the game picks one of several descriptions. */
   random: boolean;
 }
 
@@ -30,6 +35,8 @@ export class TileNames {
   private readonly names: Map<number, string>;
   private readonly actorNames: ReadonlyMap<number, string>;
   private readonly texts: ReadonlyMap<number, readonly string[]>;
+  /** Episode III's diary pages are in its room-name texts. */
+  private readonly pages: ReadonlyMap<number, readonly string[]>;
   private readonly classes: EpisodeClasses;
   private readonly episode: number;
 
@@ -43,6 +50,7 @@ export class TileNames {
     );
     this.names = game.objectNames(episode);
     this.texts = game.episodeTexts(episode)?.entries ?? new Map<number, string[]>();
+    this.pages = game.texts(roomNamesId(episode))?.entries ?? new Map<number, string[]>();
     this.classes = game.episode(episode).classes;
     this.episode = episode;
   }
@@ -57,19 +65,42 @@ export class TileNames {
     const raw = description ? descriptionTexts(description, this.texts) : [];
     const points = requiredPoints(value, this.classes);
     const needs = points === undefined ? [] : [`Needs at least ${points} points to cross.`];
-    const texts = [...needs, ...raw.map((t) => displayText(t)).filter((d) => d !== "")];
+    const texts = [
+      ...needs,
+      ...this.contents(value),
+      ...raw.map((t) => displayText(t)).filter((d) => d !== ""),
+    ];
     return {
       name,
       descriptions: texts.map((t) => displayText(t, (v) => this.tileName(v))),
       texts,
-      random: description !== undefined && typeof description.variant !== "number",
+      random:
+        description !== undefined && typeof description.variant !== "number" && raw.length > 1,
     };
+  }
+
+  /** What a note says or a package holds (the first line: it tells them apart). */
+  private contents(value: number): string[] {
+    const type = packageContents(value, this.classes);
+    if (type !== undefined) return [`Contains @${type.toString(16)}.`];
+    const note = noteText(value, this.classes);
+    if (!note) return [];
+    const text = (note.read === "diary" ? this.pages : this.texts).get(note.text)?.[0] ?? "";
+    const recorder = this.classes.typeOfClass.has(0xbf);
+    const how = {
+      step: `Note, read when stepped on (message ${note.text}):`,
+      carry: recorder
+        ? `Cassette, picked up and played with the recorder (message ${note.text}):`
+        : `Old writing, picked up and read with the dictionary (message ${note.text}):`,
+      diary: `Diary page ${note.text}:`,
+    }[note.read];
+    return [`${how} ${text}`];
   }
 
   /** A tooltip: value, name and the descriptions. */
   title(value: number, room?: Room): string {
     const { name, descriptions, random } = this.info(value, room);
-    const head = [hex(value), name, random && descriptions.length > 1 ? "(one of)" : undefined];
+    const head = [hex(value), name, random ? "(one of)" : undefined];
     return [head.filter(Boolean).join(" "), ...descriptions].join("\n");
   }
 

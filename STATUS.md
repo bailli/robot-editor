@@ -356,6 +356,27 @@ rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry
   Punkte…"; e.g. 0x0c32 = 120,000). `requiredPoints`; the editor says it in the tile's
   description. Passing also goes through the registration check (below) with that
   number instead of the score.
+- **Notes** (class 15: Junior tile 15, episodes I, II and IV tile 58; `noteText`): the
+  state is the message, **800 + (state & 0x7f)**. With bit 7 set the tile looks and is
+  described as a note ("Ein Zettel. Geh' einmal hin…") and is read on stepping onto it,
+  which removes it (0x421660, entry 0 of the touch table 0x47f948). Without it, it is old
+  writing (Junior–II) or a micro-cassette (IV): picked up (0x41ef00) and read with
+  "Benutzen" (0x4216e0 / 0x4217f0 → 0x4066a0). In episodes with the dictionary (class 8,
+  BOOK) the text loses its vowels (`aeiouyAEIOUY`, 0x475058) unless the hero carries it,
+  and then gives 300 points; in IV, which has the recorder (class 0xbf), it plays only
+  with the recorder (messages 973/974). Every note in the played rooms has its message
+  (test); e.g. Junior's 15 notes are messages 801–815, episode II room 105's six notes
+  the file listings 833–842. Not yet tried in the game.
+- **Diary pages** (episode III, class 164, tile 58): page = entry `state` of resource
+  1320 (with the room names; date and title, then the text; 0x416400 → 0x4067b0 →
+  episode method +0x40, 0x40b370), which marks bit `state` of 0x4fe3c8 as read; the
+  page goes into the diary (class 164 in the rucksack).
+- **Packages** (class 109, tile 94: episode II's presents, III's chests, IV's crates;
+  `packageContents`): the state is the tile type inside. "Benutzen" from the rucksack
+  (0x414150) turns it into that class (0x43a5f0) on the hero's cell (0x433420: as an
+  actor where the type is one, e.g. robots in II's "poisoned" presents); an electric
+  fence (class 7) kills the hero (message 951). Used: robots, walls, gold, bottles,
+  garlic, ammunition, suits, tonic, save clocks, jokers, food, fins, shovels, …
 - **Registration (shareware limit, 0x42f7c0):** every room change (edges 0x44c6b9, doors,
   stairs) and every expert field checks a number: the score, or the field's threshold.
   Below a random limit it passes: episode method +0x28, I/II/IV 70,000–100,000 points,
@@ -483,7 +504,8 @@ Supported:
   (`/play` on the dev server, `harness.py play`, the game window on this display; the
   episode is chosen by hand), the static build downloads it
 - tile names (items) and the game's descriptions in tooltips and the hover line; logic
-  cells say what their record does
+  cells say what their record does, notes and diary pages their message, packages what
+  they hold (drawn in the hover line)
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
   inspector with the record's fields per type (cells with previews, target room with
   "Go", arrival position, spawner radius/period, a native's object, price and chatter,

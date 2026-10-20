@@ -6,9 +6,11 @@ import {
   describeCell,
   descriptionTexts,
   knowsDescribeMethod,
+  noteText,
+  packageContents,
   requiredPoints,
 } from "../src/describe.ts";
-import { EPISODES, Game } from "../src/game.ts";
+import { EPISODES, Game, roomNamesId } from "../src/game.ts";
 import { displayText } from "../src/texts.ts";
 import { exe, snapshot } from "./data.ts";
 
@@ -79,4 +81,45 @@ test("expert fields need their state × 10,000 points", () => {
   expect(requiredPoints(0x0c31, classes)).toBeUndefined();
   // Junior's tile 0x32 is the goal, not an expert field
   expect(requiredPoints(0x0132, game.episode(0).classes)).toBeUndefined();
+});
+
+/** The title screen, episode IV's sheet of all tiles and the debug room. */
+const notPlayed = (episode: number, room: number) =>
+  room === 1 || room === 99 || (episode === 4 && room === 2);
+
+test("every note and diary page has its text", () => {
+  for (const episode of EPISODES) {
+    const { rooms, classes } = game.episode(episode);
+    const texts = game.episodeTexts(episode)?.entries;
+    const pages = game.texts(roomNamesId(episode))?.entries;
+    for (const room of rooms) {
+      if (notPlayed(episode, room.id)) continue;
+      for (const cell of new Set([...room.base, ...room.overlay])) {
+        const note = noteText(cell, classes);
+        if (!note) continue;
+        const where = `episode ${episode} room ${room.id} cell ${cell.toString(16)}`;
+        assert.ok((note.read === "diary" ? pages : texts)?.has(note.text), where);
+      }
+    }
+  }
+  expect(noteText(0x8e0f, game.episode(0).classes)).toEqual({ text: 814, read: "step" });
+  expect(noteText(0x0c3a, game.episode(4).classes)).toEqual({ text: 812, read: "carry" });
+  expect(noteText(0x043a, game.episode(3).classes)).toEqual({ text: 4, read: "diary" });
+  expect(noteText(0x043b, game.episode(3).classes)).toBeUndefined();
+});
+
+test("packages hold the tile type in their state", () => {
+  expect(packageContents(0x695e, game.episode(3).classes)).toBe(0x69); // a shovel
+  expect(packageContents(0x025e, game.episode(2).classes)).toBe(2); // a robot
+  expect(packageContents(0x0c3a, game.episode(4).classes)).toBeUndefined();
+  for (const episode of EPISODES) {
+    const { rooms, classes } = game.episode(episode);
+    for (const room of rooms) {
+      if (notPlayed(episode, room.id)) continue;
+      for (const cell of new Set([...room.base, ...room.overlay])) {
+        const type = packageContents(cell, classes);
+        if (type !== undefined) assert.ok(classes.classes.get(type)?.id, `${episode}: ${type}`);
+      }
+    }
+  }
 });

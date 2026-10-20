@@ -185,14 +185,19 @@ export { EPISODE_VTABLES, readEpisodeStart, withEpisodeStart } from "./start.ts"
 export type { EpisodeStart } from "./start.ts";
 export type { TextPiece, Texts } from "./texts.ts";
 export {
+  DIARY_PAGE_CLASS,
   EXPERT_CLASS,
+  NOTE_CLASS,
   NO_DESCRIPTION,
+  PACKAGE_CLASS,
   describeCell,
   descriptionTexts,
   knowsDescribeMethod,
+  noteText,
+  packageContents,
   requiredPoints,
 } from "./describe.ts";
-export type { CellDescription } from "./describe.ts";
+export type { CellDescription, NoteText } from "./describe.ts";
 export { TANGRAM_TILE, describeRecord, readOracleSymbols } from "./records.ts";
 export { EVENT_TEXT, readEventTable } from "./events.ts";
 export type { GameEvent } from "./events.ts";

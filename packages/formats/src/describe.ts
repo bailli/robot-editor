@@ -39,6 +39,50 @@ export function requiredPoints(cell: number, classes: EpisodeClasses): number | 
   return classes.classes.get(cell & 0xff)?.id === EXPERT_CLASS ? (cell >> 8) * 10000 : undefined;
 }
 
+/** Notes (Junior type 15; episodes I, II and IV type 58). */
+export const NOTE_CLASS = 15;
+/** Episode III's diary pages (type 58). */
+export const DIARY_PAGE_CLASS = 164;
+/** Packages (type 94): episode II's presents, III's chests, IV's crates. */
+export const PACKAGE_CLASS = 109;
+
+/** What a note or diary page says (see noteText). */
+export interface NoteText {
+  /** Entry in the episode's texts; for a diary page in its room-name texts (resource 1320). */
+  text: number;
+  /**
+   * "step": read when the hero steps on it, which removes it; "carry": picked up and read
+   * from the rucksack, in Junior, I and II without vowels unless the hero carries the
+   * dictionary (class 8, which earns 300 points), in IV a micro-cassette that needs the
+   * recorder (class 0xbf, messages 973/974); "diary": a page added to episode III's diary.
+   */
+  read: "step" | "carry" | "diary";
+}
+
+/**
+ * The text of a note: message 800 + state. Notes with state bit 7 (drawn and described as
+ * a note rather than old handwriting or a cassette) are read on the spot (0x421660, touch
+ * table 0x47f948), the others picked up and read with "Benutzen" (0x4216e0, 0x4217f0;
+ * 0x4066a0 shows them). Diary pages show entry `state` of resource 1320 (0x416400,
+ * 0x40b370) and mark it read (bit `state` of 0x4fe3c8).
+ */
+export function noteText(cell: number, classes: EpisodeClasses): NoteText | undefined {
+  const id = classes.classes.get(cell & 0xff)?.id;
+  const state = cell >> 8;
+  if (id === DIARY_PAGE_CLASS) return { text: state, read: "diary" };
+  if (id !== NOTE_CLASS) return undefined;
+  return { text: 800 + (state & 0x7f), read: state & 0x80 ? "step" : "carry" };
+}
+
+/**
+ * What a package holds: the tile type in its state. Used from the rucksack, it becomes
+ * that object (state 0) on the hero's cell, or the actor it stands for (robots, 0x433420);
+ * an electric fence (class 7) kills the hero (message 951). 0x414150.
+ */
+export function packageContents(cell: number, classes: EpisodeClasses): number | undefined {
+  return classes.classes.get(cell & 0xff)?.id === PACKAGE_CLASS ? cell >> 8 : undefined;
+}
+
 type Rule = (state: number, episode: number) => number | readonly number[] | "random";
 
 /** Describe methods by address; each gets the state byte of the cell. */
