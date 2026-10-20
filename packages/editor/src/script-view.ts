@@ -1,3 +1,9 @@
+import {
+  type Completion,
+  type CompletionSource,
+  autocompletion,
+  snippetCompletion,
+} from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { EditorState, type Extension, StateField } from "@codemirror/state";
 import {
@@ -30,6 +36,16 @@ export interface ScriptViewEvents {
    * numbers (undefined where an argument is not a plain number).
    */
   hover(fn: string | undefined, args: readonly (number | undefined)[]): void;
+  /** The game's names a script can use, for completion. */
+  names(): readonly ScriptName[];
+}
+
+/** A name of the game: a function (one per argument count), a variable or a constant. */
+export interface ScriptName {
+  name: string;
+  kind: "function" | "variable" | "constant";
+  /** A function's argument names. */
+  args?: readonly string[];
 }
 
 /** A call in the source: the function and its arguments where they are plain numbers. */
@@ -123,6 +139,54 @@ export function markUp(source: string, events: ScriptViewEvents): Shown[] {
   });
 }
 
+/**
+ * Completes the name before the cursor (not in comments and strings): statements, the
+ * game's functions (as snippets: Tab goes to the next argument), variables and constants
+ * with what they mean, and the script's own variables.
+ */
+export function scriptCompletions(events: ScriptViewEvents): CompletionSource {
+  return (context) => {
+    const word = context.matchBefore(/[A-Za-z_]\w*/);
+    if (!word && !context.explicit) return null;
+    const pieces = scanScript(context.state.doc.toString());
+    const inside = pieces.find((p) => p.at < context.pos && context.pos <= p.at + p.text.length);
+    if (inside?.kind === "comment" || inside?.kind === "string") return null;
+    const info = (name: string) => () => {
+      const text = events.explain(name);
+      return text === undefined ? null : document.createTextNode(text);
+    };
+    const options: Completion[] = [...STATEMENTS].map((label) => ({ label, type: "keyword" }));
+    for (const { name, kind, args } of events.names()) {
+      if (kind === "function") {
+        const list = args ?? [];
+        const fields = list.map((a) => `\${${a}}`).join(", ");
+        const detail = `(${list.join(", ")})`;
+        options.push(
+          snippetCompletion(`${name}(${fields})`, {
+            label: name,
+            detail,
+            type: kind,
+            info: info(name),
+          }),
+        );
+      } else {
+        options.push({ label: name, type: kind, info: info(name) });
+      }
+    }
+    // the script's own variables (lower case), except the one being typed
+    const locals = new Set(
+      pieces
+        .filter((p) => p.kind === "name" && /^[a-z]/.test(p.text) && p.at !== word?.from)
+        .map((p) => p.text),
+    );
+    for (const label of locals) {
+      if (!STATEMENTS.has(label))
+        options.push({ label, type: "variable", detail: "of this script" });
+    }
+    return { from: word?.from ?? context.pos, options, validFor: /^\w*$/ };
+  };
+}
+
 /** The marked-up source of an editor and, while editing, what the compiler says. */
 interface Marked {
   shown: Shown[];
@@ -189,6 +253,17 @@ const theme = EditorView.theme({
     borderRight: "1px solid var(--line)",
   },
   ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--accent) 6%, transparent)" },
+  ".cm-tooltip": {
+    color: "var(--text)",
+    backgroundColor: "var(--panel)",
+    border: "1px solid var(--line)",
+  },
+  ".cm-tooltip-autocomplete ul li[aria-selected]": {
+    color: "var(--text)",
+    backgroundColor: "color-mix(in srgb, var(--accent) 25%, transparent)",
+  },
+  ".cm-completionDetail": { color: "var(--muted)" },
+  ".cm-completionInfo": { maxWidth: "40em", whiteSpace: "pre-line" },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
     backgroundColor: "color-mix(in srgb, var(--accent) 25%, transparent) !important",
   },
@@ -388,6 +463,7 @@ export class ScriptView {
       [
         drawSelection(),
         highlightActiveLine(),
+        autocompletion({ override: [scriptCompletions(this.events)] }),
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         EditorView.editorAttributes.of({ class: "script-edit" }),

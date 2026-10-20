@@ -465,7 +465,8 @@ Supported:
   game variables, `O_` constants as tiles, message ids as their text, room numbers as
   room names, `Enigma` entries as their points and text), calls with plain coordinates (`SetWarea`, `SetObj`, `Area`, …) outline
   their cells on the map; the bytecode on request; Edit (CodeMirror, marked up the same
-  way while typing, its own undo) compiles while typing (errors with line and column,
+  way while typing, its own undo, completion of the game's functions with their arguments
+  as fields, variables, constants and the script's own variables) compiles while typing (errors with line and column,
   syntax errors underlined where they are) and Apply sets source and compiled script as
   one undo step
 - save: downloads the exe with all edited episodes and texts (warns about unsaved changes

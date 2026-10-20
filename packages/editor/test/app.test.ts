@@ -521,6 +521,12 @@ test("the script explains itself and can be edited", async () => {
   expect(area.element().textContent).toBe("gm");
   expect(app.mapView.element.hidden).toBe(true);
   await expect.element(page.getByRole("checkbox", { name: "Grid" })).not.toBeChecked();
+  // completion: the function with its arguments as fields (Tab to the next)
+  await userEvent.fill(area, "");
+  await userEvent.keyboard("Mess");
+  await expect.element(page.getByRole("option", { name: /^Message/ })).toBeVisible();
+  await userEvent.keyboard("{Enter}700{Tab}0");
+  expect(area.element().textContent).toBe("Message(700, 0)");
   await userEvent.fill(area, "RoomWest = 42;\nMesage(1, 0);");
   expect(document.querySelector(".script-verdict")?.textContent).toMatch(/unknown function Mesage/);
   await expect.element(scriptView().getByRole("button", { name: "Apply" })).toBeDisabled();

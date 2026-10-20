@@ -4,6 +4,7 @@ import {
   EPISODE_NAMES,
   EVENT_TEXT,
   Game,
+  KEYWORD_FUNCTION,
   LOGIC_CELL,
   NAMED_ROOMS,
   PLACEMENT_AREAS,
@@ -63,7 +64,7 @@ import {
   drawRoom,
   spriteCanvas,
 } from "./room-view.ts";
-import { ScriptView } from "./script-view.ts";
+import { type ScriptName, ScriptView } from "./script-view.ts";
 import { SettingsView } from "./settings-view.ts";
 import { SidePanel } from "./side-panel.ts";
 import { TileNames } from "./tile-info.ts";
@@ -323,6 +324,21 @@ export class App {
     },
     hover: (fn, args) => {
       this.view.setHighlights(fn === undefined ? [] : scriptPlaces(fn, args));
+    },
+    names: () => {
+      const game = this.need().game;
+      const keywords = game.scriptKeywords().map((k): ScriptName => {
+        if (!(k.flags & KEYWORD_FUNCTION)) return { name: k.name, kind: "variable" };
+        const args =
+          scriptFunctionDoc(k.name, k.args)?.args ??
+          Array.from({ length: k.args }, (_, i) => `arg${i + 1}`);
+        return { name: k.name, kind: "function", args };
+      });
+      const constants = [...game.scriptConstants(this.episode).keys()].map((name): ScriptName => ({
+        name,
+        kind: "constant",
+      }));
+      return [...keywords, ...constants];
     },
   });
   readonly recordView = new RecordView({

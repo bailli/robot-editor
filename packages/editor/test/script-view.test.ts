@@ -1,7 +1,9 @@
+import { CompletionContext } from "@codemirror/autocomplete";
+import { EditorState } from "@codemirror/state";
 import { expect, test } from "vitest";
 
 import { scriptPlaces } from "../src/app.ts";
-import { type ScriptViewEvents, markUp } from "../src/script-view.ts";
+import { type ScriptViewEvents, markUp, scriptCompletions } from "../src/script-view.ts";
 
 const events: ScriptViewEvents = {
   explain: (name) => (name === "Message" ? "Message(text, delay)" : undefined),
@@ -9,6 +11,13 @@ const events: ScriptViewEvents = {
   compile: () => "",
   apply: () => undefined,
   hover: () => undefined,
+  names: () => [
+    { name: "Message", kind: "function", args: ["text", "delay"] },
+    { name: "Area", kind: "function", args: ["x", "y", "size"] },
+    { name: "Area", kind: "function", args: ["x", "y", "w", "h"] },
+    { name: "NewRoom", kind: "variable" },
+    { name: "O_KEY", kind: "constant" },
+  ],
 };
 
 test("markUp names what each piece is and explains whole number arguments", () => {
@@ -36,4 +45,34 @@ test("calls with plain numbers name places in the room", () => {
   // a variable coordinate: no place
   expect(scriptPlaces("SetObj", [21, undefined, 3, 0])).toEqual([]);
   expect(scriptPlaces("Message", [700, 25])).toEqual([]);
+});
+
+test("completion offers the game's names and the script's own variables", async () => {
+  const complete = async (source: string, explicit = false) => {
+    const state = EditorState.create({ doc: source });
+    const context = new CompletionContext(state, source.length, explicit);
+    return await scriptCompletions(events)(context);
+  };
+  const result = await complete("count = 1;\nif (NewRoom) Mes");
+  expect(result?.from).toBe(24);
+  const labels = result?.options.map((o) => `${o.label} ${o.type ?? ""} ${o.detail ?? ""}`);
+  expect(labels).toEqual(
+    expect.arrayContaining([
+      "if keyword ",
+      "Message function (text, delay)",
+      // one option per form
+      "Area function (x, y, size)",
+      "Area function (x, y, w, h)",
+      "NewRoom variable ",
+      "O_KEY constant ",
+      "count variable of this script",
+    ]),
+  );
+  // the word being typed is not a variable of the script
+  expect(labels).not.toContain("Mes variable of this script");
+  // nothing in comments and strings, nothing without a word unless asked for
+  expect(await complete("// Mes")).toBeNull();
+  expect(await complete('Message("Mes')).toBeNull();
+  expect(await complete("x = ")).toBeNull();
+  expect((await complete("x = ", true))?.from).toBe(4);
 });
