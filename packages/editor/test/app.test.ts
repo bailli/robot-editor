@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, onTestFinished, test, vi } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 
 import {
@@ -514,6 +514,12 @@ test("the script explains itself and can be edited", async () => {
   expect(document.querySelector(".script-code")?.textContent).toMatch(/call Message/);
 
   await scriptView().getByRole("button", { name: "Edit" }).click();
+  // Cancel first, the confirming action last (as in the dialogs)
+  const bar = [...document.querySelectorAll(".script-bar button")];
+  expect(bar.map((b) => [b.textContent, b.className])).toEqual([
+    ["Cancel", ""],
+    ["Apply", "primary"],
+  ]);
   const area = scriptView().getByRole("textbox", { name: "Script source" });
   // keys typed there are text, not the editor's shortcuts (m: map, g: grid)
   await userEvent.fill(area, "");
@@ -889,27 +895,30 @@ test("Test in game runs an exe that starts in the room, at the selected cell", a
 });
 
 test("deleting a room asks first, naming the rooms that lead to it", async () => {
-  const questions: string[] = [];
-  let answer = false;
-  const spy = vi.spyOn(window, "confirm").mockImplementation((question?: string) => {
-    questions.push(question ?? "");
-    return answer;
-  });
-  onTestFinished(() => {
-    spy.mockRestore();
-  });
+  const dialog = page.getByRole("dialog", { name: "Delete room" });
   app.showRoom(44);
   await page.getByRole("button", { name: "Delete room…" }).click();
-  expect(questions[0]).toBe(
-    "Delete room 44 – RÄTSELHAFTE TÜREN?\nRooms leading to it (they would lead nowhere): 21, 34, 43, 45, 54.",
+  await expect.element(dialog).toBeVisible();
+  expect(dialog.element().textContent).toBe(
+    "Delete room 44 – RÄTSELHAFTE TÜREN?Rooms leading to it (they would lead nowhere): 21, 34, 43, 45, 54.Undo brings it back.CancelDelete room",
   );
+  // Cancel first, the red action last; Cancel has the focus
+  const buttons = [...dialog.element().querySelectorAll("button")];
+  expect(buttons.map((b) => [b.textContent, b.className])).toEqual([
+    ["Cancel", ""],
+    ["Delete room", "primary danger"],
+  ]);
+  expect(document.activeElement).toBe(buttons[0]);
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect.element(dialog).not.toBeInTheDocument();
   expect(document.querySelector('.room-list [data-room="44"]')).not.toBeNull();
-  answer = true;
   await page.getByRole("button", { name: "Delete room…" }).click();
+  await dialog.getByRole("button", { name: "Delete room" }).click();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
   expect(document.querySelector('.room-list [data-room="44"]')).toBeNull();
   // the start room stays
   await page.getByRole("button", { name: "Delete room…" }).click();
+  await dialog.getByRole("button", { name: "Delete room" }).click();
   expect(document.querySelector(".status")?.textContent).toMatch(/the episode starts in room 43/);
   app.undo();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();

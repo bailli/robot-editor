@@ -325,7 +325,10 @@ describe("Editor rooms and names", () => {
     expect(editor.wallCells(1)[0]).toBe(0x0006);
     expect(editor.wallCells(2)[0]).toBe(0x0026);
     expect(editor.wallCells(4)[0]).toBe(0x0a4e);
-    const room = defined(editor.addRoom(1, 251, { walls: 6 }).added);
+    expect(editor.exitCells(1)).toEqual([0x0017]);
+    expect(editor.exitCells(3)[0]).toBe(0x0055); // episode III: no exit tiles, barriers
+    expect(editor.exitCells(2)[0]).toBe(0x0017);
+    const room = defined(editor.addRoom(1, 251, { walls: 6, exits: 0x17 }).added);
     const row = (y: number) => Array.from(room.base.subarray(y * 40, y * 40 + 40));
     const exits = (cells: number[]) => cells.flatMap((c, k) => (c === 0x17 ? [k] : []));
     expect(row(0).every((c) => c === 6)).toBe(true); // under the status line

@@ -447,8 +447,11 @@ Supported:
   ending in 0), checked while typing (taken, out of range; its grid neighbours and how
   their exits stand, also across a row's end or a hundred; rooms ± 100); the content:
   walls and exits (a wall chosen from the episode's wall tiles most used on the originals'
-  edges, by class: 6, 199 walls, 93 rock, 215/216 episode IV's walls; five closed exit
-  tiles in the middle of each edge, like most Junior and I rooms; **verified under Wine**
+  edges, by class: 6, 199 walls, 93 rock, 215/216 episode IV's walls; five exit cells in
+  the middle of each edge, like most Junior and I rooms: exit tiles, or the barriers
+  the originals have on edges (class 100, tile 0x55; the default in episode III, whose
+  rooms have no exit tiles; under Wine the hero walked through them in state 0 "open"
+  and 1 "closed" alike, what toggles them is not decoded); **verified under Wine**
   in episodes I, III and IV: the tiles towards existing rooms open, walking out arrives
   there; III's originals use no exit tiles at all), empty floor
   or a copy of any room (the shown one by default; cells, records, tags, script); and
@@ -487,6 +490,10 @@ Supported:
   as fields, variables, constants and the script's own variables) compiles while typing (errors with line and column,
   syntax errors underlined where they are) and Apply sets source and compiled script as
   one undo step
+- buttons: in every dialog and editor Cancel comes first, the confirming action last and
+  filled (Create, Apply, Delete room); actions that remove something are red; "Save
+  exe" is filled while there are unsaved changes; questions (deleting a room,
+  discarding changes) use the editor's own dialog, not the browser's
 - save: downloads the exe with all edited episodes and texts (warns about unsaved changes
   on leave)
 

@@ -16,10 +16,55 @@ export interface NewRoomDialogEvents {
   source(id: number): string | undefined;
   /** The episode's walls to offer, the most used first. */
   walls(): readonly number[];
+  /** The cells to offer for the exits, the default first. */
+  exits(): readonly number[];
   /** A cell drawn small (with its name as title). */
   preview(value: number): HTMLCanvasElement;
   /** Adds the room; returns whether it worked (else the dialog stays open). */
   create(id: number, content: NewRoomContent, openNeighbours: boolean): boolean;
+}
+
+/** A row of tile buttons to pick one of (aria-pressed marks it). */
+class TileChoice {
+  readonly element = document.createElement("div");
+  value: number | undefined;
+  private readonly name: string;
+  private readonly picked: () => void;
+
+  constructor(name: string, picked: () => void) {
+    this.name = name;
+    this.picked = picked;
+    this.element.className = "new-room-tiles";
+    this.element.setAttribute("role", "group");
+    this.element.setAttribute("aria-label", name);
+  }
+
+  /** Offers `values` (drawn by `preview`), keeping the picked one if it is among them. */
+  offer(values: readonly number[], preview: (value: number) => HTMLCanvasElement): void {
+    this.value = values.includes(this.value ?? -1) ? this.value : values[0];
+    this.element.replaceChildren(
+      ...values.map((value) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset["tile"] = String(value);
+        const canvas = preview(value);
+        button.title = canvas.title;
+        button.setAttribute("aria-label", `${this.name} 0x${value.toString(16).padStart(4, "0")}`);
+        button.append(canvas);
+        button.addEventListener("click", () => {
+          this.value = value;
+          this.picked();
+        });
+        return button;
+      }),
+    );
+  }
+
+  refresh(): void {
+    for (const button of this.element.querySelectorAll<HTMLElement>("button")) {
+      button.setAttribute("aria-pressed", String(Number(button.dataset["tile"]) === this.value));
+    }
+  }
 }
 
 /**
@@ -37,8 +82,14 @@ export class NewRoomDialog {
   private readonly copy = document.createElement("input");
   private readonly copyFrom = document.createElement("input");
   private readonly copyName = document.createElement("span");
-  private readonly wallChoice = document.createElement("div");
-  private wall: number | undefined;
+  private readonly wall = new TileChoice("Wall", () => {
+    this.walled.checked = true;
+    this.refresh();
+  });
+  private readonly exits = new TileChoice("Exits", () => {
+    this.walled.checked = true;
+    this.refresh();
+  });
   private readonly open = document.createElement("input");
   private readonly openLabel = document.createElement("label");
   private readonly create = document.createElement("button");
@@ -79,14 +130,24 @@ export class NewRoomDialog {
     }
     const walledLabel = document.createElement("label");
     walledLabel.title =
-      "The episode's wall all around, with five closed exit tiles in the middle of each edge (they open once the room's robots are gone)";
+      "A wall all around, with five exit cells in the middle of each edge (exit tiles open once the room's robots are gone; barriers let the hero through)";
     walledLabel.append(this.walled, " Walls and exits");
-    this.wallChoice.className = "new-room-walls";
-    this.wallChoice.setAttribute("role", "group");
-    this.wallChoice.setAttribute("aria-label", "Wall");
+    const tiles = document.createElement("div");
+    tiles.className = "new-room-tile-rows";
+    for (const [label, choice] of [
+      ["Wall", this.wall],
+      ["Exits", this.exits],
+    ] as const) {
+      const row = document.createElement("div");
+      row.className = "new-room-copy";
+      const name = document.createElement("span");
+      name.className = "new-room-tile-label";
+      name.textContent = label;
+      row.append(name, choice.element);
+      tiles.append(row);
+    }
     const walledRow = document.createElement("div");
-    walledRow.className = "new-room-copy";
-    walledRow.append(walledLabel, this.wallChoice);
+    walledRow.append(walledLabel, tiles);
     const emptyLabel = document.createElement("label");
     emptyLabel.append(this.empty, " Empty floor");
     this.copyFrom.type = "number";
@@ -111,7 +172,7 @@ export class NewRoomDialog {
       "Their exits byte then says 'neighbour' for that direction (one undo step with the new room)";
 
     const buttons = document.createElement("div");
-    buttons.className = "new-room-buttons";
+    buttons.className = "dialog-buttons";
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.textContent = "Cancel";
@@ -119,6 +180,7 @@ export class NewRoomDialog {
       this.element.close();
     });
     this.create.type = "submit";
+    this.create.className = "primary";
     this.create.textContent = "Create";
     buttons.append(cancel, this.create);
     form.addEventListener("submit", (event) => {
@@ -143,25 +205,9 @@ export class NewRoomDialog {
     this.heading.textContent = `New room in ${episode}`;
     this.id.value = id === undefined ? "" : String(id);
     this.copyFrom.value = String(from);
-    const walls = this.events.walls();
-    this.wall = walls.includes(this.wall ?? -1) ? this.wall : walls[0];
-    this.wallChoice.replaceChildren(
-      ...walls.map((value) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset["tile"] = String(value);
-        const preview = this.events.preview(value);
-        button.title = preview.title;
-        button.setAttribute("aria-label", `Wall 0x${value.toString(16).padStart(4, "0")}`);
-        button.append(preview);
-        button.addEventListener("click", () => {
-          this.wall = value;
-          this.walled.checked = true;
-          this.refresh();
-        });
-        return button;
-      }),
-    );
+    const preview = (value: number) => this.events.preview(value);
+    this.wall.offer(this.events.walls(), preview);
+    this.exits.offer(this.events.exits(), preview);
     if (![this.walled, this.empty, this.copy].some((input) => input.checked))
       this.walled.checked = true;
     this.refresh();
@@ -171,16 +217,18 @@ export class NewRoomDialog {
 
   /** The content chosen, undefined for a copy of a room that does not exist. */
   private content(): NewRoomContent | undefined {
-    if (this.walled.checked) return this.wall === undefined ? undefined : { walls: this.wall };
+    if (this.walled.checked) {
+      const [walls, exits] = [this.wall.value, this.exits.value];
+      return walls === undefined || exits === undefined ? undefined : { walls, exits };
+    }
     if (this.empty.checked) return "empty";
     const from = Number(this.copyFrom.value);
     return this.events.source(from) === undefined ? undefined : { copy: from };
   }
 
   private refresh(): void {
-    for (const button of this.wallChoice.querySelectorAll<HTMLElement>("button")) {
-      button.setAttribute("aria-pressed", String(Number(button.dataset["tile"]) === this.wall));
-    }
+    this.wall.refresh();
+    this.exits.refresh();
     const source = this.events.source(Number(this.copyFrom.value));
     this.copyName.textContent = source?.replace(/^room \d+( – )?/, "") ?? "(no such room)";
     this.copyName.classList.toggle("error", source === undefined);

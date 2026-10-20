@@ -102,7 +102,10 @@ export interface GridNeighbour {
 export const MAX_RECORD_SLOTS = 200;
 
 /** What a new room holds (Editor.addRoom). */
-export type NewRoomContent = "empty" | { walls: number } | { copy: number };
+export type NewRoomContent = "empty" | { walls: number; exits: number } | { copy: number };
+
+/** The class of barriers (tile 0x55: "Eine Barriere für unvorsichtige Abenteurer"). */
+export const BARRIER_CLASS = 100;
 
 /**
  * Classes of walls, by the episodes' descriptions: walls (6: "Diese Mauer kann keiner
@@ -289,8 +292,31 @@ export class Editor {
   }
 
   /**
+   * The cells for a new room's exits, the default first: the exit tile (closed until the
+   * room's robots are gone) and the barriers (BARRIER_CLASS) the original rooms have on
+   * their edges, most used first; barriers come first where the originals use no exit
+   * tiles (episode III: the open barrier 0x0055, as at room 141's exit).
+   */
+  exitCells(episode: number): number[] {
+    const { rooms, classes } = this.game.episode(episode);
+    let exitTiles = 0;
+    const barriers = new Map<number, number>();
+    for (const room of rooms) {
+      for (const i of RING) {
+        const cell = room.base[i] ?? 0;
+        if (cell === EXIT_CELL) exitTiles++;
+        else if (classes.classes.get(cell & 0xff)?.id === BARRIER_CLASS)
+          barriers.set(cell, (barriers.get(cell) ?? 0) + 1);
+      }
+    }
+    const found = [...barriers].sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([c]) => c);
+    return exitTiles > 0 || found.length === 0 ? [EXIT_CELL, ...found] : [...found, EXIT_CELL];
+  }
+
+  /**
    * Adds room `id` to the episode: empty, walled (the cell `content.walls` all around with
-   * five closed exit tiles in the middle of each edge, like most rooms of Junior and I) or a copy
+   * five cells `content.exits` in the middle of each edge, like most rooms of Junior and I:
+   * there exit tiles, see exitCells) or a copy
    * of room `content.copy` (cells, records and tags, the script too); with `openNeighbours`
    * the grid neighbours whose exits towards it are closed ("none") open them. One undo
    * step. Throws a RangeError if the id is taken or out of range, or the episode is full.
@@ -312,7 +338,8 @@ export class Editor {
     if (typeof content === "object" && "walls" in content) {
       if (isLogicCell(content.walls)) throw new RangeError("walls cannot be logic cells");
       for (const i of RING) base[i] = content.walls;
-      for (const i of EXIT_GAPS) base[i] = EXIT_CELL;
+      if (isLogicCell(content.exits)) throw new RangeError("exits cannot be logic cells");
+      for (const i of EXIT_GAPS) base[i] = content.exits;
     }
     const room: Room = source
       ? {

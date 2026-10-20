@@ -8,6 +8,9 @@
   --accent: #0a66d8;
   --edited: #d97a00;
   --error: #c62828;
+  --hover: #ecece8;
+  --accent-hover: #0855b3;
+  --on-accent: #ffffff;
   font:
     14px/1.4 system-ui,
     sans-serif;
@@ -23,6 +26,9 @@
     --accent: #5aa2ff;
     --edited: #ffa53d;
     --error: #ff6b6b;
+    --hover: #2e3035;
+    --accent-hover: #3d8af0;
+    --on-accent: #0d1117;
   }
 }
 
@@ -52,9 +58,86 @@ select {
   cursor: pointer;
 }
 
+button:enabled:hover,
+select:enabled:hover {
+  border-color: var(--muted);
+  background: var(--hover);
+}
+
+button:enabled:active {
+  background: var(--line);
+  transform: translateY(1px);
+}
+
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* the confirming action of a dialog or editor (Create, Apply, …): always the last button */
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+button.primary:enabled:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* actions that remove something: red, filled where they confirm */
+button.danger {
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 50%, var(--line));
+}
+
+button.danger:enabled:hover {
+  background: color-mix(in srgb, var(--error) 10%, var(--panel));
+  border-color: var(--error);
+}
+
+button.primary.danger {
+  background: var(--error);
+  border-color: var(--error);
+  color: var(--on-accent);
+}
+
+button.primary.danger:enabled:hover {
+  background: color-mix(in srgb, var(--error) 85%, black);
+}
+
+/* Cancel left, the action right */
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+dialog {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+
+.confirm-dialog {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.confirm-dialog p {
+  margin: 0 0 8px;
 }
 
 header {
@@ -538,7 +621,8 @@ canvas.cell {
 
 .script-bar h3 {
   font-size: 14px;
-  margin: 0;
+  /* the buttons on the right, as in the dialogs */
+  margin: 0 auto 0 0;
 }
 
 .script-source,
@@ -872,10 +956,6 @@ canvas.cell.text-tile {
 }
 
 .new-room {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
-  color: var(--text);
   width: min(420px, calc(100vw - 32px));
 }
 
@@ -915,12 +995,6 @@ canvas.cell.text-tile {
   color: var(--error);
 }
 
-.new-room-buttons {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .new-room-copy {
   display: flex;
   align-items: center;
@@ -944,19 +1018,30 @@ canvas.cell.text-tile {
   color: var(--error);
 }
 
-.new-room-walls {
+.new-room-tiles {
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
 }
 
-.new-room-walls button {
+.new-room-tiles button {
   padding: 1px;
   border-radius: 2px;
   line-height: 0;
 }
 
-.new-room-walls button[aria-pressed="true"] {
+.new-room-tiles button[aria-pressed="true"] {
   border-color: var(--accent);
   outline: 2px solid var(--accent);
+}
+
+.new-room-tile-rows {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0 24px;
+}
+
+.new-room-tile-label {
+  width: 4em;
+  color: var(--muted);
 }

@@ -316,6 +316,7 @@ export class RecordView {
     });
 
     const remove = element("button", undefined, "Remove record");
+    remove.className = "danger";
     remove.addEventListener("click", () => {
       this.events.remove();
     });

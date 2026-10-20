@@ -39,6 +39,7 @@ import {
 } from "@robot/formats";
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
+import { confirmDialog } from "./confirm-dialog.ts";
 import {
   type Area,
   type Clip,
@@ -273,6 +274,7 @@ export class App {
         : undefined,
     create: (id, content, openNeighbours) => this.addRoom(id, content, openNeighbours),
     walls: () => this.need().wallCells(this.episode),
+    exits: () => this.need().exitCells(this.episode),
     preview: (value) => this.cellPreview(value),
   });
   private readonly backButton = h("button", { class: "history", disabled: true }, "◀");
@@ -519,10 +521,10 @@ export class App {
           h(
             "button",
             {
-              class: "room-delete",
+              class: "room-delete danger",
               title: "Delete the shown room (asks first, naming the rooms that lead to it)",
               click: () => {
-                this.removeRoom();
+                void this.removeRoom();
               },
             },
             "Delete room…",
@@ -862,13 +864,14 @@ export class App {
   }
 
   /** Deletes the shown room (after asking, naming the rooms that lead to it). */
-  removeRoom(): void {
+  async removeRoom(): Promise<void> {
     const id = this.roomId;
     const from = this.roomsLeadingTo(id);
     const links = from.length
       ? `\nRooms leading to it (they would lead nowhere): ${from.join(", ")}.`
       : "";
-    if (!window.confirm(`Delete ${this.roomLabel(this.episode, id)}?${links}`)) return;
+    const question = `Delete ${this.roomLabel(this.episode, id)}?${links}\nUndo brings it back.`;
+    if (!(await confirmDialog(question, { action: "Delete room", danger: true }))) return;
     try {
       this.need().removeRoom(this.episode, id);
     } catch (error) {
@@ -1468,7 +1471,12 @@ export class App {
   }
 
   private async loadFile(file: File): Promise<void> {
-    if (this.editor?.dirty && !window.confirm("Discard the unsaved changes?")) return;
+    const question = "Open another exe and discard the unsaved changes?";
+    if (
+      this.editor?.dirty &&
+      !(await confirmDialog(question, { action: "Discard changes", danger: true }))
+    )
+      return;
     try {
       this.load(new Uint8Array(await file.arrayBuffer()), file.name);
     } catch {
@@ -1718,6 +1726,8 @@ export class App {
     this.undoButton.disabled = !editor.canUndo;
     this.redoButton.disabled = !editor.canRedo;
     this.saveButton.disabled = !editor.dirty;
+    // unsaved changes: saving is the thing to do
+    this.saveButton.classList.toggle("primary", editor.dirty);
   }
 
   /**

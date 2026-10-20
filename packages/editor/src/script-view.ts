@@ -430,6 +430,10 @@ export class ScriptView {
   private editor(button: (label: string, title: string, click: () => void) => HTMLButtonElement) {
     const verdict = document.createElement("p");
     verdict.className = "script-verdict";
+    // Cancel first, the confirming action last, as in every dialog of the editor
+    button("Cancel", "Leave the script as it is", () => {
+      this.close();
+    });
     const apply = button("Apply", "Compile and give the room this script (undoable)", () => {
       try {
         this.events.apply(this.draft);
@@ -439,9 +443,7 @@ export class ScriptView {
         verdict.classList.add("error");
       }
     });
-    button("Cancel", "Leave the script as it is", () => {
-      this.close();
-    });
+    apply.classList.add("primary");
     let error: string | undefined;
     const check = () => {
       verdict.classList.toggle("error", error !== undefined);
