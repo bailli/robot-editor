@@ -610,6 +610,8 @@ canvas.cell {
 
 .script-view {
   display: grid;
+  /* one column no wider than the panel: long script lines scroll inside the editor */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 

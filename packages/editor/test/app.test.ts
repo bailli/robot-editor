@@ -972,6 +972,23 @@ test("an oracle's record shows the symbol it needs", () => {
   expect(document.querySelector(".record-text")?.textContent).toBe(displayText(hint[0] ?? ""));
 });
 
+test("the script fits into the side column, long lines scroll inside the editor", async () => {
+  app.showEpisode(4, 135); // a script with lines longer than the column is wide
+  await page.getByRole("tab", { name: "Script" }).click();
+  const panel = defined(document.querySelector<HTMLElement>(".side-script") ?? undefined);
+  const fits = () => {
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+    const right = panel.getBoundingClientRect().right + 0.5;
+    for (const child of panel.querySelectorAll<HTMLElement>(".script-view > *"))
+      expect(child.getBoundingClientRect().right, child.className).toBeLessThanOrEqual(right);
+  };
+  fits();
+  const scroller = defined(panel.querySelector<HTMLElement>(".cm-scroller") ?? undefined);
+  expect(scroller.scrollWidth).toBeGreaterThan(scroller.clientWidth);
+  await scriptView().getByRole("button", { name: "Edit" }).click();
+  fits();
+});
+
 test("the record inspector fits into the side column", async () => {
   app.showEpisode(2, 43);
   await page.getByRole("tab", { name: "Record" }).click();
