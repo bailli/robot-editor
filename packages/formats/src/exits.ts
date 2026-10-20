@@ -99,7 +99,14 @@ export interface RecordTeleport {
   scriptTarget: boolean;
 }
 
-const STEP: Readonly<Record<Direction, number>> = { north: -10, south: 10, west: -1, east: 1 };
+/** What walking off an edge adds to the room id (the grid neighbour, 0x439590). */
+export const GRID_STEP: Readonly<Record<Direction, number>> = {
+  north: -10,
+  south: 10,
+  west: -1,
+  east: 1,
+};
+const STEP = GRID_STEP;
 
 export const OPPOSITE: Readonly<Record<Direction, Direction>> = {
   north: "south",

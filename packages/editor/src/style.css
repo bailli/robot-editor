@@ -122,7 +122,6 @@ h2 {
 
 .workspace.map-mode main {
   min-width: 0;
-  overflow-x: auto;
 }
 
 .rooms {
@@ -136,12 +135,10 @@ h2 {
 /* the id on a row of its own, the buttons below it */
 .room-add {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: 3px;
 }
 
 .room-add input {
-  grid-column: 1 / -1;
   min-width: 0;
   padding: 2px 4px;
   background: var(--panel);
@@ -632,11 +629,14 @@ header button.pressed {
   color: var(--accent);
 }
 
+/* scrolls on its own, so both scroll bars stay in the window */
 .map-view {
   --map-room: 152px;
   --map-link: 22px;
   display: grid;
   gap: 16px;
+  overflow: auto;
+  max-height: calc(100vh - 130px);
 }
 
 .map-view[hidden] {
@@ -849,4 +849,97 @@ canvas.cell.text-tile {
 .tile-filter {
   width: 100%;
   box-sizing: border-box;
+}
+
+.map-add {
+  width: var(--map-room);
+  aspect-ratio: 640 / 348;
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--line);
+  opacity: 0.6;
+}
+
+.map-add:hover,
+.map-add:focus-visible {
+  color: var(--text);
+  border-color: var(--accent);
+  opacity: 1;
+}
+
+.room-head .room-delete {
+  margin-left: auto;
+}
+
+.new-room {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  width: min(420px, calc(100vw - 32px));
+}
+
+.new-room form {
+  display: grid;
+  gap: 8px;
+}
+
+.new-room h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.new-room fieldset {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.new-room-id input {
+  width: 8ch;
+}
+
+.new-room-where {
+  min-height: 2.5em;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.new-room-where p {
+  margin: 0 0 2px;
+}
+
+.new-room-where .error {
+  color: var(--error);
+}
+
+.new-room-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.new-room-copy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.new-room-copy input[type="number"] {
+  width: 7ch;
+}
+
+.new-room-source {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-room-source.error {
+  color: var(--error);
 }

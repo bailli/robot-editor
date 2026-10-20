@@ -200,7 +200,14 @@ Files in `packages/formats/src`:
 - **Grid:** north/south = id ∓ 10, west/east = id ∓ 1. The exits byte (tag kind 1, 2 bits
   per direction N, S, W, E at 0x439590): 0 = grid neighbour if it exists, 1 = room 2 (the
   "outside", e.g. episode III's sea), 2/3 = none. Walking off the map arrives on the
-  opposite edge, same row/column (0x427a9b); row 0 lies under the status line.
+  opposite edge, same row/column (0x427a9b); row 0 lies under the status line. The step
+  is plain arithmetic, rows and hundreds do not matter: **verified under Wine** (episode I,
+  new rooms as copies of room 42): west of room 51 is 50, west of 50 is **49**, the end of
+  the row above. No original room id ends in 0 (but episode II's 600, which no grid exit
+  reaches), so rows never join at their ends; ids ending in 9 are common. Across hundreds
+  the grid is used on purpose: episode IV's 194/195 (south) and 204/205 (north) are
+  neighbours. The originals leave the exits byte at "neighbour" towards missing rooms,
+  so a room added there is entered from its neighbours at once.
 - **Exit tiles** `0x0017` in walls are **closed** ("…still closed: first get rid of all
   robots"). Once the room has no robots left, task 0x66 (0x433a60, every 147 ms) opens
   them on edges whose direction leads somewhere (RoomNorth… ≠ 0), one tile per run and
@@ -424,7 +431,8 @@ Supported:
   tiles that do not arrive on exit tiles of the neighbour, dashed opened only by the
   script, grey closed; clicking an arrow opens or closes that exit (undoable); badges
   for the other links (doors, stairs, teleporters, oracles, actors, outside, far script
-  exits) go to their room; clicking a room opens it
+  exits) go to their room; clicking a room opens it; free spots next to rooms (not in
+  column 0) show a + that adds a room there; the map scrolls on its own, within the window
 - visited rooms go into the browser's history and address (`#3/147`): the browser's
   back/forward (buttons, Alt+←/→, mouse buttons), the editor's own ◀/▶ buttons (showing
   the room they lead to) and Backspace move between them, across episodes; loading the
@@ -434,11 +442,19 @@ Supported:
   in the episode's style into the German texts (episode III: resource 1320, keeping a
   description), saved CRUNCHED; rooms showing the name of the room 100 below rename
   that room; empty removes the name; undoable
-- rooms added by id (1–1023, at most 200 per episode): empty, or a copy of the shown
-  room (cells, records, tags, script); rooms deleted (not room 1, the title screen with
-  the global script, nor the start room; the confirmation names the rooms whose exits,
-  passages, records or scripts lead there, which then lead nowhere; the name stays in
-  the texts); undoable
+- rooms added ("New room…" below the episode, or a map's + slot) in a dialog: the id
+  (1–1023, at most 200 per episode; a free one after the shown room is offered, never one
+  ending in 0), checked while typing (taken, out of range; its grid neighbours and how
+  their exits stand, also across a row's end or a hundred; rooms ± 100); the content:
+  walls and exits (the episode's most frequent wall on the originals' edges, five closed
+  exit tiles in the middle of each edge, like most Junior and I rooms; **verified under
+  Wine**: the tiles towards existing rooms open, walking out arrives there), empty floor
+  or a copy of any room (the shown one by default; cells, records, tags, script); and
+  whether closed exits of its neighbours open towards it; one undo step. "Go to room"
+  opens a room by id. Rooms deleted ("Delete room…" next to the name; not room 1, the
+  title screen with the global script, nor the start room; the confirmation names the
+  rooms whose exits, passages, records or scripts lead there, which then lead nowhere;
+  the name stays in the texts); undoable
 - "Test in game": the edited exe with the episode starting in the shown room, the hero
   at the selected cell or the episode's start cell; `pnpm editor` runs it under Wine
   (`/play` on the dev server, `harness.py play`, the game window on this display; the

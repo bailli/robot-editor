@@ -37,8 +37,8 @@ Room tab sets the darkness, the points for the first visit and the music. "Save 
 downloads a copy with the edited scenes and texts. Scenes that grow move to the end of
 the resource section (the exe's signature is dropped). Logic cells (magenta) refer to
 the room's logic records and cannot be painted over (the inspector and the area tools change them). The room's name is edited in the
-field next to the title; new rooms are added (empty or as a copy of the shown one)
-and the shown room is deleted below the episode selection. "Test in game" starts the game in the shown room with all
+field next to the title, where "Delete room…" deletes it; "New room…" (or a + on the map)
+adds a room with walls and exits, empty or as a copy of another room. "Test in game" starts the game in the shown room with all
 edits (the hero at the selected cell): under `pnpm editor` in Wine on this display
 (after `python3 tools/wine/harness.py setup`; choose the episode in the game),
 otherwise the exe is downloaded. `pnpm --filter @robot/editor build`

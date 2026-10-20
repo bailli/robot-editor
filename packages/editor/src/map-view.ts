@@ -140,7 +140,14 @@ export interface MapViewEvents {
   /** The room's name, if it has one. */
   name(room: number): string | undefined;
   edited(room: number): boolean;
+  /** Asks to add room `room` (a free grid spot next to a room). */
+  add(room: number): void;
+  /** Whether the episode can take another room. */
+  canAdd(): boolean;
 }
+
+/** The highest room id (record targets have 10 bits). */
+const MAX_ROOM_ID = 1023;
 
 const LINK_ARROWS: Readonly<Record<Direction, string>> = {
   north: "▲",
@@ -191,8 +198,21 @@ export class MapView {
     heading.textContent = `Rooms ${floor * 100}–${floor * 100 + 99}`;
     const grid = document.createElement("div");
     grid.className = "map-grid";
-    const rows = rooms.map((r) => mapPosition(r.id).row);
-    const columns = rooms.map((r) => mapPosition(r.id).column);
+    // free spots next to rooms, drawn as + to add a room there
+    const free = new Set<number>();
+    if (this.events.canAdd()) {
+      for (const room of rooms) {
+        for (const d of DIRECTIONS) {
+          const id = adjacent(room.id, d);
+          // not in column 0: the game links its rooms with the row above and below
+          if (id === undefined || id < 1 || id > MAX_ROOM_ID || id % 10 === 0) continue;
+          if (!byId.has(id)) free.add(id);
+        }
+      }
+    }
+    const spots = [...rooms.map((r) => r.id), ...free];
+    const rows = spots.map((id) => mapPosition(id).row);
+    const columns = spots.map((id) => mapPosition(id).column);
     const [row0, column0] = [Math.min(...rows), Math.min(...columns)];
     const width = Math.max(...columns) - column0 + 1;
     grid.style.gridTemplateColumns =
@@ -204,6 +224,18 @@ export class MapView {
       element.style.gridColumn = String(column + 1);
       grid.append(element);
     };
+    for (const id of free) {
+      const { row, column } = mapPosition(id);
+      const add = document.createElement("button");
+      add.className = "map-add";
+      add.textContent = `+ ${id}`;
+      add.title = `Add room ${id} here`;
+      add.setAttribute("aria-label", `Add room ${id}`);
+      add.addEventListener("click", () => {
+        this.events.add(id);
+      });
+      place(add, 2 * (row - row0), 2 * (column - column0));
+    }
     for (const room of rooms) {
       const { row, column } = mapPosition(room.id);
       const [r, c] = [2 * (row - row0), 2 * (column - column0)];

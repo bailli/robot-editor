@@ -320,11 +320,30 @@ describe("Editor room settings", () => {
 });
 
 describe("Editor rooms and names", () => {
+  test("a walled room has the episode's wall all around and five exit tiles per edge", () => {
+    const editor = new Editor(game);
+    expect(editor.wallCell(1)).toBe(0x0006);
+    const room = defined(editor.addRoom(1, 251, "walled").added);
+    const row = (y: number) => Array.from(room.base.subarray(y * 40, y * 40 + 40));
+    const exits = (cells: number[]) => cells.flatMap((c, k) => (c === 0x17 ? [k] : []));
+    expect(row(0).every((c) => c === 6)).toBe(true); // under the status line
+    expect(exits(row(1))).toEqual([17, 18, 19, 20, 21]);
+    expect(exits(row(28))).toEqual([17, 18, 19, 20, 21]);
+    const column = (x: number) => Array.from({ length: 29 }, (_, y) => room.base[y * 40 + x] ?? 0);
+    expect(exits(column(0))).toEqual([12, 13, 14, 15, 16]);
+    expect(exits(column(39))).toEqual([12, 13, 14, 15, 16]);
+    expect(
+      row(10)
+        .slice(1, 39)
+        .every((c) => c === 0),
+    ).toBe(true);
+  });
+
   test("a copied room is a new room with the same content, undone as one step", () => {
     const editor = new Editor(game);
     const id = defined(editor.freeRoomId(1, 43));
     expect(game.episode(1).rooms.some((r) => r.id === id)).toBe(false);
-    expect(editor.addRoom(1, id, 43).added?.id).toBe(id);
+    expect(editor.addRoom(1, id, { copy: 43 }).added?.id).toBe(id);
     const copy = editor.room(1, id);
     expect(firstDifference(copy.base, room.base)).toBe(-1);
     expect(copy.records).toEqual(room.records);
@@ -388,7 +407,7 @@ describe("Editor rooms and names", () => {
 
   test("the test exe starts the episode in the room, with the edits", () => {
     const editor = new Editor(game);
-    editor.addRoom(1, 999, 43);
+    editor.addRoom(1, 999, { copy: 43 });
     const exe = editor.testExe(1, 999, { x: 10, y: 12 });
     expect(readEpisodeStart(parsePe(exe), 1)).toEqual({ room: 999, x: 10, y: 12 });
     expect(new Game(exe).episode(1).rooms.some((r) => r.id === 999)).toBe(true);
@@ -415,7 +434,7 @@ describe("Editor room deletion", () => {
 
   test("added rooms can be deleted; the title and start rooms cannot", () => {
     const editor = new Editor(game);
-    editor.addRoom(3, 250, 41);
+    editor.addRoom(3, 250, { copy: 41 });
     editor.removeRoom(3, 250);
     expect(editor.rooms(3).some((r) => r.id === 250)).toBe(false);
     expect(() => editor.removeRoom(3, 41)).toThrow(RangeError);

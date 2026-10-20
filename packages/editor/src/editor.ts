@@ -1,12 +1,16 @@
 import {
+  DIRECTIONS,
   type Direction,
+  EXIT_CELL,
   type EpisodeStart,
   type ExitMode,
+  GRID_STEP,
   Game,
   LOGIC_CELL,
   type LogicRecord,
   MAX_ROOMS,
   NAMED_ROOMS,
+  OPPOSITE,
   ROOM_CELLS,
   ROOM_HEIGHT,
   ROOM_NAME_ENTRY,
@@ -82,10 +86,38 @@ export interface Edit {
   removed?: Room;
   /** A text resource before and after (room names). */
   text?: { id: number; before: string; after: string };
+  /** Steps done and undone together, in this order (the edit's own fields: the first's). */
+  parts?: Edit[];
+}
+
+/** A room next to a room id on the grid, and how its exit towards that id stands. */
+export interface GridNeighbour {
+  direction: Direction;
+  room: number;
+  /** The neighbour's exits byte towards the id ("neighbour": it leads there). */
+  mode: ExitMode;
 }
 
 /** Logic record slots the game can address (0x432fd0 looks up slots below 200). */
 export const MAX_RECORD_SLOTS = 200;
+
+/** What a new room holds (Editor.addRoom). */
+export type NewRoomContent = "empty" | "walled" | { copy: number };
+
+/**
+ * The cells of a room's walls: the top two rows (row 0 lies under the status line), the
+ * bottom row and the outer columns.
+ */
+const RING: readonly number[] = Array.from({ length: ROOM_CELLS }, (_, i) => i).filter((i) => {
+  const [x, y] = [i % ROOM_WIDTH, Math.floor(i / ROOM_WIDTH)];
+  return y <= 1 || y === ROOM_HEIGHT - 1 || x === 0 || x === ROOM_WIDTH - 1;
+});
+
+/** The exits of a walled room, as most Junior and I rooms have them: five cells per edge. */
+const EXIT_GAPS: readonly number[] = [
+  ...[17, 18, 19, 20, 21].flatMap((x) => [ROOM_WIDTH + x, (ROOM_HEIGHT - 1) * ROOM_WIDTH + x]),
+  ...[12, 13, 14, 15, 16].flatMap((y) => [y * ROOM_WIDTH, y * ROOM_WIDTH + ROOM_WIDTH - 1]),
+];
 
 /** The title screen; its script is the episode's global one. */
 const TITLE_ROOM = 1;
@@ -206,20 +238,66 @@ export class Editor {
   }
 
   /**
-   * Adds room `id` to the episode: a copy of room `from` (cells, records and tags, the
-   * script too) or an empty one; one undo step. Throws a RangeError if the id is taken
-   * or out of range, or the episode is full.
+   * The rooms next to room id `id` on the grid (where walking off an edge leads, also
+   * across floors and rows: id ± 1, ± 10) and their exits towards it.
    */
-  addRoom(episode: number, id: number, from?: number): Edit {
-    this.endStroke();
+  gridNeighbours(episode: number, id: number): GridNeighbour[] {
     const rooms = this.rooms(episode);
-    if (!Number.isInteger(id) || id < 1 || id > MAX_ROOM_ID) {
-      throw new RangeError(`room ids go from 1 to ${MAX_ROOM_ID}`);
+    return DIRECTIONS.flatMap((direction) => {
+      const room = rooms.find((r) => r.id === id + GRID_STEP[direction]);
+      return room ? [{ direction, room: room.id, mode: exitMode(room, OPPOSITE[direction]) }] : [];
+    });
+  }
+
+  /** Why room `id` cannot be added (RangeError messages of addRoom), undefined if it can. */
+  roomIdProblem(episode: number, id: number): string | undefined {
+    const rooms = this.rooms(episode);
+    if (!Number.isInteger(id) || id < 1 || id > MAX_ROOM_ID)
+      return `room ids go from 1 to ${MAX_ROOM_ID}`;
+    if (rooms.some((r) => r.id === id)) return `room ${id} exists`;
+    if (rooms.length >= MAX_ROOMS) return `an episode has at most ${MAX_ROOMS} rooms`;
+    return undefined;
+  }
+
+  /**
+   * The episode's wall: the most frequent cell on the original rooms' outer ring (leaving
+   * out empty floor and exit tiles), e.g. 0x0006 in Junior and I.
+   */
+  wallCell(episode: number): number {
+    const counts = new Map<number, number>();
+    for (const room of this.game.episode(episode).rooms) {
+      for (const i of RING) {
+        const cell = room.base[i] ?? 0;
+        if (cell !== 0 && cell !== EXIT_CELL && !isLogicCell(cell))
+          counts.set(cell, (counts.get(cell) ?? 0) + 1);
+      }
     }
-    if (rooms.some((r) => r.id === id)) throw new RangeError(`room ${id} exists`);
-    if (rooms.length >= MAX_ROOMS)
-      throw new RangeError(`an episode has at most ${MAX_ROOMS} rooms`);
-    const source = from === undefined ? undefined : this.room(episode, from);
+    return [...counts].reduce((best, c) => (c[1] > best[1] ? c : best), [0, 0])[0];
+  }
+
+  /**
+   * Adds room `id` to the episode: empty, walled (the episode's wall all around with five
+   * closed exit tiles in the middle of each edge, like most rooms of Junior and I) or a copy
+   * of room `content.copy` (cells, records and tags, the script too); with `openNeighbours`
+   * the grid neighbours whose exits towards it are closed ("none") open them. One undo
+   * step. Throws a RangeError if the id is taken or out of range, or the episode is full.
+   */
+  addRoom(
+    episode: number,
+    id: number,
+    content: NewRoomContent = "empty",
+    openNeighbours = false,
+  ): Edit {
+    this.endStroke();
+    const problem = this.roomIdProblem(episode, id);
+    if (problem) throw new RangeError(problem);
+    const source = typeof content === "object" ? this.room(episode, content.copy) : undefined;
+    const base = new Uint16Array(ROOM_CELLS);
+    if (content === "walled") {
+      const wall = this.wallCell(episode);
+      for (const i of RING) base[i] = wall;
+      for (const i of EXIT_GAPS) base[i] = EXIT_CELL;
+    }
     const room: Room = source
       ? {
           id,
@@ -232,15 +310,31 @@ export class Editor {
       : {
           id,
           tags: [],
-          base: new Uint16Array(ROOM_CELLS),
+          base,
           overlay: new Uint16Array(ROOM_CELLS),
           records: [],
           trailing: new Uint8Array(),
         };
     const step: Edit = { episode, room: id, layer: "base", changes: [], added: room };
     this.apply(step, after);
-    this.push(step);
-    return step;
+    const parts = [step];
+    for (const n of openNeighbours ? this.gridNeighbours(episode, id) : []) {
+      if (n.mode !== "none") continue;
+      const neighbour = this.room(episode, n.room);
+      const tags = withExitMode(neighbour, OPPOSITE[n.direction], "neighbour").tags;
+      const open: Edit = {
+        episode,
+        room: n.room,
+        layer: "base",
+        changes: [],
+        tags: { before: neighbour.tags, after: tags },
+      };
+      this.apply(open, after);
+      parts.push(open);
+    }
+    const edit = parts.length > 1 ? { ...step, parts } : step;
+    this.push(edit);
+    return edit;
   }
 
   /**
@@ -261,10 +355,13 @@ export class Editor {
     return step;
   }
 
-  /** A free room id: the first after `near`, else the first one. */
+  /**
+   * A free room id: the first after `near`, else the first one. Ids ending in 0 are left
+   * out, like in the originals (see wrapsRow).
+   */
   freeRoomId(episode: number, near = 0): number | undefined {
     const used = new Set(this.rooms(episode).map((r) => r.id));
-    const ids = Array.from({ length: MAX_ROOM_ID }, (_, k) => k + 1);
+    const ids = Array.from({ length: MAX_ROOM_ID }, (_, k) => k + 1).filter((k) => !wrapsRow(k));
     return ids.find((k) => k > near && !used.has(k)) ?? ids.find((k) => !used.has(k));
   }
 
@@ -619,6 +716,12 @@ export class Editor {
   }
 
   private apply(edit: Edit, value: (change: CellChange) => number): void {
+    if (edit.parts) {
+      for (const part of value === after ? edit.parts : edit.parts.toReversed()) {
+        this.apply(part, value);
+      }
+      return;
+    }
     if (edit.text) {
       this.texts.set(edit.text.id, value === before ? edit.text.before : edit.text.after);
       return;
@@ -697,6 +800,16 @@ const after = (change: CellChange) => change.after;
 export function recordCapacity(room: Room): number {
   const objects = room.overlay.reduce((n, cell) => n + Number(cell !== 0), 0);
   return MAX_RECORD_SLOTS - room.records.length - objects;
+}
+
+/**
+ * Whether a room id ends in 0. Walking off an edge adds ±1 or ±10 to the id, rows or not:
+ * west of room 50 is room 49, at the end of the row above (tried in the game), and east
+ * of 49 is 50. No original room id ends in 0 (but for episode II's 600, which no grid
+ * exit reaches), so rows never connect at their ends.
+ */
+export function wrapsRow(id: number): boolean {
+  return id % 10 === 0;
 }
 
 /** An area cut to the room (empty if it lies outside). */

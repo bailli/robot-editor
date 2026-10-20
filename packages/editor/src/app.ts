@@ -3,9 +3,11 @@ import {
   EPISODES,
   EPISODE_NAMES,
   EVENT_TEXT,
+  type ExitMode,
   Game,
   KEYWORD_FUNCTION,
   LOGIC_CELL,
+  MAX_ROOMS,
   NAMED_ROOMS,
   PLACEMENT_AREAS,
   ROBOT_CLASSES,
@@ -42,18 +44,22 @@ import {
   type Clip,
   type Edit,
   Editor,
+  type GridNeighbour,
   type Layer,
   MAX_RECORD_SLOTS,
   MAX_ROOM_ID,
+  type NewRoomContent,
   areaBetween,
   areaCells,
   clipArea,
   fillRegion,
   recordCapacity,
   tilesOf,
+  wrapsRow,
 } from "./editor.ts";
 import { type Connections, ExitsView, connections, fixedExit, leadsTo } from "./exits-view.ts";
 import { MapView } from "./map-view.ts";
+import { type NewRoomCheck, NewRoomDialog } from "./new-room-dialog.ts";
 import { RecordView } from "./record-view.ts";
 import {
   CellCache,
@@ -204,6 +210,10 @@ export class App {
       return editor.roomName(this.episode, room)?.name;
     },
     edited: (room) => this.need().isEdited(this.episode, room),
+    add: (room) => {
+      this.newRoom(room);
+    },
+    canAdd: () => this.need().rooms(this.episode).length < MAX_ROOMS,
   });
   /** Per episode: room id -> a drawing of the room and what it was drawn from. */
   private readonly thumbnails = new Map<
@@ -244,13 +254,24 @@ export class App {
     "aria-label": "Room name",
     spellcheck: "false",
   });
-  private readonly newRoomInput = h("input", {
+  private readonly goInput = h("input", {
     type: "number",
     min: "1",
     max: String(MAX_ROOM_ID),
-    class: "new-room-id",
-    "aria-label": "New room id",
-    title: "The id of a new room (Enter: add an empty one, Shift+Enter: copy the shown one)",
+    class: "go-room",
+    placeholder: "Go to room",
+    "aria-label": "Go to room",
+    title: "Type a room id and press Enter to open it",
+  });
+  readonly newRoomDialog = new NewRoomDialog({
+    check: (id) => this.checkNewRoom(id),
+    source: (id) =>
+      this.need()
+        .rooms(this.episode)
+        .some((r) => r.id === id)
+        ? this.roomLabel(this.episode, id)
+        : undefined,
+    create: (id, content, openNeighbours) => this.addRoom(id, content, openNeighbours),
   });
   private readonly backButton = h("button", { class: "history", disabled: true }, "◀");
   private readonly forwardButton = h("button", { class: "history", disabled: true }, "▶");
@@ -469,36 +490,16 @@ export class App {
         h(
           "div",
           { class: "room-add" },
-          this.newRoomInput,
+          this.goInput,
           h(
             "button",
             {
-              title: "Add an empty room with this id",
+              title: "Add a room: empty or a copy of the shown one (also from the map's + slots)",
               click: () => {
-                this.addRoom(Number(this.newRoomInput.value), false);
+                this.newRoom();
               },
             },
-            "Add",
-          ),
-          h(
-            "button",
-            {
-              title: "Copy the shown room (cells, records, tags, script) to this id",
-              click: () => {
-                this.addRoom(Number(this.newRoomInput.value), true);
-              },
-            },
-            "Copy",
-          ),
-          h(
-            "button",
-            {
-              title: "Delete the shown room",
-              click: () => {
-                this.removeRoom();
-              },
-            },
-            "Delete",
+            "New room…",
           ),
         ),
         this.roomList,
@@ -513,6 +514,17 @@ export class App {
           this.forwardButton,
           this.roomTitle,
           this.roomName,
+          h(
+            "button",
+            {
+              class: "room-delete",
+              title: "Delete the shown room (asks first, naming the rooms that lead to it)",
+              click: () => {
+                this.removeRoom();
+              },
+            },
+            "Delete room…",
+          ),
         ),
         this.roomPane,
         this.mapView.element,
@@ -559,6 +571,7 @@ export class App {
       ),
       this.welcome,
       this.workspace,
+      this.newRoomDialog.element,
     );
     this.roomPane.append(this.exitsView.element, this.cellInfo, this.cellText);
     this.recordTab.append(this.recordView.element);
@@ -644,7 +657,6 @@ export class App {
     const editor = this.need();
     this.roomId = id;
     this.showRoomName(id);
-    this.newRoomInput.value = String(editor.freeRoomId(this.episode, id) ?? "");
     this.roomTitle.textContent = `${EPISODE_NAMES[this.episode] ?? ""} – room ${id}`;
     const room = editor.room(this.episode, id);
     // outlines shown while hovering the actor list or the script belong to the old room:
@@ -736,18 +748,104 @@ export class App {
     if (this.mapShown) this.refreshMap();
   }
 
-  /** Adds room `id`, empty or a copy of the shown room, and shows it. */
-  addRoom(id: number, copy: boolean): void {
-    const from = this.roomId;
+  /**
+   * Adds room `id` (empty, walled or a copy, see Editor.addRoom), optionally opening the
+   * closed exits of its neighbours towards it, and shows it; returns whether it worked.
+   */
+  addRoom(id: number, content: NewRoomContent = "empty", openNeighbours = false): boolean {
+    let edit: Edit;
     try {
-      this.need().addRoom(this.episode, id, copy ? from : undefined);
+      edit = this.need().addRoom(this.episode, id, content, openNeighbours);
     } catch (error) {
       this.setStatus(`Cannot add room ${id}: ${message(error)}`, true);
-      return;
+      return false;
     }
     this.showEpisode(this.episode, id);
     this.refreshButtons();
-    this.setStatus(copy ? `Room ${from} copied to room ${id}` : `Room ${id} added`);
+    const opened = (edit.parts ?? []).slice(1).map((p) => p.room);
+    const exits = opened.length ? `, exits of ${opened.join(", ")} opened towards it` : "";
+    const added =
+      typeof content === "object"
+        ? `Room ${content.copy} copied to room ${id}`
+        : `Room ${id} added`;
+    this.setStatus(`${added}${exits}`);
+    return true;
+  }
+
+  /**
+   * Asks for a new room (NewRoomDialog): `id` filled in (else a free one after the shown
+   * room), the shown room offered as a copy.
+   */
+  newRoom(id?: number): void {
+    const editor = this.need();
+    this.newRoomDialog.show(
+      EPISODE_NAMES[this.episode] ?? "",
+      id ?? editor.freeRoomId(this.episode, this.roomId),
+      this.roomId,
+    );
+  }
+
+  /** What the new room dialog says about an id: free or not, where, what it borders. */
+  checkNewRoom(id: number): NewRoomCheck {
+    const editor = this.need();
+    const problem = editor.roomIdProblem(this.episode, id);
+    if (problem !== undefined) {
+      return { problem: `${capitalize(problem)}.`, lines: [], closed: 0 };
+    }
+    const neighbours = editor.gridNeighbours(this.episode, id);
+    const state: Record<ExitMode, string> = {
+      neighbour: "its exit leads here",
+      none: "its exit is closed",
+      outside: "its exit leads outside (room 2)",
+    };
+    const floor = (room: number) => Math.floor(room / 100);
+    // grid neighbours the map does not draw next to it (the game adds ±1, ±10 to the id)
+    const far = (n: GridNeighbour) =>
+      floor(n.room) !== floor(id)
+        ? `, in rooms ${floor(n.room) * 100}–${floor(n.room) * 100 + 99}`
+        : (n.direction === "west" || n.direction === "east") &&
+            Math.floor(n.room / 10) !== Math.floor(id / 10)
+          ? `, at the ${n.direction === "west" ? "end of the row above" : "start of the row below"}`
+          : "";
+    const lines = neighbours.map(
+      (n) =>
+        `${capitalize(n.direction)}: ${this.roomLabel(this.episode, n.room)} (${state[n.mode]}${far(n)})`,
+    );
+    if (lines.length === 0) {
+      lines.push(
+        "No room next to it: reach it by stairs or a door (room ± 100), a teleporter or the script.",
+      );
+    }
+    const ids = new Set(editor.rooms(this.episode).map((r) => r.id));
+    const levels = [id - 100, id + 100].filter((r) => ids.has(r));
+    if (levels.length) {
+      lines.push(
+        `Stairs or doors can lead here from ${levels.map((r) => `room ${r}`).join(" and ")}.`,
+      );
+    }
+    if (wrapsRow(id)) {
+      lines.unshift(
+        `No original room id ends in 0: walking west from room ${id} leads to room ${id - 1} at the end of the row above, east from room ${id - 1} leads here.`,
+      );
+    }
+    return { lines, closed: neighbours.filter((n) => n.mode === "none").length };
+  }
+
+  /** Opens room `id` if the episode has it (the Go to room field). */
+  goTo(id: number): void {
+    if (
+      this.need()
+        .rooms(this.episode)
+        .some((r) => r.id === id)
+    ) {
+      this.setMap(false, id);
+      this.goInput.value = "";
+    } else {
+      this.setStatus(
+        `${EPISODE_NAMES[this.episode] ?? ""} has no room ${id} (New room… adds rooms)`,
+        true,
+      );
+    }
   }
 
   /** The rooms of the episode with an exit, passage, record or script line to room `id`. */
@@ -1135,8 +1233,9 @@ export class App {
         this.roomName.blur();
       }
     });
-    this.newRoomInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") this.addRoom(Number(this.newRoomInput.value), event.shiftKey);
+    this.goInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      this.goTo(Number(this.goInput.value));
     });
     this.areaButtons.copy.addEventListener("click", () => {
       this.copyArea();
@@ -1768,6 +1867,8 @@ function roomKey(room: Room): string {
   }
   return `${hash >>> 0} ${room.records.length}`;
 }
+
+const capitalize = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 /** A button of the Area tools, named "<label> area" for screen readers. */
 function areaButton(label: string, title: string): HTMLButtonElement {

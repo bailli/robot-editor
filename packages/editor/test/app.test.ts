@@ -750,32 +750,118 @@ test("the room's name is edited in place", async () => {
 });
 
 test("rooms are added empty or as a copy of the shown room", async () => {
-  const id = page.getByRole("spinbutton", { name: "New room id" });
-  await userEvent.fill(id.element(), "250");
-  await page.getByRole("button", { name: "Copy", exact: true }).click();
-  await expect.element(page.getByRole("heading", { name: "Robot I – room 250" })).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "New room" });
+  const id = dialog.getByRole("spinbutton", { name: "Room id" });
+  const create = dialog.getByRole("button", { name: "Create" });
+  await page.getByRole("button", { name: "New room…" }).click();
+  await expect.element(dialog).toBeVisible();
+  // a free id after the shown room is offered
+  expect((id.element() as HTMLInputElement).value).toBe("46");
+  // ids ending in 0 join the row above (the originals have none)
+  await userEvent.fill(id, "250");
+  expect(dialog.element().textContent).toMatch(/No original room id ends in 0/);
+  await userEvent.fill(id, "251");
+  expect(dialog.element().textContent).toMatch(/No room next to it/);
+  // walls and exits are the default; the copy is of the shown room unless another is typed
+  expect(
+    (dialog.getByRole("radio", { name: "Walls and exits" }).element() as HTMLInputElement).checked,
+  ).toBe(true);
+  const from = dialog.getByRole("spinbutton", { name: "Copy from room" });
+  expect((from.element() as HTMLInputElement).value).toBe("43");
+  await userEvent.fill(from, "999");
+  expect(dialog.element().textContent).toMatch(/no such room/);
+  await expect.element(create).toBeDisabled();
+  await userEvent.fill(from, "43");
+  expect(dialog.element().textContent).toMatch(/DER START/);
+  await create.click();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 251" })).toBeVisible();
+  expect(defined(app.editor).isEdited(1, 251)).toBe(true);
   const ep = game.episode(1);
   const expected = toRgba(renderRoom(game.room(1, 43), ep.objects, ep.classes), ep.palette);
   expect(firstDifference(app.view.pixels(), expected)).toBe(-1);
-  expect(document.querySelector('.room-list [data-room="250"]')?.classList.contains("edited")).toBe(
+  expect(document.querySelector('.room-list [data-room="251"]')?.classList.contains("edited")).toBe(
     true,
   );
-  expect(roomNameField().placeholder).toBe("Szene 250 (no name)");
-  // the next free id is offered
-  expect((id.element() as HTMLInputElement).value).toBe("251");
-  await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect.element(page.getByRole("heading", { name: "Robot I – room 251" })).toBeVisible();
-  expect(app.editor?.room(1, 251).base.every((c) => c === 0)).toBe(true);
-  // ids in use are refused
-  await userEvent.fill(id.element(), "43");
-  await page.getByRole("button", { name: "Add", exact: true }).click();
-  expect(document.querySelector(".status")?.textContent).toMatch(/room 43 exists/);
+  expect(roomNameField().placeholder).toBe("Szene 251 (no name)");
+  await page.getByRole("button", { name: "New room…" }).click();
+  expect((id.element() as HTMLInputElement).value).toBe("252");
+  await dialog.getByRole("radio", { name: "Empty floor" }).click();
+  await create.click();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 252" })).toBeVisible();
+  expect(app.editor?.room(1, 252).base.every((c) => c === 0)).toBe(true);
+  // ids in use cannot be created
+  await page.getByRole("button", { name: "New room…" }).click();
+  await userEvent.fill(id, "43");
+  expect(dialog.element().textContent).toMatch(/Room 43 exists\./);
+  await expect.element(create).toBeDisabled();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect.element(dialog).not.toBeInTheDocument();
   app.undo();
-  await expect.element(page.getByRole("heading", { name: "Robot I – room 250" })).toBeVisible();
-  expect(document.querySelector('.room-list [data-room="251"]')).toBeNull();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 251" })).toBeVisible();
+  expect(document.querySelector('.room-list [data-room="252"]')).toBeNull();
   app.undo();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
-  expect(document.querySelector('.room-list [data-room="250"]')).toBeNull();
+  expect(document.querySelector('.room-list [data-room="251"]')).toBeNull();
+});
+
+test("a new room's dialog names its neighbours and opens their closed exits, undone in one step", async () => {
+  // room 46 is missing; 36 (north of it) leads there once it exists, 45's exit is closed here
+  const editor = defined(app.editor);
+  editor.setExitMode(1, 45, "east", "none");
+  app.newRoom(46);
+  const dialog = page.getByRole("dialog", { name: "New room" });
+  const text = dialog.element().textContent;
+  expect(text).toMatch(/North: room 36.* \(its exit leads here\)/);
+  expect(text).toMatch(/West: room 45.* \(its exit is closed\)/);
+  const open = dialog.getByRole("checkbox", { name: /Open the closed exit of its neighbour/ });
+  expect((open.element() as HTMLInputElement).checked).toBe(true);
+  await dialog.getByRole("button", { name: "Create" }).click();
+  expect(exitMode(editor.room(1, 45), "east")).toBe("neighbour");
+  expect(document.querySelector(".status")?.textContent).toBe(
+    "Room 46 added, exits of 45 opened towards it",
+  );
+  app.undo();
+  expect(exitMode(editor.room(1, 45), "east")).toBe("none");
+  expect(editor.rooms(1).some((r) => r.id === 46)).toBe(false);
+  app.undo(); // the exit closed above
+  expect(editor.canUndo).toBe(false);
+});
+
+test("neighbours across the end of a row or a hundred are named as such", () => {
+  // episode IV: room 204's north neighbour is 194, in the hundred above
+  app.showEpisode(4, 204);
+  defined(app.editor).removeRoom(4, 204);
+  expect(app.checkNewRoom(204).lines.join("\n")).toMatch(/North: room 194.*, in rooms 100–199\)/);
+  // episode I: west of a room 50 is room 49, at the end of the row above
+  app.showEpisode(1, 43);
+  defined(app.editor).addRoom(1, 49);
+  expect(app.checkNewRoom(50).lines.join("\n")).toMatch(
+    /West: room 49 \(its exit leads here, at the end of the row above\)/,
+  );
+});
+
+test("Go to room opens a room by its id", async () => {
+  const go = page.getByRole("spinbutton", { name: "Go to room" });
+  await userEvent.fill(go, "44");
+  await userEvent.keyboard("{Enter}");
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
+  await userEvent.fill(go, "999");
+  await userEvent.keyboard("{Enter}");
+  expect(document.querySelector(".status.error")?.textContent).toMatch(/has no room 999/);
+});
+
+test("the map's + slots next to rooms add a room there", async () => {
+  await page.getByRole("button", { name: "Map" }).click();
+  // no slots in column 0: the game links those rooms with the row above and below
+  expect(document.querySelector('[aria-label="Add room 40"]')).toBeNull();
+  await page.getByRole("button", { name: "Add room 46" }).click();
+  const dialog = page.getByRole("dialog", { name: "New room" });
+  const id = dialog.getByRole("spinbutton", { name: "Room id" });
+  expect((id.element() as HTMLInputElement).value).toBe("46");
+  await dialog.getByRole("button", { name: "Create" }).click();
+  // the map stays, with the new room on it
+  expect(document.querySelector('.map-room[data-room="46"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Add room 46"]')).toBeNull();
 });
 
 test("Test in game runs an exe that starts in the room, at the selected cell", async () => {
@@ -813,17 +899,17 @@ test("deleting a room asks first, naming the rooms that lead to it", async () =>
     spy.mockRestore();
   });
   app.showRoom(44);
-  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Delete room…" }).click();
   expect(questions[0]).toBe(
     "Delete room 44 – RÄTSELHAFTE TÜREN?\nRooms leading to it (they would lead nowhere): 21, 34, 43, 45, 54.",
   );
   expect(document.querySelector('.room-list [data-room="44"]')).not.toBeNull();
   answer = true;
-  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Delete room…" }).click();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
   expect(document.querySelector('.room-list [data-room="44"]')).toBeNull();
   // the start room stays
-  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Delete room…" }).click();
   expect(document.querySelector(".status")?.textContent).toMatch(/the episode starts in room 43/);
   app.undo();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
