@@ -306,6 +306,11 @@ export class App {
         this.showRoom(room);
     },
     preview: (value) => this.cellPreview(value),
+    text: (id) => {
+      const texts = this.need().game.episodeTexts(this.episode)?.entries.get(id);
+      const tile = (v: number) => this.names().tileName(v);
+      return texts?.map((t) => displayText(t, tile)).join(" – or – ");
+    },
   });
   /** The column right of the room: tiles, the selected record, the actors, the script. */
   readonly sidePanel: SidePanel = new SidePanel(

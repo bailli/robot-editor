@@ -18,6 +18,10 @@ the exe itself; findings are checked three ways where possible:
    compared pixel by pixel with our renderer. The harness runs the game silently and can
    press keys before the screenshot (`--keys`), e.g. to walk the hero somewhere.
 
+What the game itself says helps too: its help texts (text 995 in each episode: controls,
+the rucksack) and the official info booklets (see Resources in the README) with hints
+for episodes I–IV.
+
 ## Working conventions
 
 - **pnpm only**, never npm. Node ≥ 22.18 runs the TypeScript sources directly.
@@ -339,9 +343,10 @@ rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry
   out) whose states are the oracle's pattern (`readOracleSymbols`, 0x47be54, 10 patterns;
   0x412860, which then draws the pieces as solved). **Verified under Wine** (episode II
   room 43): with the symbol, an oracle walked into northwards sends the hero to its target,
-  eastwards it vanishes (message 330 + n exists in episode III only), westwards it turns
-  into its object; with one piece wrong nothing happens. The editor shows the symbol in
-  the record inspector.
+  eastwards it shows its hint, message 330 + n, and vanishes (the tested
+  oracle 0 has none in episode II, which has 331, 332, 334 and 339), westwards it turns
+  into its object; with one piece wrong nothing happens. The editor shows the symbol and the
+  hint in the record inspector.
 - **Travelling actors** (record type 8, `SetMan`): byte 8 is converted on scene load
   (0x432728): with bit 0x80 an index into the episode's actor kinds (episode +0x34, e.g.
   episode I 0x475c38: 0x100…0x105), else a tile type (its class); the originals use 0x83

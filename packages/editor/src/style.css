@@ -408,6 +408,8 @@ h2 {
   border-radius: 6px;
   background: var(--panel);
   display: grid;
+  /* one column no wider than the panel: long values wrap or shrink */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   max-width: 640px;
 }
@@ -424,17 +426,27 @@ h2 {
 .record-summary {
   margin: 0;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .record-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .record-label {
-  width: 12em;
+  flex: 0 0 9em;
   color: var(--muted);
+}
+
+/* a text the record shows in the game */
+.record-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .record-field,
@@ -451,7 +463,9 @@ h2 {
 }
 
 .record-bytes {
-  width: 30ch;
+  flex: 1;
+  min-width: 0;
+  max-width: 30ch;
 }
 
 .record-view button {

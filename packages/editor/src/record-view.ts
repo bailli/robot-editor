@@ -5,8 +5,12 @@ import {
   describeRecord,
 } from "@robot/formats";
 
-/** Record type of oracles. */
+/** Record types of oracles and teleporters. */
 const ORACLE = 12;
+const TELEPORTER = 13;
+/** Texts: an oracle's hint (+ the low 4 bits of its state), a teleporter's message. */
+const ORACLE_HINTS = 330;
+const TELEPORTER_MESSAGES = 1200;
 
 /** A record field shown as an input: a cell value (hex), a number or a flag. */
 interface Field {
@@ -202,6 +206,8 @@ export interface RecordViewEvents {
   go(room: number): void;
   /** A canvas showing a cell value. */
   preview(value: number): HTMLCanvasElement;
+  /** The episode's text `id` as one paragraph, undefined if it has none. */
+  text(id: number): string | undefined;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -272,6 +278,18 @@ export class RecordView {
     });
 
     const fields = (known?.fields ?? []).map((field) => this.field(field, data, commit));
+    // the texts the record shows: an oracle's hint eastwards, a teleporter's message
+    const message =
+      data[0] === ORACLE
+        ? { label: "Hint (eastwards)", id: ORACLE_HINTS + (data[3] & 15) }
+        : data[0] === TELEPORTER && data[8]
+          ? { label: "Message", id: TELEPORTER_MESSAGES + data[8] }
+          : undefined;
+    if (message) {
+      const text = this.events.text(message.id);
+      const shown = element("span", "record-text", text ?? "(none in this episode)");
+      fields.push(labelled(`${message.label} ${message.id}`, shown, text));
+    }
     const symbol = data[0] === ORACLE ? symbols?.[data[3] & 15] : undefined;
     if (symbol) {
       const block = element("span", "oracle-symbol");

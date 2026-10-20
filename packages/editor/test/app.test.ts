@@ -715,4 +715,25 @@ test("an oracle's record shows the symbol it needs", () => {
   expect(document.querySelector(".record-summary")?.textContent).toMatch(
     /^an oracle; once its symbol, tangram pieces 0x0[0-4]50 /,
   );
+  // its hint eastwards (message 330 + n)
+  app.showEpisode(3, 48);
+  const room48 = game.room(3, 48);
+  const oracle = defined(room48.records.find((r) => r.data[0] === 12));
+  app.select(room48.base.findIndex((c) => c === (0x7f | (oracle.slot << 8))));
+  const hint = defined(game.episodeTexts(3)?.entries.get(330 + (oracle.data[3] & 15)));
+  expect(document.querySelector(".record-text")?.textContent).toBe(displayText(hint[0] ?? ""));
+});
+
+test("the record inspector fits into the side column", async () => {
+  app.showEpisode(2, 43);
+  await page.getByRole("tab", { name: "Record" }).click();
+  const room = game.room(2, 43);
+  const slot = defined(room.records.find((r) => r.data[0] === 12)).slot;
+  app.select(room.base.findIndex((c) => c === (0x7f | (slot << 8))));
+  const view = defined(document.querySelector<HTMLElement>(".record-view") ?? undefined);
+  expect(view.scrollWidth).toBeLessThanOrEqual(view.clientWidth);
+  for (const child of view.querySelectorAll<HTMLElement>("*"))
+    expect(child.getBoundingClientRect().right, child.className).toBeLessThanOrEqual(
+      view.getBoundingClientRect().right + 0.5,
+    );
 });

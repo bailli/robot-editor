@@ -69,6 +69,15 @@ screenshot: a patched copy of the exe holds only the title screens and the wante
 when present and fail whenever the set of differing cells changes. Actors (hero, robots),
 animations and other runtime effects differ from a static render by nature.
 
+## Resources
+
+- The official info booklets ("Infohefte", German) for episodes I–IV, with very specific
+  hints: https://www.game-of-robot.de/infohefte.htm (PDFs by TOM Productions:
+  [I](https://www.tom-games.de/games/Infoheft_Robot1.pdf),
+  [II](https://www.tom-games.de/games/Infoheft_Robot2.pdf),
+  [III](https://www.tom-games.de/games/Infoheft_Robot3.pdf),
+  [IV](https://www.tom-games.de/games/Infoheft_Robot4.pdf)). Not part of this repository.
+
 ## Scripts
 
 - `pnpm check` – typecheck, lint, format check and tests

@@ -38,9 +38,10 @@ import type { LogicRecord } from "./scene.ts";
  *       room, a 2×2 block of tangram pieces (tile 0x50) whose states are pattern n of
  *       readOracleSymbols (n: low 4 bits of the oracle's state; 0x412860, which then shows
  *       the pieces as solved). Then, walked into (0x412ae0), northwards it sends to the
- *       target (see exits.ts), eastwards it shows message 330 + n (texts of episode III
- *       only) and vanishes, westwards it turns into the object at offset 8, southwards it
- *       kills (all but south tried in the game; without the symbol nothing happens)
+ *       target (see exits.ts), eastwards it shows its hint, message 330 + n (episode II has
+ *       331, 332, 334 and 339), and vanishes, westwards it turns into the object at offset
+ *       8, southwards it kills (all but south tried in the game; without the symbol
+ *       nothing happens)
  *   13  teleporter (see exits.ts): byte 1 bit 1 lets a script's Teleport() set the target
  *       (tried in the game), bit 0 lets the shown cell act first while byte 7 is 0, bit 3
  *       adds a visual effect; message 1200 + byte 8 when used. A target room that does
