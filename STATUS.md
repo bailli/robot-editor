@@ -41,40 +41,41 @@ for episodes I–IV.
 - **No game data in the repository:** `reference/` (the installer and exe), `resources/`,
   `shots/`, `.wine/`, `renders/` etc. are ignored. Snapshots store hashes, not content.
 - **Wine:** the project prefix `.wine/` is sandboxed (no links into `$HOME`, no `Z:`).
-  Don't run the game in other prefixes. Sound is off (audio drivers disabled per run).
+  Don't run the game in other prefixes. Sound is off for screenshots (audio drivers
+  disabled per run); `harness.py play` keeps it on unless `--mute`.
 
 ## Repository map
 
-| Path                    | Content                                                                                              |
-| ----------------------- | ---------------------------------------------------------------------------------------------------- |
-| `packages/formats/src`  | `@robot/formats`: all decoders/encoders, no dependencies, Node and browser                           |
-| `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build)                                             |
-| `packages/tools/src`    | `@robot/tools`: CLI `pnpm robot …` (render, compare, eval, patch, shots, script), PNG via `fast-png` |
-| `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool                                        |
-| `shots.json`            | per reference screenshot: hash, palette offset, cells where our render still differs                 |
+| Path                    | Content                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| `packages/formats/src`  | `@robot/formats`: all decoders/encoders, no dependencies, Node and browser                    |
+| `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build)                                      |
+| `packages/tools/src`    | `@robot/tools`: CLI `pnpm robot …` (render, compare, eval, patch, shots, script, start, play) |
+| `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool                                 |
+| `shots.json`            | per reference screenshot: hash, palette offset, cells where our render still differs          |
 
 Files in `packages/formats/src`:
 
-| File                         | What it covers                                                                                |
-| ---------------------------- | --------------------------------------------------------------------------------------------- |
-| `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc`  |
-| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression (decoder and encoder), CP437                                        |
-| `texts.ts`                   | text resources: tile descriptions, messages, object names; setting an entry                   |
-| `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                    |
-| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects), shape tables and frames                                |
-| `palette.ts`                 | the 16-colour palettes per episode                                                            |
-| `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font     |
-| `render.ts`                  | drawing cells and rooms like the game                                                         |
-| `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                 |
-| `describe.ts`                | the description the game shows for a cell                                                     |
-| `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                      |
-| `start.ts`                   | the room and cell an episode starts in, and patching them                                     |
-| `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants      |
-| `script-docs.ts`             | what the script functions and variables do, how scripts and events run                        |
-| `records.ts`                 | what logic records do                                                                         |
-| `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`)                   |
-| `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
-| `game.ts`                    | `Game`: loads an exe, episodes lazily, saves edited scenes (`withScene`)                      |
+| File                         | What it covers                                                                                 |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc`   |
+| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression (decoder and encoder), CP437                                         |
+| `texts.ts`                   | text resources: tile descriptions, messages, object names; setting an entry                    |
+| `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                     |
+| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects), shape tables and frames                                 |
+| `palette.ts`                 | the 16-colour palettes per episode                                                             |
+| `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font      |
+| `render.ts`                  | drawing cells and rooms like the game                                                          |
+| `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                  |
+| `describe.ts`                | the description the game shows for a cell                                                      |
+| `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                       |
+| `start.ts`                   | the room and cell an episode starts in, and patching them                                      |
+| `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants       |
+| `script-docs.ts`             | what the script functions and variables do, how scripts and events run                         |
+| `records.ts`                 | what logic records do                                                                          |
+| `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`)                    |
+| `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts)  |
+| `game.ts`                    | `Game`: loads an exe, episodes lazily, saves edited scenes and texts (`withScene`, `withText`) |
 
 ## What is decoded and verified
 
@@ -138,8 +139,10 @@ Files in `packages/formats/src`:
   and I have none), kind 6 = length-prefixed payload (value 2 = compiled script, the only
   one read; 1 = script source, 3 = a Unix time 1993–2008 in every room, probably when the
   original editor saved it). Kind 3 (+0x16) holds two **episode III flags** (rooms
-  136, 143–146, 154, 155; the other episodes ignore it): bit 0 re-links the labyrinth's
-  teleporters when the room is entered from room 146 (vtable +0x5c, 0x40ca30), bit 1
+  136, 143–146, 154, 155; the other episodes ignore it): bit 0 (only room 144) builds the
+  labyrinth anew when the room is entered from room 146: a random maze of walls and
+  teleporters over an n × n block of rooms from 144 on, n = 1 on the first visit, 2
+  later (vtable +0x5c, 0x40ca30 → 0x40c910; not tried in the game), bit 1
   makes the hero dizzy: message 944 ("…Dir wird plötzlich schwindelig…") after 15 s in
   the room, once per game unless three herb tubers were eaten (vtable +0x60, 0x40ca70;
   **verified under Wine:** in room 41 with the tag, not without; the controls still
@@ -177,7 +180,7 @@ Files in `packages/formats/src`:
   (vtable +0x54: Junior 0x40e1a0 room 43 (2, 14), I 0x408da0 43 (5, 14), II 0x409fa0
   43 (6, 23), III 0x40b460 41 (8, 15), IV 0x40d680 53 (13, 16)): three `mov`s set the
   arrival cell (0x4fe309/0x4fe30a) and NxtRoom (0x4fe2f6), then a word at 0x4fe0c0
-  (unknown: 50, 38, 60, 200, 120). `start.ts` reads and patches them (`robot start`,
+  (50, 38, 60, 200, 120; probably the number of inventory slots, see open item 4). `start.ts` reads and patches them (`robot start`,
   the editor's "Test in game"; **verified under Wine** for episode I: a copied room 250
   and another start cell). The hero tile (type 1) in the map is cleared, not used. In
   a `robot patch` exe the hero lands at the episode's position in whatever room was put
@@ -218,7 +221,8 @@ Files in `packages/formats/src`:
   same place, except 5 recorded one-way stairs. Stairs need nothing but the tile (no
   record, script or tag); both layers are used (episode IV mostly the overlay); Junior
   has no stairs.
-- **Logic records with targets:** oracles (type 12, taken walking north), teleporters
+- **Logic records with targets:** oracles (type 12, walked into northwards once their
+  symbol is laid, see logic records), teleporters
   (13), travelling actors (8); target = room in bits 0–9 + x in bits 10–15 of offset 4,
   y at offset 6 (actors: x, y at bytes 6, 7).
 - **Reachability** from each start room: everything except debug room 99 and the rooms
@@ -251,7 +255,8 @@ Files in `packages/formats/src`:
   elsewhere).
 - **When scripts run** (0x4392e0…): on entering a room its script runs once from the
   top (after Newroom, RoomTime = 0, Night and the exits are set). The event functions
-  (`Event(mask)`, `E_Take(type)`, `E_Drop`, `E_Area(n)`, `E_NewRoom(room)`, `E_Slot(n)`)
+  (`Event(mask)`, `E_Take(class)`, `E_Drop(class)`, `E_Area(n)`, `E_NewRoom(room)`,
+  `E_Slot(n)`)
   register the code after their call as a handler (0x407b30; 20 handlers at 0x4c5df8)
   and return 0, so `if (Event(…)) { … return; }` is skipped then. When the event
   happens (0x408970) the script continues at that block with E_Value set, until
@@ -425,7 +430,8 @@ Supported:
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
   inspector with the record's fields per type (cells with previews, target room with
   "Go", arrival position, spawner radius/period, a native's object, price and chatter,
-  circuit stairs, …) and the raw bytes; change the type, add a record to a plain cell
+  circuit stairs, an oracle's symbol and hint, a teleporter's message, …) and the raw
+  bytes; change the type, add a record to a plain cell
   (in the base layer, where the game keeps them; it shows the cell it replaces, lowest
   free slot, refused once records and overlay objects fill the game's 200), remove one
   (the cell becomes what it showed); all undoable
@@ -446,7 +452,8 @@ Not supported (yet):
 
 - painting over logic cells (use the inspector); records are edited field by field, no
   copy/paste of records between rooms
-- editing the other tags (darkness, points, ambient name, kind 3); painting exit tiles is plain painting (0x0017 in the base layer)
+- editing the other tags (darkness, points, music, kind 3); painting exit tiles is plain
+  painting (0x0017 in the base layer)
 - English texts: room names are edited in the German texts only (Junior and I also
   have English ones, which keep the old names, or none for new rooms)
 - fill, copy/paste of areas, tile search/filter
@@ -473,7 +480,10 @@ Roughly by value for the editor.
    takes, bonuses) stay until Return. The rucksack: Return opens it, a letter key or the
    arrows pick an item (letters first appear as one "?" item to choose with Return), Down
    picks the action, Return does it ("Benutzen" puts a letter down next to the hero).
-   `PrintVal(x)` in a script shows a value in a box.
+   `PrintVal(x)` in a script shows a value in a box. Put objects the hero needs on the
+   map to be taken: a shovel given by `Take()` in a script did not show up in the
+   rucksack. Episode IV's status line shows the room and the hero's cell
+   (`[183,26/15]`); `SetNight(0)` lights a dark room.
    `robot start E ROOM OUT.exe --at X,Y` makes an exe starting the hero anywhere (the
    whole episode stays as it is), `robot play` and the editor's "Test in game" run one
    to be played by hand.
@@ -524,13 +534,14 @@ Roughly by value for the editor.
    music (the harness is silent; listen with `robot play`). The word 0x4fe0c0 each episode's start method sets is probably the
    number of inventory slots (50, 38, 60, 200, 120; compared by the debug tracer
    0x439170).
-5. **Rooms not reached** by any decoded connection: episode I 228 (its wizard sends the
-   hero to room 2, the cinema, at (12, 12) — besides the title room 1 the only way to
-   room 2 in episode I, which uses no "outside" exits), episode II 242 (only one-way
-   stairs out), episode III 149 and 3; room 99 is a debug room in every episode.
-   Episode I 228 is reached through room 128's circuit puzzle: once all 7 nodes are lit,
-   its final node places stairs down at (22, 27) (from the code). The others probably via
-   game code (e.g. 0x44bd2b takes a room from a table). The episode II jump to room 600
+5. **Rooms not reached** by any connection the reachability analysis models: episode I
+   228 (its wizard sends the hero to room 2, the cinema, at (12, 12) — besides the title
+   room 1 the only way to room 2 in episode I, which uses no "outside" exits), episode II
+   242 (only one-way stairs out), episode III 149 and 3; room 99 is a debug room in every
+   episode. Episode I 228 is reached through room 128's circuit puzzle: once all 7 nodes
+   are lit, its final node places stairs down at (22, 27) (from the code; circuits work as
+   decoded in the game, see logic records). The others probably via game code (e.g.
+   0x44bd2b takes a room from a table). The episode II jump to room 600
    at 0x40a820 is not understood either.
 6. **Renderer gaps** (`pnpm robot eval --types`): empty floor in episodes I/II (runtime:
    actors, hero, animations), episode IV types 95/106/79/99/70, episode III types 83, 37,
@@ -540,7 +551,8 @@ Roughly by value for the editor.
 7. **Description extras:** key colours (strings 0x9c50/0x9c51 from the exe's string
    table), messages 200/201 added by two classes, codes formatted by 0x41d2c0/0x40ff80, and
    four describe methods that depend on game flags/options.
-8. **Not decoded at all:** MUSIC and PCXBITMAP resources, the obfuscated command strings
+8. **Not decoded at all:** MUSIC (only its piece names, see room tags) and PCXBITMAP
+   resources, the obfuscated command strings
    near 0x4828d4 ("Command %s unknown!", probably cheats; two jump ±100 rooms).
 9. **Saving details:** the PE checksum is not updated (Windows does not check it for
    exes); a moved resource leaves zeroed space behind.
@@ -610,6 +622,11 @@ Roughly by value for the editor.
 | 0x432560, 0x4327c4, 0x432e06 | room load: convert records; overlay objects → type 1 records; allocate one     |
 | 0x42bef0, 0x407aa0           | an event's first time (sound, points, text 1800 + n); script Enigma            |
 | 0x4393d8, 0x4393e8, 0x439537 | entering a room: episode III kind 3 bit 0; background music; kind 3 bit 1      |
+| 0x40f700, 0x40f9a0           | circuits: evaluate the nodes (after taking or putting down a piece); trace     |
+| 0x412860, 0x47be54           | an oracle's symbol check; the 10 symbols                                       |
+| 0x42ca90, 0x430110, 0x430210 | read a word laid with letters; turn the Area square left, right                |
+| 0x42fdc0, 0x4302f0           | ShiftArea's shift; turn a punch card's square                                  |
+| 0x4130b0, 0x41f730, 0x448440 | dig (shovel); level tiles and bridges; the dealer's trade                      |
 | 0x408da0 (per episode)       | episode start: arrival cell, start room (vtable +0x54, see `start.ts`)         |
 | 0x481170                     | 8×8 font                                                                       |
 | 0x4750d8                     | script keywords (functions and variables)                                      |
@@ -635,6 +652,8 @@ Roughly by value for the editor.
   harness only warns). After the dialogs the harness presses Return until nothing
   reacts; a Return that opens something in the room would end up in the screenshot
   (not seen so far, review finding).
+- The game evaluates circuits only when a circuit piece is taken or put down, not on
+  entering the room: a test needs the hero to move a piece.
 - Each `App` in the editor listens on `window`; tests must `dispose()` old instances,
   or they react to history and key events too.
 - `harness.py play` and `shot` share the prefix: each ends a game the other started
