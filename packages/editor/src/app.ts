@@ -15,6 +15,7 @@ import {
   type Room,
   type RoomActor,
   START_ROOMS,
+  backdropRoom,
   compileScript,
   cryptScene,
   darkPalette,
@@ -680,7 +681,7 @@ export class App {
     // their rows are replaced without a mouseleave
     this.view.setAreas([]);
     this.view.setHighlights([]);
-    this.view.show(room, this.roomCache(room));
+    this.view.show(room, this.roomCache(room), this.backdrop(room));
     this.connections = connections(
       room,
       new Set(editor.rooms(this.episode).map((r) => r.id)),
@@ -1191,7 +1192,7 @@ export class App {
     const editor = this.need();
     this.beginStroke();
     const changed = cells.filter((i) => editor.paint(i, this.tile));
-    if (changed.length > 0) this.view.update(editor.room(this.episode, this.roomId), changed);
+    if (changed.length > 0) this.updateView(changed);
     this.endStroke();
   }
 
@@ -1521,7 +1522,7 @@ export class App {
     const cells = this.lastPainted === undefined ? [index] : line(this.lastPainted, index);
     this.lastPainted = index;
     const changed = cells.filter((i) => editor.paint(i, this.tile));
-    if (changed.length > 0) this.view.update(editor.room(this.episode, this.roomId), changed);
+    if (changed.length > 0) this.updateView(changed);
   }
 
   private endStroke(): void {
@@ -1571,7 +1572,6 @@ export class App {
   /** Shows the room of an undone or redone edit. */
   private revisit(edit: Edit | undefined): void {
     if (!edit) return;
-    const editor = this.need();
     if (edit.added || edit.removed) {
       // the room list changes: show the room, or the last room seen that still exists
       this.showEpisode(edit.episode, this.lastSeen(edit.episode, edit.room));
@@ -1582,10 +1582,7 @@ export class App {
       this.showRoom(this.roomId);
       if (this.selected) this.select(this.selected.index);
     } else {
-      this.view.update(
-        editor.room(this.episode, this.roomId),
-        edit.changes.map((c) => c.index),
-      );
+      this.updateView(edit.changes.map((c) => c.index));
       // painted cells may be actors (as at the end of a stroke)
       this.refreshActors();
     }
@@ -1629,13 +1626,18 @@ export class App {
       this.thumbnails.set(this.episode, cache);
     }
     const cells = this.roomCache(room);
-    const key = `${roomKey(room)} ${cells.palette.map((c) => c.join()).join()}`;
+    const backdrop = this.backdrop(room);
+    const key = [
+      roomKey(room),
+      backdrop ? roomKey(backdrop) : "",
+      cells.palette.map((c) => c.join()).join(),
+    ].join(" ");
     const known = cache.get(id);
     if (known?.key === key) return known.canvas;
     const canvas = known?.canvas ?? h("canvas", { class: "map-thumbnail" });
     cache.set(id, { key, canvas });
     setTimeout(() => {
-      drawRoom(canvas, room, cells);
+      drawRoom(canvas, room, cells, backdrop);
     });
     return canvas;
   }
@@ -1874,6 +1876,19 @@ export class App {
       this.caches.set(key, cache);
     }
     return cache;
+  }
+
+  /** The room the game draws in a room's class 99 cells (e.g. the town around a house). */
+  private backdrop(room: Room): Room | undefined {
+    const editor = this.need();
+    const classes = editor.game.episode(this.episode).classes;
+    return backdropRoom(this.episode, room, editor.rooms(this.episode), classes);
+  }
+
+  /** Redraws cells of the shown room after an edit. */
+  private updateView(indices: readonly number[]): void {
+    const room = this.need().room(this.episode, this.roomId);
+    this.view.update(room, indices, this.backdrop(room));
   }
 
   /** The cells a room is drawn with: as dark as in the game with the Dark toggle on. */

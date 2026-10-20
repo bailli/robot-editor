@@ -6,9 +6,13 @@ import {
   SCRIPT_TAG,
   START_ROOMS,
   ScriptPart,
+  backdropRoom,
   cellActorSource,
+  parsePe,
+  readEpisodeStart,
   resolveCell,
   roomActors,
+  withEpisodeStart,
 } from "@robot/formats";
 
 /** Room tags holding the script source and the compiled script. */
@@ -47,22 +51,37 @@ export function calmRoom(room: Room, classes: EpisodeClasses): Room {
  * its scene holds only rooms 1 and 2 (title screens) and, in the start room's slot, the
  * map and tags of the wanted room without its scripts (they evaluate game state and
  * could change the room) and without enemies (calmRoom). The smaller scene is written
- * over the original in place.
+ * over the original in place. A room with a backdrop (backdropRoom) keeps its id and its
+ * backdrop room, made calm as well, and the episode starts in it (withEpisodeStart).
  */
 export function patchedExe(game: Game, episode: number, roomId: number): Uint8Array {
   const start = START_ROOMS[episode];
   if (start === undefined) throw new RangeError(`no episode ${episode}`);
-  const target = calmRoom(game.room(episode, roomId), game.episode(episode).classes);
-  const room: Room = {
-    ...target,
-    id: start,
-    tags: target.tags.filter((t) => !isScript(t.kind, t.value)),
+  const ep = game.episode(episode);
+  const calm = (room: Room): Room => {
+    const target = calmRoom(room, ep.classes);
+    return { ...target, tags: target.tags.filter((t) => !isScript(t.kind, t.value)) };
   };
-  const keep = game
-    .episode(episode)
-    .rooms.filter((r) => (r.id === 1 || r.id === 2) && r.id !== start);
+  const target = game.room(episode, roomId);
+  const backdrop = backdropRoom(episode, target, ep.rooms, ep.classes);
+  const keep = ep.rooms.filter((r) => r.id === 1 || r.id === 2);
+  if (backdrop) {
+    const rooms = [
+      ...keep.filter((r) => r.id !== target.id && r.id !== backdrop.id),
+      calm(target),
+      calm(backdrop),
+    ];
+    const scene = game.withScene(
+      episode,
+      rooms.sort((a, b) => a.id - b.id),
+    );
+    const image = parsePe(scene);
+    return withEpisodeStart(image, episode, { ...readEpisodeStart(image, episode), room: roomId });
+  }
   return game.withScene(
     episode,
-    [...keep, room].sort((a, b) => a.id - b.id),
+    [...keep.filter((r) => r.id !== start), { ...calm(target), id: start }].sort(
+      (a, b) => a.id - b.id,
+    ),
   );
 }

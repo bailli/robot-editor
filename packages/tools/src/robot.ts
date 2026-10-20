@@ -26,7 +26,6 @@ import {
   disassemble,
   parseCompiledScript,
   readEpisodeStart,
-  renderRoom,
   roomCompiledScript,
   roomScript,
   withEpisodeStart,
@@ -41,6 +40,7 @@ import {
   differingCells,
   readManifest,
   readShot,
+  renderShot,
   shotRoom,
   takeShot,
   updateShot,
@@ -93,7 +93,7 @@ function startExe(episode: number, room: number): Uint8Array {
 function render(episode: number, room: number) {
   const g = game();
   const ep = g.episode(episode);
-  return { g, ep, indices: renderRoom(g.room(episode, room), ep.objects, ep.classes) };
+  return { g, ep, indices: renderShot(g, { episode, room }) };
 }
 
 switch (command) {

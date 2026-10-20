@@ -5,7 +5,14 @@ import { test } from "vitest";
 import { readEpisodeClasses } from "../src/classes.ts";
 import type { Rgb } from "../src/palette.ts";
 import { parsePe } from "../src/pe.ts";
-import { SCREEN_HEIGHT, SCREEN_WIDTH, cellFrame, renderRoom, toRgba } from "../src/render.ts";
+import {
+  SCREEN_HEIGHT,
+  SCREEN_WIDTH,
+  backdropRoom,
+  cellFrame,
+  renderRoom,
+  toRgba,
+} from "../src/render.ts";
 import { cryptScene } from "../src/scene-crypt.ts";
 import { LOGIC_CELL, ROOM_CELLS, type Room, parseScene } from "../src/scene.ts";
 import { type Shape, type ShapeTable, parseShapes } from "../src/shapes.ts";
@@ -28,6 +35,26 @@ for (let episode = 0; episode < 5; episode++) {
     }
   });
 }
+
+test("the room behind a room: id mod 100 in Junior to III, id - 100 in IV", () => {
+  const behind = (episode: number) => {
+    const { rooms, classes } = loadEpisode(episode);
+    return (id: number) => {
+      const room = rooms.find((r) => r.id === id);
+      assert.ok(room);
+      return backdropRoom(episode, room, rooms, classes)?.id;
+    };
+  };
+  const ii = behind(2);
+  assert.equal(ii(242), 42); // not 142, which has room 42 behind it too
+  assert.equal(ii(142), 42);
+  assert.equal(ii(115), 15);
+  assert.equal(behind(3)(147), 47);
+  const iv = behind(4);
+  assert.equal(iv(441), 341); // marked at (39, 1) only
+  assert.equal(iv(272), 172);
+  assert.equal(behind(1)(117), undefined); // episode I has no class 99 cells
+});
 
 test("cellFrame takes the low nibble of the high byte, falling back to frame 0", () => {
   const wall: Shape = { ...SOLID, frames: Array.from({ length: 6 }, () => SOLID.frames[0]) };

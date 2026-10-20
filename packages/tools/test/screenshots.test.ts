@@ -3,10 +3,8 @@ import { existsSync } from "node:fs";
 
 import { test } from "vitest";
 
-import { renderRoom } from "@robot/formats";
-
 import { ROOT, loadGame } from "../src/game.ts";
-import { differingCells, readManifest, readShot, sha256, shotRoom } from "../src/shots.ts";
+import { differingCells, readManifest, readShot, renderShot, sha256 } from "../src/shots.ts";
 
 /**
  * Compares our renders with screenshots taken in the real game (`robot shots`).
@@ -28,11 +26,7 @@ for (const shot of readManifest()) {
       shot.sha256,
       `${shot.file} differs from the one in shots.json: ${HINT}`,
     );
-    const ep = game.episode(shot.episode);
-    const actual = differingCells(
-      indices,
-      renderRoom(shotRoom(game, shot), ep.objects, ep.classes),
-    );
+    const actual = differingCells(indices, renderShot(game, shot));
     const key = ([x, y]: [number, number]) => `${x},${y}`;
     const known = new Set(shot.differingCells.map(key));
     const now = new Set(actual.map(key));

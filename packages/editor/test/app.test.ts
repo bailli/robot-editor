@@ -7,6 +7,9 @@ import {
   ROOM_WIDTH,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
+  TILE_HEIGHT,
+  TILE_WIDTH,
+  backdropRoom,
   darkPalette,
   darknessBlock,
   displayText,
@@ -17,10 +20,12 @@ import {
   renderRoom,
   roomScript,
   roomSettings,
+  shownCells,
   toRgba,
 } from "@robot/formats";
 
 import { App, line } from "../src/app.ts";
+import { dim } from "../src/room-view.ts";
 import "../src/style.css";
 import { defined, exeBytes, firstDifference } from "./game.ts";
 
@@ -85,18 +90,57 @@ test("the Dark toggle draws rooms as dark as the game on entering them", async (
   expect(firstDifference(app.view.pixels(), drawn(42, 0))).toBe(-1);
 });
 
+/** A room as the renderer draws it, with its backdrop dimmed (as the editor shows it). */
+function drawnWithBackdrop(episode: number, id: number): Uint8ClampedArray {
+  const ep = game.episode(episode);
+  const room = game.room(episode, id);
+  const backdrop = backdropRoom(episode, room, ep.rooms, ep.classes);
+  const rgba = toRgba(renderRoom(room, ep.objects, ep.classes, backdrop), ep.palette);
+  for (let i = 0; i < ROOM_WIDTH * ROOM_HEIGHT; i++) {
+    if (!shownCells(room, i, ep.classes, backdrop)[2]) continue;
+    const [x0, y0] = [(i % ROOM_WIDTH) * TILE_WIDTH, Math.floor(i / ROOM_WIDTH) * TILE_HEIGHT];
+    for (let y = y0; y < y0 + TILE_HEIGHT; y++) {
+      const start = (y * SCREEN_WIDTH + x0) * 4;
+      dim(rgba.subarray(start, start + TILE_WIDTH * 4));
+    }
+  }
+  return rgba;
+}
+
 test("every room of every episode is drawn as the renderer draws it", () => {
   for (const episode of [0, 1, 2, 3, 4]) {
     const ep = game.episode(episode);
     app.showEpisode(episode);
     for (const room of ep.rooms) {
       app.showRoom(room.id);
-      const expected = toRgba(renderRoom(room, ep.objects, ep.classes), ep.palette);
+      const expected = drawnWithBackdrop(episode, room.id);
       const pixels = app.view.pixels();
       expect(pixels.length).toBe(SCREEN_WIDTH * SCREEN_HEIGHT * 4);
       expect(firstDifference(pixels, expected), `episode ${episode} room ${room.id}`).toBe(-1);
     }
   }
+});
+
+test("a house's interior shows the town around it dimmed, until its marks are painted over", () => {
+  // episode II room 115: its class 99 cells show room 15
+  app.showEpisode(2, 115);
+  const ep = game.episode(2);
+  const room = game.room(2, 115);
+  expect(backdropRoom(2, room, ep.rooms, ep.classes)?.id).toBe(15);
+  const plain = toRgba(renderRoom(room, ep.objects, ep.classes), ep.palette);
+  expect(firstDifference(app.view.pixels(), drawnWithBackdrop(2, 115))).toBe(-1);
+  expect(firstDifference(app.view.pixels(), plain)).not.toBe(-1);
+  // (0, 1) and (39, 1) both mark it; painting one keeps the backdrop
+  app.setTile(0x0000); // empty floor
+  app.paintCell(ROOM_WIDTH);
+  expect(firstDifference(app.view.pixels(), plain)).not.toBe(-1);
+  app.paintCell(2 * ROOM_WIDTH - 1);
+  const edited = app.editor?.room(2, 115);
+  const without = toRgba(renderRoom(defined(edited), ep.objects, ep.classes), ep.palette);
+  expect(firstDifference(app.view.pixels(), without)).toBe(-1);
+  app.undo();
+  app.undo();
+  expect(firstDifference(app.view.pixels(), drawnWithBackdrop(2, 115))).toBe(-1);
 });
 
 test("right click picks a tile, left click paints it, undo reverts it", async () => {

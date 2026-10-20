@@ -17,15 +17,22 @@ import {
   renderCell,
   resolveCell,
   shapePixels,
+  shownCells,
   toRgba,
 } from "@robot/formats";
 
+/** How far cells of a backdrop room are moved towards grey (see dim). */
+const BACKDROP_DIMMING = 0.45;
+const DIM_GREY = 128;
+
 /**
  * RGBA pixels of map positions (base, overlay) of one episode, drawn once each, in the
- * episode's palette or another (e.g. a dark one, darkPalette).
+ * episode's palette or another (e.g. a dark one, darkPalette); dimmed for cells that show
+ * a backdrop room (backdropRoom).
  */
 export class CellCache {
   private readonly cells = new Map<number, ImageData>();
+  private readonly dimmed = new Map<number, ImageData>();
 
   readonly episode: Episode;
   readonly palette: readonly Rgb[];
@@ -35,29 +42,50 @@ export class CellCache {
     this.palette = palette;
   }
 
-  get(base: number, overlay: number): ImageData {
+  get(base: number, overlay: number, dimmed = false): ImageData {
     const key = base * 0x10000 + overlay;
-    let image = this.cells.get(key);
+    const cells = dimmed ? this.dimmed : this.cells;
+    let image = cells.get(key);
     if (!image) {
       const pixels = renderCell(base, overlay, this.episode.objects, this.episode.classes);
-      image = new ImageData(toRgba(pixels, this.palette), TILE_WIDTH, TILE_HEIGHT);
-      this.cells.set(key, image);
+      const rgba = toRgba(pixels, this.palette);
+      if (dimmed) dim(rgba);
+      image = new ImageData(rgba, TILE_WIDTH, TILE_HEIGHT);
+      cells.set(key, image);
     }
     return image;
   }
+
+  /** The cells drawn at map position `index` (shownCells), dimmed where from `backdrop`. */
+  shown(room: Room, index: number, backdrop: Room | undefined): ImageData {
+    const [base, overlay, fromBackdrop] = shownCells(room, index, this.episode.classes, backdrop);
+    return this.get(base, overlay, fromBackdrop);
+  }
 }
 
-/** Draws a whole room onto a canvas of the screen's size, as the room view does. */
-export function drawRoom(canvas: HTMLCanvasElement, room: Room, cache: CellCache): void {
+/** Moves RGBA colours towards grey: the backdrop stays recognisable but recedes. */
+export function dim(rgba: Uint8ClampedArray): void {
+  for (let i = 0; i < rgba.length; i++) {
+    if (i % 4 !== 3) rgba[i] += (DIM_GREY - rgba[i]) * BACKDROP_DIMMING;
+  }
+}
+
+/**
+ * Draws a whole room onto a canvas of the screen's size, as the room view does (with the
+ * backdrop room, if any, dimmed behind it).
+ */
+export function drawRoom(
+  canvas: HTMLCanvasElement,
+  room: Room,
+  cache: CellCache,
+  backdrop?: Room,
+): void {
   canvas.width = SCREEN_WIDTH;
   canvas.height = SCREEN_HEIGHT;
   const g = canvas.getContext("2d");
   if (!g) return;
   for (let i = 0; i < ROOM_CELLS; i++) {
-    const image = cache.get(
-      resolveCell(room, room.base[i] ?? 0),
-      resolveCell(room, room.overlay[i] ?? 0),
-    );
+    const image = cache.shown(room, i, backdrop);
     g.putImageData(image, (i % ROOM_WIDTH) * TILE_WIDTH, Math.floor(i / ROOM_WIDTH) * TILE_HEIGHT);
   }
 }
@@ -81,6 +109,7 @@ export class RoomView {
   private readonly marks2d: CanvasRenderingContext2D;
   private room: Room | undefined;
   private cache: CellCache | undefined;
+  private backdrop: Room | undefined;
   private hover: number | undefined;
   private selected: number | undefined;
   private grid = false;
@@ -106,16 +135,25 @@ export class RoomView {
     this.marks2d = context(marksCanvas);
   }
 
-  show(room: Room, cache: CellCache): void {
+  /** Shows a room, with the room drawn behind it (backdropRoom) dimmed in its class 99 cells. */
+  show(room: Room, cache: CellCache, backdrop?: Room): void {
     this.room = room;
     this.cache = cache;
+    this.backdrop = backdrop;
     for (let i = 0; i < ROOM_CELLS; i++) this.drawCell(i);
     this.drawMarks();
   }
 
-  /** Redraws cells after they changed in the shown room (which may be a new copy). */
-  update(room: Room, indices: Iterable<number>): void {
+  /**
+   * Redraws cells after they changed in the shown room (which may be a new copy), all of
+   * them if the edit changed its backdrop.
+   */
+  update(room: Room, indices: Iterable<number>, backdrop?: Room): void {
     this.room = room;
+    if (backdrop !== this.backdrop && this.cache) {
+      this.show(room, this.cache, backdrop);
+      return;
+    }
     for (const i of indices) this.drawCell(i);
     this.drawMarks();
   }
@@ -226,11 +264,8 @@ export class RoomView {
 
   private drawCell(i: number): void {
     if (!this.room || !this.cache) return;
-    // logic cells show their record's cell, as in the game
-    const image = this.cache.get(
-      resolveCell(this.room, this.room.base[i] ?? 0),
-      resolveCell(this.room, this.room.overlay[i] ?? 0),
-    );
+    // logic cells show their record's cell, class 99 cells the backdrop, as in the game
+    const image = this.cache.shown(this.room, i, this.backdrop);
     this.room2d.putImageData(
       image,
       (i % ROOM_WIDTH) * TILE_WIDTH,

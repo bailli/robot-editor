@@ -85,16 +85,19 @@ export {
 } from "./pe.ts";
 export type { PeDataDirectory, PeImage, PeSection } from "./pe.ts";
 export {
+  BACKDROP_CLASS,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
   TILE_HEIGHT,
   TILE_WIDTH,
+  backdropRoom,
   blitCell,
   cellFrame,
   cellPixels,
   glyphRow,
   renderCell,
   renderRoom,
+  shownCells,
   toRgba,
 } from "./render.ts";
 export {

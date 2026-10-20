@@ -11,6 +11,7 @@ import {
   SCREEN_WIDTH,
   TILE_HEIGHT,
   TILE_WIDTH,
+  backdropRoom,
   renderRoom,
 } from "@robot/formats";
 
@@ -100,13 +101,25 @@ export function shotRoom(
   return shot.patched ? calmRoom(room, game.episode(shot.episode).classes) : room;
 }
 
+/** Our render of a shot's room, with its backdrop (calmed as well in a patched exe). */
+export function renderShot(
+  game: Game,
+  shot: { episode: number; room: number; patched?: boolean | undefined },
+): Uint8Array {
+  const ep = game.episode(shot.episode);
+  const room = shotRoom(game, shot);
+  const backdrop = backdropRoom(shot.episode, room, ep.rooms, ep.classes);
+  return renderRoom(
+    room,
+    ep.objects,
+    ep.classes,
+    backdrop && shot.patched ? calmRoom(backdrop, ep.classes) : backdrop,
+  );
+}
+
 function describe(game: Game, episode: number, room: number, file: string, patched: boolean): Shot {
   const indices = readShot(file);
-  const ep = game.episode(episode);
-  const cells = differingCells(
-    indices,
-    renderRoom(shotRoom(game, { episode, room, patched }), ep.objects, ep.classes),
-  );
+  const cells = differingCells(indices, renderShot(game, { episode, room, patched }));
   return {
     episode,
     room,
@@ -155,7 +168,7 @@ export function takeShot(game: Game, episode: number, room?: number): Shot {
   const best = ep.rooms
     .map((r) => ({
       id: r.id,
-      n: differingCells(indices, renderRoom(r, ep.objects, ep.classes)).length,
+      n: differingCells(indices, renderShot(game, { episode, room: r.id })).length,
     }))
     .reduce((a, b) => (b.n < a.n ? b : a));
   return describe(game, episode, best.id, file, false);

@@ -183,7 +183,8 @@ Files in `packages/formats/src`:
   Class 0 is the shared empty class (left out of the class→type table 0x4c70e0, 0x43b46a).
 - **Renderer:** draws base cells as tiles and overlay cells as sprites with each class's
   frame method (12 methods incl. walls, terrain quarters, masks, doors, letters with the
-  game font, underlays); logic cells show their record's cell. **698 cells differ** in 26
+  game font, underlays); logic cells show their record's cell, class 99 cells the
+  backdrop's (see room connections). **730 cells differ** in 29
   reference screenshots (`pnpm robot eval`), most from runtime effects (see open items).
 - **Reference screenshots of any room** use a patched exe (`patch.ts`): the room in the
   start room's slot, without scripts and without anything that moves or kills
@@ -192,7 +193,9 @@ Files in `packages/formats/src`:
   (`HATCHING_LOAD_METHODS`: eggs, snake basket, "something behind the wall"), bombs
   (they release robots), sand heaps hiding scorpions (sand states 6/7) and the records
   that let actors appear (spawners, natives, travelling actors). Otherwise the hero can
-  die before the screenshot and the death's message box covers the room.
+  die before the screenshot and the death's message box covers the room. A room with a
+  backdrop keeps its id and its backdrop room (calm as well), and the episode starts in
+  it (`withEpisodeStart`): in the start room's slot it would be its own backdrop.
 - **The start room and the hero's start** are fixed per episode in the episode code
   (vtable +0x54: Junior 0x40e1a0 room 43 (2, 14), I 0x408da0 43 (5, 14), II 0x409fa0
   43 (6, 23), III 0x40b460 41 (8, 15), IV 0x40d680 53 (13, 16)): three `mov`s set the
@@ -254,6 +257,18 @@ Files in `packages/formats/src`:
   same place, except 5 recorded one-way stairs. Stairs need nothing but the tile (no
   record, script or tag); both layers are used (episode IV mostly the overlay); Junior
   has no stairs.
+- **Backdrops** (`backdropRoom`, `shownCells`): a room whose cell (0, 1) or (39, 1) is
+  of class 99 (tile 0x54; episode vtable +0x00: 0x409d30, IV 0x40d4a0) is drawn over
+  another room: room id mod 100 in Junior to III (242 shows 42, not 142), id − 100 in
+  IV. Drawing the room (0x401af0, 0x401ba0) loads that room's map from the scene and
+  draws its cell wherever the room's own cell is of class 99, so the house's interior
+  sits in the town around it; the backdrop's actors stay cells (robots draw nothing as
+  tiles). 22 rooms in episodes II–IV, e.g. II 115 over 15, III 147 over 47, IV 441 over
+  341 (marked at (39, 1) only). The name rule (`SAME_NAME_CLASS`) looks at (0, 1) alone.
+  **Verified under Wine:** shots of II 115, III 147 and IV 441 differ from our render
+  only where the renderer differs anyway (current arrows on water, doors, the hero; the
+  74 backdrop cells with overlay objects in 441 match), II 242 shows room 42 around it
+  (seen in the harness's capture: the game wrote no screenshot of that room).
 - **Logic records with targets:** oracles (type 12, walked into northwards once their
   symbol is laid, see logic records), teleporters
   (13), travelling actors (8); target = room in bits 0–9 + x in bits 10–15 of offset 4,
@@ -441,7 +456,10 @@ Supported:
 
 - open/drop an exe (in development `reference/GameOfRobot.exe` opens by itself)
 - episode and room selection, room list with edited rooms marked
-- room drawn exactly as the renderer draws it (cell image cache, per-cell redraws)
+- room drawn exactly as the renderer draws it (cell image cache, per-cell redraws); a
+  room with a backdrop (house interiors, see room connections) shows the backdrop room
+  slightly dimmed in its class 99 cells, in the view and on the map; painting over its
+  marks at (0, 1) and (39, 1) removes it
 - painting base or overlay with a tile from the episode's tiles (robots, which draw
   nothing as tiles, show their first sprite; other invisible tiles a hatching; a filter
   by name, text or hex value) or any hex value; right click picks; dragging fills lines;
@@ -651,7 +669,10 @@ Roughly by value for the editor.
     the actor grid at + 0x91c), while scenes store base and overlay: on loading, each
     overlay object becomes a type 1 record on its base cell (see logic records). "Empty
     cell" (RandObj, the free-cell check 0x433230) is approximated as base and overlay
-    both 0; how the free-cell check treats such records is not traced.
+    both 0; how the free-cell check treats such records is not traced. Likewise whether
+    an overlay object on a class 99 cell hides the backdrop there (0x401af0 checks the
+    cell's effective value, 0x433110; 0x401ba0 the raw word): the originals have none,
+    `shownCells` assumes it does.
 11. **Two edge-exit code paths:** 0x427a9b (arrival only) and 0x44c5a0 (also sets the
     RandObj reference point; with game flag bit 10 of [0x51bb18]+8 clear, the arrival
     moves one cell further in). Which one runs when is not known.
@@ -700,6 +721,7 @@ Roughly by value for the editor.
 | 0x412ae0, 0x44cc30           | oracle, teleporter (step-on handler 0x44cb60)                                  |
 | 0x42b6f0                     | room load: records 7/8 spawn actors                                            |
 | 0x432fd0, 0x433110           | logic record lookup; a cell's effective value                                  |
+| 0x401af0, 0x409d30           | draw a room over its backdrop (class 99 cells); which room (IV 0x40d4a0)       |
 | 0x406ae0, 0x438850           | describe a cell; fetch a text variant                                          |
 | 0x43c0b0, 0x43bfd0           | a room's name; cut a text down to one line                                     |
 | 0x43b2e0, 0x43b46a           | episode constructor; class tables 0x4c6ce0 (objects) / 0x4c70e0 (class → type) |
