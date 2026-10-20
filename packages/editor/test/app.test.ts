@@ -11,6 +11,7 @@ import {
   exitMode,
   parsePe,
   readEpisodeStart,
+  readEventTable,
   renderRoom,
   roomScript,
   toRgba,
@@ -690,4 +691,15 @@ test("deleting a room asks first, naming the rooms that lead to it", async () =>
   expect(document.querySelector(".status")?.textContent).toMatch(/the episode starts in room 43/);
   app.undo();
   await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
+});
+
+test("Enigma's number says what the entry gives", () => {
+  app.showEpisode(4, 135); // Enigma(192) when a slot gets the lock
+  const number = [...document.querySelectorAll(".script-source .number")].find(
+    (e) => e.textContent === "192",
+  );
+  const entry = defined(readEventTable(game.image, 4)[192]);
+  expect(number?.getAttribute("title")).toMatch(
+    new RegExp(`^entry 192: ${entry.points} points, text 1992:\\n`),
+  );
 });

@@ -1,8 +1,8 @@
 /**
  * Where an episode starts. The episode's start method (vtable +0x54; Junior 0x40e1a0,
  * I 0x408da0, II 0x409fa0, III 0x40b460, IV 0x40d680) sets the hero's arrival cell and
- * the room to enter next with three plain instructions, then a word at 0x4fe0c0
- * (unknown):
+ * the room to enter next with three plain instructions, then the word at 0x4fe0c0 (the
+ * number of inventory slots, probably: the debug tracer 0x439170 compares that many):
  *
  *   c6 05 09 e3 4f 00 xx         mov byte [0x4fe309], x       arrival x
  *   c6 05 0a e3 4f 00 yy         mov byte [0x4fe30a], y       arrival y

@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   Game,
   LOGIC_CELL,
+  ROOM_CELLS,
   compileScript,
   parsePe,
   readEpisodeStart,
@@ -10,7 +11,7 @@ import {
   roomScript,
 } from "@robot/formats";
 
-import { Editor, MAX_RECORD_SLOTS, shownCell, tilesOf } from "../src/editor.ts";
+import { Editor, MAX_RECORD_SLOTS, recordCapacity, shownCell, tilesOf } from "../src/editor.ts";
 import { defined, firstDifference, loadGame } from "./game.ts";
 
 const game = await loadGame();
@@ -155,7 +156,21 @@ describe("Editor records", () => {
     const editor = new Editor(game);
     const used = new Set(game.room(1, 43).records.map((r) => r.slot));
     const lowest = [...Array(MAX_RECORD_SLOTS).keys()].find((k) => !used.has(k));
-    expect(editor.addRecord(1, 43, "overlay", free, 5)).toBe(lowest);
+    expect(editor.addRecord(1, 43, "base", free, 5)).toBe(lowest);
+  });
+
+  test("records go into the base layer, as many as the game's table holds", () => {
+    const editor = new Editor(game);
+    // the game drops logic cells in the overlay (tried in the game)
+    expect(editor.addRecord(1, 43, "overlay", free, 13)).toBeUndefined();
+    expect(recordCapacity(room)).toBe(
+      MAX_RECORD_SLOTS - room.records.length - room.overlay.filter((c) => c !== 0).length,
+    );
+    editor.beginStroke(1, 43, "overlay");
+    for (let i = 0; i < ROOM_CELLS && recordCapacity(editor.room(1, 43)) > 0; i++)
+      editor.paint(i, 0x0015);
+    editor.endStroke();
+    expect(editor.addRecord(1, 43, "base", free, 13)).toBeUndefined();
   });
 });
 

@@ -10,7 +10,8 @@ usage:
 screenshot (Ctrl+Alt+P) of the start room: a 640x348 PNG whose pixel values are the
 game's palette indices. --exe runs a different (e.g. patched) copy of the game; --wait
 is how long to wait in the room before the screenshot; --keys presses keys (held
-briefly, the game polls the keyboard) before it; --keep leaves the game running.
+briefly, the game polls the keyboard; KEY:SECONDS holds one longer or shorter,
+wait:SECONDS pauses) before it, with --debug a capture after each; --keep leaves the game running.
 
 What the screenshot shows: the start room with the status line in row 0 and the
 actors (hero, robots) wherever they are at that moment; animated tiles may show any
@@ -200,8 +201,15 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
             print("warning: neither a name dialog nor a room banner appeared", file=sys.stderr)
         time.sleep(wait)
         for key in keys:
-            hold(display, key, 0.3)
+            # KEY, KEY:SECONDS (held that long, default 0.3) or wait:SECONDS
+            name, _, seconds = key.partition(":")
+            if name == "wait":
+                time.sleep(float(seconds or 1))
+                continue
+            hold(display, name, float(seconds or 0.3))
             time.sleep(0.5)
+            if debug:
+                capture(f"key-{name}")
         capture("room")
         files = []
         for _ in range(3):  # Ctrl+Alt+P: the game's screenshot command; held like all keys
@@ -264,7 +272,8 @@ def main():
     s.add_argument("--wait", type=float, default=1.0)
     s.add_argument("--keep", action="store_true")
     s.add_argument("--debug", metavar="DIR", help="save the whole screen after each step")
-    s.add_argument("--keys", nargs="*", default=[], help="xdotool key names to press before the screenshot")
+    s.add_argument("--keys", nargs="*", default=[], help="xdotool key names to press before the screenshot: KEY, KEY:SECONDS "
+                   "(held that long, default 0.3), wait:SECONDS")
     s = sub.add_parser("play")
     s.add_argument("episode", type=int, choices=range(5), nargs="?")
     s.add_argument("--exe", default=EXE)

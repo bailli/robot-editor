@@ -2,7 +2,8 @@
  * Room scripts: the compiled form the game runs (room tag 6/2) and a compiler for the
  * C-like source (tag 6/1, text for people: the game runs the compiled code, verified
  * under Wine). Every room, with or without a script, has a tag 6/3 holding a Unix time
- * (1993-2008), probably when the room was last saved in the original editor.
+ * (1993-2008), probably when the room was last saved in the original editor; the game
+ * does not read it.
  *
  * Compiled script: one byte code stream that starts with its symbol table. The loader
  * (0x406da0) links the table in place, the interpreter (0x4080e0) runs the code after it,

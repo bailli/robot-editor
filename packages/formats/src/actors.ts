@@ -25,7 +25,7 @@ import { LOGIC_CELL, type LogicRecord, ROOM_CELLS, ROOM_WIDTH, type Room } from 
  *   bomb       its explosion lets robots appear
  *   scorpions  sand heaps (sand states 6, 7) hiding scorpions
  *   spawner    record type 5: robots appear while the hero is near (0x435650)
- *   creature   record type 7: an actor of kind 0x107 appears on entering
+ *   creature   record type 7: a friendly native (kind 0x107) appears on entering
  *   travelling record type 8: an actor (recordActorKind), in the originals the dealer
  *              or the thief. It walks towards the hero; once the hero dealt with it (a
  *              trade, a theft) it wanders off and, stepping into an edge wall, leaves a
@@ -45,9 +45,9 @@ export interface RoomActor {
   type: number | undefined;
   /** The record behind it (spawner, creature, travelling actor). */
   record?: LogicRecord;
-  /** Spawners: creatures appear while the hero is within this many cells. */
+  /** Spawners: robots appear while the hero is within this many cells. */
   radius?: number;
-  /** Spawners: ticks between creatures. */
+  /** Spawners: ticks between robots. */
   period?: number;
   /** Travelling actors: where they head. */
   target?: { room: number; x: number; y: number };

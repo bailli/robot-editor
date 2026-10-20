@@ -60,6 +60,18 @@ const packedX: Field = {
   },
 };
 
+/** Bit `bit` of byte `at` as a checkbox. */
+const flag = (at: number, bit: number, label: string, hint?: string): Field => ({
+  label,
+  kind: "flag",
+  max: 1,
+  get: (d) => (d[at] >> bit) & 1,
+  set: (d, v) => {
+    d[at] = (d[at] & ~(1 << bit)) | (v << bit);
+  },
+  ...(hint === undefined ? {} : { hint }),
+});
+
 /** The record types and their fields (see records.ts in @robot/formats). */
 export const RECORD_TYPES: readonly { type: number; name: string; fields: readonly Field[] }[] = [
   {
@@ -70,24 +82,28 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
       targetRoom,
       packedX,
       byte(6, "Arrival y", 28),
-      {
-        label: "Script may set the target",
-        kind: "flag",
-        max: 1,
-        get: (d) => (d[1] >> 1) & 1,
-        set: (d, v) => {
-          d[1] = (d[1] & ~2) | (v << 1);
-        },
-        hint: "a script's Teleport(room, x, y) (room not 0) replaces the target",
-      },
-      byte(7, "Description variant"),
+      flag(
+        1,
+        1,
+        "Script may set the target",
+        "a script's Teleport(room, x, y) (room not 0) replaces the target",
+      ),
+      flag(1, 0, "Cell acts first", "the shown cell acts first, while byte 7 is 0"),
+      byte(7, "Byte 7", 255, "with 'Cell acts first': 0 lets the cell act"),
+      flag(1, 3, "Effect", "a visual effect now and then"),
       byte(8, "Message", 255, "0: none, else message 1200 + this when used"),
     ],
   },
   {
     type: 12,
     name: "Oracle",
-    fields: [cell(2, "Cell"), targetRoom, packedX, byte(6, "Arrival y", 28)],
+    fields: [
+      cell(2, "Cell", "tile 0x51; its state's low 4 bits pick message 330 + n and the sound"),
+      { ...targetRoom, hint: "walked into northwards" },
+      packedX,
+      byte(6, "Arrival y", 28),
+      cell(8, "Turns into", "walked into westwards"),
+    ],
   },
   {
     type: 8,
@@ -107,12 +123,12 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
   },
   {
     type: 7,
-    name: "Creature",
+    name: "Native",
     fields: [
       cell(2, "Cell", "placed when the room is entered"),
-      cell(4, "Parameter"),
-      byte(6, "Parameter 2", 15),
-      byte(7, "Parameter 3", 15),
+      cell(4, "Sells", "the object he offers after a few chats; 0: none"),
+      byte(6, "Price", 15, "in gold (counts up to 9)"),
+      byte(7, "Chatter", 15, "his texts: 300 + this or 310 + this"),
     ],
   },
   {
@@ -120,16 +136,19 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
     name: "Spawner",
     fields: [
       cell(2, "Cell"),
-      byte(4, "Radius²", 255, "a creature appears while the hero's squared distance is below this"),
-      byte(5, "Period", 255, "ticks between creatures"),
-      byte(6, "Countdown", 255, "ticks until the first creature"),
-      byte(7, "State"),
+      byte(4, "Radius²", 255, "a robot appears while the hero's squared distance is below this"),
+      byte(5, "Period", 255, "ticks between robots"),
+      byte(6, "Countdown", 255, "ticks until the next robot"),
+      byte(7, "Animation", 255, "its animation phase (set by the game)"),
     ],
   },
   {
     type: 3,
     name: "Buried",
-    fields: [cell(2, "Visible cell"), cell(4, "Buried cell", "found by digging with the shovel")],
+    fields: [
+      cell(2, "Visible cell"),
+      cell(4, "Buried cell", "dug up with the shovel: then it lies on the visible cell"),
+    ],
   },
   {
     type: 1,
@@ -145,11 +164,27 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
         set: (d, v) => {
           d[1] = (d[1] & 0x3f) | (v << 6);
         },
-        hint: "compared with the actor stepping on it",
+        hint: "of the top object: actors reach it only from this level up (bridges)",
       },
     ],
   },
-  { type: 11, name: "Circuit node", fields: [cell(2, "Cell"), byte(7, "Signal")] },
+  {
+    type: 11,
+    name: "Circuit node",
+    fields: [
+      cell(2, "Cell"),
+      flag(
+        1,
+        0,
+        "Final node",
+        "places the stairs once all the room's nodes are on (other nodes: while it is on)",
+      ),
+      byte(4, "Stairs x", 39),
+      byte(5, "Stairs y", 28, "0: no stairs"),
+      byte(6, "Stairs up", 255, "0: stairs down, else up"),
+      byte(7, "Signal", 255, "its input, set by the game"),
+    ],
+  },
 ];
 
 export interface RecordViewEvents {
@@ -262,7 +297,11 @@ export class RecordView {
     });
     this.element.replaceChildren(
       element("h3", undefined, `No logic record at ${where}`),
-      element("p", "hint", "A new record shows the cell it replaces; its other fields start at 0."),
+      element(
+        "p",
+        "hint",
+        "A new record goes into the base layer (the game drops records in the overlay) and shows the cell it replaces; its other fields start at 0.",
+      ),
       labelled("Type", type),
       add,
     );

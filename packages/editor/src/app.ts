@@ -1,6 +1,7 @@
 import {
   type Direction,
   EPISODE_NAMES,
+  EVENT_TEXT,
   Game,
   LOGIC_CELL,
   NAMED_ROOMS,
@@ -17,6 +18,7 @@ import {
   exitMode,
   parseCompiledScript,
   randomPlacement,
+  readEventTable,
   roomActors,
   roomScript,
   scriptActors,
@@ -27,7 +29,15 @@ import {
 } from "@robot/formats";
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
-import { type Edit, Editor, type Layer, MAX_ROOM_ID, tilesOf } from "./editor.ts";
+import {
+  type Edit,
+  Editor,
+  type Layer,
+  MAX_RECORD_SLOTS,
+  MAX_ROOM_ID,
+  recordCapacity,
+  tilesOf,
+} from "./editor.ts";
 import { type Connections, ExitsView, connections, fixedExit, leadsTo } from "./exits-view.ts";
 import { MapView } from "./map-view.ts";
 import { RecordView } from "./record-view.ts";
@@ -264,7 +274,20 @@ export class App {
     add: (type) => {
       const selected = this.selected;
       if (!selected) return;
-      this.need().addRecord(this.episode, this.roomId, selected.layer, selected.index, type);
+      const editor = this.need();
+      const room = editor.room(this.episode, this.roomId);
+      if (
+        editor.addRecord(this.episode, this.roomId, selected.layer, selected.index, type) ===
+        undefined
+      ) {
+        this.setStatus(
+          recordCapacity(room) < 1
+            ? `No room for another record: the game holds ${MAX_RECORD_SLOTS} records and overlay objects per room`
+            : "Cannot add a record here",
+          true,
+        );
+        return;
+      }
       this.afterRecordEdit();
     },
     remove: () => {
@@ -734,7 +757,8 @@ export class App {
       this.recordView.hide();
       return;
     }
-    const layer = this.logicLayer(index) ?? this.layer;
+    // new records go into the base layer: the game drops logic cells in the overlay
+    const layer = this.logicLayer(index) ?? "base";
     this.selected = { index, layer };
     const room = this.need().room(this.episode, this.roomId);
     const cell = room[layer][index] ?? 0;
@@ -1314,6 +1338,13 @@ export class App {
     const kind = scriptArgument(fn, index, args.length);
     const game = this.need().game;
     if (kind === "room") return this.roomLabel(this.episode, value);
+    if (kind === "enigma") {
+      const entry = readEventTable(game.image, this.episode).at(value);
+      if (!entry || value < 0) return `entry ${value} (missing)`;
+      const text = game.episodeTexts(this.episode)?.entries.get(EVENT_TEXT + value)?.[0];
+      const shown = text === undefined ? "" : `, text ${EVENT_TEXT + value}:\n${displayText(text)}`;
+      return `entry ${value}: ${entry.points} points${shown}`;
+    }
     if (kind !== "text") return undefined;
     const variants = game
       .episodeTexts(this.episode)

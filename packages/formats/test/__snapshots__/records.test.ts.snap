@@ -4,7 +4,7 @@ exports[`every logic record in the game has a known type 1`] = `
 {
   "buried": 133,
   "circuit": 11,
-  "creature": 89,
+  "native": 89,
   "oracle": 26,
   "spawner": 604,
   "stacked": 23,

@@ -140,6 +140,7 @@ export type { PeResource } from "./resources.ts";
 export { cryptScene, SCENE_KEY } from "./scene-crypt.ts";
 export {
   LOGIC_CELL,
+  MAX_ROOM_DATA,
   MAX_ROOMS,
   encodeRoomMap,
   parseRoomMap,
@@ -176,6 +177,8 @@ export {
 } from "./describe.ts";
 export type { CellDescription } from "./describe.ts";
 export { describeRecord } from "./records.ts";
+export { EVENT_TEXT, readEventTable } from "./events.ts";
+export type { GameEvent } from "./events.ts";
 export type { RecordInfo, RecordKind } from "./records.ts";
 export {
   ACTOR_CLASS_NAMES,

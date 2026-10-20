@@ -6,14 +6,24 @@
  *   per room (at most 200):
  *     u16  room id
  *     u16  tags with bit 15 set: kind = (tag >> 12) & 7, value = tag & 0xfff; the loader
- *          keeps kinds 1-5 in the room record (+0x14 onwards):
+ *          keeps kinds 1-5 in the room record (0x28 bytes, zeroed, so a missing tag is 0;
+ *          the jump table 0x439068 picks the field):
  *            kind 1  exits byte (+0x15, see exits.ts)
- *            kind 2  byte at +0x14, kind 3 byte at +0x16 (unknown)
- *            kind 4  u32 at +0x18 (unknown; values like 100, 500)
- *            kind 5  followed by 8 bytes: a name, e.g. "BRANDUNG", "LAVA" (sound?)
- *            kind 6  followed by u16 length + payload
- *                    (value 1 = script source, 2 = compiled script, 3 = unknown)
+ *            kind 2  darkness, Night 0-100 on entering (+0x14)
+ *            kind 3  episode III flags (+0x16): bit 0 re-links the labyrinth's teleporters
+ *                    when entered from room 146 (vtable +0x5c, 0x40ca30), bit 1 makes the
+ *                    hero dizzy: message 944 after 15 s, once per game (vtable +0x60,
+ *                    0x40ca70); the other episodes ignore it
+ *            kind 4  points for the first visit / 10 (u32 at +0x18, 0x4392f5)
+ *            kind 5  followed by 8 bytes: the background music, a piece of the episode's
+ *                    MUSIC resource (e.g. "BRANDUNG", "LAVA"; +0x1c, started looping on
+ *                    entering, 0x4393e8; no tag or an unknown piece: silence)
+ *            kind 6  followed by u16 length + payload: value 2 = compiled script (+0x10);
+ *                    1 = script source and 3 = a save time (Unix time) are not read
+ *          Kinds 1-3 are bytes: higher values are cut to their low byte.
  *     u16  map length (bit 15 clear, includes these 2 bytes), then the map body
+ *   The loader reads payloads and map bodies into a stack buffer of 19998 bytes without
+ *   checking their length (MAX_ROOM_DATA).
  *
  * Map body (decoder at 0x432460):
  *   4 RLE layers of 40 x 29 cells: layer 0/1 = low/high byte of the base cell,
@@ -33,6 +43,8 @@ export const ROOM_HEIGHT = 29;
 export const ROOM_CELLS = ROOM_WIDTH * ROOM_HEIGHT;
 export const MAX_ROOMS = 200;
 export const LOGIC_CELL = 0x7f;
+/** The longest tag payload or map body the game can load (0x438d10's buffer). */
+export const MAX_ROOM_DATA = 19998;
 
 const SIGNATURE = [0x53, 0x43, 0x4e, 0x56, 0x33, 0x1a] as const; // "SCNV3\x1a"
 const HEADER_SIZE = 7;
@@ -271,13 +283,21 @@ export function serializeScene(rooms: readonly Room[]): Uint8Array {
         w.bytes(tag.data);
       } else if (tag.kind === 6) {
         const data = tag.data ?? new Uint8Array();
-        if (data.length > 0xffff) throw new SceneFormatError(`room ${room.id}: tag data too long`);
+        if (data.length > MAX_ROOM_DATA) {
+          throw new SceneFormatError(
+            `room ${room.id}: tag data of ${data.length} bytes, the game loads at most ${MAX_ROOM_DATA}`,
+          );
+        }
         w.u16(data.length);
         w.bytes(data);
       }
     }
     const body = encodeRoomMap(room);
-    if (body.length + 2 > 0x7fff) throw new SceneFormatError(`room ${room.id}: map too large`);
+    if (body.length > MAX_ROOM_DATA) {
+      throw new SceneFormatError(
+        `room ${room.id}: map of ${body.length} bytes, the game loads at most ${MAX_ROOM_DATA}`,
+      );
+    }
     w.u16(body.length + 2);
     w.bytes(body);
   }

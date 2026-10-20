@@ -68,6 +68,7 @@ Files in `packages/formats/src`:
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants      |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                        |
 | `records.ts`                 | what logic records do                                                                         |
+| `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`)                   |
 | `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
 | `game.ts`                    | `Game`: loads an exe, episodes lazily, saves edited scenes (`withScene`)                      |
 
@@ -123,12 +124,24 @@ Files in `packages/formats/src`:
   logic records. **Re-encoding reproduces all five scenes byte for byte.**
 - **Cells:** low byte = tile type, high byte = state. Type `0x7f` = logic cell, high byte
   = record slot. In memory the game converts types to class ids.
-- **Room tags** (loader 0x438d10, stored at room record +0x14 …): kind 1 = exits byte,
-  kind 5 = 8-character name (`BRANDUNG`, `LAVA`, … probably an ambient sound), kind 6 =
-  length-prefixed payload (value 1 = script source, 2 = compiled script, 3 = a Unix time
-  1993–2008 in every room, probably when the original editor saved it). Kind 2 = the
-  room's darkness (Night, 20–100, read by `GetNight`), kind 4 × 10 = points for the
-  first visit (0x42b640); kind 3 is not understood (see open items).
+- **Room tags** (loader 0x438d10; room records of 0x28 bytes, zeroed, sorted by id, so
+  a missing tag is 0 and the order of rooms does not matter; documented in `scene.ts`):
+  kind 1 = exits byte (+0x15), kind 2 = the room's darkness (Night, 40–100, read by
+  `GetNight`; +0x14), kind 4 × 10 = points for the first visit (+0x18, 0x42b640; at most
+  40,950), kind 5 = the **background music** (8 characters, +0x1c: a piece of the
+  episode's MUSIC resource 1E05, started looping on entering, 0x4393e8; a piece already
+  playing goes on, no tag or an unknown name (episode III's `HUMBA`) is silence; Junior
+  and I have none), kind 6 = length-prefixed payload (value 2 = compiled script, the only
+  one read; 1 = script source, 3 = a Unix time 1993–2008 in every room, probably when the
+  original editor saved it). Kind 3 (+0x16) holds two **episode III flags** (rooms
+  136, 143–146, 154, 155; the other episodes ignore it): bit 0 re-links the labyrinth's
+  teleporters when the room is entered from room 146 (vtable +0x5c, 0x40ca30), bit 1
+  makes the hero dizzy: message 944 ("…Dir wird plötzlich schwindelig…") after 15 s in
+  the room, once per game unless three herb tubers were eaten (vtable +0x60, 0x40ca70;
+  **verified under Wine:** in room 41 with the tag, not without; the controls still
+  worked normally right after). Kinds 1–3 are bytes (higher values are cut). Payloads
+  and map bodies longer than 19,998 bytes overflow the loader's stack buffer
+  (`MAX_ROOM_DATA`, refused by the scene writer).
 - **Saving:** `Game.withScene` writes edited rooms back. The original scenes fill their
   resources exactly, so edits usually grow them; a grown resource moves to the end of
   `.rsrc` (the last section), which grows, and the Authenticode signature is dropped.
@@ -154,7 +167,7 @@ Files in `packages/formats/src`:
   `ACTOR_LOAD_METHODS`: robots, androids, snakes, the worm, …), delayed creature sources
   (`HATCHING_LOAD_METHODS`: eggs, snake basket, "something behind the wall"), bombs
   (they release robots), sand heaps hiding scorpions (sand states 6/7) and the records
-  that let actors appear (spawners, creatures, travelling actors). Otherwise the hero can
+  that let actors appear (spawners, natives, travelling actors). Otherwise the hero can
   die before the screenshot and the death's message box covers the room.
 - **The start room and the hero's start** are fixed per episode in the episode code
   (vtable +0x54: Junior 0x40e1a0 room 43 (2, 14), I 0x408da0 43 (5, 14), II 0x409fa0
@@ -239,11 +252,17 @@ Files in `packages/formats/src`:
   and return 0, so `if (Event(…)) { … return; }` is skipped then. When the event
   happens (0x408970) the script continues at that block with E_Value set, until
   `return` (without one it runs on into the code after the block). Events: 1 take,
-  2 drop (filter: tile type, E_Value: the object), 4 walk areas from `SetWarea` (E_Value
-  +n entering, −n leaving), 8 entering the room, 16 slots. **Verified under Wine:** in
-  episode I's start room the top-level code and an `Event(8)` block both run. Room 1's
-  script is the global one (episode start, game load); its handlers run when no room
-  handler matches.
+  2 drop (filter and E_Value: the object's **class**, with its state in the high byte,
+  0x42c1e6), 4 walk areas from `SetWarea` (E_Value +n entering, −n leaving), 8 entering
+  the room, 16 slots. Scripts name objects by tile type, so `E_Take(O_X)` and
+  `E_Value == O_X` only work where class and tile type agree (O_KEY 21 yes, O_LAMP 27 =
+  class 56 no): episode IV room 156's `E_Value == (O_LAMP|0x0100)` and room 157's
+  `E_Value == O_SAVE` never match. **Verified under Wine:** in episode I's start room the
+  top-level code and an `Event(8)` block both run; taking a key runs `Event(1)` and
+  `E_Take(O_KEY)` handlers (there `E_Value == O_KEY` and `Possess(O_KEY)` hold); taking
+  the lamp gives E_Value 56 (`PrintVal`); a `SetWarea` area raises `E_Area(1)` with
+  E_Value 1 on entering. Room 1's script is the global one (episode start, game load);
+  its handlers run when no room handler matches.
 - **NewRoom** is 1 only on the first visit of a room in a game: entering a room whose
   record lacks the visited flag (+4 bit 2) sets it, sets NewRoom = 1 and awards the
   first-visit points; any later entry sets NewRoom = 0 (0x4392dc). `HaveSeen(room)`
@@ -256,10 +275,25 @@ Files in `packages/formats/src`:
   `Message(text, delay)` shows a text after `delay` seconds in the room (all its `|`
   variants as pages one after another; with delay 0 at once and one variant at random),
   `SetObj(obj, x, y, mode)` places objects, `Possess(obj)` tests the inventory (a state
-  selects the exact variant), `SetMan` sends the dealer somewhere, `Enigma(n)` awards a
-  solved puzzle once, `Wizzard(x, y, room, rx, ry, …)` places episode I's wizard, who
-  sends the hero to `room` at (rx, ry). RoomTime counts seconds (147 ticks each);
-  Val1…Val8 are free variables kept across rooms.
+  selects the exact variant), `SetMan` sends the dealer somewhere, `Wizzard(x, y, room,
+rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry).
+  RoomTime counts seconds (147 ticks each); Val1…Val8 are free variables kept across
+  rooms. Decoded in detail (0x407aa0…): `Enigma(n)` awards entry n of the episode's
+  **event table** (`events.ts`, episode +0x1cc: per tile type the first take, then game
+  events; points, a sound, text 1800 + n with the bonus text 516) once per game, the same
+  mechanism as the first take of an object (the key's 500 points; **verified:**
+  `Enigma(112)` twice in episode II gives 5000 points once and returns 0 the second
+  time); `Phone(text, delay, n)` rings n + 1 times; `Area(x, y, size)` is the square that
+  the magic words LEFT/RIGHT (LINKS/RECHTS), laid with letter tiles, rotate (words of
+  text 514, some need the wand; letters are items the hero takes, placing them with
+  `SetObj` does not count); `Area(x, y, size, key)` the squares episode IV's punch cards
+  turn at card readers; `ShiftArea(x, y, w, h, d)` the area episode IV's remote control
+  shifts once with wrap-around (d 0 up, 1 left, 2 down, 3 right). StationBOff counts
+  episode IV's switched power station groups (from 4 spawners stop: **verified**),
+  NoSwim (episode II) forbids swimming until the ship ticket is used. The interpreter
+  knows no operations beyond those our compiler emits (opcodes 0x01–0x09, 0x0e/0x0f,
+  0x41–0x43, operators 0x80–0x8e and 0x91–0x96), so `while`, `break` or compound
+  assignments, if the original language had them, compiled to the same forms.
 - `pnpm robot script E ROOM` shows a script and its disassembly; with a source file and
   an output exe it writes the script into the room (`withRoomScript`).
 
@@ -285,10 +319,23 @@ Files in `packages/formats/src`:
   checksum of the name and an episode value (0x42f910, episode +0x2c). Otherwise message
   999 ("…lass' Dich bitte registrieren", www.tom-games.de) and the room change does not
   happen. Not tried in the game (no test went above these limits).
-- **Logic records** (`records.ts`), all 1177 in the game classified: 1 stacked (object on
-  another cell, e.g. drawbridges), 3 buried (dug up with the shovel), 5 spawner (creature
-  near the hero), 7 creature, 8 travelling actor, 11 logic-gate circuit node (episode I),
-  12 oracle, 13 teleporter.
+- **Logic records** (`records.ts`, every byte the game reads), all 1177 in the game
+  classified: 1 stacked (object on another cell; byte 1 its level, e.g. bridges), 3
+  buried (dug up with the shovel), 5 spawner (robots near the hero), 7 native (episode
+  III's friendly native, selling an object for gold), 8 travelling actor, 11 circuit node
+  (episodes I, II; lit nodes place stairs, episode I room 128's final node the stairs to
+  228), 12 oracle (one effect per direction it is walked into), 13 teleporter. On loading
+  a room the game converts the record cells to classes and old types (2, 10 → 13; 6, 9 →
+  12), then turns every **overlay object into a type 1 record** on its base cell, in a
+  table of 200 records (0x4327c4, 0x432e06; so records plus overlay objects ≤ 200, the
+  originals reach 114); a logic cell in the overlay is dropped. **Verified under Wine**
+  (episode I room 43 and the others' start rooms, records next to the hero): a stacked
+  key is taken (`Possess`) and leaves the lower cell; a teleporter with flag 0x02 follows
+  `Teleport()`, one to a missing room does nothing, one in the overlay does nothing; a
+  spawner lets robots appear that kill the hero within seconds, not with StationBOff 4;
+  a native record lets a native appear. Oracles did nothing when walked into (a new one
+  in episode II room 43 in all four directions, room 106's own northwards): something
+  gates them, probably the 2×2 pattern of tile 0x50 pieces that 0x412860 checks.
 - **Travelling actors** (record type 8, `SetMan`): byte 8 is converted on scene load
   (0x432728): with bit 0x80 an index into the episode's actor kinds (episode +0x34, e.g.
   episode I 0x475c38: 0x100…0x105), else a tile type (its class); the originals use 0x83
@@ -355,9 +402,11 @@ Supported:
   cells say what their record does
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
   inspector with the record's fields per type (cells with previews, target room with
-  "Go", arrival position, spawner radius/period, …) and the raw bytes; change the type,
-  add a record to a plain cell (it shows the cell it replaces, lowest free slot < 200),
-  remove one (the cell becomes what it showed); all undoable
+  "Go", arrival position, spawner radius/period, a native's object, price and chatter,
+  circuit stairs, …) and the raw bytes; change the type, add a record to a plain cell
+  (in the base layer, where the game keeps them; it shows the cell it replaces, lowest
+  free slot, refused once records and overlay objects fill the game's 200), remove one
+  (the cell becomes what it showed); all undoable
 - actors (toggle "Actors", key A): marks where actors appear (ring: placed in the map;
   dashed: appear later or from a record; spawner radius; arrow: heading somewhere),
   robots drawn with the episode's `_Aliens` sprites in turn (their look and colours vary
@@ -365,7 +414,7 @@ Supported:
   to select), plus what the script's `RandObj(…)` does with the room's current number
 - the room's script below the map: names explain themselves on hover (functions,
   game variables, `O_` constants as tiles, message ids as their text, room numbers as
-  room names), calls with plain coordinates (`SetWarea`, `SetObj`, `Area`, …) outline
+  room names, `Enigma` entries as their points and text), calls with plain coordinates (`SetWarea`, `SetObj`, `Area`, …) outline
   their cells on the map; the bytecode on request; Edit compiles while typing (errors
   with line and column) and Apply sets source and compiled script as one undo step
 - save: downloads the exe with all edited episodes and texts (warns about unsaved changes
@@ -387,16 +436,19 @@ Not supported (yet):
 
 Roughly by value for the editor.
 
-1. **Logic records in play.** The inspector edits all record types. Verified in the real
-   game: a teleporter added next to the hero's start (episode I room 43, (6, 14), to room
-   11 at (20, 15)) takes the hero exactly there. Other record types are only
-   round-tripped through the scene writer. Fields of types 7 and 11 are only partly
-   understood. **How to test an edit in the game:** build the exe (`Game.withScene`, or
-   the editor's "Save exe"), put the change next to the hero's start (see "The hero's
-   start" above) and run `python3 -I tools/wine/harness.py shot E OUT.png --exe EXE
---keys Right` (`--debug DIR` saves every step); the game's screenshot file name tells
-   the room it ended in. Exits open only once a room's robots are gone, so tests of
-   walking out remove them (`calmRoom`); a 0.3 s key press moves the hero several cells.
+1. **Logic records in play.** All types are decoded byte by byte and most are tried in
+   the game (see logic records above). Open: what gates oracles; buried records (digging
+   needs the shovel and its key), circuit signals through wires and gates, a travelling
+   actor leaving through a wall and the stacked level only from the code. **How to test
+   an edit in the game:** build the exe (`Game.withScene`, or the editor's "Save exe"),
+   put the change next to the hero's start (see "The hero's start" above) and run
+   `python3 -I tools/wine/harness.py shot E OUT.png --exe EXE --keys Right:0.1 wait:2`
+   (`--debug DIR` saves every step and a capture after each key); the game's screenshot
+   file name tells the room it ended in, and the cells that differ from our render show
+   where the hero and what changed are. Exits open only once a room's robots are gone,
+   so tests of walking out remove them (`calmRoom`); a 0.1 s key press moves the hero 2
+   cells, 0.3 s several. Message boxes (first takes, bonuses) stay until Return.
+   `PrintVal(x)` in a script shows a value in a box.
    `robot start E ROOM OUT.exe --at X,Y` makes an exe starting the hero anywhere (the
    whole episode stays as it is), `robot play` and the editor's "Test in game" run one
    to be played by hand.
@@ -435,21 +487,25 @@ Roughly by value for the editor.
    object names are tile types (`scriptConstants`, see room scripts above). The editor's `RandObj` counts
    (`randomPlacement`) look at map cells only; the game also counts actors standing on
    cells (0x407650 via 0x433230), e.g. those from records.
-3. **Scripts.** Decoded, compiled and editable (see room scripts above). Open: a few
-   functions in detail (`ShiftArea`, what triggers `Area(x, y, size)`, `Phone`'s third
-   argument, `Enigma`'s table at episode +0x1cc), how E_Value (a class id in memory) is
-   compared with tile types, StationBOff/NoSwim, and whether `while`, `break` or compound
-   assignments existed in the original language (no script uses them). Of edited scripts
-   only `SetObj`, `for` and an `Event(8)` handler are verified in the game.
-4. **Room tag kind 3** (record +0x16 byte, values 2/3): meaning unknown. (Kind 2 is the
-   darkness, kind 4 × 10 the first visit's points, see room tags above.)
+3. **Scripts.** Decoded, compiled and editable; every function is decoded (see room
+   scripts above) and many are tried in the game. Not tried: `Area` rotations (letters
+   have to be dropped by the hero, the drop key is not known), `ShiftArea` and punch
+   cards (episode IV's use key), `Phone` (silent harness), whether `Area`/`ShiftArea`
+   settings survive leaving the room. Possibly worth adding to the compiler: `while`,
+   `break`, compound assignments (they compile to existing operations).
+4. **Room tags:** all kinds decoded (see room tags above). Not tried in the game: bit 0 of
+   kind 3 (the labyrinth's teleporters), the music (the harness is silent; listen with
+   `robot play`). The word 0x4fe0c0 each episode's start method sets is probably the
+   number of inventory slots (50, 38, 60, 200, 120; compared by the debug tracer
+   0x439170).
 5. **Rooms not reached** by any decoded connection: episode I 228 (its wizard sends the
    hero to room 2, the cinema, at (12, 12) — besides the title room 1 the only way to
    room 2 in episode I, which uses no "outside" exits), episode II 242 (only one-way
    stairs out), episode III 149 and 3; room 99 is a debug room in every episode.
-   Probably entered via game code (e.g. 0x44bd2b takes a room from a table; in episode I
-   the puzzle in room 128 creates the way to 228, by the player's account). The episode
-   II jump to room 600 at 0x40a820 is not understood either.
+   Episode I 228 is reached through room 128's circuit puzzle: once all 7 nodes are lit,
+   its final node places stairs down at (22, 27) (from the code). The others probably via
+   game code (e.g. 0x44bd2b takes a room from a table). The episode II jump to room 600
+   at 0x40a820 is not understood either.
 6. **Renderer gaps** (`pnpm robot eval --types`): empty floor in episodes I/II (runtime:
    actors, hero, animations), episode IV types 95/106/79/99/70, episode III types 83, 37,
    49, 76, episode II 85/77/110/25, Junior 23/25 (animated). Some are runtime effects that
@@ -463,9 +519,10 @@ Roughly by value for the editor.
 9. **Saving details:** the PE checksum is not updated (Windows does not check it for
    exes); a moved resource leaves zeroed space behind.
 10. **The game's map in memory is one layer** (0x5197f8 + 0xc, 40×29 words, followed by
-    the actor grid at + 0x91c), while scenes store base and overlay. How the two are
-    merged on loading is not known; "empty cell" (RandObj, the free-cell check 0x433230)
-    is approximated as base and overlay both 0.
+    the actor grid at + 0x91c), while scenes store base and overlay: on loading, each
+    overlay object becomes a type 1 record on its base cell (see logic records). "Empty
+    cell" (RandObj, the free-cell check 0x433230) is approximated as base and overlay
+    both 0; how the free-cell check treats such records is not traced.
 11. **Two edge-exit code paths:** 0x427a9b (arrival only) and 0x44c5a0 (also sets the
     RandObj reference point; with game flag bit 10 of [0x51bb18]+8 clear, the arrival
     moves one cell further in). Which one runs when is not known.
@@ -524,6 +581,9 @@ Roughly by value for the editor.
 | 0x41e4d0, 0x47efe0, 0x41e100 | telephone (episode II): dial; numbers → handlers; Ghostbusters (robot-free)    |
 | 0x4827f0                     | base palette (episode III: 0x477c10)                                           |
 | 0x4314b0, 0x438710, 0x431300 | CRUNCHED: next character; load a text resource; parse an entry header          |
+| 0x432560, 0x4327c4, 0x432e06 | room load: convert records; overlay objects → type 1 records; allocate one     |
+| 0x42bef0, 0x407aa0           | an event's first time (sound, points, text 1800 + n); script Enigma            |
+| 0x4393d8, 0x4393e8, 0x439537 | entering a room: episode III kind 3 bit 0; background music; kind 3 bit 1      |
 | 0x408da0 (per episode)       | episode start: arrival cell, start room (vtable +0x54, see `start.ts`)         |
 | 0x481170                     | 8×8 font                                                                       |
 | 0x4750d8                     | script keywords (functions and variables)                                      |

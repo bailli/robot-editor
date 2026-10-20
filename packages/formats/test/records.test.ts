@@ -34,7 +34,5 @@ test("records say what they do", () => {
   expect(summary(1, 126, 8)).toMatch(/^the thief appears here/);
   expect(summary(2, 55, 13)).toBe("a teleporter to room 155 at (6, 7)");
   expect(summary(3, 11, 3)).toMatch(/^0x\w{4} is buried under 0x\w{4}; dig to find it$/);
-  expect(summary(3, 11, 5)).toMatch(
-    /^a creature appears every \d+ ticks while the hero is within /,
-  );
+  expect(summary(3, 11, 5)).toMatch(/^a robot appears every \d+ ticks while the hero is within /);
 });

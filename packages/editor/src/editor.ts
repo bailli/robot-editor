@@ -294,7 +294,8 @@ export class Editor {
   /**
    * Turns a cell into a logic cell with a new record of `type` that shows the former cell
    * (fields other than the cell are zero). Returns the slot, or undefined if the cell is a
-   * logic cell already or the room has no free slot.
+   * logic cell already, the layer is the overlay (the game drops logic cells there, see
+   * recordCapacity) or the room has no room for another record.
    */
   addRecord(
     episode: number,
@@ -305,9 +306,9 @@ export class Editor {
   ): number | undefined {
     this.endStroke();
     const room = this.room(episode, roomId);
-    if (!inRoom(index)) return undefined;
+    if (!inRoom(index) || layer === "overlay") return undefined;
     const cell = room[layer][index];
-    if (isLogicCell(cell)) return undefined;
+    if (isLogicCell(cell) || recordCapacity(room) < 1) return undefined;
     const used = new Set(room.records.map((r) => r.slot));
     const slot = Array.from({ length: MAX_RECORD_SLOTS }, (_, k) => k).find((k) => !used.has(k));
     if (slot === undefined) return undefined;
@@ -521,6 +522,16 @@ export class Editor {
 
 const before = (change: CellChange) => change.before;
 const after = (change: CellChange) => change.after;
+
+/**
+ * How many more records fit into the room in the game: on loading it the game turns
+ * every overlay object into a record of its own on the base cell (0x4327c4; a logic
+ * cell in the overlay is dropped), in a table of MAX_RECORD_SLOTS entries.
+ */
+export function recordCapacity(room: Room): number {
+  const objects = room.overlay.reduce((n, cell) => n + Number(cell !== 0), 0);
+  return MAX_RECORD_SLOTS - room.records.length - objects;
+}
 
 /** The cell a record shows (what its logic cell looks like). */
 export const shownCell = recordCell;

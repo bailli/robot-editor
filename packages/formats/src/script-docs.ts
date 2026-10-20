@@ -17,7 +17,8 @@
 import { KEYWORD_FUNCTION, type ScriptKeyword } from "./script.ts";
 
 /** What a number argument refers to, where the editor can show it. */
-export type ScriptArgumentKind = "text" | "room";
+/** What a number argument refers to: a text, a room, an entry of the event table. */
+export type ScriptArgumentKind = "text" | "room" | "enigma";
 
 /** Arguments that give a place in the room: indices of x, y and of width, height. */
 export interface ScriptPlace {
@@ -68,8 +69,9 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
     args: ["text", "delay", "n"],
     kinds: ["text"],
     doc:
-      "lets the phone ring after `delay` seconds in the room; answering plays text `text` " +
-      "(n: probably the number of rings). Episode II.",
+      "lets the phone ring after `delay` seconds in the room (not if that time has passed), " +
+      "n times plus one; answering it (using the phone) while it rings shows text `text`, " +
+      "after the last ring the caller gives up (0x41e320). Episode II.",
   },
   PRINTSTR: { args: ["string"], doc: "shows a string in a message box (debugging; unused)." },
   PRINTVAL: { args: ["value"], doc: "shows a number in a message box (debugging; unused)." },
@@ -126,12 +128,15 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
     doc: "takes obj (exact state) out of the inventory as if dropped (raises the drop event); 1 if done.",
   },
   E_TAKE: {
-    args: ["type"],
-    doc: `event: the hero takes an object of tile type \`type\`. ${HANDLER}`,
+    args: ["class"],
+    doc:
+      "event: the hero takes an object of class `class`. The game compares class ids, " +
+      "so O_ names (tile types) only work where both agree (O_KEY yes, O_LAMP no). " +
+      HANDLER,
   },
   E_DROP: {
-    args: ["type"],
-    doc: `event: the hero drops an object of tile type \`type\`. ${HANDLER}`,
+    args: ["class"],
+    doc: "event: the hero drops an object of class `class` (class ids, as with E_Take). " + HANDLER,
   },
   SETWAREA: {
     args: ["x", "y", "w", "h"],
@@ -158,9 +163,12 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
   },
   ENIGMA: {
     args: ["n"],
+    kinds: ["enigma"],
     doc:
-      "a puzzle solved for the first time: entry n of the episode's table gives points, a " +
-      "sound and a text (once only); 1 the first time, else 0.",
+      "the first time in a game: plays entry n's sound, adds its points and shows text " +
+      "1800 + n with the bonus (text 516); returns 1 then, else 0. Entries of the episode's " +
+      "event table (episode +0x1cc): 0–127 are the first takes of tile types, the higher " +
+      "ones game events (0x407aa0, 0x42bef0).",
   },
   TELEPORT: {
     args: ["room", "x", "y"],
@@ -187,17 +195,26 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
   "AREA/3": {
     args: ["x", "y", "size"],
     places: [{ x: 0, y: 1, w: 2, h: 2 }],
-    doc: "a square of cells whose rings rotate (e.g. episode I's endless labyrinth).",
+    doc:
+      "the square of size × size cells that magic words turn: LEFT/LINKS laid with letter " +
+      "tiles (O_LETTER) rotates each of its rings a quarter turn anticlockwise, " +
+      "RIGHT/RECHTS clockwise (words of text 514, 0x42ca90). One square per room. " +
+      "Episodes I and II.",
   },
   "AREA/4": {
     args: ["x", "y", "size", "key"],
     places: [{ x: 0, y: 1, w: 2, h: 2 }],
-    doc: "a rotating square (up to 4) turned by a switch whose key matches.",
+    doc:
+      "one of up to 4 squares that a punch card used at a card reader turns, the one " +
+      "whose key is the card's state (0x419b30). Episode IV.",
   },
   SHIFTAREA: {
     args: ["x", "y", "w", "h", "d"],
     places: [RECT(0)],
-    doc: "an area of cells that shift (d: probably the direction); not decoded in detail.",
+    doc:
+      "sets up the area that episode IV's remote control (O_CONTROL, state 6) shifts once " +
+      "by one cell with wrap-around: d 0 up, 1 left, 2 down, 3 right; actors on the cells " +
+      "move along (0x407d80, 0x42fdc0). Kept across rooms.",
   },
   WIZZARD: {
     args: ["x", "y", "room", "rx", "ry", "ax", "ay", "aw", "ah"],
@@ -225,7 +242,10 @@ const VARIABLES: Readonly<Partial<Record<string, string>>> = {
   ROOMEAST: "where the east exit leads (0: closed)",
   BUSEAST: "where the bus goes east (episode II)",
   BUSWEST: "where the bus goes west (episode II)",
-  E_VALUE: "the value of the event being handled (the object, ±area, the room, the slot)",
+  E_VALUE:
+    "the value of the event being handled: taking and dropping the object's class | state " +
+    "<< 8 (a class id, not a tile type: the lamp is 56, O_LAMP 27; tried in the game), " +
+    "±area, the room, the slot",
   HEROX: "the hero's column (read only: writes are lost)",
   HEROY: "the hero's row (read only: writes are lost)",
   VAL1: "a free variable, kept across rooms",
@@ -236,8 +256,12 @@ const VARIABLES: Readonly<Partial<Record<string, string>>> = {
   VAL6: "a free variable, kept across rooms",
   VAL7: "a free variable, kept across rooms",
   VAL8: "a free variable, kept across rooms",
-  STATIONBOFF: "an episode IV flag (probably: power station B is off)",
-  NOSWIM: "an episode III/IV flag (probably: swimming is not possible)",
+  STATIONBOFF:
+    "episode IV: how many groups of power station parts are switched (0x41ae10): from 2 " +
+    "some actors slow down, from 4 spawner records stop",
+  NOSWIM:
+    "episode II: 1 forbids swimming (text 230, 0x427e40); boarding the ship with the " +
+    "ticket clears it",
 };
 
 /**

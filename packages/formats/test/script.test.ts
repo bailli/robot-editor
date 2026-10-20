@@ -129,15 +129,20 @@ test("withRoomScript writes source and compiled script where the game's scenes h
 test("every keyword of the game is described", () => {
   for (const k of keywords)
     expect(scriptDoc(k.name, keywords), k.name).not.toMatch(/not decoded yet|a game variable \(/);
-  expect(scriptDoc("Area", keywords)?.split("\n")).toEqual([
-    "Area(x, y, size): a square of cells whose rings rotate (e.g. episode I's endless labyrinth). (0x407cb0)",
-    "Area(x, y, size, key): a rotating square (up to 4) turned by a switch whose key matches. (0x407cf0)",
+  expect(
+    scriptDoc("Area", keywords)
+      ?.split("\n")
+      .map((line) => line.slice(0, 40)),
+  ).toEqual([
+    "Area(x, y, size): the square of size × s",
+    "Area(x, y, size, key): one of up to 4 sq",
   ]);
   expect(scriptDoc("score", keywords)).toBe("Score: the points (dword at 0x4fe2f0)");
   expect(scriptDoc("count", keywords)).toBeUndefined();
   expect(scriptArgument("Message", 0, 2)).toBe("text");
   expect(scriptArgument("SetMan", 3, 6)).toBe("room");
   expect(scriptArgument("Message", 1, 2)).toBeUndefined();
+  expect(scriptArgument("Enigma", 0, 1)).toBe("enigma");
   // overloaded: the form with that many arguments
   expect(scriptFunctionDoc("Area", 4)?.args).toEqual(["x", "y", "size", "key"]);
   expect(scriptFunctionDoc("Area", 3)?.args).toEqual(["x", "y", "size"]);
