@@ -931,6 +931,30 @@ test("a house's interior is added from the room it is entered from", async () =>
   expect(app.describeInterior(143).problem).toMatch(/class 99/);
 });
 
+test("a level inside a house: the id follows the shown room, stairs go at the selected cell", async () => {
+  app.showEpisode(2, 144);
+  const below = game.room(2, 144);
+  const cell = below.base.findIndex((c, i) => i > 80 && c === 0 && below.overlay[i] === 0);
+  app.select(cell);
+  app.newRoom(); // offers 145, the next free id
+  const dialog = page.getByRole("dialog", { name: "New room" });
+  await dialog.getByRole("radio", { name: /Interior of room/ }).click();
+  const id = dialog.getByRole("spinbutton", { name: "Room id" });
+  expect((id.element() as HTMLInputElement).value).toBe("244");
+  const at = `(${cell % ROOM_WIDTH}, ${Math.floor(cell / ROOM_WIDTH)})`;
+  const stairs = dialog.getByRole("checkbox", { name: /Stairs down at/ });
+  expect((stairs.element() as HTMLInputElement).checked).toBe(true); // 144 has no way in
+  expect(stairs.element().parentElement?.textContent).toContain(`Stairs down at ${at} of room 144`);
+  expect(dialog.element().textContent).toMatch(/Room 44 shows around it, not room 144/);
+  await dialog.getByRole("button", { name: "Create" }).click();
+  expect(document.querySelector(".status")?.textContent).toBe(
+    `Room 244 added: the interior of room 144, stairs at ${at}`,
+  );
+  const editor = defined(app.editor);
+  expect(editor.room(2, 144).base[cell]).toBe(0x003d);
+  expect(editor.room(2, 244).base[cell]).toBe(0x013d);
+});
+
 test("neighbours across the end of a row or a hundred are named as such", () => {
   // episode IV: room 204's north neighbour is 194, in the hundred above
   app.showEpisode(4, 204);

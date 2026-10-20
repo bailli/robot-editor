@@ -279,6 +279,7 @@ export class App {
         ? this.roomLabel(this.episode, id)
         : undefined,
     interior: (id) => this.describeInterior(id),
+    interiorStairs: (id) => this.interiorStairs(id),
     create: (id, content, openNeighbours) => this.addRoom(id, content, openNeighbours),
     walls: () => this.need().wallCells(this.episode),
     exits: () => this.need().exitCells(this.episode),
@@ -790,13 +791,15 @@ export class App {
     }
     this.showEpisode(this.episode, id);
     this.refreshButtons();
-    const opened = (edit.parts ?? []).slice(1).map((p) => p.room);
+    const opened = (edit.parts ?? []).filter((p) => p.tags).map((p) => p.room);
     const exits = opened.length ? `, exits of ${opened.join(", ")} opened towards it` : "";
+    const stairs =
+      typeof content === "object" && "interior" in content ? content.interior.stairs : undefined;
     const added =
       typeof content === "object" && "copy" in content
         ? `Room ${content.copy} copied to room ${id}`
-        : content === "interior"
-          ? `Room ${id} added: the interior of room ${id - 100}`
+        : content === "interior" || stairs !== undefined
+          ? `Room ${id} added: the interior of room ${id - 100}${stairs === undefined ? "" : `, stairs at ${cellAt(stairs)}`}`
           : `Room ${id} added`;
     this.setStatus(`${added}${exits}`);
     return true;
@@ -812,11 +815,12 @@ export class App {
       EPISODE_NAMES[this.episode] ?? "",
       id ?? editor.freeRoomId(this.episode, this.roomId),
       this.roomId,
+      id !== undefined,
     );
   }
 
   /** What the new room dialog says about room `id` as an interior (Editor.interiorOf). */
-  describeInterior(id: number): { text: string; problem?: string } {
+  describeInterior(id: number): { text: string; problem?: string; ways?: number } {
     let interior: Interior;
     try {
       interior = this.need().interiorOf(this.episode, id);
@@ -830,7 +834,7 @@ export class App {
     ].filter((w) => w !== "");
     const lead = ways.length
       ? `Room ${above} leads in: ${ways.join(", ")} at the same cell${doors + stairs > 1 ? "s" : ""}.`
-      : `Room ${above} has no doors into buildings or stairs down yet: put one there (tile 0x0753 or 0x0653, stairs 0x003d) and a door out (0x005a) here at the same cell.`;
+      : `Room ${above} has no doors into buildings or stairs down yet: select a cell there for new stairs, or put a door there (tile 0x0753 or 0x0653) and a door out (0x005a) here at the same cell.`;
     const around =
       backdrop === undefined
         ? "No room shows around it: the game draws room id mod 100 (episode IV: id − 100), which does not exist."
@@ -842,7 +846,16 @@ export class App {
       this.episode === 2 && doors > 0
         ? " The hero needs the key 0x0f15 to go in (episode II: it lies in room 42)."
         : "";
-    return { text: `${lead} ${around}${key}` };
+    return { text: `${lead} ${around}${key}`, ways: doors + stairs };
+  }
+
+  /** The selected cell of the shown room, if it is room `id` - 100: new stairs into `id`. */
+  interiorStairs(id: number): { cell: number; at: string; problem?: string } | undefined {
+    const cell = this.selected?.index;
+    if (cell === undefined || this.roomId !== id - 100) return undefined;
+    const at = cellAt(cell);
+    const problem = this.need().interiorStairsProblem(this.episode, id, cell);
+    return problem === undefined ? { cell, at } : { cell, at, problem };
   }
 
   /** What the new room dialog says about an id: free or not, where, what it borders. */
@@ -1957,6 +1970,11 @@ function isHistoryState(state: unknown): state is HistoryState {
 const HISTORY_KEY = "robot-editor-history";
 
 /** A short fingerprint of what a room looks like (its cells and records). */
+/** A cell index as "(x, y)". */
+function cellAt(index: number): string {
+  return `(${index % ROOM_WIDTH}, ${Math.floor(index / ROOM_WIDTH)})`;
+}
+
 function roomKey(room: Room): string {
   let hash = 0x811c9dc5;
   const mix = (v: number) => {

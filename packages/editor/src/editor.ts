@@ -109,7 +109,11 @@ export const MAX_RECORD_SLOTS = 200;
 
 /** What a new room holds (Editor.addRoom). */
 export type NewRoomContent =
-  "empty" | "interior" | { walls: number; exits: number } | { copy: number };
+  | "empty"
+  | "interior"
+  | { interior: { stairs: number } }
+  | { walls: number; exits: number }
+  | { copy: number };
 
 /** What Editor.interiorOf finds for a new room's interior. */
 export interface Interior {
@@ -152,6 +156,11 @@ const BACKDROP_MARKS: readonly number[] = [ROOM_WIDTH, 2 * ROOM_WIDTH - 1];
 /** A room filled with the class 99 tile (state 0). */
 function interiorFiller(classes: EpisodeClasses): Uint16Array {
   return new Uint16Array(ROOM_CELLS).fill(classes.typeOfClass.get(BACKDROP_CLASS) ?? 0);
+}
+
+/** Stairs down (class 71, state 0). */
+function stairsDown(classes: EpisodeClasses): number {
+  return classes.typeOfClass.get(STAIRS_CLASS) ?? 0;
 }
 
 /** A way into an interior: a building's door or stairs down, at a cell of room id - 100. */
@@ -388,14 +397,35 @@ export class Editor {
   }
 
   /**
+   * Why new stairs down cannot go at `cell` of room id - 100 to lead into interior `id`
+   * (interiorCells), undefined if they can.
+   */
+  interiorStairsProblem(episode: number, id: number, cell: number): string | undefined {
+    const below = this.rooms(episode).find((r) => r.id === id - 100);
+    if (!below) return `there is no room ${id - 100}`;
+    if (!inRoom(cell) || cell < ROOM_WIDTH) return "stairs cannot go under the status line";
+    if (BACKDROP_MARKS.includes(cell))
+      return "(0, 1) and (39, 1) must stay class 99 in the interior";
+    if (isLogicCell(below.base[cell]) || isLogicCell(below.overlay[cell]))
+      return "the cell belongs to a logic record";
+    if (!this.game.episode(episode).classes.typeOfClass.has(STAIRS_CLASS))
+      return "the episode has no stairs";
+    return undefined;
+  }
+
+  /**
    * The cells of a new interior `id`: class 99 everywhere, so the room the game draws
    * behind it shows (backdropRoom) and the hero cannot walk there; at each door into a
    * building in room id - 100 a door out at the same cell, walls beside it and two cells
    * of floor in the direction the hero walks on (doors move him two cells further, as in
    * the originals of episodes II and III); at each of its stairs down, stairs up with
-   * floor around them.
+   * floor around them, also at `stairs`, a cell where new stairs down go (addRoom).
    */
-  interiorCells(episode: number, id: number): { base: Uint16Array; overlay: Uint16Array } {
+  interiorCells(
+    episode: number,
+    id: number,
+    stairs?: number,
+  ): { base: Uint16Array; overlay: Uint16Array } {
     this.interiorOf(episode, id);
     const { classes } = this.game.episode(episode);
     const above = this.room(episode, id - 100);
@@ -404,7 +434,11 @@ export class Editor {
     const filler = base[0];
     const doorOut = classes.typeOfClass.get(DOOR_OUT_CLASS) ?? 0;
     const wall = this.wallCells(episode, 1).at(0) ?? filler;
-    const passages = interiorPassages(above, classes).filter(
+    const added: InteriorPassage[] =
+      stairs === undefined
+        ? []
+        : [{ kind: "stairs", cell: stairs, layer: "base", value: stairsDown(classes), dy: 0 }];
+    const passages = [...interiorPassages(above, classes), ...added].filter(
       (p) => !BACKDROP_MARKS.includes(p.cell),
     );
     // the passages first: doors side by side keep each other
@@ -444,8 +478,9 @@ export class Editor {
   /**
    * Adds room `id` to the episode: empty, walled (the cell `content.walls` all around with
    * five cells `content.exits` in the middle of each edge, like most rooms of Junior and I:
-   * there exit tiles, see exitCells), an interior of room id - 100 (interiorCells) or a
-   * copy of room `content.copy` (cells, records and tags, the script too); with `openNeighbours`
+   * there exit tiles, see exitCells), an interior of room id - 100 (interiorCells; with
+   * `interior.stairs` new stairs down at that cell of room id - 100, in the same step)
+   * or a copy of room `content.copy` (cells, records and tags, the script too); with `openNeighbours`
    * the grid neighbours whose exits towards it are closed ("none") open them. One undo
    * step. Throws a RangeError if the id is taken or out of range, or the episode is full.
    */
@@ -462,7 +497,16 @@ export class Editor {
       typeof content === "object" && "copy" in content
         ? this.room(episode, content.copy)
         : undefined;
-    const interior = content === "interior" ? this.interiorCells(episode, id) : undefined;
+    const stairs =
+      typeof content === "object" && "interior" in content ? content.interior.stairs : undefined;
+    if (stairs !== undefined) {
+      const stairsProblem = this.interiorStairsProblem(episode, id, stairs);
+      if (stairsProblem) throw new RangeError(stairsProblem);
+    }
+    const interior =
+      content === "interior" || stairs !== undefined
+        ? this.interiorCells(episode, id, stairs)
+        : undefined;
     const base = interior?.base ?? new Uint16Array(ROOM_CELLS);
     if (typeof content === "object" && "walls" in content) {
       if (isLogicCell(content.walls)) throw new RangeError("walls cannot be logic cells");
@@ -490,6 +534,23 @@ export class Editor {
     const step: Edit = { episode, room: id, layer: "base", changes: [], added: room };
     this.apply(step, after);
     const parts = [step];
+    if (stairs !== undefined) {
+      const below = this.room(episode, id - 100);
+      const down: Edit = {
+        episode,
+        room: below.id,
+        layer: "base",
+        changes: [
+          {
+            index: stairs,
+            before: below.base[stairs],
+            after: stairsDown(this.game.episode(episode).classes),
+          },
+        ],
+      };
+      this.apply(down, after);
+      parts.push(down);
+    }
     for (const n of openNeighbours ? this.gridNeighbours(episode, id) : []) {
       if (n.mode !== "none") continue;
       const neighbour = this.room(episode, n.room);

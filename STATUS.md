@@ -528,9 +528,12 @@ Supported:
   interior of the room 100 below (episodes II–IV, `interiorCells`: class 99 everywhere,
   so that room shows around it; at each of its doors into buildings a door out at the
   same cell with walls beside it and two cells of floor where the hero walks on, at its
-  stairs down stairs up; picking it moves the id to the shown room + 100; the dialog
-  names the room drawn around it and episode II's key; **verified under Wine**: a
-  generated 115 under room 15 is entered with the key and left northwards); and
+  stairs down stairs up; picking it moves an offered id to the shown room + 100; with a
+  cell selected there, new stairs down at it and up in the interior, in the same undo
+  step, e.g. for a floor above an interior (episode II's 244 over 144 shows 44 around
+  it, like 242 over 142); the dialog names the room drawn around it and episode II's
+  key; **verified under Wine**: a generated 115 under room 15 is entered with the key
+  and left northwards, a generated 244 by new stairs in 144); and
   whether closed exits of its neighbours open towards it; one undo step. "Go to room"
   opens a room by id. Rooms deleted ("Delete room…" next to the name; not room 1, the
   title screen with the global script, nor the start room; the confirmation names the

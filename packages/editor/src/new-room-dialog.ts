@@ -14,8 +14,18 @@ export interface NewRoomDialogEvents {
   check(id: number): NewRoomCheck;
   /** The room to copy, named ("room 43 – DER START"), undefined if there is none. */
   source(id: number): string | undefined;
-  /** What an interior with this id would be, or why there can be none. */
-  interior(id: number): { text: string; problem?: string | undefined };
+  /**
+   * What an interior with this id would be, or why there can be none; `ways`: how many
+   * doors and stairs of the room 100 below lead in.
+   */
+  interior(id: number): { text: string; problem?: string | undefined; ways?: number };
+  /**
+   * The cell selected in the room 100 below the id, where new stairs down could lead
+   * into the interior ("(12, 7)"; a problem if they cannot go there), undefined if none.
+   */
+  interiorStairs(
+    id: number,
+  ): { cell: number; at: string; problem?: string | undefined } | undefined;
   /** The episode's walls to offer, the most used first. */
   walls(): readonly number[];
   /** The cells to offer for the exits, the default first. */
@@ -86,6 +96,8 @@ export class NewRoomDialog {
   private readonly interior = document.createElement("input");
   private readonly interiorLabel = document.createElement("span");
   private readonly interiorText = document.createElement("p");
+  private readonly stairs = document.createElement("input");
+  private readonly stairsLabel = document.createElement("label");
   private readonly copyFrom = document.createElement("input");
   private readonly copyName = document.createElement("span");
   private readonly wall = new TileChoice("Wall", () => {
@@ -138,17 +150,8 @@ export class NewRoomDialog {
       });
     }
     this.interior.addEventListener("change", () => {
-      // an interior lies 100 above the room it is entered from: the shown one, if free
-      const id = Number(this.id.value);
-      const inside = this.from + 100;
-      if (
-        this.events.interior(id).problem !== undefined &&
-        this.events.check(inside).problem === undefined &&
-        this.events.interior(inside).problem === undefined
-      ) {
-        this.id.value = String(inside);
-        this.refresh();
-      }
+      this.moveInside();
+      this.refresh();
     });
     const walledLabel = document.createElement("label");
     walledLabel.title =
@@ -192,7 +195,14 @@ export class NewRoomDialog {
     interiorLabel.append(this.interior, " ", this.interiorLabel);
     this.interiorText.className = "new-room-interior";
     const interiorRow = document.createElement("div");
-    interiorRow.append(interiorLabel, this.interiorText);
+    this.stairs.type = "checkbox";
+    this.stairs.addEventListener("change", () => {
+      this.refresh();
+    });
+    this.stairsLabel.className = "new-room-interior";
+    this.stairsLabel.title =
+      "The room below gets stairs down at the cell selected there, this room stairs up at the same cell (one undo step)";
+    interiorRow.append(interiorLabel, this.interiorText, this.stairsLabel);
     content.append(legend, walledRow, emptyLabel, copyRow, interiorRow);
 
     this.open.type = "checkbox";
@@ -227,13 +237,15 @@ export class NewRoomDialog {
   }
 
   /**
-   * Opens the dialog for an episode with `id` filled in; `from` is the shown room (offered
-   * to copy). The content chosen last stays chosen.
+   * Opens the dialog for an episode with `id` filled in (`fixed`: asked for, e.g. by the
+   * map, else only offered); `from` is the shown room (offered to copy). The content
+   * chosen last stays chosen: an interior then moves the offered id to `from` + 100.
    */
-  show(episode: string, id: number | undefined, from: number): void {
+  show(episode: string, id: number | undefined, from: number, fixed = false): void {
     this.heading.textContent = `New room in ${episode}`;
     this.from = from;
     this.id.value = id === undefined ? "" : String(id);
+    if (this.interior.checked && !fixed) this.moveInside();
     this.copyFrom.value = String(from);
     const preview = (value: number) => this.events.preview(value);
     this.wall.offer(this.events.walls(), preview);
@@ -245,6 +257,21 @@ export class NewRoomDialog {
     this.id.select();
   }
 
+  /**
+   * An interior lies 100 above the room it is entered from: moves the id to the shown
+   * room + 100 if that can be one; new stairs are offered where the room has no way in.
+   */
+  private moveInside(): void {
+    const inside = this.from + 100;
+    if (
+      this.events.check(inside).problem === undefined &&
+      this.events.interior(inside).problem === undefined
+    ) {
+      this.id.value = String(inside);
+    }
+    this.stairs.checked = this.events.interior(Number(this.id.value)).ways === 0;
+  }
+
   /** The content chosen, undefined for a copy of a room that does not exist. */
   private content(): NewRoomContent | undefined {
     if (this.walled.checked) {
@@ -253,9 +280,11 @@ export class NewRoomDialog {
     }
     if (this.empty.checked) return "empty";
     if (this.interior.checked) {
-      return this.events.interior(Number(this.id.value)).problem === undefined
-        ? "interior"
-        : undefined;
+      const id = Number(this.id.value);
+      if (this.events.interior(id).problem !== undefined) return undefined;
+      const stairs = this.events.interiorStairs(id);
+      if (!stairs || this.stairsLabel.hidden || !this.stairs.checked) return "interior";
+      return stairs.problem === undefined ? { interior: { stairs: stairs.cell } } : undefined;
     }
     const from = Number(this.copyFrom.value);
     return this.events.source(from) === undefined ? undefined : { copy: from };
@@ -272,6 +301,18 @@ export class NewRoomDialog {
     this.interiorLabel.textContent = `Interior of room ${id - 100}`;
     this.interiorText.textContent = interior.problem ?? interior.text;
     this.interiorText.classList.toggle("error", interior.problem !== undefined);
+    const stairs = interior.problem === undefined ? this.events.interiorStairs(id) : undefined;
+    this.stairsLabel.hidden = !stairs || !this.interior.checked;
+    this.stairsLabel.replaceChildren(
+      this.stairs,
+      stairs
+        ? ` Stairs down at ${stairs.at} of room ${id - 100}, up here${stairs.problem ? `: ${stairs.problem}` : ""}`
+        : "",
+    );
+    this.stairsLabel.classList.toggle(
+      "error",
+      stairs?.problem !== undefined && this.stairs.checked,
+    );
     const check = this.events.check(Number(this.id.value));
     const lines = check.problem === undefined ? check.lines : [check.problem, ...check.lines];
     this.where.replaceChildren(

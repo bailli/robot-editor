@@ -395,6 +395,26 @@ describe("Editor rooms and names", () => {
     expect(() => editor.addRoom(2, 1001, "interior")).toThrow(/no room 901/);
   });
 
+  test("an interior of an interior gets new stairs in both rooms, as one step", () => {
+    const editor = new Editor(game);
+    // episode II room 144 (inside 44) has no way further in: stairs at one of its floor cells
+    const below = game.room(2, 144);
+    const cell = below.base.findIndex((c, i) => i > 80 && c === 0 && below.overlay[i] === 0);
+    expect(editor.interiorOf(2, 244)).toEqual({ above: 144, backdrop: 44, doors: 0, stairs: 0 });
+    const room = defined(editor.addRoom(2, 244, { interior: { stairs: cell } }).added);
+    expect(editor.room(2, 144).base[cell]).toBe(0x003d);
+    expect(room.base[cell]).toBe(0x013d);
+    expect([room.base[cell - 1], room.base[cell + 1], room.base[cell + 40]]).toEqual([0, 0, 0]);
+    editor.undo();
+    expect(editor.room(2, 144).base[cell]).toBe(0);
+    expect(editor.rooms(2).some((r) => r.id === 244)).toBe(false);
+    expect(editor.interiorStairsProblem(2, 244, 5)).toMatch(/status line/);
+    expect(editor.interiorStairsProblem(2, 244, 40)).toMatch(/class 99/);
+    const logic = below.base.findIndex((c) => (c & 0xff) === LOGIC_CELL);
+    if (logic >= 0) expect(editor.interiorStairsProblem(2, 244, logic)).toMatch(/logic record/);
+    expect(() => editor.addRoom(2, 244, { interior: { stairs: 40 } })).toThrow(RangeError);
+  });
+
   test("an added room is empty; ids must be free and in range", () => {
     const editor = new Editor(game);
     editor.addRoom(1, 999);
