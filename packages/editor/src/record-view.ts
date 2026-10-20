@@ -1,4 +1,12 @@
-import { type EpisodeClasses, type LogicRecord, describeRecord } from "@robot/formats";
+import {
+  type EpisodeClasses,
+  type LogicRecord,
+  TANGRAM_TILE,
+  describeRecord,
+} from "@robot/formats";
+
+/** Record type of oracles. */
+const ORACLE = 12;
 
 /** A record field shown as an input: a cell value (hex), a number or a flag. */
 interface Field {
@@ -230,8 +238,16 @@ export class RecordView {
     this.element.replaceChildren();
   }
 
-  /** Shows a record of an episode with these classes; `where` names the cell, e.g. "(12, 7) base". */
-  show(record: LogicRecord, where: string, classes: EpisodeClasses): void {
+  /**
+   * Shows a record of an episode with these classes and oracle symbols
+   * (readOracleSymbols); `where` names the cell, e.g. "(12, 7) base".
+   */
+  show(
+    record: LogicRecord,
+    where: string,
+    classes: EpisodeClasses,
+    symbols?: readonly (readonly number[])[],
+  ): void {
     this.element.hidden = false;
     const data = record.data.slice();
     const known = RECORD_TYPES.find((t) => t.type === data[0]);
@@ -240,7 +256,11 @@ export class RecordView {
     };
 
     const title = element("h3", undefined, `Logic record ${record.slot} at ${where}`);
-    const summary = element("p", "record-summary", describeRecord(record, classes).summary);
+    const summary = element(
+      "p",
+      "record-summary",
+      describeRecord(record, classes, symbols).summary,
+    );
     const type = element("select");
     type.setAttribute("aria-label", "Record type");
     for (const t of RECORD_TYPES) type.append(new Option(`${t.type} ${t.name}`, String(t.type)));
@@ -252,6 +272,13 @@ export class RecordView {
     });
 
     const fields = (known?.fields ?? []).map((field) => this.field(field, data, commit));
+    const symbol = data[0] === ORACLE ? symbols?.[data[3] & 15] : undefined;
+    if (symbol) {
+      const block = element("span", "oracle-symbol");
+      block.title = "Lay these tangram pieces as a 2×2 block anywhere in the room";
+      block.append(...symbol.map((s) => this.events.preview(TANGRAM_TILE | (s << 8))));
+      fields.push(labelled("Symbol", block));
+    }
 
     const raw = element("input", "record-bytes");
     raw.setAttribute("aria-label", "Record bytes");

@@ -1,5 +1,6 @@
 import { ACTOR_CLASS_NAMES, actorKindClass, recordActorKind } from "./actors.ts";
 import type { EpisodeClasses } from "./classes.ts";
+import { type PeImage, readVa } from "./pe.ts";
 import type { LogicRecord } from "./scene.ts";
 
 /**
@@ -33,17 +34,32 @@ import type { LogicRecord } from "./scene.ts";
  *       (0x40f700, byte 7). While lit it places stairs (up if byte 6, else down) at
  *       (byte 4, byte 5), if byte 5 is not 0; a final node (byte 1 bit 0) only once all
  *       the room's nodes are lit (episode I room 128: the stairs to room 228)
- *   12  oracle (episodes II, III, tile 0x51, 0x412ae0): walked into northwards it sends to
- *       the target (see exits.ts), eastwards it shows message 330 + n (n: low 4 bits of
- *       its state), westwards it turns into the object at offset 8, southwards it kills.
- *       Walking into oracles did nothing in the game so far (a new one in episode II room
- *       43, room 106's own): something gates it, probably a pattern of tile 0x50 pieces
- *       (0x412860)
+ *   12  oracle (episodes II, III, tile 0x51): it only works once its symbol lies in the
+ *       room, a 2×2 block of tangram pieces (tile 0x50) whose states are pattern n of
+ *       readOracleSymbols (n: low 4 bits of the oracle's state; 0x412860, which then shows
+ *       the pieces as solved). Then, walked into (0x412ae0), northwards it sends to the
+ *       target (see exits.ts), eastwards it shows message 330 + n (texts of episode III
+ *       only) and vanishes, westwards it turns into the object at offset 8, southwards it
+ *       kills (all but south tried in the game; without the symbol nothing happens)
  *   13  teleporter (see exits.ts): byte 1 bit 1 lets a script's Teleport() set the target
  *       (tried in the game), bit 0 lets the shown cell act first while byte 7 is 0, bit 3
  *       adds a visual effect; message 1200 + byte 8 when used. A target room that does
  *       not exist does nothing (tried)
  */
+
+/** The tangram pieces oracles' symbols are laid with (class 0x5f, episodes II and III). */
+export const TANGRAM_TILE = 0x50;
+const ORACLE_SYMBOLS = 0x47be54;
+const SYMBOL_COUNT = 10;
+
+/**
+ * The oracles' symbols: per n the states of the four tangram pieces of the 2×2 block,
+ * top left, top right, bottom left, bottom right.
+ */
+export function readOracleSymbols(image: PeImage): number[][] {
+  const bytes = readVa(image, ORACLE_SYMBOLS, SYMBOL_COUNT * 4);
+  return Array.from({ length: SYMBOL_COUNT }, (_, n) => [...bytes.subarray(n * 4, n * 4 + 4)]);
+}
 
 export type RecordKind =
   | "stacked"
@@ -75,8 +91,15 @@ export interface RecordInfo {
 
 const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 
-/** `classes` (the record's episode) name the actors of travelling actor records. */
-export function describeRecord(record: LogicRecord, classes?: EpisodeClasses): RecordInfo {
+/**
+ * `classes` (the record's episode) name the actors of travelling actor records, `symbols`
+ * (readOracleSymbols) the symbol an oracle needs.
+ */
+export function describeRecord(
+  record: LogicRecord,
+  classes?: EpisodeClasses,
+  symbols?: readonly (readonly number[])[],
+): RecordInfo {
   const d = record.data;
   const u16 = (at: number) => d[at] | (d[at + 1] << 8);
   const target = () => `room ${u16(4) & 0x3ff} at (${u16(4) >> 10}, ${d[6]})`;
@@ -111,9 +134,18 @@ export function describeRecord(record: LogicRecord, classes?: EpisodeClasses): R
         ? `; ${d[1] & 1 ? "once all nodes are lit" : "while lit"} stairs ${d[6] ? "up" : "down"} ` +
           `appear at (${d[4]}, ${d[5]})`
         : ""),
-    oracle: () =>
-      `an oracle: walked into northwards it sends to ${target()}, eastwards it shows ` +
-      `message ${330 + (d[3] & 15)}, westwards it turns into ${hex(u16(8))}, southwards it kills`,
+    oracle: () => {
+      const symbol = symbols?.[d[3] & 15];
+      const pieces = symbol
+        ? `its symbol, tangram pieces ${symbol.map((s) => hex(TANGRAM_TILE | (s << 8))).join(" ")} ` +
+          `in a 2×2 block (top left to bottom right),`
+        : "its symbol";
+      return (
+        `an oracle; once ${pieces} lies in the room: walked into northwards it sends to ` +
+        `${target()}, eastwards it shows message ${330 + (d[3] & 15)}, westwards it turns ` +
+        `into ${hex(u16(8))}, southwards it kills`
+      );
+    },
     teleporter: () =>
       `a teleporter to ${target()}` +
       (d[1] & 0x02 ? ", or where a script's Teleport() says" : "") +

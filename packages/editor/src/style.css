@@ -801,3 +801,10 @@ canvas.cell.text-tile {
   margin: 0 1px;
   image-rendering: pixelated;
 }
+
+/* an oracle's symbol: the four tangram pieces as they lie in the room */
+.oracle-symbol {
+  display: inline-grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 0;
+}

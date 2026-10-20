@@ -196,9 +196,10 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
     args: ["x", "y", "size"],
     places: [{ x: 0, y: 1, w: 2, h: 2 }],
     doc:
-      "the square of size × size cells that magic words turn: LEFT/LINKS laid with letter " +
-      "tiles (O_LETTER) rotates each of its rings a quarter turn anticlockwise, " +
-      "RIGHT/RECHTS clockwise (words of text 514, 0x42ca90). One square per room. " +
+      "the square of size × size cells that magic words turn: the hero lays them with " +
+      "letters (O_LETTER) from the rucksack, LEFT/LINKS rotates each of the square's " +
+      "rings a quarter turn anticlockwise (tried in the game), RIGHT/RECHTS clockwise " +
+      "(the words of text 514, some need the wand; 0x42ca90). One square per room. " +
       "Episodes I and II.",
   },
   "AREA/4": {

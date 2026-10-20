@@ -703,3 +703,16 @@ test("Enigma's number says what the entry gives", () => {
     new RegExp(`^entry 192: ${entry.points} points, text 1992:\\n`),
   );
 });
+
+test("an oracle's record shows the symbol it needs", () => {
+  app.showEpisode(2, 43);
+  const room = game.room(2, 43);
+  const slot = defined(room.records.find((r) => r.data[0] === 12)).slot;
+  const index = room.base.findIndex((c) => c === (0x7f | (slot << 8)));
+  app.select(index);
+  const symbol = defined(document.querySelector(".oracle-symbol") ?? undefined, "the symbol");
+  expect(symbol.querySelectorAll("canvas").length).toBe(4);
+  expect(document.querySelector(".record-summary")?.textContent).toMatch(
+    /^an oracle; once its symbol, tangram pieces 0x0[0-4]50 /,
+  );
+});

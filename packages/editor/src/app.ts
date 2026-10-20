@@ -19,6 +19,7 @@ import {
   parseCompiledScript,
   randomPlacement,
   readEventTable,
+  readOracleSymbols,
   roomActors,
   roomScript,
   scriptActors,
@@ -765,8 +766,11 @@ export class App {
     const where = `(${index % ROOM_WIDTH}, ${Math.floor(index / ROOM_WIDTH)}) ${layer}`;
     const record =
       (cell & 0xff) === LOGIC_CELL ? room.records.find((r) => r.slot === cell >> 8) : undefined;
-    if (record) this.recordView.show(record, where, this.need().game.episode(this.episode).classes);
-    else this.recordView.showEmpty(where);
+    const game = this.need().game;
+    if (record) {
+      const classes = game.episode(this.episode).classes;
+      this.recordView.show(record, where, classes, readOracleSymbols(game.image));
+    } else this.recordView.showEmpty(where);
   }
 
   setLayer(layer: Layer): void {

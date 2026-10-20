@@ -271,7 +271,7 @@ Files in `packages/formats/src`:
   it also stores NewRoom itself, so the room saved in runs its script on loading with
   the value it had then (a game saved on a room's first visit sees NewRoom = 1 again).
 - **Functions and variables:** all 62 keywords are described in `script-docs.ts`
-  (decoded from their handlers; a few meanings are guesses, marked there): e.g.
+  (decoded from their handlers): e.g.
   `Message(text, delay)` shows a text after `delay` seconds in the room (all its `|`
   variants as pages one after another; with delay 0 at once and one variant at random),
   `SetObj(obj, x, y, mode)` places objects, `Possess(obj)` tests the inventory (a state
@@ -284,9 +284,10 @@ rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry
   mechanism as the first take of an object (the key's 500 points; **verified:**
   `Enigma(112)` twice in episode II gives 5000 points once and returns 0 the second
   time); `Phone(text, delay, n)` rings n + 1 times; `Area(x, y, size)` is the square that
-  the magic words LEFT/RIGHT (LINKS/RECHTS), laid with letter tiles, rotate (words of
-  text 514, some need the wand; letters are items the hero takes, placing them with
-  `SetObj` does not count); `Area(x, y, size, key)` the squares episode IV's punch cards
+  the magic words LEFT/RIGHT (LINKS/RECHTS) rotate: the player lays them with letters
+  from the rucksack (words of text 514, some only with the wand in the rucksack; placing
+  letters with `SetObj` does not count; **verified:** putting down L, E, F, T turns the
+  square's rings a quarter anticlockwise); `Area(x, y, size, key)` the squares episode IV's punch cards
   turn at card readers; `ShiftArea(x, y, w, h, d)` the area episode IV's remote control
   shifts once with wrap-around (d 0 up, 1 left, 2 down, 3 right). StationBOff counts
   episode IV's switched power station groups (from 4 spawners stop: **verified**),
@@ -333,9 +334,14 @@ rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry
   key is taken (`Possess`) and leaves the lower cell; a teleporter with flag 0x02 follows
   `Teleport()`, one to a missing room does nothing, one in the overlay does nothing; a
   spawner lets robots appear that kill the hero within seconds, not with StationBOff 4;
-  a native record lets a native appear. Oracles did nothing when walked into (a new one
-  in episode II room 43 in all four directions, room 106's own northwards): something
-  gates them, probably the 2×2 pattern of tile 0x50 pieces that 0x412860 checks.
+  a native record lets a native appear. **Oracles** work only once their symbol lies in
+  the room: a 2×2 block of tangram pieces (tile 0x50, items the player collects and lays
+  out) whose states are the oracle's pattern (`readOracleSymbols`, 0x47be54, 10 patterns;
+  0x412860, which then draws the pieces as solved). **Verified under Wine** (episode II
+  room 43): with the symbol, an oracle walked into northwards sends the hero to its target,
+  eastwards it vanishes (message 330 + n exists in episode III only), westwards it turns
+  into its object; with one piece wrong nothing happens. The editor shows the symbol in
+  the record inspector.
 - **Travelling actors** (record type 8, `SetMan`): byte 8 is converted on scene load
   (0x432728): with bit 0x80 an index into the episode's actor kinds (episode +0x34, e.g.
   episode I 0x475c38: 0x100…0x105), else a tile type (its class); the originals use 0x83
@@ -437,9 +443,9 @@ Not supported (yet):
 Roughly by value for the editor.
 
 1. **Logic records in play.** All types are decoded byte by byte and most are tried in
-   the game (see logic records above). Open: what gates oracles; buried records (digging
-   needs the shovel and its key), circuit signals through wires and gates, a travelling
-   actor leaving through a wall and the stacked level only from the code. **How to test
+   the game (see logic records above). Open: buried records (digging needs the shovel; its use is not tried), circuit
+   signals through wires and gates, a travelling actor leaving through a wall, an oracle
+   walked into southwards and the stacked level only from the code. **How to test
    an edit in the game:** build the exe (`Game.withScene`, or the editor's "Save exe"),
    put the change next to the hero's start (see "The hero's start" above) and run
    `python3 -I tools/wine/harness.py shot E OUT.png --exe EXE --keys Right:0.1 wait:2`
@@ -447,7 +453,10 @@ Roughly by value for the editor.
    file name tells the room it ended in, and the cells that differ from our render show
    where the hero and what changed are. Exits open only once a room's robots are gone,
    so tests of walking out remove them (`calmRoom`); a 0.1 s key press moves the hero 2
-   cells, 0.3 s several. Message boxes (first takes, bonuses) stay until Return.
+   cells, 0.3 s several (the game misses presses now and then). Message boxes (first
+   takes, bonuses) stay until Return. The rucksack: Return opens it, a letter key or the
+   arrows pick an item (letters first appear as one "?" item to choose with Return), Down
+   picks the action, Return does it ("Benutzen" puts a letter down next to the hero).
    `PrintVal(x)` in a script shows a value in a box.
    `robot start E ROOM OUT.exe --at X,Y` makes an exe starting the hero anywhere (the
    whole episode stays as it is), `robot play` and the editor's "Test in game" run one
@@ -488,8 +497,7 @@ Roughly by value for the editor.
    (`randomPlacement`) look at map cells only; the game also counts actors standing on
    cells (0x407650 via 0x433230), e.g. those from records.
 3. **Scripts.** Decoded, compiled and editable; every function is decoded (see room
-   scripts above) and many are tried in the game. Not tried: `Area` rotations (letters
-   have to be dropped by the hero, the drop key is not known), `ShiftArea` and punch
+   scripts above) and many are tried in the game. Not tried: `ShiftArea` and punch
    cards (episode IV's use key), `Phone` (silent harness), whether `Area`/`ShiftArea`
    settings survive leaving the room. Possibly worth adding to the compiler: `while`,
    `break`, compound assignments (they compile to existing operations).
