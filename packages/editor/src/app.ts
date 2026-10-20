@@ -181,7 +181,7 @@ export class App {
     {
       disabled: true,
       title:
-        "Start the game in this room, with all edits: the hero starts at the selected cell, else where the episode puts it",
+        "Start the game in this room, with all edits: the hero starts at the cell picked with Select or Inspect, else where the episode puts it",
     },
     "Test in game",
   );
@@ -834,7 +834,7 @@ export class App {
     ].filter((w) => w !== "");
     const lead = ways.length
       ? `Room ${above} leads in: ${ways.join(", ")} at the same cell${doors + stairs > 1 ? "s" : ""}.`
-      : `Room ${above} has no doors into buildings or stairs down yet: select a cell there for new stairs, or put a door there (tile 0x0753 or 0x0653) and a door out (0x005a) here at the same cell.`;
+      : `Room ${above} has no doors into buildings or stairs down yet: pick a cell there (Select or Inspect tool) for new stairs, or put a door there (tile 0x0753 or 0x0653) and a door out (0x005a) here at the same cell.`;
     const around =
       backdrop === undefined
         ? "No room shows around it: the game draws room id mod 100 (episode IV: id − 100), which does not exist."
@@ -849,9 +849,12 @@ export class App {
     return { text: `${lead} ${around}${key}`, ways: doors + stairs };
   }
 
-  /** The selected cell of the shown room, if it is room `id` - 100: new stairs into `id`. */
+  /**
+   * The cell picked in the shown room (pickedCell), if it is room `id` - 100: new stairs
+   * into `id`.
+   */
   interiorStairs(id: number): { cell: number; at: string; problem?: string } | undefined {
-    const cell = this.selected?.index;
+    const cell = this.pickedCell();
     if (cell === undefined || this.roomId !== id - 100) return undefined;
     const at = cellAt(cell);
     const problem = this.need().interiorStairsProblem(this.episode, id, cell);
@@ -964,13 +967,23 @@ export class App {
   }
 
   /**
+   * The one cell picked in the shown room: an area of a single cell (Select tool), else
+   * the selected cell (Inspect tool, a logic cell clicked).
+   */
+  private pickedCell(): number | undefined {
+    const area = this.area;
+    if (area?.w === 1 && area.h === 1) return area.y * ROOM_WIDTH + area.x;
+    return this.selected?.index;
+  }
+
+  /**
    * Starts the game in the shown room with all edits (Editor.testExe): the hero at the
-   * selected cell, else where the episode puts it. Without a way to run the game the
-   * exe is downloaded.
+   * picked cell (pickedCell), else where the episode puts it. Without a way to run the
+   * game the exe is downloaded.
    */
   async testInGame(): Promise<void> {
     const editor = this.need();
-    const index = this.selected?.index;
+    const index = this.pickedCell();
     const at =
       index === undefined
         ? undefined

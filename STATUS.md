@@ -529,7 +529,7 @@ Supported:
   so that room shows around it; at each of its doors into buildings a door out at the
   same cell with walls beside it and two cells of floor where the hero walks on, at its
   stairs down stairs up; picking it moves an offered id to the shown room + 100; with a
-  cell selected there, new stairs down at it and up in the interior, in the same undo
+  cell picked there (Select tool, one cell, or Inspect), new stairs down at it and up in the interior, in the same undo
   step, e.g. for a floor above an interior (episode II's 244 over 144 shows 44 around
   it, like 242 over 142); the dialog names the room drawn around it and episode II's
   key; **verified under Wine**: a generated 115 under room 15 is entered with the key
@@ -540,7 +540,7 @@ Supported:
   rooms whose exits, passages, records or scripts lead there, which then lead nowhere;
   the name stays in the texts); undoable
 - "Test in game": the edited exe with the episode starting in the shown room, the hero
-  at the selected cell or the episode's start cell; `pnpm editor` runs it under Wine
+  at the picked cell (Select tool, one cell, or Inspect) or the episode's start cell; `pnpm editor` runs it under Wine
   (`/play` on the dev server, `harness.py play`, the game window on this display; the
   episode is chosen by hand), the static build downloads it
 - tile names (items) and the game's descriptions in tooltips and the hover line; logic

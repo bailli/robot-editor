@@ -935,7 +935,9 @@ test("a level inside a house: the id follows the shown room, stairs go at the se
   app.showEpisode(2, 144);
   const below = game.room(2, 144);
   const cell = below.base.findIndex((c, i) => i > 80 && c === 0 && below.overlay[i] === 0);
-  app.select(cell);
+  // picked with the Select tool: an area of one cell (the Inspect tool selects it too)
+  app.setTool("select");
+  await clickCell(cell);
   app.newRoom(); // offers 145, the next free id
   const dialog = page.getByRole("dialog", { name: "New room" });
   await dialog.getByRole("radio", { name: /Interior of room/ }).click();
@@ -1013,7 +1015,11 @@ test("Test in game runs an exe that starts in the room, at the selected cell", a
   expect(readEpisodeStart(parsePe(defined(runs[0]).exe), 2)).toEqual({ room: 44, x: 7, y: 10 });
   expect(document.querySelector(".status")?.textContent).toBe(
     "Game started: choose Robot II, it starts in room 44 at (7, 10)",
-  );
+  ); // a single cell picked with the Select tool counts too
+  app.setArea({ x: 12, y: 5, w: 1, h: 1 });
+  await page.getByRole("button", { name: "Test in game" }).click();
+  await expect.poll(() => runs.length).toBe(2);
+  expect(readEpisodeStart(parsePe(defined(runs[1]).exe), 2)).toEqual({ room: 44, x: 12, y: 5 });
 });
 
 test("deleting a room asks first, naming the rooms that lead to it", async () => {
