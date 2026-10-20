@@ -12,6 +12,8 @@ import {
   edgeExits,
   exitMode,
   exitsByte,
+  raisedRoom,
+  roomCircuitStairs,
   roomExits,
   roomPassages,
   roomScript,
@@ -168,7 +170,6 @@ const ONE_WAY_PASSAGES = [
   "1 125 (21,14) stairs up",
   "1 126 (18,4) stairs up",
   "2 34 (18,22) stairs down",
-  "2 242 (25,18) stairs up",
   "3 114 (3,17) stairs up",
 ];
 
@@ -186,7 +187,10 @@ test("doors and stairs lead 100 rooms in or out onto the matching passage", () =
         const target = rooms.find((r) => r.id === p.room);
         assert.ok(target, `${where}: no room to go to`);
         // the way back at the same place (double doors: the neighbouring cells)
-        const back = roomPassages(target, classes, ids).filter(
+        const back = [
+          ...roomPassages(target, classes, ids),
+          ...roomCircuitStairs(target, ids),
+        ].filter(
           (t) =>
             t.kind === RETURN_PASSAGE[p.kind] &&
             Math.abs((t.cell % 40) - (p.cell % 40)) <= 1 &&
@@ -198,6 +202,22 @@ test("doors and stairs lead 100 rooms in or out onto the matching passage", () =
   }
   expect(listed).toMatchSnapshot();
   assert.deepEqual(oneWay, ONE_WAY_PASSAGES);
+});
+
+test("lit circuit nodes place stairs, the old mechanism raises room id + 100", () => {
+  const ids = (episode: number) => new Set(game.episode(episode).rooms.map((r) => r.id));
+  // episode I room 128: the final node, once all 7 are lit; II 142: its only node
+  assert.deepEqual(roomCircuitStairs(game.room(1, 128), ids(1)), [
+    { cell: 27 * 40 + 22, kind: "stairs down", room: 228 },
+  ]);
+  assert.deepEqual(roomCircuitStairs(game.room(2, 142), ids(2)), [
+    { cell: 18 * 40 + 25, kind: "stairs down", room: 242 },
+  ]);
+  const { classes } = game.episode(3);
+  assert.equal(raisedRoom(game.room(3, 49), classes, ids(3)), 149);
+  // debug room 99 has the pipes, boiler and pistons but no steam
+  assert.equal(raisedRoom(game.room(3, 99), classes, ids(3)), 0);
+  assert.equal(raisedRoom(game.room(3, 43), classes, ids(3)), 0);
 });
 
 test("oracles and teleporters lead to rooms of their episode", () => {
@@ -219,9 +239,11 @@ test("oracles and teleporters lead to rooms of their episode", () => {
 });
 
 /**
- * Rooms not reached from the start room through exits, scripts, doors, stairs, oracles and
- * teleporters. Room 99 of every episode is a debug room; the others still lack a
- * decoded connection.
+ * Rooms not reached from the start room through exits, scripts, doors, stairs (also those
+ * circuits place), oracles, teleporters and episode III's old mechanism (its room + 100
+ * is never entered: the mechanism raises its cells). Room 99 of every episode is a debug
+ * room; episode III's room 3 looks like a leftover (no records, no script, plain terrain,
+ * nothing leads there).
  */
 test("rooms reached from the start room", () => {
   const unreached = EPISODES.map((episode) => {
@@ -236,6 +258,8 @@ test("rooms reached from the start room", () => {
         ...script.buses.map((b) => b.room),
         ...roomPassages(room, classes, ids).map((p) => p.room),
         ...roomTeleports(room).map((t) => t.room),
+        ...roomCircuitStairs(room, ids).map((p) => p.room),
+        raisedRoom(room, classes, ids),
       ];
     };
     const start = START_ROOMS[episode] ?? 0;

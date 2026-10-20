@@ -224,7 +224,9 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
     kinds: [undefined, undefined, "room"],
     places: [CELL(0, 1), RECT(5)],
     doc:
-      "the wizard at (x, y) sends the hero to `room` at (rx, ry); outside the area " +
+      "the hidden door behind the wizard's throne at (x, y) leads to `room` at (rx, ry); " +
+      "it appears once KILLHIM is laid with the wizard two rows above the word (needs " +
+      "the wand), in a registered game only (0x42c820, 0x410050). Outside the area " +
       "(ax, ay, aw, ah) he mutters a spell (text 993). Episode I.",
   },
 };

@@ -1058,9 +1058,9 @@ exports[`oracles and teleporters lead to rooms of their episode 1`] = `
 exports[`rooms reached from the start room 1`] = `
 [
   "0: ",
-  "1: 99 228",
-  "2: 99 242",
-  "3: 99 149 3",
+  "1: 99",
+  "2: 99",
+  "3: 99 3",
   "4: 99",
 ]
 `;

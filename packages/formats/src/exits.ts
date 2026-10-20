@@ -34,6 +34,11 @@ import { LOGIC_CELL, ROOM_HEIGHT, ROOM_WIDTH, type Room } from "./scene.ts";
  *             or with state bit 0 set (steps up) room - 100 (0x426880)
  * The hero keeps the column and moves on in the walking direction (doors: two cells,
  * stairs: one); the other room has the matching door or stairs at the same place.
+ * Circuit nodes (logic record type 11, see records.ts) place such stairs once lit
+ * (roomCircuitStairs): episode I room 128 the stairs down to 228, II 142 those to 242.
+ *
+ * Episode III's old mechanism (class 157, tile 0x2a, room 49) raises what is sunken in
+ * the room's water from room id + 100 (raisedRoom), which the hero never enters.
  *
  * Logic records move the hero to a target in their u16 at data offset 4 (room = bits
  * 0-9, x = bits 10-15) and y at offset 6:
@@ -189,6 +194,55 @@ export function roomPassages(
     });
   }
   return passages;
+}
+
+export const CIRCUIT_RECORD = 11;
+
+/**
+ * The stairs a room's circuit nodes place once lit (record bytes 4, 5: x, y, none if y
+ * is 0; byte 6: up, else down), as passages to room +/- 100.
+ */
+export function roomCircuitStairs(room: Room, ids: ReadonlySet<number>): Passage[] {
+  return room.records.flatMap((record): Passage[] => {
+    const [type = 0, , , , x = 0, y = 0, up = 0] = record.data;
+    if (type !== CIRCUIT_RECORD || y === 0) return [];
+    const target = room.id + (up ? -100 : 100);
+    return [
+      {
+        cell: y * ROOM_WIDTH + x,
+        kind: up ? "stairs up" : "stairs down",
+        room: ids.has(target) ? target : 0,
+      },
+    ];
+  });
+}
+
+/**
+ * Episode III's old mechanism, class 157 (tile 0x2a; states 0 pipes, 1 boiler, 2 pistons,
+ * 3 and 7-10 the drive anchor, 4-6 steam). On entering a room the class looks for steam
+ * (state 4-6) and an anchor (7-10) below row 0 and, if room id + 100 exists, starts a
+ * task with that room's map (0x4158e0, the class's room-entry hook at vtable +0x1c).
+ * Episode III's lamp turns the cold steam, state 4, into 5 (0x424d20); then the task
+ * (0x4155d0) lets it puff and, in a registered game only (0x42f910), counts on. After
+ * about 128 ticks, with pipes, boiler and pistons in a row above the steam (x .. x + 2,
+ * y - 1), the anchor turns and the room's water cells (classes 55, 82) take the other
+ * room's cells, except its class 99 cells, row by row from the shores. Nothing in this
+ * depends on the room or the episode, but only episode III maps class 157 to a tile type.
+ */
+export const MECHANISM_CLASS = 157;
+
+/** The room the mechanism raises its cells from (see MECHANISM_CLASS), 0 if none. */
+export function raisedRoom(room: Room, classes: EpisodeClasses, ids: ReadonlySet<number>): number {
+  // row 0 lies under the status line
+  const states = [room.base, room.overlay].flatMap((layer) =>
+    [...layer.subarray(ROOM_WIDTH)]
+      .filter((value) => classes.classes.get(value & 0xff)?.id === MECHANISM_CLASS)
+      .map((value) => value >> 8),
+  );
+  const steam = states.some((s) => s >= 4 && s <= 6);
+  const anchor = states.some((s) => s >= 7 && s <= 10);
+  const target = room.id + 100;
+  return steam && anchor && ids.has(target) ? target : 0;
 }
 
 /**

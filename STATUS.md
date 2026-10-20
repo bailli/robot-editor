@@ -285,8 +285,16 @@ Files in `packages/formats/src`:
   symbol is laid, see logic records), teleporters
   (13), travelling actors (8); target = room in bits 0–9 + x in bits 10–15 of offset 4,
   y at offset 6 (actors: x, y at bytes 6, 7).
-- **Reachability** from each start room: everything except debug room 99 and the rooms
-  listed under open items (snapshot in `exits.test.ts`).
+- **Circuit stairs** (`roomCircuitStairs`): lit circuit nodes place stairs (see logic
+  records), episode I 128 → 228 at (22, 27), II 142 → 242 at (25, 18) onto the stairs
+  back at the same place. Room 228 has no way back: no exits, stairs or records; its only
+  way out is the wizard's door to room 2, which needs a registered game (see
+  registration).
+- **The old mechanism** (episode III, `raisedRoom`, see below): room 49 takes the cells
+  of room 149, which the hero never enters.
+- **Reachability** from each start room, counting all of the above: everything except
+  debug room 99 and episode III room 3 (snapshot in `exits.test.ts`; see open items).
+  Some connections need a registered game (see registration).
 
 ### Room scripts (`script.ts`)
 
@@ -345,7 +353,8 @@ Files in `packages/formats/src`:
   variants as pages one after another; with delay 0 at once and one variant at random),
   `SetObj(obj, x, y, mode)` places objects, `Possess(obj)` tests the inventory (a state
   selects the exact variant), `SetMan` sends the dealer somewhere, `Wizzard(x, y, room,
-rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry).
+rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (x, y)
+  leads to `room` at (rx, ry) (see registration).
   RoomTime counts seconds (147 ticks each); Val1…Val8 are free variables kept across
   rooms. Decoded in detail (0x407aa0…): `Enigma(n)` awards entry n of the episode's
   **event table** (`events.ts`, episode +0x1cc: per tile type the first take, then game
@@ -405,6 +414,24 @@ rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry
   fence (class 7) kills the hero (message 951). Used: robots, walls, gold, bottles,
   garlic, ammunition, suits, tonic, save clocks, jokers, food, fins, shovels, …
   From the code and data; not yet tried in the game.
+- **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
+  1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
+  class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
+  4–6) and an anchor (7–10) below row 0 and, if room id + 100 exists, starts a task with
+  that room's map (0x4155d0). Cold steam (4) waits until episode III's lamp (class 56,
+  vtable 0x46c1a0, handler 0x424d20 at +0x38; its text: "…auch noch andere Dienste")
+  turns it into 5; then it puffs (5, 6) and, **only in a registered game** (0x42f910),
+  counts ticks. After about 128, with pipes, boiler and pistons in a row above the steam
+  (x … x + 2, y − 1), the anchor turns and the room's water cells (classes 55, 82) take
+  the other room's cells where those are not class 99, row by row from the shores
+  (event 0x148). Oracle hint 335: "Ein Mechanismus im fernen Osten läßt Versunkenes
+  wieder auftauchen." Room 49 holds the steam at (5, 25) and anchor cells at (7, 25),
+  (8, 25); the pipes, boiler and pistons lie elsewhere (room 43 at (10, 6), records in
+  rooms 21 and 61; debug room 99 has all three in a row). Nothing in this depends on the
+  room or the episode, but only episode III maps class 157 to a tile type (the hook
+  table 0x4c6ce0 holds only the episode's classes, 0x43b46a), and the other episodes'
+  lamps (0x46c200, IV 0x4698d0) do not light the steam. From the code; not yet tried in
+  the game.
 - **Registration (shareware limit, 0x42f7c0):** every room change (edges 0x44c6b9, doors,
   stairs) and every expert field checks a number: the score, or the field's threshold.
   Below a random limit it passes: episode method +0x28, I/II/IV 70,000–100,000 points,
@@ -413,17 +440,31 @@ rx, ry, …)` places episode I's wizard, who sends the hero to `room` at (rx, ry
   wants a registration: the licensee name (registry `HKCU\Software\TOM-Productions\Robot`,
   value `Licensee`, asked for on the first start, message 515) and a registration number
   (0x4fe2ec, typed into a dialog, 0x42f550, and kept in savegames) that must match a
-  checksum of the name and an episode value (0x42f910, episode +0x2c). Otherwise message
+  checksum of the name and an episode constant (0x42f910; episode vtable +0x2c: Junior and
+  I 0 (base 0x44c9c0), II 0x01967385, III 0x00534542, IV 0x01436363; the high and low
+  halves XORed seed the random generator 0x436850). Otherwise message
   999 ("…lass' Dich bitte registrieren", www.tom-games.de) and the room change does not
   happen. Not tried in the game (no test went above these limits).
+  **Registered only**, whatever the score (the name must be set and the number match,
+  0x42f910): episode I's hidden door behind the wizard's throne (`Wizzard()`, 0x407ec0:
+  room 228's `Wizzard(23, 4, 2, 12, 12, …)` = the door at (23, 4) to room 2, the cinema,
+  at (12, 12)). The magic word KILLHIM (text 514, needs the wand; 0x42c820) laid with the
+  wizard (class 78) in the 7 cells two rows above it lets 0x410050 place class 80,
+  WIZDOOR, there (event 0x11f), elsewhere message 992 ("…nicht der richtige Platz für
+  diesen Spruch"); the door's state 0 handler (0x4100c0, vtable 0x467410 +0x10) sends
+  the hero on. Room 228 has no other way out. Then episode II's bus east to a room
+  of 100 or more (0x44a845: room 6's `BusEast = 683`; unregistered it goes to room 53)
+  and episode III's old mechanism (above). The other uses of 0x42f910 are the room
+  change check itself and its dialog (0x42f4f0, 0x42f660 resume the blocked room change);
+  the episodes' code only keeps the number in savegames.
 - **Logic records** (`records.ts`, every byte the game reads), all 1177 in the game
   classified: 1 stacked (object on another cell; byte 1 its level, e.g. bridges), 3
   buried (dug up with the shovel), 5 spawner (robots near the hero), 7 native (episode
   III's friendly native, selling an object for gold), 8 travelling actor, 11 circuit node
   (episodes I, II; lit nodes place stairs, episode I room 128's final node the stairs to
-  228), 12 oracle (one effect per direction it is walked into), 13 teleporter. On loading
-  a room the game converts the record cells to classes and old types (2, 10 → 13; 6, 9 →
-  12), then turns every **overlay object into a type 1 record** on its base cell, in a
+  228, II 142's node those to 242), 12 oracle (one effect per direction it is walked
+  into), 13 teleporter. On loading a room the game converts the record cells to classes
+  and old types (2, 10 → 13; 6, 9 → 12), then turns every **overlay object into a type 1 record** on its base cell, in a
   table of 200 records (0x4327c4, 0x432e06; so records plus overlay objects ≤ 200, the
   originals reach 114); a logic cell in the overlay is dropped. **Verified under Wine**
   (episode I room 43 and the others' start rooms, records next to the hero): a stacked
@@ -665,15 +706,15 @@ Roughly by value for the editor.
    music (the harness is silent; listen with `robot play`). The word 0x4fe0c0 each episode's start method sets is probably the
    number of inventory slots (50, 38, 60, 200, 120; compared by the debug tracer
    0x439170).
-5. **Rooms not reached** by any connection the reachability analysis models: episode I
-   228 (its wizard sends the hero to room 2, the cinema, at (12, 12) — besides the title
-   room 1 the only way to room 2 in episode I, which uses no "outside" exits), episode II
-   242 (only one-way stairs out), episode III 149 and 3; room 99 is a debug room in every
-   episode. Episode I 228 is reached through room 128's circuit puzzle: once all 7 nodes
-   are lit, its final node places stairs down at (22, 27) (from the code; circuits work as
-   decoded in the game, see logic records). The others probably via game code (e.g.
-   0x44bd2b takes a room from a table). The episode II jump to room 600
-   at 0x40a820 is not understood either.
+5. **Rooms not reached** by any connection the reachability analysis models: only
+   episode III room 3 (no records, no script, plain terrain; its exits lead to 13 and the
+   sea, but nothing leads there: probably a leftover); room 99 is a debug room in every
+   episode. Room 2 is left out of the analysis: in episode I only the title room and the
+   wizard's hidden door in 228 (registered only) lead there. Not tried in the game: the
+   old mechanism raising 149 into 49 (needs a licensee and a matching number in the
+   harness's prefix), the wizard's door. The episode II jump to room 600 at 0x40a820 is
+   not understood. (0x44bd2b, once thought to take a room from a table, belongs to an
+   actor leaving through an edge: current room ± 1 or ± 10.)
 6. **Renderer gaps** (`pnpm robot eval --types`): empty floor in episodes I/II (runtime:
    actors, hero, animations), episode IV types 95/106/79/99/70, episode III types 83, 37,
    49, 76, episode II 85/77/110/25, Junior 23/25 (animated). Some are runtime effects that
@@ -723,7 +764,9 @@ Roughly by value for the editor.
   of the episode vtable, `start.ts`). Adding a room to an episode is therefore possible
   (new id, link it by grid id, stairs ±100 or a teleporter); the editor does it.
 - **Episodes** are objects with their own vtables (Junior 0x466cd8, I 0x466458, II
-  0x4665a8, III 0x466b08, IV 0x466c38, base 0x46cdf0); 22 of 28 slots are overridden
+  0x4665a8, III 0x466b08, IV 0x466c38, base 0x46cdf0, whose constructor 0x43b2e0 each
+  episode's constructor calls first); each registers a factory at startup (0x43bc00, a
+  list at 0x51bfc0 sorted by episode number); 22 of 28 slots are overridden
   somewhere (start position, special events, episode II's jump to room 600, …).
 - **Engine-wide:** logic record handling (lookup, step-on 0x44cb60, room load 0x42b6f0,
   the spawner tick 0x435650 in the global task list 0x46cc24…) and the class code itself.
@@ -776,6 +819,11 @@ Roughly by value for the editor.
 | 0x439426, 0x44ccb1           | clear the Teleport() point on entering (flag 0x2000); teleporter uses it       |
 | 0x421660, 0x4216e0, 0x4066a0 | note: step on (bit 7), read from the rucksack; show message (dictionary/tape)  |
 | 0x416400, 0x414150           | episode III diary page; open a package (its state = the tile type inside)      |
+| 0x439455                     | entering a room: every class's hook (vtable +0x1c)                             |
+| 0x4158e0, 0x4155d0, 0x424d20 | old mechanism (III): start (room + 100); its task; the lamp lights the steam   |
+| 0x42f910, 0x42f3a0           | registration: checksum of name and episode value; licensee name set            |
+| 0x407ec0, 0x42c820, 0x410050 | script Wizzard; the word KILLHIM; place the wizard's door (registered only)    |
+| 0x44a831                     | the bus: BusWest, or BusEast (≥ 100 only registered, else room 53)             |
 
 ## Gotchas
 
