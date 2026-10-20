@@ -50,12 +50,17 @@ export interface Edit {
   tags?: { before: readonly RoomTag[]; after: readonly RoomTag[] };
   /** The room was added (undo removes it). */
   added?: Room;
+  /** The room was removed (undo puts it back). */
+  removed?: Room;
   /** A text resource before and after (room names). */
   text?: { id: number; before: string; after: string };
 }
 
 /** Logic record slots the game can address (0x432fd0 looks up slots below 200). */
 export const MAX_RECORD_SLOTS = 200;
+
+/** The title screen; its script is the episode's global one. */
+const TITLE_ROOM = 1;
 
 /** The highest room id records can lead to (their targets have 10 bits). */
 export const MAX_ROOM_ID = 1023;
@@ -205,6 +210,24 @@ export class Editor {
           trailing: new Uint8Array(),
         };
     const step: Edit = { episode, room: id, layer: "base", changes: [], added: room };
+    this.apply(step, after);
+    this.push(step);
+    return step;
+  }
+
+  /**
+   * Removes room `id` from the episode; one undo step. Its name and whatever leads to it
+   * stay. Throws a RangeError for room 1 (the title screen, its script runs throughout
+   * the episode) and the room the episode starts in.
+   */
+  removeRoom(episode: number, id: number): Edit {
+    this.endStroke();
+    const room = this.room(episode, id);
+    if (id === TITLE_ROOM) throw new RangeError("room 1 is the title screen");
+    if (id === readEpisodeStart(this.game.image, episode).room) {
+      throw new RangeError(`the episode starts in room ${id}`);
+    }
+    const step: Edit = { episode, room: id, layer: "base", changes: [], removed: room };
     this.apply(step, after);
     this.push(step);
     return step;
@@ -435,9 +458,10 @@ export class Editor {
       this.texts.set(edit.text.id, value === before ? edit.text.before : edit.text.after);
       return;
     }
-    if (edit.added) {
+    const present = value === after ? edit.added : edit.removed;
+    if (edit.added || edit.removed) {
       const rooms = this.writableList(edit.episode).filter((r) => r.id !== edit.room);
-      if (value === after) rooms.push(edit.added);
+      if (present) rooms.push(present);
       this.edited.set(
         edit.episode,
         rooms.sort((a, b) => a.id - b.id),

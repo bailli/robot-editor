@@ -133,14 +133,15 @@ h2 {
   top: 16px;
 }
 
+/* the id on a row of its own, the buttons below it */
 .room-add {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 3px;
 }
 
 .room-add input {
-  width: 0;
-  flex: 1;
+  grid-column: 1 / -1;
   min-width: 0;
   padding: 2px 4px;
   background: var(--panel);
@@ -149,14 +150,14 @@ h2 {
 }
 
 .room-add button {
-  padding: 2px 5px;
+  padding: 2px 0;
 }
 
 .room-list {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 3px;
-  max-height: calc(100vh - 160px);
+  max-height: calc(100vh - 185px);
   overflow-y: auto;
 }
 

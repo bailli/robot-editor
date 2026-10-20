@@ -263,3 +263,29 @@ describe("Editor rooms and names", () => {
     expect(() => editor.testExe(1, 998)).toThrow();
   });
 });
+
+describe("Editor room deletion", () => {
+  test("a deleted room is gone from the saved exe and comes back on undo", () => {
+    const editor = new Editor(game);
+    const original = editor.room(1, 44);
+    expect(editor.removeRoom(1, 44).removed).toBe(original);
+    expect(editor.rooms(1).some((r) => r.id === 44)).toBe(false);
+    expect(new Game(editor.save()).episode(1).rooms.some((r) => r.id === 44)).toBe(false);
+    editor.undo();
+    expect(editor.room(1, 44)).toBe(original);
+    expect(editor.isEdited(1, 44)).toBe(false);
+    expect(editor.rooms(1).map((r) => r.id)).toEqual(game.episode(1).rooms.map((r) => r.id));
+    editor.redo();
+    expect(editor.rooms(1).some((r) => r.id === 44)).toBe(false);
+  });
+
+  test("added rooms can be deleted; the title and start rooms cannot", () => {
+    const editor = new Editor(game);
+    editor.addRoom(3, 250, 41);
+    editor.removeRoom(3, 250);
+    expect(editor.rooms(3).some((r) => r.id === 250)).toBe(false);
+    expect(() => editor.removeRoom(3, 41)).toThrow(RangeError);
+    expect(() => editor.removeRoom(3, 1)).toThrow(RangeError);
+    expect(() => editor.removeRoom(3, 250)).toThrow();
+  });
+});

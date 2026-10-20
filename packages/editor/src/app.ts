@@ -28,7 +28,7 @@ import {
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
 import { type Edit, Editor, type Layer, MAX_ROOM_ID, tilesOf } from "./editor.ts";
-import { type Connections, ExitsView, connections, fixedExit } from "./exits-view.ts";
+import { type Connections, ExitsView, connections, fixedExit, leadsTo } from "./exits-view.ts";
 import { MapView } from "./map-view.ts";
 import { RecordView } from "./record-view.ts";
 import {
@@ -363,6 +363,16 @@ export class App {
             },
             "Copy",
           ),
+          h(
+            "button",
+            {
+              title: "Delete the shown room",
+              click: () => {
+                this.removeRoom();
+              },
+            },
+            "Delete",
+          ),
         ),
         this.roomList,
       ),
@@ -574,6 +584,47 @@ export class App {
     this.setStatus(copy ? `Room ${from} copied to room ${id}` : `Room ${id} added`);
   }
 
+  /** The rooms of the episode with an exit, passage, record or script line to room `id`. */
+  roomsLeadingTo(id: number): number[] {
+    const editor = this.need();
+    const rooms = editor.rooms(this.episode);
+    const ids = new Set(rooms.map((r) => r.id));
+    const classes = editor.game.episode(this.episode).classes;
+    return rooms
+      .filter((r) => r.id !== id && leadsTo(connections(r, ids, classes), id))
+      .map((r) => r.id);
+  }
+
+  /** Deletes the shown room (after asking, naming the rooms that lead to it). */
+  removeRoom(): void {
+    const id = this.roomId;
+    const from = this.roomsLeadingTo(id);
+    const links = from.length
+      ? `\nRooms leading to it (they would lead nowhere): ${from.join(", ")}.`
+      : "";
+    if (!window.confirm(`Delete ${this.roomLabel(this.episode, id)}?${links}`)) return;
+    try {
+      this.need().removeRoom(this.episode, id);
+    } catch (error) {
+      this.setStatus(`Cannot delete room ${id}: ${message(error)}`, true);
+      return;
+    }
+    this.showEpisode(this.episode, this.lastSeen(this.episode));
+    this.refreshButtons();
+    this.setStatus(`Room ${id} deleted`);
+  }
+
+  /** The room shown last in an episode that still exists. */
+  private lastSeen(episode: number, first?: number): number | undefined {
+    const rooms = this.need().rooms(episode);
+    const seen = this.history
+      .slice(0, this.historyIndex + 1)
+      .reverse()
+      .filter((entry) => entry.episode === episode)
+      .map((entry) => entry.room);
+    return [first, ...seen].find((id) => rooms.some((r) => r.id === id));
+  }
+
   /**
    * Starts the game in the shown room with all edits (Editor.testExe): the hero at the
    * selected cell, else where the episode puts it. Without a way to run the game the
@@ -635,7 +686,7 @@ export class App {
   /** The browser went back or forward to one of our entries: show its room. */
   private arrive(state: unknown): void {
     if (!this.editor || !isHistoryState(state)) return;
-    // a room added and undone again
+    // a room deleted, or added and undone again
     if (!this.editor.rooms(state.episode).some((r) => r.id === state.room)) return;
     // set first: showing the room must not record it again
     this.historyIndex = state.index;
@@ -1009,16 +1060,9 @@ export class App {
   private revisit(edit: Edit | undefined): void {
     if (!edit) return;
     const editor = this.need();
-    if (edit.added) {
-      // the room list changes: show the added room, or the last room seen that still exists
-      const rooms = editor.rooms(edit.episode);
-      const seen = this.history
-        .slice(0, this.historyIndex + 1)
-        .reverse()
-        .filter((entry) => entry.episode === edit.episode)
-        .map((entry) => entry.room);
-      const shown = [edit.room, ...seen].find((id) => rooms.some((r) => r.id === id));
-      this.showEpisode(edit.episode, shown);
+    if (edit.added || edit.removed) {
+      // the room list changes: show the room, or the last room seen that still exists
+      this.showEpisode(edit.episode, this.lastSeen(edit.episode, edit.room));
     } else if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
     else if (edit.room !== this.roomId) this.showRoom(edit.room);
     else if (edit.records || edit.tags || edit.text) {

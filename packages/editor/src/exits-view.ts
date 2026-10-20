@@ -59,6 +59,16 @@ export function connections(
   };
 }
 
+/** Whether any exit, passage, record or script line leads to room `id`. */
+export function leadsTo(c: Connections, id: number): boolean {
+  return (
+    DIRECTIONS.some((d) => c.exits[d] === id) ||
+    [...c.scripted, ...c.teleports, ...c.buses, ...c.passages, ...c.records].some(
+      (link) => link.room === id,
+    )
+  );
+}
+
 /** Where a direction leads regardless of the game state: the last fixed script assignment, else the exits byte. */
 export function fixedExit(c: Connections, direction: Direction): number {
   const fixed = c.scripted.filter((s) => s.direction === direction && !s.conditional).at(-1);

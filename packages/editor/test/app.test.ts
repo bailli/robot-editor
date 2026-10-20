@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, onTestFinished, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 
 import {
@@ -663,4 +663,31 @@ test("Test in game runs an exe that starts in the room, at the selected cell", a
   expect(document.querySelector(".status")?.textContent).toBe(
     "Game started: choose Robot II, it starts in room 44 at (7, 10)",
   );
+});
+
+test("deleting a room asks first, naming the rooms that lead to it", async () => {
+  const questions: string[] = [];
+  let answer = false;
+  const spy = vi.spyOn(window, "confirm").mockImplementation((question?: string) => {
+    questions.push(question ?? "");
+    return answer;
+  });
+  onTestFinished(() => {
+    spy.mockRestore();
+  });
+  app.showRoom(44);
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  expect(questions[0]).toBe(
+    "Delete room 44 – RÄTSELHAFTE TÜREN?\nRooms leading to it (they would lead nowhere): 21, 34, 43, 45, 54.",
+  );
+  expect(document.querySelector('.room-list [data-room="44"]')).not.toBeNull();
+  answer = true;
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
+  expect(document.querySelector('.room-list [data-room="44"]')).toBeNull();
+  // the start room stays
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  expect(document.querySelector(".status")?.textContent).toMatch(/the episode starts in room 43/);
+  app.undo();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
 });

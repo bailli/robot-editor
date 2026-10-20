@@ -343,7 +343,10 @@ Supported:
   description), saved CRUNCHED; rooms showing the name of the room 100 below rename
   that room; empty removes the name; undoable
 - rooms added by id (1–1023, at most 200 per episode): empty, or a copy of the shown
-  room (cells, records, tags, script); undoable
+  room (cells, records, tags, script); rooms deleted (not room 1, the title screen with
+  the global script, nor the start room; the confirmation names the rooms whose exits,
+  passages, records or scripts lead there, which then lead nowhere; the name stays in
+  the texts); undoable
 - "Test in game": the edited exe with the episode starting in the shown room, the hero
   at the selected cell or the episode's start cell; `pnpm editor` runs it under Wine
   (`/play` on the dev server, `harness.py play`, the game window on this display; the
@@ -372,8 +375,7 @@ Not supported (yet):
 
 - painting over logic cells (use the inspector); records are edited field by field, no
   copy/paste of records between rooms
-- editing the other tags (darkness, points, ambient name, kind 3); deleting rooms;
-  painting exit tiles is plain painting (0x0017 in the base layer)
+- editing the other tags (darkness, points, ambient name, kind 3); painting exit tiles is plain painting (0x0017 in the base layer)
 - English texts: room names are edited in the German texts only (Junior and I also
   have English ones, which keep the old names, or none for new rooms)
 - fill, copy/paste of areas, tile search/filter
