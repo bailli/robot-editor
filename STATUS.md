@@ -265,6 +265,10 @@ Files in `packages/formats/src`:
   sits in the town around it; the backdrop's actors stay cells (robots draw nothing as
   tiles). 22 rooms in episodes II–IV, e.g. II 115 over 15, III 147 over 47, IV 441 over
   341 (marked at (39, 1) only). The name rule (`SAME_NAME_CLASS`) looks at (0, 1) alone.
+  Nothing ties an interior to the outline of a building: III 149 is the land under the
+  lake of 49, drawn over its shore. Class 99 cells block the hero (**verified under
+  Wine** in 149: walking from (17, 3) east or north into them does not move him, west
+  along the floor does).
   **Verified under Wine:** shots of II 115, III 147 and IV 441 differ from our render
   only where the renderer differs anyway (current arrows on water, doors, the hero; the
   74 backdrop cells with overlay objects in 441 match), II 242 shows room 42 around it
