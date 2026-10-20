@@ -545,14 +545,15 @@ canvas.cell {
 }
 
 .script-source,
-.script-code,
-.script-edit {
+.script-code {
   margin: 0;
-  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
+}
+
+.script-code {
+  padding: 8px 12px;
   background: var(--panel);
-  color: var(--text);
   font:
     13px/1.45 ui-monospace,
     monospace;
@@ -560,9 +561,9 @@ canvas.cell {
   white-space: pre;
 }
 
-.script-edit {
-  width: 100%;
-  resize: vertical;
+.script-edit .cm-scroller {
+  min-height: 12em;
+  max-height: 44em;
 }
 
 .script-code {
@@ -598,6 +599,11 @@ canvas.cell {
 
 .script-source .invalid {
   color: var(--error);
+}
+
+.script-source .script-error {
+  text-decoration: underline wavy var(--error);
+  text-decoration-skip-ink: none;
 }
 
 .script-verdict {

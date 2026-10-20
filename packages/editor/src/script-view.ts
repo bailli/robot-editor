@@ -1,4 +1,17 @@
-import { type ScriptPiece, scanScript } from "@robot/formats";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { EditorState, type Extension, StateField } from "@codemirror/state";
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  drawSelection,
+  highlightActiveLine,
+  highlightSpecialChars,
+  keymap,
+  lineNumbers,
+} from "@codemirror/view";
+
+import { ScriptError, type ScriptPiece, scanScript } from "@robot/formats";
 
 export interface ScriptViewEvents {
   /** What a name means (function, game variable, constant), undefined if unknown. */
@@ -110,6 +123,77 @@ export function markUp(source: string, events: ScriptViewEvents): Shown[] {
   });
 }
 
+/** The marked-up source of an editor and, while editing, what the compiler says. */
+interface Marked {
+  shown: Shown[];
+  /** The compiler's complaint, undefined if the source compiles (or is not checked). */
+  error: string | undefined;
+  decorations: DecorationSet;
+}
+
+/** Spans for the pieces of the source and, where the compiler knows it, its error. */
+function decorate(shown: readonly Shown[], error: unknown): DecorationSet {
+  const marks = shown
+    .filter(({ piece }) => piece.kind !== "space")
+    .map(({ piece, className, title }) =>
+      Decoration.mark({ class: className, attributes: title ? { title } : {} }).range(
+        piece.at,
+        piece.at + piece.text.length,
+      ),
+    );
+  // the piece the error is at (at the end of the source: the last one)
+  const at = error instanceof ScriptError ? error.at : undefined;
+  const piece =
+    at === undefined
+      ? undefined
+      : shown.findLast((s) => s.piece.kind !== "space" && s.piece.at <= at)?.piece;
+  if (piece && error instanceof Error) {
+    const mark = Decoration.mark({ class: "script-error", attributes: { title: error.message } });
+    marks.push(mark.range(piece.at, piece.at + piece.text.length));
+  }
+  return Decoration.set(marks, true);
+}
+
+/** The editor's state field: the source marked up, compiled too when `compile` is given. */
+function marking(events: ScriptViewEvents, compile?: (source: string) => void) {
+  const mark = (state: EditorState): Marked => {
+    const source = state.doc.toString();
+    const shown = markUp(source, events);
+    let error: unknown;
+    let message: string | undefined;
+    try {
+      compile?.(source);
+    } catch (e) {
+      error = e;
+      message = e instanceof Error ? e.message : String(e);
+    }
+    return { shown, error: message, decorations: decorate(shown, error) };
+  };
+  return StateField.define<Marked>({
+    create: mark,
+    update: (marked, transaction) => (transaction.docChanged ? mark(transaction.state) : marked),
+    provide: (field) => EditorView.decorations.from(field, (marked) => marked.decorations),
+  });
+}
+
+/** CodeMirror's own parts in the colours of the page (the pieces' are in style.css). */
+const theme = EditorView.theme({
+  "&": { color: "var(--text)", backgroundColor: "var(--panel)" },
+  "&.cm-focused": { outline: "2px solid var(--accent)" },
+  ".cm-scroller": { font: "13px/1.45 ui-monospace, monospace" },
+  ".cm-content": { padding: "8px 0", caretColor: "var(--text)" },
+  ".cm-cursor": { borderLeftColor: "var(--text)" },
+  ".cm-gutters": {
+    backgroundColor: "var(--panel)",
+    color: "var(--muted)",
+    borderRight: "1px solid var(--line)",
+  },
+  ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--accent) 6%, transparent)" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+    backgroundColor: "color-mix(in srgb, var(--accent) 25%, transparent) !important",
+  },
+});
+
 /**
  * The room's script: the source marked up (names and numbers explain themselves on
  * hover), the compiled code on request, and an editor that compiles while typing.
@@ -125,6 +209,8 @@ export class ScriptView {
   /** The source the draft started from, and how to check the draft again. */
   private draftBase = "";
   private recheck: (() => void) | undefined;
+  /** The CodeMirror view shown (read-only or the editor). */
+  private code: EditorView | undefined;
 
   constructor(events: ScriptViewEvents) {
     this.events = events;
@@ -157,6 +243,8 @@ export class ScriptView {
   }
 
   private render(): void {
+    this.code?.destroy();
+    this.code = undefined;
     const heading = document.createElement("h3");
     heading.textContent = this.source || this.editing ? "Script" : "No script";
     const bar = document.createElement("div");
@@ -179,7 +267,7 @@ export class ScriptView {
       this.draft = this.source;
       this.draftBase = this.source;
       this.render();
-      this.element.querySelector("textarea")?.focus();
+      this.code?.focus();
     });
     const parts: HTMLElement[] = [bar];
     if (this.source) {
@@ -197,42 +285,59 @@ export class ScriptView {
           this.render();
         },
       );
-      parts.push(...this.marked(this.source));
+      const { view, info } = this.codeView(this.source, [
+        EditorState.readOnly.of(true),
+        EditorView.editable.of(false),
+      ]);
+      parts.push(view.dom, info);
       if (this.showCode) parts.push(this.bytecode(this.source));
     }
     this.element.replaceChildren(...parts);
   }
 
-  /** The marked-up source and a line saying what the mouse is over. */
-  private marked(source: string): HTMLElement[] {
-    const pre = document.createElement("pre");
-    pre.className = "script-source";
+  /**
+   * A CodeMirror view of the source, marked up, and a line saying what the mouse is over
+   * (explanations can be long, e.g. all pages of a message).
+   */
+  private codeView(
+    source: string,
+    extensions: Extension[],
+    compile?: (source: string) => void,
+  ): { view: EditorView; info: HTMLElement; field: StateField<Marked> } {
+    const field = marking(this.events, compile);
     const info = document.createElement("p");
     info.className = "script-info";
     info.textContent = "Hover a name or number to see what it means.";
-    const calls = new Map<Element, ScriptCall>();
-    for (const { piece, className, title, call } of markUp(source, this.events)) {
-      if (piece.kind === "space") {
-        pre.append(piece.text);
-        continue;
-      }
-      const span = document.createElement("span");
-      span.className = className;
-      span.textContent = piece.text;
-      if (title) span.title = title;
-      if (call) calls.set(span, call);
-      pre.append(span);
-    }
-    pre.addEventListener("mouseover", (event) => {
-      const span = event.target instanceof HTMLElement ? event.target : undefined;
-      if (span?.title) info.textContent = span.title;
-      const call = span && calls.get(span);
-      this.events.hover(call?.fn, call?.args ?? []);
+    const view = new EditorView({
+      doc: source,
+      extensions: [
+        field,
+        theme,
+        lineNumbers(),
+        highlightSpecialChars(),
+        EditorView.domEventHandlers({
+          mouseover: (event, view) => {
+            const target = event.target instanceof Element ? event.target : undefined;
+            const titled = target?.closest("[title]");
+            if (titled && view.contentDOM.contains(titled)) {
+              info.textContent = titled.getAttribute("title");
+            }
+            // the call whose function name is under the mouse
+            const name = target?.closest(".function");
+            const at = name ? view.posAtDOM(name) : -1;
+            const call = view.state.field(field).shown.find((s) => s.piece.at === at)?.call;
+            this.events.hover(call?.fn, call?.args ?? []);
+          },
+          mouseleave: () => {
+            this.events.hover(undefined, []);
+          },
+        }),
+        EditorView.editorAttributes.of({ class: "script-source" }),
+        ...extensions,
+      ],
     });
-    pre.addEventListener("mouseleave", () => {
-      this.events.hover(undefined, []);
-    });
-    return [pre, info];
+    this.code = view;
+    return { view, info, field };
   }
 
   private bytecode(source: string): HTMLElement {
@@ -246,13 +351,8 @@ export class ScriptView {
     return pre;
   }
 
-  /** The textarea, the compiler's verdict and the apply/cancel buttons. */
+  /** The editor, the compiler's verdict and the apply/cancel buttons. */
   private editor(button: (label: string, title: string, click: () => void) => HTMLButtonElement) {
-    const area = document.createElement("textarea");
-    area.className = "script-edit";
-    area.spellcheck = false;
-    area.value = this.draft;
-    area.rows = Math.min(30, Math.max(8, this.draft.split("\n").length + 2));
     const verdict = document.createElement("p");
     verdict.className = "script-verdict";
     const apply = button("Apply", "Compile and give the room this script (undoable)", () => {
@@ -267,14 +367,8 @@ export class ScriptView {
     button("Cancel", "Leave the script as it is", () => {
       this.close();
     });
+    let error: string | undefined;
     const check = () => {
-      this.draft = area.value;
-      let error: string | undefined;
-      try {
-        if (this.draft.trim() !== "") this.events.compile(this.draft);
-      } catch (e) {
-        error = e instanceof Error ? e.message : String(e);
-      }
       verdict.classList.toggle("error", error !== undefined);
       const changed =
         this.source === this.draftBase
@@ -286,9 +380,30 @@ export class ScriptView {
         changed;
       apply.disabled = error !== undefined || this.draft === this.source;
     };
-    area.addEventListener("input", check);
+    const compile = (source: string) => {
+      if (source.trim() !== "") this.events.compile(source);
+    };
+    const { view, info, field } = this.codeView(
+      this.draft,
+      [
+        drawSelection(),
+        highlightActiveLine(),
+        history(),
+        keymap.of([...defaultKeymap, ...historyKeymap]),
+        EditorView.editorAttributes.of({ class: "script-edit" }),
+        EditorView.contentAttributes.of({ "aria-label": "Script source" }),
+        EditorView.updateListener.of((update) => {
+          if (!update.docChanged) return;
+          this.draft = update.state.doc.toString();
+          error = update.state.field(field).error;
+          check();
+        }),
+      ],
+      compile,
+    );
+    error = view.state.field(field).error;
     this.recheck = check;
     check();
-    return [area, verdict];
+    return [view.dom, verdict, info];
   }
 }

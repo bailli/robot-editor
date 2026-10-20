@@ -143,6 +143,13 @@ export interface CompiledScript {
 
 export class ScriptError extends Error {
   override name = "ScriptError";
+  /** Offset in the source the error is at (syntax errors; not unknown names). */
+  readonly at: number | undefined;
+
+  constructor(message: string, at?: number) {
+    super(message);
+    this.at = at;
+  }
 }
 
 const SYMBOL_SIZE = 14;
@@ -346,7 +353,7 @@ export function scanScript(source: string): ScriptPiece[] {
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   const fail = (message: string, at: number): never => {
-    throw new ScriptError(`${message} at ${position(source, at)}`);
+    throw new ScriptError(`${message} at ${position(source, at)}`, at);
   };
   for (const { kind, text, at } of scanScript(source)) {
     if (kind === "space") continue;
@@ -421,7 +428,7 @@ export function compileScript(source: string, options: CompileOptions = {}): Uin
 
   const peek = () => tokens[t];
   const fail = (message: string, token = peek()): never => {
-    throw new ScriptError(`${message} at ${position(source, token.at)}`);
+    throw new ScriptError(`${message} at ${position(source, token.at)}`, token.at);
   };
   const isPunct = (text: string, token = peek()) => token.kind === "punct" && token.text === text;
   const isWord = (text: string, token = peek()) => token.kind === "name" && token.text === text;

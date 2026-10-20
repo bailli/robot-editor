@@ -49,7 +49,7 @@ for episodes I–IV.
 | Path                    | Content                                                                                       |
 | ----------------------- | --------------------------------------------------------------------------------------------- |
 | `packages/formats/src`  | `@robot/formats`: all decoders/encoders, no dependencies, Node and browser                    |
-| `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build)                                      |
+| `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build; CodeMirror 6 for the script source)  |
 | `packages/tools/src`    | `@robot/tools`: CLI `pnpm robot …` (render, compare, eval, patch, shots, script, start, play) |
 | `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool                                 |
 | `shots.json`            | per reference screenshot: hash, palette offset, cells where our render still differs          |
@@ -464,8 +464,10 @@ Supported:
 - the room's script below the map: names explain themselves on hover (functions,
   game variables, `O_` constants as tiles, message ids as their text, room numbers as
   room names, `Enigma` entries as their points and text), calls with plain coordinates (`SetWarea`, `SetObj`, `Area`, …) outline
-  their cells on the map; the bytecode on request; Edit compiles while typing (errors
-  with line and column) and Apply sets source and compiled script as one undo step
+  their cells on the map; the bytecode on request; Edit (CodeMirror, marked up the same
+  way while typing, its own undo) compiles while typing (errors with line and column,
+  syntax errors underlined where they are) and Apply sets source and compiled script as
+  one undo step
 - save: downloads the exe with all edited episodes and texts (warns about unsaved changes
   on leave)
 

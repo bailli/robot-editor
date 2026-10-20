@@ -1262,7 +1262,8 @@ export class App {
           (target instanceof HTMLInputElement && !toggle) ||
           target instanceof HTMLTextAreaElement ||
           target instanceof HTMLSelectElement ||
-          (toggle && event.key.startsWith("Arrow"))
+          (toggle && event.key.startsWith("Arrow")) ||
+          (target instanceof HTMLElement && target.isContentEditable) // the script editor
         ) {
           return;
         }

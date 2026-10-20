@@ -514,10 +514,20 @@ test("the script explains itself and can be edited", async () => {
   expect(document.querySelector(".script-code")?.textContent).toMatch(/call Message/);
 
   await scriptView().getByRole("button", { name: "Edit" }).click();
-  const area = defined(document.querySelector("textarea") ?? undefined);
+  const area = scriptView().getByRole("textbox", { name: "Script source" });
+  // keys typed there are text, not the editor's shortcuts (m: map, g: grid)
+  await userEvent.fill(area, "");
+  await userEvent.keyboard("gm");
+  expect(area.element().textContent).toBe("gm");
+  expect(app.mapView.element.hidden).toBe(true);
+  await expect.element(page.getByRole("checkbox", { name: "Grid" })).not.toBeChecked();
   await userEvent.fill(area, "RoomWest = 42;\nMesage(1, 0);");
   expect(document.querySelector(".script-verdict")?.textContent).toMatch(/unknown function Mesage/);
   await expect.element(scriptView().getByRole("button", { name: "Apply" })).toBeDisabled();
+  // a syntax error is marked where it is
+  await userEvent.fill(area, "RoomWest = 42;\nRoomEast = ;");
+  expect(document.querySelector(".script-verdict")?.textContent).toMatch(/at line 2, column 12/);
+  expect(document.querySelector(".script-edit .script-error")?.textContent).toBe(";");
   await userEvent.fill(area, "RoomWest = 42;");
   expect(document.querySelector(".script-verdict")?.textContent).toBe("Compiles.");
   await scriptView().getByRole("button", { name: "Apply" }).click();
