@@ -12,7 +12,16 @@ import {
   roomSettings,
 } from "@robot/formats";
 
-import { Editor, MAX_RECORD_SLOTS, recordCapacity, shownCell, tilesOf } from "../src/editor.ts";
+import {
+  Editor,
+  MAX_RECORD_SLOTS,
+  areaCells,
+  clipArea,
+  fillRegion,
+  recordCapacity,
+  shownCell,
+  tilesOf,
+} from "../src/editor.ts";
 import { defined, firstDifference, loadGame } from "./game.ts";
 
 const game = await loadGame();
@@ -198,6 +207,95 @@ describe("Editor scripts", () => {
     expect(editor.canUndo).toBe(false);
     // the same source is no change
     expect(editor.setScript(1, 43, roomScript(room))).toBeUndefined();
+  });
+});
+
+describe("Editor areas", () => {
+  // episode II room 55: a teleporter (a logic cell) to copy
+  const room55 = game.room(2, 55);
+  const logic55 = room55.base.findIndex((c) => (c & 0xff) === LOGIC_CELL);
+  const at = { x: logic55 % 40, y: Math.floor(logic55 / 40) };
+  const area = { x: at.x - 1, y: at.y - 1, w: 3, h: 3 };
+
+  test("a copied area takes the records of its logic cells into another room", () => {
+    const editor = new Editor(game);
+    const clip = editor.copyArea(2, 55, area);
+    expect([clip.w, clip.h, clip.records.length]).toEqual([3, 3, 1]);
+    const before = editor.room(2, 43).records.length;
+    expect(editor.pasteArea(2, 43, 10, 10, clip)?.changes.length).toBeGreaterThan(0);
+    const room = editor.room(2, 43);
+    expect(room.records.length).toBe(before + 1);
+    const cell = room.base[11 * 40 + 11] ?? 0;
+    expect(cell & 0xff).toBe(LOGIC_CELL);
+    const record = defined(room.records.find((r) => r.slot === cell >> 8));
+    expect(Array.from(record.data)).toEqual(Array.from(clip.records[0]?.data ?? []));
+    expect(Array.from(room.overlay.subarray(10 * 40 + 10, 10 * 40 + 13))).toEqual(
+      Array.from(clip.overlay.subarray(0, 3)),
+    );
+    // saved and undone as one step
+    expect(new Game(editor.save()).room(2, 43).records.length).toBe(before + 1);
+    editor.undo();
+    expect(editor.isEdited(2, 43)).toBe(false);
+  });
+
+  test("clearing an area empties both layers and removes its records", () => {
+    const editor = new Editor(game);
+    editor.clearArea(2, 55, area);
+    const room = editor.room(2, 55);
+    for (const i of areaCells(area)) expect([room.base[i], room.overlay[i]]).toEqual([0, 0]);
+    expect(room.records.length).toBe(room55.records.length - 1);
+    editor.undo();
+    expect(editor.isEdited(2, 55)).toBe(false);
+    expect(editor.clearArea(2, 55, { x: 0, y: 0, w: 0, h: 0 })).toBeUndefined();
+  });
+
+  test("pasting where the cells came from changes nothing; pasting over records replaces them", () => {
+    const editor = new Editor(game);
+    const clip = editor.copyArea(2, 55, area);
+    expect(editor.pasteArea(2, 55, area.x, area.y, clip)).toBeUndefined();
+    // one cell to the right: the old record goes, the copy takes its slot
+    editor.pasteArea(2, 55, area.x + 1, area.y, clip);
+    const room = editor.room(2, 55);
+    expect(room.records.length).toBe(room55.records.length);
+    expect((room.base[logic55 + 1] ?? 0) & 0xff).toBe(LOGIC_CELL);
+    expect((room.base[logic55] ?? 0) & 0xff).not.toBe(LOGIC_CELL);
+  });
+
+  test("areas are cut to the room, pastes too", () => {
+    expect(clipArea({ x: 38, y: -2, w: 5, h: 4 })).toEqual({ x: 38, y: 0, w: 2, h: 2 });
+    const editor = new Editor(game);
+    const clip = editor.copyArea(1, 43, { x: 0, y: 0, w: 4, h: 4 });
+    const edit = defined(editor.pasteArea(1, 44, 38, 27, clip));
+    const corner = new Set(areaCells({ x: 38, y: 27, w: 2, h: 2 }));
+    expect(edit.changes.length).toBeGreaterThan(0);
+    expect(edit.changes.every((c) => corner.has(c.index))).toBe(true);
+  });
+
+  test("a paste the game's record table cannot hold is refused", () => {
+    const editor = new Editor(game);
+    const full = new Uint16Array(40 * 29).fill(0x0015); // an object in every overlay cell
+    const clip = {
+      episode: 1,
+      w: 40,
+      h: 29,
+      base: new Uint16Array(40 * 29),
+      overlay: full,
+      records: [],
+    };
+    expect(() => editor.pasteArea(1, 43, 0, 0, clip)).toThrow(RangeError);
+    expect(editor.canUndo).toBe(false);
+  });
+
+  test("a fill takes the connected cells of the same value, not logic cells", () => {
+    const base = new Uint16Array(40 * 29);
+    base.fill(5, 0, 40); // row 0
+    base[3] = LOGIC_CELL;
+    const empty = new Uint16Array(40 * 29);
+    const room = { ...room55, base, overlay: empty, records: [] };
+    expect(fillRegion(room, "base", 0)).toEqual([0, 1, 2]);
+    expect(fillRegion(room, "base", 3)).toEqual([]);
+    expect(fillRegion(room, "base", 10, { x: 8, y: 0, w: 4, h: 1 })).toEqual([8, 9, 10, 11]);
+    expect(fillRegion(room, "overlay", 0).length).toBe(40 * 29);
   });
 });
 

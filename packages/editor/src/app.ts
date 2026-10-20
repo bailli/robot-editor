@@ -37,11 +37,17 @@ import {
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
 import {
+  type Area,
+  type Clip,
   type Edit,
   Editor,
   type Layer,
   MAX_RECORD_SLOTS,
   MAX_ROOM_ID,
+  areaBetween,
+  areaCells,
+  clipArea,
+  fillRegion,
   recordCapacity,
   tilesOf,
 } from "./editor.ts";
@@ -53,6 +59,7 @@ import {
   type Highlight,
   RoomView,
   cellCanvas,
+  cellsCanvas,
   drawRoom,
   spriteCanvas,
 } from "./room-view.ts";
@@ -100,6 +107,20 @@ const ARROWS: Readonly<Partial<Record<string, Direction>>> = {
 
 const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 
+export type Tool = "paint" | "fill" | "select" | "inspect";
+
+const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
+  { tool: "paint", label: "Paint", title: "Paint cells with the tile; dragging draws lines" },
+  {
+    tool: "fill",
+    label: "Fill",
+    title:
+      "Fill the cells of the clicked cell's value around it (within the selected area, if inside)",
+  },
+  { tool: "select", label: "Select", title: "Drag to select an area to copy, cut, clear or fill" },
+  { tool: "inspect", label: "Inspect", title: "Click a cell to see or add its logic record" },
+];
+
 export interface AppOptions {
   /**
    * Runs an exe in the game (e.g. via the development server and Wine); without it,
@@ -116,8 +137,14 @@ export class App {
   episode = 1;
   roomId = START_ROOMS[1] ?? 1;
   layer: Layer = "base";
-  /** Paint cells, or select cells to inspect their logic records. */
-  tool: "paint" | "inspect" = "paint";
+  /** Paint or fill cells, select an area, or select cells to inspect their logic records. */
+  tool: Tool = "paint";
+  /** The selected area (Select tool), in the shown room. */
+  area: Area | undefined;
+  /** Copied cells, pasted with Ctrl+V (also in other rooms and episodes). */
+  clip: Clip | undefined;
+  /** The clip follows the mouse until a click puts it down. */
+  pasting = false;
   /** The selected cell (inspect tool, or a logic cell clicked). */
   selected: { index: number; layer: Layer } | undefined;
   tile = 0;
@@ -128,6 +155,12 @@ export class App {
   private painting = false;
   private lastRoom: string | undefined;
   private lastPainted: number | undefined;
+  /** The cell an area selection started at, while dragging. */
+  private selectFrom: number | undefined;
+  /** The cell the clip was last shown at. */
+  private pasteCell: number | undefined;
+  /** The clip drawn with an episode's tiles. */
+  private clipImage: { episode: number; canvas: HTMLCanvasElement } | undefined;
 
   private readonly fileInput = h("input", { type: "file", accept: ".exe", hidden: true });
   private readonly saveButton = h("button", { disabled: true }, "Save exe");
@@ -254,7 +287,24 @@ export class App {
   private readonly tileNames = new Map<number, TileNames>();
   private readonly tileGrid = h("div", { class: "tile-grid" });
   private readonly layerInputs = new Map<Layer, HTMLInputElement>();
-  private readonly toolInputs = new Map<"paint" | "inspect", HTMLInputElement>();
+  private readonly toolInputs = new Map<Tool, HTMLInputElement>();
+  private readonly areaButtons = {
+    copy: areaButton("Copy", "Copy the selected area, both layers and its records (Ctrl+C)"),
+    cut: areaButton("Cut", "Copy the selected area and clear it (Ctrl+X)"),
+    paste: areaButton(
+      "Paste",
+      "Put the copied cells down where you click (Ctrl+V; Shift+click: again; Esc: stop)",
+    ),
+    clear: areaButton("Clear", "Empty the selected area in both layers (Delete)"),
+    fill: areaButton("Fill", "Fill the selected area's cells of this layer with the tile"),
+  };
+  private readonly tileFilter = h("input", {
+    type: "search",
+    class: "tile-filter",
+    placeholder: "Filter tiles: name, text or hex",
+    "aria-label": "Filter tiles",
+    spellcheck: "false",
+  });
   readonly scriptView = new ScriptView({
     explain: (name) => this.explain(name),
     argument: (fn, index, args) => this.explainArgument(fn, index, args),
@@ -371,15 +421,21 @@ export class App {
     }
 
     const tools = h("fieldset", { class: "layers" }, h("legend", {}, "Tool"));
-    for (const tool of ["paint", "inspect"] as const) {
+    for (const { tool, label, title } of TOOLS) {
       const input = h("input", { type: "radio", name: "tool", value: tool });
       input.checked = tool === this.tool;
       input.addEventListener("change", () => {
-        this.tool = tool;
+        this.setTool(tool);
       });
       this.toolInputs.set(tool, input);
-      tools.append(h("label", {}, input, tool === "paint" ? " Paint" : " Inspect"));
+      tools.append(h("label", { title }, input, ` ${label}`));
     }
+    const areaTools = h(
+      "fieldset",
+      { class: "layers area-tools" },
+      h("legend", {}, "Area"),
+      ...Object.values(this.areaButtons),
+    );
 
     this.welcome = h(
       "section",
@@ -447,7 +503,7 @@ export class App {
       ),
       this.sidePanel.element,
     );
-    this.sidePanel.setHeader(tools, layers);
+    this.sidePanel.setHeader(tools, layers, areaTools);
     this.tilesTab.append(
       h("label", { class: "tile-current" }, this.tilePreview, this.tileInput),
       this.tileText,
@@ -456,6 +512,7 @@ export class App {
         { class: "hint" },
         "Paint with the left button, pick with the right. Magenta cells belong to logic records and stay as they are.",
       ),
+      this.tileFilter,
       this.tileGrid,
     );
     const width = SidePanel.savedWidth();
@@ -511,6 +568,10 @@ export class App {
     }
     this.fileName = name;
     this.caches.clear();
+    this.stopPasting();
+    this.clip = undefined;
+    this.clipImage = undefined;
+    this.refreshAreaButtons();
     this.tileNames.clear();
     this.robotSprites.clear();
     this.thumbnails.clear();
@@ -586,7 +647,10 @@ export class App {
     this.refreshActors();
     this.refreshRoomList();
     const shown = `${this.episode} ${id}`;
-    if (this.selected && this.lastRoom !== shown) this.select(undefined);
+    if (this.lastRoom !== shown) {
+      if (this.selected) this.select(undefined);
+      this.setArea(undefined);
+    }
     this.lastRoom = shown;
     this.remember(this.episode, id);
     if (this.mapShown) this.refreshMap();
@@ -867,6 +931,152 @@ export class App {
     this.endStroke();
   }
 
+  setTool(tool: Tool): void {
+    this.tool = tool;
+    const input = this.toolInputs.get(tool);
+    if (input) input.checked = true;
+    if (tool !== "select") this.setArea(undefined);
+  }
+
+  /** Selects an area of the shown room (undefined: none). */
+  setArea(area: Area | undefined): void {
+    this.area = area && clipArea(area);
+    this.view.setSelection(this.area);
+    this.refreshAreaButtons();
+    if (this.area) {
+      const { x, y, w, h } = this.area;
+      this.setStatus(`Area ${w}×${h} at (${x}, ${y}): Ctrl+C copy, Ctrl+X cut, Delete clear`);
+    }
+  }
+
+  /** Copies the selected area (both layers, the records of its logic cells). */
+  copyArea(): void {
+    if (!this.area) return;
+    this.clip = this.need().copyArea(this.episode, this.roomId, this.area);
+    this.clipImage = undefined;
+    this.refreshAreaButtons();
+    const records = this.clip.records.length;
+    this.setStatus(
+      `Copied ${this.clip.w}×${this.clip.h} cells${records ? ` with ${records} record${records > 1 ? "s" : ""}` : ""}: Ctrl+V pastes`,
+    );
+  }
+
+  cutArea(): void {
+    if (!this.area) return;
+    this.copyArea();
+    this.clearArea();
+  }
+
+  /** Empties the selected area in both layers. */
+  clearArea(): void {
+    const area = this.area;
+    if (!area) return;
+    this.areaEdit(() => this.need().clearArea(this.episode, this.roomId, area));
+  }
+
+  /** Fills the selected area's cells of the current layer with the tile (one stroke). */
+  fillArea(): void {
+    if (!this.area) return;
+    this.paintCells(areaCells(this.area));
+  }
+
+  /** Fills the cells of the clicked value around a cell (within the area, if inside). */
+  fill(index: number): void {
+    const room = this.need().room(this.episode, this.roomId);
+    const area = this.area && areaCells(this.area).includes(index) ? this.area : undefined;
+    this.paintCells(fillRegion(room, this.layer, index, area));
+  }
+
+  /** The clip follows the mouse; a click puts it down. */
+  startPasting(): void {
+    if (!this.clip || !this.editor) return;
+    this.pasting = true;
+    this.areaButtons.paste.classList.add("pressed");
+    const from =
+      this.clip.episode === this.episode
+        ? ""
+        : ` (from ${EPISODE_NAMES[this.clip.episode] ?? ""}: its tiles may mean other things here)`;
+    this.setStatus(
+      `Click where the top left cell goes (Shift+click: paste again, Esc: stop)${from}`,
+    );
+    if (this.pasteCell !== undefined) this.showPaste(this.pasteCell);
+  }
+
+  stopPasting(): void {
+    this.pasting = false;
+    this.areaButtons.paste.classList.remove("pressed");
+    this.view.setFloating(undefined);
+  }
+
+  /** Puts the clip down with its top left cell at `index`; `again` keeps pasting. */
+  pasteClip(index: number, again = false): void {
+    const clip = this.clip;
+    if (!clip) return;
+    const [x, y] = [index % ROOM_WIDTH, Math.floor(index / ROOM_WIDTH)];
+    try {
+      this.areaEdit(() => this.need().pasteArea(this.episode, this.roomId, x, y, clip));
+    } catch (error) {
+      this.setStatus(`Cannot paste: ${message(error)}`, true);
+      return;
+    }
+    if (!again) this.stopPasting();
+    this.setArea({ x, y, w: clip.w, h: clip.h });
+    if (again) this.showPaste(index);
+  }
+
+  private showPaste(index: number): void {
+    const clip = this.clip;
+    this.pasteCell = index;
+    if (!clip) return;
+    if (this.clipImage?.episode !== this.episode) {
+      const canvas = cellsCanvas(this.cache(), clip.w, clip.base, clip.overlay, clip.records);
+      this.clipImage = { episode: this.episode, canvas };
+    }
+    const [x, y] = [index % ROOM_WIDTH, Math.floor(index / ROOM_WIDTH)];
+    this.view.setFloating({ x, y, image: this.clipImage.canvas });
+  }
+
+  /** Applies an area edit (cells of both layers and records) and redraws the room. */
+  private areaEdit(change: () => Edit | undefined): void {
+    if (!change()) return;
+    const area = this.area;
+    this.showRoom(this.roomId);
+    this.setArea(area);
+    if (this.selected) this.select(this.selected.index);
+    this.refreshButtons();
+  }
+
+  /** Paints the tile into cells as one stroke. */
+  private paintCells(cells: readonly number[]): void {
+    const editor = this.need();
+    this.beginStroke();
+    const changed = cells.filter((i) => editor.paint(i, this.tile));
+    if (changed.length > 0) this.view.update(editor.room(this.episode, this.roomId), changed);
+    this.endStroke();
+  }
+
+  private refreshAreaButtons(): void {
+    for (const button of [
+      this.areaButtons.copy,
+      this.areaButtons.cut,
+      this.areaButtons.clear,
+      this.areaButtons.fill,
+    ]) {
+      button.disabled = !this.area;
+    }
+    this.areaButtons.paste.disabled = !this.clip;
+  }
+
+  /** Shows the palette tiles whose hex value, name or text contain the filter. */
+  private filterTiles(): void {
+    const query = this.tileFilter.value.trim().toLowerCase();
+    for (const button of this.tileGrid.querySelectorAll<HTMLElement>("button")) {
+      const value = Number(button.dataset["tile"]);
+      const text = `${hex(value)} ${button.title}`.toLowerCase();
+      button.hidden = query !== "" && !text.includes(query);
+    }
+  }
+
   undo(): void {
     this.revisit(this.editor?.undo());
   }
@@ -912,6 +1122,24 @@ export class App {
     this.newRoomInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") this.addRoom(Number(this.newRoomInput.value), event.shiftKey);
     });
+    this.areaButtons.copy.addEventListener("click", () => {
+      this.copyArea();
+    });
+    this.areaButtons.cut.addEventListener("click", () => {
+      this.cutArea();
+    });
+    this.areaButtons.paste.addEventListener("click", () => {
+      this.startPasting();
+    });
+    this.areaButtons.clear.addEventListener("click", () => {
+      this.clearArea();
+    });
+    this.areaButtons.fill.addEventListener("click", () => {
+      this.fillArea();
+    });
+    this.tileFilter.addEventListener("input", () => {
+      this.filterTiles();
+    });
     this.undoButton.addEventListener("click", () => {
       this.undo();
     });
@@ -949,11 +1177,19 @@ export class App {
       const index = this.view.cellAt(event);
       if (index === undefined) return;
       event.preventDefault();
-      if (event.button === 2 || event.altKey) this.pick(index);
-      else if (event.button === 0 && (this.tool === "inspect" || this.logicLayer(index))) {
+      if (this.pasting) {
+        if (event.button === 0) this.pasteClip(index, event.shiftKey);
+        else this.stopPasting();
+      } else if (event.button === 2 || event.altKey) this.pick(index);
+      else if (event.button !== 0) return;
+      else if (this.tool === "select") {
+        this.selectFrom = index;
+        this.setArea(areaBetween(index, index));
+      } else if (this.tool === "inspect" || this.logicLayer(index)) {
         this.select(index);
         this.sidePanel.show("record");
-      } else if (event.button === 0) {
+      } else if (this.tool === "fill") this.fill(index);
+      else {
         this.painting = true;
         this.beginStroke();
         this.paintTo(index);
@@ -963,7 +1199,10 @@ export class App {
       const index = this.view.cellAt(event);
       this.view.setHover(index);
       this.showCellInfo(index);
-      if (this.painting && index !== undefined) this.paintTo(index);
+      if (index === undefined) return;
+      if (this.painting) this.paintTo(index);
+      if (this.selectFrom !== undefined) this.setArea(areaBetween(this.selectFrom, index));
+      if (this.pasting) this.showPaste(index);
     });
     view.addEventListener("mouseleave", () => {
       this.view.setHover(undefined);
@@ -975,6 +1214,7 @@ export class App {
     window.addEventListener(
       "mouseup",
       () => {
+        this.selectFrom = undefined;
         if (!this.painting) return;
         this.painting = false;
         this.endStroke();
@@ -1014,11 +1254,15 @@ export class App {
       "keydown",
       (event) => {
         const target = event.target;
+        // checkboxes and radio buttons (the tools, the layers) keep their arrow keys only
+        const toggle =
+          target instanceof HTMLInputElement && ["checkbox", "radio"].includes(target.type);
         if (
           !this.editor ||
-          target instanceof HTMLInputElement ||
+          (target instanceof HTMLInputElement && !toggle) ||
           target instanceof HTMLTextAreaElement ||
-          target instanceof HTMLSelectElement
+          target instanceof HTMLSelectElement ||
+          (toggle && event.key.startsWith("Arrow"))
         ) {
           return;
         }
@@ -1036,7 +1280,26 @@ export class App {
           return;
         }
         const key = event.key.toLowerCase();
-        if ((event.ctrlKey || event.metaKey) && key === "z") {
+        const ctrl = event.ctrlKey || event.metaKey;
+        if (event.key === "Escape") {
+          if (this.pasting) this.stopPasting();
+          else this.setArea(undefined);
+        } else if (event.key === "Delete" && !ctrl) {
+          this.clearArea();
+        } else if (ctrl && !event.shiftKey && !event.altKey && key === "c") {
+          if (this.area) {
+            event.preventDefault();
+            this.copyArea();
+          }
+        } else if (ctrl && !event.shiftKey && !event.altKey && key === "x") {
+          if (this.area) {
+            event.preventDefault();
+            this.cutArea();
+          }
+        } else if (ctrl && !event.shiftKey && !event.altKey && key === "v") {
+          event.preventDefault();
+          this.startPasting();
+        } else if ((event.ctrlKey || event.metaKey) && key === "z") {
           event.preventDefault();
           if (event.shiftKey) this.redo();
           else this.undo();
@@ -1083,6 +1346,7 @@ export class App {
       { signal: this.listeners.signal },
     );
     this.setLayer("base");
+    this.refreshAreaButtons();
   }
 
   private async loadFile(file: File): Promise<void> {
@@ -1287,6 +1551,7 @@ export class App {
       ),
     );
     this.setTile(tiles.includes(this.tile) ? this.tile : 0);
+    this.filterTiles();
   }
 
   private showCellInfo(index: number | undefined): void {
@@ -1485,6 +1750,11 @@ function roomKey(room: Room): string {
     for (const b of r.data) mix(b);
   }
   return `${hash >>> 0} ${room.records.length}`;
+}
+
+/** A button of the Area tools, named "<label> area" for screen readers. */
+function areaButton(label: string, title: string): HTMLButtonElement {
+  return h("button", { title, "aria-label": `${label} area` }, label);
 }
 
 /** Keeps the visited rooms for this tab, so a reload can label back/forward again. */

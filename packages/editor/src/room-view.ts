@@ -82,6 +82,8 @@ export class RoomView {
   private actors: readonly RoomActor[] = [];
   private areas: readonly PlacementArea[] = [];
   private highlights: readonly Highlight[] = [];
+  private selection: Highlight | undefined;
+  private floating: { x: number; y: number; image: HTMLCanvasElement } | undefined;
   private actorSprite: (actor: RoomActor, n: number) => HTMLCanvasElement | undefined = () =>
     undefined;
 
@@ -162,6 +164,21 @@ export class RoomView {
   /** Outlines cells or areas a script names (empty: none). */
   setHighlights(highlights: readonly Highlight[]): void {
     this.highlights = highlights;
+    this.drawMarks();
+  }
+
+  /** Outlines the selected area (undefined: none). */
+  setSelection(area: Highlight | undefined): void {
+    this.selection = area;
+    this.drawMarks();
+  }
+
+  /**
+   * Shows cells about to be pasted (`image`: drawn at the room's scale) with their top
+   * left cell at (x, y); undefined hides them.
+   */
+  setFloating(floating: { x: number; y: number; image: HTMLCanvasElement } | undefined): void {
+    this.floating = floating;
     this.drawMarks();
   }
 
@@ -261,6 +278,29 @@ export class RoomView {
       g.lineWidth = 3;
       g.strokeRect(area.x * w + 1.5, area.y * h + 1.5, area.w * w - 3, area.h * h - 3);
     }
+    if (this.floating) {
+      const { x, y, image } = this.floating;
+      const [fw, fh] = [(image.width / TILE_WIDTH) * w, (image.height / TILE_HEIGHT) * h];
+      g.imageSmoothingEnabled = false;
+      g.globalAlpha = 0.75;
+      g.drawImage(image, x * w, y * h, fw, fh);
+      g.globalAlpha = 1;
+      g.strokeStyle = "rgb(0 160 80)";
+      g.lineWidth = 2;
+      g.setLineDash([6, 4]);
+      g.strokeRect(x * w + 1, y * h + 1, fw - 2, fh - 2);
+      g.setLineDash([]);
+    }
+    if (this.selection) {
+      const { x, y, w: sw, h: sh } = this.selection;
+      g.fillStyle = "rgb(255 140 0 / 0.15)";
+      g.fillRect(x * w, y * h, sw * w, sh * h);
+      g.strokeStyle = "rgb(255 140 0)";
+      g.lineWidth = 2;
+      g.setLineDash([6, 4]);
+      g.strokeRect(x * w + 1, y * h + 1, sw * w - 2, sh * h - 2);
+      g.setLineDash([]);
+    }
     if (this.selected !== undefined) {
       g.strokeStyle = "rgb(255 140 0)";
       g.lineWidth = 3;
@@ -331,6 +371,30 @@ function context(element: HTMLCanvasElement): CanvasRenderingContext2D {
   const g = element.getContext("2d");
   if (!g) throw new Error("no 2D canvas");
   return g;
+}
+
+/**
+ * Cells of both layers, `w` wide, as a canvas (e.g. a clip to paste); logic cells show the
+ * cells of `records`.
+ */
+export function cellsCanvas(
+  cache: CellCache,
+  w: number,
+  base: Uint16Array,
+  overlay: Uint16Array,
+  records: Room["records"],
+): HTMLCanvasElement {
+  const h = Math.ceil(base.length / Math.max(1, w));
+  const element = canvas(w * TILE_WIDTH, h * TILE_HEIGHT, "cells");
+  const g = context(element);
+  for (let i = 0; i < base.length; i++) {
+    const image = cache.get(
+      resolveCell({ records }, base[i] ?? 0),
+      resolveCell({ records }, overlay[i] ?? 0),
+    );
+    g.putImageData(image, (i % w) * TILE_WIDTH, Math.floor(i / w) * TILE_HEIGHT);
+  }
+  return element;
 }
 
 /** A single cell (e.g. a palette entry) as a canvas. */

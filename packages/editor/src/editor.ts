@@ -8,7 +8,9 @@ import {
   MAX_ROOMS,
   NAMED_ROOMS,
   ROOM_CELLS,
+  ROOM_HEIGHT,
   ROOM_NAME_ENTRY,
+  ROOM_WIDTH,
   type Room,
   type RoomName,
   type RoomSettings,
@@ -39,6 +41,29 @@ export interface CellChange {
   index: number;
   before: number;
   after: number;
+  /** The layer of this cell, if not the edit's (area edits change both). */
+  layer?: Layer;
+}
+
+/** A rectangle of cells: column, row, width and height. */
+export interface Area {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Cells copied from a room (both layers, row by row), with the records of its logic
+ * cells, which keep their slots in the room they come from.
+ */
+export interface Clip {
+  episode: number;
+  w: number;
+  h: number;
+  base: Uint16Array;
+  overlay: Uint16Array;
+  records: LogicRecord[];
 }
 
 /** One step to undo: a stroke's cells in one layer of one room, and record changes. */
@@ -282,6 +307,123 @@ export class Editor {
     return stroke;
   }
 
+  /** The cells of an area (cut to the room) with the records their logic cells use. */
+  copyArea(episode: number, roomId: number, area: Area): Clip {
+    const room = this.room(episode, roomId);
+    const { x, y, w, h } = clipArea(area);
+    const cells = areaCells({ x, y, w, h });
+    const pick = (layer: Uint16Array) => Uint16Array.from(cells, (i) => layer[i] ?? 0);
+    const base = pick(room.base);
+    const overlay = pick(room.overlay);
+    const slots = new Set([...base, ...overlay].filter(isLogicCell).map((c) => c >> 8));
+    const records = room.records
+      .filter((r) => slots.has(r.slot))
+      .map((r) => ({ ...r, data: r.data.slice() }));
+    return { episode, w, h, base, overlay, records };
+  }
+
+  /** Empties an area in both layers (records of its logic cells go too); one undo step. */
+  clearArea(episode: number, roomId: number, area: Area): Edit | undefined {
+    const cells = areaCells(clipArea(area));
+    return this.writeArea(
+      episode,
+      roomId,
+      cells.map((index) => ({ index, base: 0, overlay: 0 })),
+      [],
+    );
+  }
+
+  /**
+   * Puts a clip into a room with its top left cell at (x, y), both layers (cells outside
+   * the room are dropped); its logic cells get new records in free slots, the records
+   * of logic cells it covers go. One undo step. Throws a RangeError if the records and
+   * overlay objects would not fit into the game's table (recordCapacity).
+   */
+  pasteArea(episode: number, roomId: number, x: number, y: number, clip: Clip): Edit | undefined {
+    const writes: { index: number; base: number; overlay: number }[] = [];
+    for (let row = 0; row < clip.h; row++) {
+      for (let col = 0; col < clip.w; col++) {
+        const [cx, cy] = [x + col, y + row];
+        if (cx < 0 || cy < 0 || cx >= ROOM_WIDTH || cy >= ROOM_HEIGHT) continue;
+        const k = row * clip.w + col;
+        writes.push({
+          index: cy * ROOM_WIDTH + cx,
+          base: clip.base[k] ?? 0,
+          overlay: clip.overlay[k] ?? 0,
+        });
+      }
+    }
+    return this.writeArea(episode, roomId, writes, clip.records);
+  }
+
+  /**
+   * Writes cells of both layers as one undo step. Logic cells written refer to the slots
+   * of `incoming` and get the records' copies in free slots; records only the overwritten
+   * cells used are removed (records no cell refers to, e.g. actors, stay).
+   */
+  private writeArea(
+    episode: number,
+    roomId: number,
+    writes: readonly { index: number; base: number; overlay: number }[],
+    incoming: readonly LogicRecord[],
+  ): Edit | undefined {
+    this.endStroke();
+    const room = this.room(episode, roomId);
+    const written = new Set(writes.map((w) => w.index));
+    const remaining = new Set<number>();
+    const covered = new Set<number>();
+    for (const layer of [room.base, room.overlay]) {
+      layer.forEach((cell, i) => {
+        if (isLogicCell(cell)) (written.has(i) ? covered : remaining).add(cell >> 8);
+      });
+    }
+    const records = room.records.filter((r) => remaining.has(r.slot) || !covered.has(r.slot));
+    // the slots the written logic cells use, in the order they appear
+    const wanted = new Set(
+      writes
+        .flatMap((w) => [w.base, w.overlay])
+        .filter(isLogicCell)
+        .map((c) => c >> 8),
+    );
+    const used = new Set(records.map((r) => r.slot));
+    const free = Array.from({ length: MAX_RECORD_SLOTS }, (_, k) => k).filter((k) => !used.has(k));
+    const slots = new Map<number, number>();
+    for (const slot of wanted) {
+      const record = incoming.find((r) => r.slot === slot);
+      // the same slot if it is free (pasting where the cells came from changes nothing)
+      if (!record || free.length === 0) continue;
+      const at = Math.max(0, free.indexOf(slot));
+      const to = free[at];
+      free.splice(at, 1);
+      slots.set(slot, to);
+      records.push({ ...record, slot: to, data: record.data.slice() });
+    }
+    // a logic cell without its record becomes an empty cell
+    const remap = (cell: number) => {
+      if (!isLogicCell(cell)) return cell;
+      const slot = slots.get(cell >> 8);
+      return slot === undefined ? 0 : LOGIC_CELL | (slot << 8);
+    };
+    const changes: CellChange[] = [];
+    const overlay = room.overlay.slice();
+    for (const w of writes) {
+      for (const layer of ["base", "overlay"] as const) {
+        const before = room[layer][w.index] ?? 0;
+        const after = remap(w[layer]);
+        if (layer === "overlay") overlay[w.index] = after;
+        if (before !== after) changes.push({ index: w.index, before, after, layer });
+      }
+    }
+    records.sort((a, b) => a.slot - b.slot);
+    if (changes.length === 0 && sameRecords(records, room.records)) return undefined;
+    if (recordCapacity({ ...room, overlay, records }) < 0) {
+      throw new RangeError(
+        `the game holds ${MAX_RECORD_SLOTS} records and overlay objects per room`,
+      );
+    }
+    return this.commit({ episode, room: roomId, layer: "base", changes }, room, records);
+  }
+
   /** Replaces the data of the record in `slot`. */
   setRecord(episode: number, roomId: number, slot: number, data: Uint8Array): Edit | undefined {
     const room = this.room(episode, roomId);
@@ -492,7 +634,9 @@ export class Editor {
       return;
     }
     const room = this.writable(edit.episode, edit.room);
-    for (const change of edit.changes) room[edit.layer][change.index] = value(change);
+    for (const change of edit.changes) {
+      room[change.layer ?? edit.layer][change.index] = value(change);
+    }
     if (edit.records) {
       room.records = [...(value === before ? edit.records.before : edit.records.after)];
     }
@@ -553,6 +697,66 @@ const after = (change: CellChange) => change.after;
 export function recordCapacity(room: Room): number {
   const objects = room.overlay.reduce((n, cell) => n + Number(cell !== 0), 0);
   return MAX_RECORD_SLOTS - room.records.length - objects;
+}
+
+/** An area cut to the room (empty if it lies outside). */
+export function clipArea(area: Area): Area {
+  const x = Math.max(0, area.x);
+  const y = Math.max(0, area.y);
+  const w = Math.max(0, Math.min(ROOM_WIDTH, area.x + area.w) - x);
+  const h = Math.max(0, Math.min(ROOM_HEIGHT, area.y + area.h) - y);
+  return { x, y, w, h };
+}
+
+/** The cell indices of an area inside the room, row by row. */
+export function areaCells(area: Area): number[] {
+  const cells: number[] = [];
+  for (let y = area.y; y < area.y + area.h; y++) {
+    for (let x = area.x; x < area.x + area.w; x++) cells.push(y * ROOM_WIDTH + x);
+  }
+  return cells;
+}
+
+/** The area spanned by two cells (both included). */
+export function areaBetween(a: number, b: number): Area {
+  const [ax, ay] = [a % ROOM_WIDTH, Math.floor(a / ROOM_WIDTH)];
+  const [bx, by] = [b % ROOM_WIDTH, Math.floor(b / ROOM_WIDTH)];
+  const [x, y] = [Math.min(ax, bx), Math.min(ay, by)];
+  return { x, y, w: Math.abs(ax - bx) + 1, h: Math.abs(ay - by) + 1 };
+}
+
+/**
+ * The cells a fill starting at `index` changes: the cell and its neighbours (up, down,
+ * left, right) of the same value in that layer, within `within` if given. Logic cells are
+ * never filled.
+ */
+export function fillRegion(room: Room, layer: Layer, index: number, within?: Area): number[] {
+  const cells = room[layer];
+  if (!inRoom(index) || isLogicCell(cells[index])) return [];
+  const value = cells[index];
+  const inside = (i: number) => {
+    if (!within) return true;
+    const [x, y] = [i % ROOM_WIDTH, Math.floor(i / ROOM_WIDTH)];
+    return x >= within.x && x < within.x + within.w && y >= within.y && y < within.y + within.h;
+  };
+  if (!inside(index)) return [];
+  const seen = new Set([index]);
+  const todo = [index];
+  for (let i = todo.pop(); i !== undefined; i = todo.pop()) {
+    const x = i % ROOM_WIDTH;
+    const next = [
+      i - ROOM_WIDTH,
+      i + ROOM_WIDTH,
+      x > 0 ? i - 1 : -1,
+      x < ROOM_WIDTH - 1 ? i + 1 : -1,
+    ];
+    for (const n of next) {
+      if (n < 0 || n >= ROOM_CELLS || seen.has(n) || cells[n] !== value || !inside(n)) continue;
+      seen.add(n);
+      todo.push(n);
+    }
+  }
+  return [...seen].sort((a, b) => a - b);
 }
 
 /** The cell a record shows (what its logic cell looks like). */

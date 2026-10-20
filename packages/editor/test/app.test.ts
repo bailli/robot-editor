@@ -122,6 +122,88 @@ test("dragging paints every cell along the way", () => {
   expect(app.editor?.undo()?.changes.length).toBeGreaterThan(1);
 });
 
+/** Sends a mouse event to the room view at a cell. */
+function fireAt(type: string, index: number, init: MouseEventInit = {}) {
+  const rect = app.view.element.getBoundingClientRect();
+  app.view.element.dispatchEvent(
+    new MouseEvent(type, {
+      bubbles: true,
+      button: 0,
+      clientX: rect.left + cellCentre(index).x,
+      clientY: rect.top + cellCentre(index).y,
+      ...init,
+    }),
+  );
+}
+
+test("an area is selected, copied and pasted into another room, undoably", async () => {
+  const button = (name: string) => page.getByRole("button", { name, exact: true });
+  await expect.element(button("Copy area")).toBeDisabled();
+  await expect.element(button("Paste area")).toBeDisabled();
+  await page.getByRole("radio", { name: "Select" }).click();
+  // room 43's top left corner: walls
+  fireAt("mousedown", 0);
+  fireAt("mousemove", 2 * ROOM_WIDTH + 3);
+  window.dispatchEvent(new MouseEvent("mouseup"));
+  expect(app.area).toEqual({ x: 0, y: 0, w: 4, h: 3 });
+  await expect.element(button("Copy area")).toBeEnabled();
+  await userEvent.keyboard("{Control>}c{/Control}");
+  expect(app.clip?.w).toBe(4);
+  app.showRoom(44);
+  expect(app.area).toBeUndefined(); // the selection belongs to the room
+  await userEvent.keyboard("{Control>}v{/Control}");
+  expect(app.pasting).toBe(true);
+  const target = 10 * ROOM_WIDTH + 10;
+  fireAt("mousemove", target);
+  fireAt("mousedown", target);
+  expect(app.pasting).toBe(false);
+  const source = game.room(1, 43);
+  const room = defined(app.editor).room(1, 44);
+  for (let y = 0; y < 3; y++) {
+    for (let x = 0; x < 4; x++) {
+      expect(room.base[(10 + y) * ROOM_WIDTH + 10 + x]).toBe(source.base[y * ROOM_WIDTH + x]);
+    }
+  }
+  expect(app.area).toEqual({ x: 10, y: 10, w: 4, h: 3 });
+  // Delete clears the pasted area, undo brings it back
+  await userEvent.keyboard("{Delete}");
+  expect(defined(app.editor).room(1, 44).base[target]).toBe(0);
+  app.undo();
+  app.undo();
+  expect(defined(app.editor).isEdited(1, 44)).toBe(false);
+});
+
+test("the fill tool fills connected cells of one value, within a selected area", async () => {
+  const room = game.room(1, 43);
+  const floor = 5 * ROOM_WIDTH + 20; // empty floor
+  app.setTile(room.base[3 * ROOM_WIDTH + 1] ?? 0);
+  app.setArea({ x: 18, y: 4, w: 5, h: 3 });
+  await page.getByRole("radio", { name: "Fill" }).click();
+  expect(app.area).toBeUndefined(); // other tools drop the selection
+  app.setArea({ x: 18, y: 4, w: 5, h: 3 });
+  fireAt("mousedown", floor);
+  const filled =
+    defined(app.editor)
+      .undo()
+      ?.changes.map((c) => c.index) ?? [];
+  expect(filled.length).toBeGreaterThan(1);
+  expect(filled.length).toBeLessThanOrEqual(15);
+  // without the area: much more of the floor
+  app.setArea(undefined);
+  fireAt("mousedown", floor);
+  expect(defined(app.editor).undo()?.changes.length).toBeGreaterThan(15);
+});
+
+test("the tile filter keeps the tiles whose name or value match", async () => {
+  const tiles = () => [...document.querySelectorAll<HTMLElement>(".tile-grid button")];
+  const all = tiles().length;
+  await userEvent.fill(page.getByRole("searchbox", { name: "Filter tiles" }), "0x0017");
+  const shown = tiles().filter((b) => !b.hidden);
+  expect(shown.map((b) => Number(b.dataset["tile"]))).toEqual([0x17]);
+  await userEvent.fill(page.getByRole("searchbox", { name: "Filter tiles" }), "");
+  expect(tiles().filter((b) => !b.hidden).length).toBe(all);
+});
+
 test("switching episodes shows the episode's start room", async () => {
   await userEvent.selectOptions(page.getByRole("combobox", { name: "Episode" }), "Robot III");
   await expect.element(page.getByRole("heading", { name: "Robot III – room 41" })).toBeVisible();

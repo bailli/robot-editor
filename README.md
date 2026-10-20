@@ -30,10 +30,13 @@ What is decoded, what the editor supports and what is still open: [STATUS.md](ST
 `pnpm editor` starts it at http://localhost:5173 and opens `reference/GameOfRobot.exe`
 by itself; otherwise open or drop an exe (it never leaves the browser). Pick an episode
 and a room, then paint the base or overlay layer: left button paints, right button picks
-the tile under the cursor, Ctrl+Z / Ctrl+Y undo and redo, G shows the grid. "Save exe"
+the tile under the cursor, Ctrl+Z / Ctrl+Y undo and redo, G shows the grid. The Fill
+tool fills connected cells; with the Select tool an area is copied (Ctrl+C), cut
+(Ctrl+X), cleared (Delete) and pasted (Ctrl+V, then click), logic records included. The
+Room tab sets the darkness, the points for the first visit and the music. "Save exe"
 downloads a copy with the edited scenes and texts. Scenes that grow move to the end of
 the resource section (the exe's signature is dropped). Logic cells (magenta) refer to
-the room's logic records and cannot be painted yet. The room's name is edited in the
+the room's logic records and cannot be painted over (the inspector and the area tools change them). The room's name is edited in the
 field next to the title; new rooms are added (empty or as a copy of the shown one)
 and the shown room is deleted below the episode selection. "Test in game" starts the game in the shown room with all
 edits (the hero at the selected cell): under `pnpm editor` in Wine on this display

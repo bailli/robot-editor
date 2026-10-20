@@ -398,8 +398,17 @@ Supported:
 - episode and room selection, room list with edited rooms marked
 - room drawn exactly as the renderer draws it (cell image cache, per-cell redraws)
 - painting base or overlay with a tile from the episode's tiles (robots, which draw
-  nothing as tiles, show their first sprite; other invisible tiles a hatching) or any hex
-  value; right click picks; dragging fills lines; undo/redo per stroke; grid (G)
+  nothing as tiles, show their first sprite; other invisible tiles a hatching; a filter
+  by name, text or hex value) or any hex value; right click picks; dragging fills lines;
+  undo/redo per stroke; grid (G)
+- tools Paint, Fill (the connected cells of the clicked value, 4 neighbours, within the
+  selected area if clicked inside it), Select (drag a rectangle) and Inspect; the Area
+  buttons and keys work on the selection in both layers: Copy (Ctrl+C), Cut (Ctrl+X),
+  Clear (Delete), Fill (the area's cells of the current layer); Paste (Ctrl+V) shows the
+  clip under the mouse until a click puts it down (Shift+click: again, Esc or right click:
+  stop), in any room or episode; logic cells take their records along (new slots, the
+  same ones where free), the records of covered logic cells go, a paste beyond the game's
+  200 records and overlay objects is refused; each one undo step
 - layout: the room fits the window's height with its exits around it (north above, south
   below, west and east at the sides; doors, stairs, bus, oracles, teleporters and actors
   in a line above); the column right of it has the tool and layer settings (always
@@ -462,12 +471,12 @@ Supported:
 
 Not supported (yet):
 
-- painting over logic cells (use the inspector); records are edited field by field, no
-  copy/paste of records between rooms
+- painting over logic cells (use the inspector or the area tools); records are edited
+  field by field
 - painting exit tiles is plain painting (0x0017 in the base layer)
 - English texts: room names are edited in the German texts only (Junior and I also
   have English ones, which keep the old names, or none for new rooms)
-- fill, copy/paste of areas, tile search/filter
+- copying areas between editor windows or exes (the clip lives in the page)
 - English UI texts / English descriptions (German only; English exists for Junior and I)
 - remembering the last exe or unsaved work across reloads
 - any check that an edited room is still playable

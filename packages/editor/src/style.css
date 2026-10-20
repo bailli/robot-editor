@@ -822,3 +822,25 @@ canvas.cell.text-tile {
   grid-template-columns: repeat(2, auto);
   gap: 0;
 }
+
+.settings-flags {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.settings-flags[hidden] {
+  display: none;
+}
+
+.area-tools button.pressed {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+}
+
+.tile-filter {
+  width: 100%;
+  box-sizing: border-box;
+}
