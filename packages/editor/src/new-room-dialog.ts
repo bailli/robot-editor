@@ -14,6 +14,8 @@ export interface NewRoomDialogEvents {
   check(id: number): NewRoomCheck;
   /** The room to copy, named ("room 43 – DER START"), undefined if there is none. */
   source(id: number): string | undefined;
+  /** What an interior with this id would be, or why there can be none. */
+  interior(id: number): { text: string; problem?: string | undefined };
   /** The episode's walls to offer, the most used first. */
   walls(): readonly number[];
   /** The cells to offer for the exits, the default first. */
@@ -69,8 +71,9 @@ class TileChoice {
 
 /**
  * Asks for a new room: its id (checked while typing: free, where it lies, which rooms it
- * borders), its content (walls with exits, empty floor or a copy of a room, the shown one
- * by default), and whether closed exits of its neighbours should open towards it.
+ * borders), its content (walls with exits, empty floor, a copy of a room, the shown one
+ * by default, or the interior of the room 100 below), and whether closed exits of its
+ * neighbours should open towards it.
  */
 export class NewRoomDialog {
   readonly element = document.createElement("dialog");
@@ -80,6 +83,9 @@ export class NewRoomDialog {
   private readonly walled = document.createElement("input");
   private readonly empty = document.createElement("input");
   private readonly copy = document.createElement("input");
+  private readonly interior = document.createElement("input");
+  private readonly interiorLabel = document.createElement("span");
+  private readonly interiorText = document.createElement("p");
   private readonly copyFrom = document.createElement("input");
   private readonly copyName = document.createElement("span");
   private readonly wall = new TileChoice("Wall", () => {
@@ -94,6 +100,8 @@ export class NewRoomDialog {
   private readonly openLabel = document.createElement("label");
   private readonly create = document.createElement("button");
   private readonly events: NewRoomDialogEvents;
+  /** The room shown when the dialog opened. */
+  private from = 0;
 
   constructor(events: NewRoomDialogEvents) {
     this.events = events;
@@ -120,6 +128,7 @@ export class NewRoomDialog {
       [this.walled, "walls"],
       [this.empty, "empty"],
       [this.copy, "copy"],
+      [this.interior, "interior"],
     ] as const) {
       input.type = "radio";
       input.name = "new-room-content";
@@ -128,6 +137,19 @@ export class NewRoomDialog {
         this.refresh();
       });
     }
+    this.interior.addEventListener("change", () => {
+      // an interior lies 100 above the room it is entered from: the shown one, if free
+      const id = Number(this.id.value);
+      const inside = this.from + 100;
+      if (
+        this.events.interior(id).problem !== undefined &&
+        this.events.check(inside).problem === undefined &&
+        this.events.interior(inside).problem === undefined
+      ) {
+        this.id.value = String(inside);
+        this.refresh();
+      }
+    });
     const walledLabel = document.createElement("label");
     walledLabel.title =
       "A wall all around, with five exit cells in the middle of each edge (exit tiles and barriers are closed while the room has enemies, exit tiles only open on edges that lead somewhere)";
@@ -164,7 +186,14 @@ export class NewRoomDialog {
     const copyRow = document.createElement("div");
     copyRow.className = "new-room-copy";
     copyRow.append(copyLabel, this.copyFrom, this.copyName);
-    content.append(legend, walledRow, emptyLabel, copyRow);
+    const interiorLabel = document.createElement("label");
+    interiorLabel.title =
+      "Filled with the tile that shows the room behind it and blocks the hero (class 99); a door out at each door into a building of the room 100 below, stairs up at its stairs down";
+    interiorLabel.append(this.interior, " ", this.interiorLabel);
+    this.interiorText.className = "new-room-interior";
+    const interiorRow = document.createElement("div");
+    interiorRow.append(interiorLabel, this.interiorText);
+    content.append(legend, walledRow, emptyLabel, copyRow, interiorRow);
 
     this.open.type = "checkbox";
     this.open.checked = true;
@@ -203,12 +232,13 @@ export class NewRoomDialog {
    */
   show(episode: string, id: number | undefined, from: number): void {
     this.heading.textContent = `New room in ${episode}`;
+    this.from = from;
     this.id.value = id === undefined ? "" : String(id);
     this.copyFrom.value = String(from);
     const preview = (value: number) => this.events.preview(value);
     this.wall.offer(this.events.walls(), preview);
     this.exits.offer(this.events.exits(), preview);
-    if (![this.walled, this.empty, this.copy].some((input) => input.checked))
+    if (![this.walled, this.empty, this.copy, this.interior].some((input) => input.checked))
       this.walled.checked = true;
     this.refresh();
     if (!this.element.open) this.element.showModal();
@@ -222,6 +252,11 @@ export class NewRoomDialog {
       return walls === undefined || exits === undefined ? undefined : { walls, exits };
     }
     if (this.empty.checked) return "empty";
+    if (this.interior.checked) {
+      return this.events.interior(Number(this.id.value)).problem === undefined
+        ? "interior"
+        : undefined;
+    }
     const from = Number(this.copyFrom.value);
     return this.events.source(from) === undefined ? undefined : { copy: from };
   }
@@ -232,6 +267,11 @@ export class NewRoomDialog {
     const source = this.events.source(Number(this.copyFrom.value));
     this.copyName.textContent = source?.replace(/^room \d+( – )?/, "") ?? "(no such room)";
     this.copyName.classList.toggle("error", source === undefined);
+    const id = Number(this.id.value);
+    const interior = this.events.interior(id);
+    this.interiorLabel.textContent = `Interior of room ${id - 100}`;
+    this.interiorText.textContent = interior.problem ?? interior.text;
+    this.interiorText.classList.toggle("error", interior.problem !== undefined);
     const check = this.events.check(Number(this.id.value));
     const lines = check.problem === undefined ? check.lines : [check.problem, ...check.lines];
     this.where.replaceChildren(

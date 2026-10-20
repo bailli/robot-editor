@@ -908,6 +908,29 @@ test("a new room's dialog names its neighbours and opens their closed exits, und
   expect(editor.canUndo).toBe(false);
 });
 
+test("a house's interior is added from the room it is entered from", async () => {
+  const editor = defined(app.editor);
+  editor.removeRoom(2, 115);
+  app.showEpisode(2, 15);
+  app.newRoom();
+  const dialog = page.getByRole("dialog", { name: "New room" });
+  await dialog.getByRole("radio", { name: /Interior of room/ }).click();
+  // the id moves to the room 100 above the shown one
+  const id = dialog.getByRole("spinbutton", { name: "Room id" });
+  expect((id.element() as HTMLInputElement).value).toBe("115");
+  expect(dialog.element().textContent).toMatch(
+    /Room 15 leads in: 1 door out at the same cell\. Room 15 shows around it\./,
+  );
+  await dialog.getByRole("button", { name: "Create" }).click();
+  expect(document.querySelector(".status")?.textContent).toBe(
+    "Room 115 added: the interior of room 15",
+  );
+  expect(editor.room(2, 115).base[8 * ROOM_WIDTH + 26]).toBe(0x005a);
+  // Junior and I cannot have one
+  app.showEpisode(1, 43);
+  expect(app.describeInterior(143).problem).toMatch(/class 99/);
+});
+
 test("neighbours across the end of a row or a hundred are named as such", () => {
   // episode IV: room 204's north neighbour is 194, in the hundred above
   app.showEpisode(4, 204);

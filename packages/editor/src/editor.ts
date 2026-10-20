@@ -1,7 +1,11 @@
 import {
+  BACKDROP_CLASS,
   DIRECTIONS,
+  DOOR_IN_CLASS,
+  DOOR_OUT_CLASS,
   type Direction,
   EXIT_CELL,
+  type EpisodeClasses,
   type EpisodeStart,
   type ExitMode,
   GRID_STEP,
@@ -19,7 +23,9 @@ import {
   type RoomName,
   type RoomSettings,
   type RoomTag,
+  STAIRS_CLASS,
   type Texts,
+  backdropRoom,
   encodeCp437,
   exitMode,
   nameRoom,
@@ -102,7 +108,18 @@ export interface GridNeighbour {
 export const MAX_RECORD_SLOTS = 200;
 
 /** What a new room holds (Editor.addRoom). */
-export type NewRoomContent = "empty" | { walls: number; exits: number } | { copy: number };
+export type NewRoomContent =
+  "empty" | "interior" | { walls: number; exits: number } | { copy: number };
+
+/** What Editor.interiorOf finds for a new room's interior. */
+export interface Interior {
+  /** The room 100 below, whose doors and stairs lead in. */
+  above: number;
+  /** The room the game draws around it (backdropRoom), if any. */
+  backdrop: number | undefined;
+  doors: number;
+  stairs: number;
+}
 
 /** The class of barriers (tile 0x55: "Eine Barriere für unvorsichtige Abenteurer"). */
 export const BARRIER_CLASS = 100;
@@ -128,6 +145,41 @@ const EXIT_GAPS: readonly number[] = [
   ...[17, 18, 19, 20, 21].flatMap((x) => [ROOM_WIDTH + x, (ROOM_HEIGHT - 1) * ROOM_WIDTH + x]),
   ...[12, 13, 14, 15, 16].flatMap((y) => [y * ROOM_WIDTH, y * ROOM_WIDTH + ROOM_WIDTH - 1]),
 ];
+
+/** The cells whose class 99 gives a room its backdrop: (0, 1) and (39, 1). */
+const BACKDROP_MARKS: readonly number[] = [ROOM_WIDTH, 2 * ROOM_WIDTH - 1];
+
+/** A room filled with the class 99 tile (state 0). */
+function interiorFiller(classes: EpisodeClasses): Uint16Array {
+  return new Uint16Array(ROOM_CELLS).fill(classes.typeOfClass.get(BACKDROP_CLASS) ?? 0);
+}
+
+/** A way into an interior: a building's door or stairs down, at a cell of room id - 100. */
+interface InteriorPassage {
+  kind: "door" | "stairs";
+  cell: number;
+  layer: Layer;
+  value: number;
+  /** Rows the hero walks on through a door: -1 north (state 6), 1 south (state 7). */
+  dy: number;
+}
+
+/** The doors into buildings (class 98, states 6 and 7) and stairs down of a room. */
+function interiorPassages(room: Room, classes: EpisodeClasses): InteriorPassage[] {
+  const found: InteriorPassage[] = [];
+  for (const layer of ["base", "overlay"] as const) {
+    room[layer].forEach((value, cell) => {
+      const id = classes.classes.get(value & 0xff)?.id;
+      const state = (value >> 8) & 0xf;
+      if (id === DOOR_IN_CLASS && (state === 6 || state === 7)) {
+        found.push({ kind: "door", cell, layer, value, dy: state === 6 ? -1 : 1 });
+      } else if (id === STAIRS_CLASS && !((value >> 8) & 1)) {
+        found.push({ kind: "stairs", cell, layer, value, dy: 0 });
+      }
+    });
+  }
+  return found;
+}
 
 /** The title screen; its script is the episode's global one. */
 const TITLE_ROOM = 1;
@@ -314,10 +366,86 @@ export class Editor {
   }
 
   /**
+   * What an interior with id `id` would be (see interiorCells); throws a RangeError if the
+   * episode has no class 99 tile (Junior and I) or no room id - 100.
+   */
+  interiorOf(episode: number, id: number): Interior {
+    const { classes } = this.game.episode(episode);
+    if (!classes.typeOfClass.has(BACKDROP_CLASS)) {
+      throw new RangeError("the episode has no tile that shows the room behind (class 99)");
+    }
+    const rooms = this.rooms(episode);
+    const above = rooms.find((r) => r.id === id - 100);
+    if (!above) throw new RangeError(`there is no room ${id - 100} to lead in from`);
+    const passages = interiorPassages(above, classes);
+    const room = { ...above, id, base: interiorFiller(classes), records: [] };
+    return {
+      above: above.id,
+      backdrop: backdropRoom(episode, room, rooms, classes)?.id,
+      doors: passages.filter((p) => p.kind === "door").length,
+      stairs: passages.filter((p) => p.kind === "stairs").length,
+    };
+  }
+
+  /**
+   * The cells of a new interior `id`: class 99 everywhere, so the room the game draws
+   * behind it shows (backdropRoom) and the hero cannot walk there; at each door into a
+   * building in room id - 100 a door out at the same cell, walls beside it and two cells
+   * of floor in the direction the hero walks on (doors move him two cells further, as in
+   * the originals of episodes II and III); at each of its stairs down, stairs up with
+   * floor around them.
+   */
+  interiorCells(episode: number, id: number): { base: Uint16Array; overlay: Uint16Array } {
+    this.interiorOf(episode, id);
+    const { classes } = this.game.episode(episode);
+    const above = this.room(episode, id - 100);
+    const base = interiorFiller(classes);
+    const overlay = new Uint16Array(ROOM_CELLS);
+    const filler = base[0];
+    const doorOut = classes.typeOfClass.get(DOOR_OUT_CLASS) ?? 0;
+    const wall = this.wallCells(episode, 1).at(0) ?? filler;
+    const passages = interiorPassages(above, classes).filter(
+      (p) => !BACKDROP_MARKS.includes(p.cell),
+    );
+    // the passages first: doors side by side keep each other
+    for (const p of passages) {
+      if (p.kind === "door") base[p.cell] = doorOut;
+      else if (p.layer === "base") base[p.cell] = p.value | 0x100;
+      else {
+        base[p.cell] = 0;
+        overlay[p.cell] = p.value | 0x100;
+      }
+    }
+    const set = (x: number, y: number, value: number) => {
+      const i = y * ROOM_WIDTH + x;
+      if (x < 0 || x >= ROOM_WIDTH || y < 1 || y >= ROOM_HEIGHT) return;
+      if (base[i] === filler && !BACKDROP_MARKS.includes(i)) base[i] = value;
+    };
+    for (const p of passages) {
+      const [x, y] = [p.cell % ROOM_WIDTH, Math.floor(p.cell / ROOM_WIDTH)];
+      if (p.kind === "door") {
+        set(x - 1, y, wall);
+        set(x + 1, y, wall);
+        set(x, y + p.dy, 0);
+        set(x, y + 2 * p.dy, 0);
+      } else {
+        for (const [dx, dy] of [
+          [0, -1],
+          [0, 1],
+          [-1, 0],
+          [1, 0],
+        ] as const)
+          set(x + dx, y + dy, 0);
+      }
+    }
+    return { base, overlay };
+  }
+
+  /**
    * Adds room `id` to the episode: empty, walled (the cell `content.walls` all around with
    * five cells `content.exits` in the middle of each edge, like most rooms of Junior and I:
-   * there exit tiles, see exitCells) or a copy
-   * of room `content.copy` (cells, records and tags, the script too); with `openNeighbours`
+   * there exit tiles, see exitCells), an interior of room id - 100 (interiorCells) or a
+   * copy of room `content.copy` (cells, records and tags, the script too); with `openNeighbours`
    * the grid neighbours whose exits towards it are closed ("none") open them. One undo
    * step. Throws a RangeError if the id is taken or out of range, or the episode is full.
    */
@@ -334,7 +462,8 @@ export class Editor {
       typeof content === "object" && "copy" in content
         ? this.room(episode, content.copy)
         : undefined;
-    const base = new Uint16Array(ROOM_CELLS);
+    const interior = content === "interior" ? this.interiorCells(episode, id) : undefined;
+    const base = interior?.base ?? new Uint16Array(ROOM_CELLS);
     if (typeof content === "object" && "walls" in content) {
       if (isLogicCell(content.walls)) throw new RangeError("walls cannot be logic cells");
       for (const i of RING) base[i] = content.walls;
@@ -354,7 +483,7 @@ export class Editor {
           id,
           tags: [],
           base,
-          overlay: new Uint16Array(ROOM_CELLS),
+          overlay: interior?.overlay ?? new Uint16Array(ROOM_CELLS),
           records: [],
           trailing: new Uint8Array(),
         };

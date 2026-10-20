@@ -256,7 +256,13 @@ Files in `packages/formats/src`:
   at the same (x, y) in the target room (0x426880), so all have their counterpart at the
   same place, except 5 recorded one-way stairs. Stairs need nothing but the tile (no
   record, script or tag); both layers are used (episode IV mostly the overlay); Junior
-  has no stairs.
+  has no stairs. A door in (0x413d30) takes only the hero walking north (state 6) or
+  south (state 7), who then moves on two cells; unless the episode's flag 0x80000
+  (`[0x51bb18]+8`) is set, he must carry the key 0x0f15 (0x42bcd0 searches the
+  inventory slots, their count at 0x4fe0c0; in episode II it lies in room 42 at
+  (16, 19)), and a second check (0x42f7c0 on 0x42b600(0x4fe098), not traced) must pass.
+  **Verified under Wine** in episode II room 15: without the key the hero stops at
+  the door, with it he enters 115.
 - **Backdrops** (`backdropRoom`, `shownCells`): a room whose cell (0, 1) or (39, 1) is
   of class 99 (tile 0x54; episode vtable +0x00: 0x409d30, IV 0x40d4a0) is drawn over
   another room: room id mod 100 in Junior to III (242 shows 42, not 142), id − 100 in
@@ -515,8 +521,14 @@ Supported:
   enemies are about, see room connections; the default in episode III, whose rooms
   have no exit tiles); **verified under Wine**
   in episodes I, III and IV: the tiles towards existing rooms open, walking out arrives
-  there; III's originals use no exit tiles at all), empty floor
-  or a copy of any room (the shown one by default; cells, records, tags, script); and
+  there; III's originals use no exit tiles at all), empty floor,
+  a copy of any room (the shown one by default; cells, records, tags, script), or the
+  interior of the room 100 below (episodes II–IV, `interiorCells`: class 99 everywhere,
+  so that room shows around it; at each of its doors into buildings a door out at the
+  same cell with walls beside it and two cells of floor where the hero walks on, at its
+  stairs down stairs up; picking it moves the id to the shown room + 100; the dialog
+  names the room drawn around it and episode II's key; **verified under Wine**: a
+  generated 115 under room 15 is entered with the key and left northwards); and
   whether closed exits of its neighbours open towards it; one undo step. "Go to room"
   opens a room by id. Rooms deleted ("Delete room…" next to the name; not room 1, the
   title screen with the global script, nor the start room; the confirmation names the

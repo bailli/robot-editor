@@ -49,6 +49,7 @@ import {
   type Edit,
   Editor,
   type GridNeighbour,
+  type Interior,
   type Layer,
   MAX_RECORD_SLOTS,
   MAX_ROOM_ID,
@@ -277,6 +278,7 @@ export class App {
         .some((r) => r.id === id)
         ? this.roomLabel(this.episode, id)
         : undefined,
+    interior: (id) => this.describeInterior(id),
     create: (id, content, openNeighbours) => this.addRoom(id, content, openNeighbours),
     walls: () => this.need().wallCells(this.episode),
     exits: () => this.need().exitCells(this.episode),
@@ -793,7 +795,9 @@ export class App {
     const added =
       typeof content === "object" && "copy" in content
         ? `Room ${content.copy} copied to room ${id}`
-        : `Room ${id} added`;
+        : content === "interior"
+          ? `Room ${id} added: the interior of room ${id - 100}`
+          : `Room ${id} added`;
     this.setStatus(`${added}${exits}`);
     return true;
   }
@@ -809,6 +813,36 @@ export class App {
       id ?? editor.freeRoomId(this.episode, this.roomId),
       this.roomId,
     );
+  }
+
+  /** What the new room dialog says about room `id` as an interior (Editor.interiorOf). */
+  describeInterior(id: number): { text: string; problem?: string } {
+    let interior: Interior;
+    try {
+      interior = this.need().interiorOf(this.episode, id);
+    } catch (error) {
+      return { text: "", problem: `${capitalize(message(error))}.` };
+    }
+    const { above, backdrop, doors, stairs } = interior;
+    const ways = [
+      doors ? `${doors} door${doors === 1 ? "" : "s"} out` : "",
+      stairs ? `stairs up at its ${stairs === 1 ? "stairs" : `${stairs} stairs`}` : "",
+    ].filter((w) => w !== "");
+    const lead = ways.length
+      ? `Room ${above} leads in: ${ways.join(", ")} at the same cell${doors + stairs > 1 ? "s" : ""}.`
+      : `Room ${above} has no doors into buildings or stairs down yet: put one there (tile 0x0753 or 0x0653, stairs 0x003d) and a door out (0x005a) here at the same cell.`;
+    const around =
+      backdrop === undefined
+        ? "No room shows around it: the game draws room id mod 100 (episode IV: id − 100), which does not exist."
+        : backdrop === above
+          ? `Room ${backdrop} shows around it.`
+          : `Room ${backdrop} shows around it, not room ${above}: the game takes id mod 100.`;
+    // the door's handler (0x413d30) asks for the key unless the episode's flag 0x80000 is set
+    const key =
+      this.episode === 2 && doors > 0
+        ? " The hero needs the key 0x0f15 to go in (episode II: it lies in room 42)."
+        : "";
+    return { text: `${lead} ${around}${key}` };
   }
 
   /** What the new room dialog says about an id: free or not, where, what it borders. */

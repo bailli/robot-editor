@@ -1020,6 +1020,16 @@ canvas.cell.text-tile {
   color: var(--error);
 }
 
+.new-room-interior {
+  margin: 2px 0 0 24px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.new-room-interior.error {
+  color: var(--error);
+}
+
 .new-room-tiles {
   display: flex;
   flex-wrap: wrap;

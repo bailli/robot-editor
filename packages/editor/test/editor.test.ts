@@ -371,6 +371,30 @@ describe("Editor rooms and names", () => {
     expect(editor.room(1, id).base[free]).toBe(room.base[free]);
   });
 
+  test("an interior shows the room behind it, with a door out at each door in", () => {
+    const editor = new Editor(game);
+    // episode II: room 115 is the house of room 15, its door at (26, 8) (state 7: walked
+    // into southwards)
+    editor.removeRoom(2, 115);
+    expect(editor.interiorOf(2, 115)).toEqual({ above: 15, backdrop: 15, doors: 1, stairs: 0 });
+    const room = defined(editor.addRoom(2, 115, "interior").added);
+    const at = (x: number, y: number) => room.base[y * 40 + x];
+    expect(at(0, 1)).toBe(0x0054); // class 99 everywhere else: the backdrop's mark
+    expect(at(26, 8)).toBe(0x005a); // the door out, as in the original
+    expect([at(25, 8), at(27, 8)]).toEqual([0x0026, 0x0026]);
+    expect([at(26, 7), at(26, 9), at(26, 10)]).toEqual([0x0054, 0, 0]);
+    expect(room.base.filter((c) => c !== 0x0054)).toHaveLength(5);
+    // episode IV: the stairs down of room 204 (overlay) become stairs up
+    editor.removeRoom(4, 304);
+    expect(editor.interiorOf(4, 304)).toMatchObject({ above: 204, backdrop: 204, stairs: 2 });
+    const cellar = defined(editor.addRoom(4, 304, "interior").added);
+    expect(cellar.overlay[7 * 40 + 28]).toBe(0x013d);
+    expect(cellar.base[7 * 40 + 28]).toBe(0);
+    // Junior and I have no class 99 tile; an interior needs the room 100 below
+    expect(() => editor.interiorOf(1, 199)).toThrow(/class 99/);
+    expect(() => editor.addRoom(2, 1001, "interior")).toThrow(/no room 901/);
+  });
+
   test("an added room is empty; ids must be free and in range", () => {
     const editor = new Editor(game);
     editor.addRoom(1, 999);
