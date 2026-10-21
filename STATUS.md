@@ -37,9 +37,9 @@ for episodes I–IV.
   sha256); `pnpm snapshots` re-records them, and the diff must be reviewed. Almost all
   tests need `reference/GameOfRobot.exe`; the few that don't are listed in
   `pnpm test:without-game` (add new data-free test files there), which is what CI runs.
-- **Git:** commit freely; subject-only messages (a body only when important), **no
-  attribution footer**; linear history (`merge.ff=only`, rebase on pull), never merge
-  commits. Identity: bailli. **Never push**: only the user pushes to `origin` (GitHub).
+- **Git:** commit freely; subject within ~72 characters, a short body when more
+  needs saying (not a longer subject), **no attribution footer**; linear history
+  (`merge.ff=only`, rebase on pull), never merge commits. Identity: bailli. **Never push**: only the user pushes to `origin` (GitHub).
 - **CI:** `.github/workflows/ci.yml` (typecheck, lint, format, `test:without-game`, editor
   build) deploys `packages/editor/dist` to GitHub Pages from `main`.
 - **No game data in the repository:** `reference/` (the installer and exe), `resources/`,
