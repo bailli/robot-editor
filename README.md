@@ -86,9 +86,14 @@ animations and other runtime effects differ from a static render by nature.
 
 - `pnpm check` – typecheck, lint, format check and tests
 - `pnpm test` – tests only (Vitest; `pnpm exec vitest` to watch)
+- `pnpm test:without-game` – the tests that need no game data (what CI runs)
 - `pnpm snapshots` – record changed outputs in `packages/formats/test/__snapshots__/`
   (review the diff)
 - `pnpm format` – apply Prettier
+
+GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, format check and
+`pnpm test:without-game` on every push and pull request, and publishes the editor's static
+build on GitHub Pages from `main` (Settings → Pages → Source: GitHub Actions).
 
 TypeScript is restricted to erasable syntax, so Node.js (>= 22.18) runs the sources directly
 without a build step.
