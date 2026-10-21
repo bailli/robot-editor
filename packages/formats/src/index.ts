@@ -231,10 +231,12 @@ export type {
 export {
   CIRCUIT_AREA,
   CIRCUIT_NODE_RECORD,
+  BULB_CLASS,
   CIRCUIT_PIECES,
   GATE_CLASS,
   LETTER_CLASS,
   circuitCell,
+  nodeBulb,
   roomCircuit,
   traceCircuit,
 } from "./circuits.ts";

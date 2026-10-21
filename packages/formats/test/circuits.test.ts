@@ -2,8 +2,15 @@ import assert from "node:assert/strict";
 
 import { expect, test } from "vitest";
 
-import { CIRCUIT_PIECES, type RoomCircuit, circuitCell, roomCircuit } from "../src/circuits.ts";
+import {
+  CIRCUIT_PIECES,
+  type RoomCircuit,
+  circuitCell,
+  nodeBulb,
+  roomCircuit,
+} from "../src/circuits.ts";
 import { Game } from "../src/game.ts";
+import { shownCells } from "../src/render.ts";
 import { LOGIC_CELL, ROOM_CELLS, ROOM_WIDTH, type Room } from "../src/scene.ts";
 import { exe } from "./data.ts";
 
@@ -163,6 +170,24 @@ test("nodes outside columns 1-37, rows 2-26 are never evaluated", () => {
   assert.equal(c.nodes[0]?.scanned, false);
   assert.equal(c.allOn, false);
   expect(c.problems[0]?.text).toMatch(/is never evaluated/);
+});
+
+test("a node shows its record's cell with a bulb on top, lit while byte 7 is", () => {
+  const BULB = 0x43; // tile type 67, class 77
+  assert.equal(nodeBulb(classes, false), BULB);
+  const off = room({}, [{ x: 10, y: 5, data: [0, FENCE] }]);
+  const cell = 10 + 5 * ROOM_WIDTH;
+  assert.deepEqual(shownCells(off, cell, classes), [FENCE, BULB, false]);
+  const on = room({}, [{ x: 10, y: 5, data: [0, 0, 0, 0, 0, 0, 1] }]);
+  assert.deepEqual(shownCells(on, cell, classes), [0, BULB | 0x100, false]);
+  // as the circuit lights it
+  assert.deepEqual(
+    shownCells(on, cell, classes, undefined, () => false),
+    [0, BULB, false],
+  );
+  // not under an overlay object
+  on.overlay[cell] = FENCE;
+  assert.deepEqual(shownCells(on, cell, classes), [0, FENCE, false]);
 });
 
 test("the original circuits", () => {

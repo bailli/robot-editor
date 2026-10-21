@@ -1,3 +1,4 @@
+import { CIRCUIT_NODE_RECORD, nodeBulb } from "./circuits.ts";
 import { type EpisodeClasses, FrameMethod, type ObjectClass } from "./classes.ts";
 import type { Rgb } from "./palette.ts";
 import {
@@ -364,15 +365,19 @@ export function backdropRoom(
 
 /**
  * The cells drawn at map position `index`: [base, overlay] of the room, logic cells
- * resolved, or of `backdrop` (backdropRoom) where the room's cell is of class 99.
+ * resolved, or of `backdrop` (backdropRoom) where the room's cell is of class 99. A
+ * circuit node shows its bulb as the overlay (nodeBulb; not under an overlay object,
+ * which the game would draw on top of it), lit as byte 7 is or as `lit` says.
  */
 export function shownCells(
   room: Room,
   index: number,
   classes?: EpisodeClasses,
   backdrop?: Room,
+  lit?: (index: number) => boolean | undefined,
 ): [base: number, overlay: number, fromBackdrop: boolean] {
-  const base = resolveCell(room, room.base[index] ?? 0);
+  const cell = room.base[index] ?? 0;
+  const base = resolveCell(room, cell);
   const overlay = resolveCell(room, room.overlay[index] ?? 0);
   if (backdrop && overlay === 0 && classes?.classes.get(base & 0xff)?.id === BACKDROP_CLASS) {
     return [
@@ -380,6 +385,13 @@ export function shownCells(
       resolveCell(backdrop, backdrop.overlay[index] ?? 0),
       true,
     ];
+  }
+  if (classes && overlay === 0 && (cell & 0xff) === LOGIC_CELL) {
+    const record = room.records.find((r) => r.slot === cell >> 8);
+    if (record?.data[0] === CIRCUIT_NODE_RECORD) {
+      const bulb = nodeBulb(classes, lit?.(index) ?? record.data[7] !== 0);
+      if (bulb !== undefined) return [base, bulb, false];
+    }
   }
   return [base, overlay, false];
 }

@@ -184,8 +184,9 @@ Files in `packages/formats/src`:
   Class 0 is the shared empty class (left out of the class→type table 0x4c70e0, 0x43b46a).
 - **Renderer:** draws base cells as tiles and overlay cells as sprites with each class's
   frame method (12 methods incl. walls, terrain quarters, masks, doors, letters with the
-  game font, underlays); logic cells show their record's cell, class 99 cells the
-  backdrop's (see room connections). **730 cells differ** in 29
+  game font, underlays); logic cells show their record's cell, circuit nodes with a
+  BULB on top (see circuits), class 99 cells the backdrop's (see room connections).
+  **763 cells differ** in 31
   reference screenshots (`pnpm robot eval`), most from runtime effects (see open items).
 - **Reference screenshots of any room** use a patched exe (`patch.ts`): the room in the
   start room's slot, without scripts and without anything that moves or kills
@@ -471,13 +472,16 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   the trace; anything but a `1`/`0` at the end counts as 0. A node that changes places
   or empties its stairs cell (0x433300: not on water, stacked on what lies there;
   turned off, the cell becomes empty) and casts or drops a light (byte 8 holds it at run
-  time). The final node (the last with byte 1 bit 0 in the scan) waits until every
-  scanned node is on, **itself included**, then places its stairs (event 0x127; bit 1
-  remembers it) and takes them away when one goes off. The gates' outputs match the
-  truth tables in the GATE tile's own texts (test). In the originals every node is open:
-  the hero builds the circuits from pieces lying in the room (I 128: spare pieces in
-  racks, a final node behind an electric fence that pieces can be laid over; II 142: `1`
-  and `0` legs that meet where a gate's inputs half belongs).
+  time). A node is drawn as its record's cell with a BULB on top (class 77, lit while
+  byte 7 is 1; 0x4328f0's case 0x4329f2). **Verified under Wine:** the bulbs in I 128,
+  II 142 and I 99 match the game's screenshots. The final node (the last with byte 1
+  bit 0 in the scan) waits until every scanned node is on, **itself included**, then
+  places its stairs (event 0x127; bit 1 remembers it) and takes them away when one goes
+  off. The gates' outputs match the truth tables in the GATE tile's own texts (test).
+  In the originals every node is open: the hero builds the circuits from pieces lying in
+  the room (I 128: spare pieces in racks, a final node behind an electric fence that
+  pieces can be laid over; II 142: `1` and `0` legs that meet where a gate's inputs half
+  belongs).
 - **Logic records** (`records.ts`, every byte the game reads), all 1177 in the game
   classified: 1 stacked (object on another cell; byte 1 its level, e.g. bridges), 3
   buried (dug up with the shovel), 5 spawner (robots near the hero), 7 native (episode
@@ -622,8 +626,8 @@ Supported:
   evaluates, broken pieces, extra final nodes, stairs on water or on top of objects, the
   bytes the game keeps at run time not 0);
   in the room each traced cell framed in its signal's colour (amber on, blue off, grey
-  dashed none), nodes as discs, open ends as dashed rings, broken ones as crosses, the
-  stairs nodes place; a palette of the pieces (`1`, `0`, every GATE state with the game's
+  dashed none), the nodes' bulbs lit as the circuit lights them (in the list too), nodes
+  the game never evaluates framed red, broken ends as crosses, the stairs nodes place; a palette of the pieces (`1`, `0`, every GATE state with the game's
   graphics) to paint with, and "Add node" at the cell selected with the Inspect tool
 - actors (toggle "Actors", key A): marks where actors appear (ring: placed in the map;
   dashed: appear later or from a record; spawner radius; arrow: heading somewhere),
@@ -750,7 +754,13 @@ Roughly by value for the editor.
    actors, hero, animations), episode IV types 95/106/79/99/70, episode III types 83, 37,
    49, 76, episode II 85/77/110/25, Junior 23/25 (animated). Some are runtime effects that
    a static render cannot match. Logic cells in some dark rooms (episode I room 11's
-   teleporters) are drawn on black in the game but on colour 15 by us.
+   teleporters) are drawn on black in the game but on colour 15 by us. Lead: the game
+   draws a logic cell by its record's type (0x4328f0, jump table 0x432c90 by type − 1),
+   of which we only follow circuit nodes (the bulb): type 1 adds the stacked cell
+   (offset 4) as a sprite unless word 0 bits 14–15 are set, type 5 class 0x34 in state
+   byte 7 − 1 while byte 7 is set, type 13 clears the cell first (0x428ea0, colour 0 or
+   15 by byte 7 and the episode flag at 0x51bb18 + 8) and draws its cell as a sprite,
+   type 8 depends on byte 8 (0x103: class 0x2c, the dealer). Not traced further.
 7. **Description extras:** key colours (strings 0x9c50/0x9c51 from the exe's string
    table), messages 200/201 added by two classes, codes formatted by 0x41d2c0/0x40ff80, and
    four describe methods that depend on game flags/options.
@@ -837,6 +847,7 @@ Roughly by value for the editor.
 | 0x42bef0, 0x407aa0           | an event's first time (sound, points, text 1800 + n); script Enigma            |
 | 0x4393d8, 0x4393e8, 0x439537 | entering a room: episode III kind 3 bit 0; background music; kind 3 bit 1      |
 | 0x40f700, 0x40f9a0           | circuits: evaluate the nodes (after taking or putting down a piece); trace     |
+| 0x4328f0, 0x432c90           | draw a map cell (classes; logic cells by record type); its jump table          |
 | 0x412860, 0x47be54           | an oracle's symbol check; the 10 symbols                                       |
 | 0x42ca90, 0x430110, 0x430210 | read a word laid with letters; turn the Area square left, right                |
 | 0x42fdc0, 0x4302f0           | ShiftArea's shift; turn a punch card's square                                  |

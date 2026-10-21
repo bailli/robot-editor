@@ -57,9 +57,23 @@ export class CellCache {
     return image;
   }
 
-  /** The cells drawn at map position `index` (shownCells), dimmed where from `backdrop`. */
-  shown(room: Room, index: number, backdrop: Room | undefined): ImageData {
-    const [base, overlay, fromBackdrop] = shownCells(room, index, this.episode.classes, backdrop);
+  /**
+   * The cells drawn at map position `index` (shownCells, nodes' bulbs lit as `lit` says),
+   * dimmed where from `backdrop`.
+   */
+  shown(
+    room: Room,
+    index: number,
+    backdrop: Room | undefined,
+    lit?: (index: number) => boolean | undefined,
+  ): ImageData {
+    const [base, overlay, fromBackdrop] = shownCells(
+      room,
+      index,
+      this.episode.classes,
+      backdrop,
+      lit,
+    );
     return this.get(base, overlay, fromBackdrop);
   }
 }
@@ -119,6 +133,8 @@ export class RoomView {
   private highlights: readonly Highlight[] = [];
   private selection: Highlight | undefined;
   private circuit: RoomCircuit | undefined;
+  /** Nodes' bulbs as the circuit lights them, while it is shown. */
+  private lit = new Map<number, boolean>();
   private floating: { x: number; y: number; image: HTMLCanvasElement } | undefined;
   private actorSprite: (actor: RoomActor, n: number) => HTMLCanvasElement | undefined = () =>
     undefined;
@@ -212,9 +228,17 @@ export class RoomView {
     this.drawMarks();
   }
 
-  /** Shows a circuit's signals, nodes, ends and stairs (undefined: none). */
+  /**
+   * Shows a circuit's signals, broken ends and stairs, and lights the bulbs of the nodes
+   * that are on (undefined: none, the bulbs as the room holds them).
+   */
   setCircuit(circuit: RoomCircuit | undefined): void {
     this.circuit = circuit;
+    const before = this.lit;
+    this.lit = new Map(
+      (circuit?.nodes ?? []).filter((n) => n.scanned).map((n) => [n.cell, n.signal === 1]),
+    );
+    for (const i of new Set([...before.keys(), ...this.lit.keys()])) this.drawCell(i);
     this.drawMarks();
   }
 
@@ -273,7 +297,7 @@ export class RoomView {
   private drawCell(i: number): void {
     if (!this.room || !this.cache) return;
     // logic cells show their record's cell, class 99 cells the backdrop, as in the game
-    const image = this.cache.shown(this.room, i, this.backdrop);
+    const image = this.cache.shown(this.room, i, this.backdrop, (j) => this.lit.get(j));
     this.room2d.putImageData(
       image,
       (i % ROOM_WIDTH) * TILE_WIDTH,
@@ -397,9 +421,9 @@ const signalColour = (signal: number) =>
   signal === 1 ? SIGNAL.on : signal === 0 ? SIGNAL.off : SIGNAL.none;
 
 /**
- * A circuit over the room: each traced cell framed in its signal's colour, nodes as
- * discs (dashed red: never evaluated; a double ring: the final node), where traces end
- * (a dashed ring: open, a cross: broken) and the stairs nodes place (solid while placed).
+ * A circuit over the room (its nodes' bulbs are lit in the room itself): each traced cell
+ * framed in its signal's colour, nodes the game never evaluates framed red, broken ends
+ * crossed out and the stairs nodes place (solid while placed).
  */
 function drawCircuit(g: CanvasRenderingContext2D, circuit: RoomCircuit, w: number, h: number) {
   const corner = (cell: number) => [(cell % ROOM_WIDTH) * w, Math.floor(cell / ROOM_WIDTH) * h];
@@ -411,41 +435,22 @@ function drawCircuit(g: CanvasRenderingContext2D, circuit: RoomCircuit, w: numbe
     g.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
   }
   g.setLineDash([]);
-  const r = Math.min(w, h) * 0.32;
   for (const node of circuit.nodes) {
-    const [x = 0, y = 0] = corner(node.cell);
-    const [cx, cy] = [x + w / 2, y + h / 2];
-    g.beginPath();
-    g.arc(cx, cy, r, 0, Math.PI * 2);
-    g.fillStyle = node.scanned ? signalColour(node.signal === 1 ? 1 : 0) : "rgb(255 255 255 / 0.6)";
-    g.fill();
-    g.strokeStyle = node.scanned ? "rgb(0 0 0 / 0.7)" : ACTOR;
-    g.lineWidth = 2;
-    g.setLineDash(node.scanned ? [] : [3, 2]);
-    g.stroke();
-    if (node.final) {
-      g.beginPath();
-      g.arc(cx, cy, r + 4, 0, Math.PI * 2);
-      g.stroke();
-    }
-    g.setLineDash([]);
-    const end = node.scanned ? node.end : undefined;
-    if (end) {
-      const [ex = 0, ey = 0] = corner(end.cell);
-      g.strokeStyle = end.kind === "broken" ? ACTOR : "rgb(255 120 0)";
+    if (!node.scanned) {
+      const [x = 0, y = 0] = corner(node.cell);
+      g.strokeStyle = ACTOR;
+      g.lineWidth = 3;
+      g.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+    } else if (node.end?.kind === "broken") {
+      const [ex = 0, ey = 0] = corner(node.end.cell);
+      g.strokeStyle = ACTOR;
       g.lineWidth = 3;
       g.beginPath();
-      if (end.kind === "broken") {
-        g.moveTo(ex + 5, ey + 5);
-        g.lineTo(ex + w - 5, ey + h - 5);
-        g.moveTo(ex + w - 5, ey + 5);
-        g.lineTo(ex + 5, ey + h - 5);
-      } else {
-        g.setLineDash([3, 3]);
-        g.arc(ex + w / 2, ey + h / 2, r, 0, Math.PI * 2);
-      }
+      g.moveTo(ex + 5, ey + 5);
+      g.lineTo(ex + w - 5, ey + h - 5);
+      g.moveTo(ex + w - 5, ey + 5);
+      g.lineTo(ex + 5, ey + h - 5);
       g.stroke();
-      g.setLineDash([]);
     }
     if (node.stairs) {
       const [sx = 0, sy = 0] = corner(node.stairs.cell);

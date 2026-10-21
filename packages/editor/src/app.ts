@@ -27,6 +27,7 @@ import {
   disassemble,
   displayText,
   exitMode,
+  nodeBulb,
   parseCompiledScript,
   parseScene,
   randomPlacement,
@@ -1654,11 +1655,13 @@ export class App {
         : undefined;
     const letter = classes.typeOfClass.get(LETTER_CLASS);
     const gate = classes.typeOfClass.get(GATE_CLASS);
+    const bulb = nodeBulb(classes, false);
     this.circuitView.show(circuit, {
       room: this.roomId,
       ids: new Set(editor.rooms(this.episode).map((r) => r.id)),
       ...(letter === undefined ? {} : { letter }),
       ...(gate === undefined ? {} : { gate }),
+      ...(bulb === undefined ? {} : { bulb }),
       ...(free === undefined ? {} : { free }),
     });
   }

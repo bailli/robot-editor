@@ -118,7 +118,7 @@ exports[`episode 1: renders of every room > episode 1 room 75 1`] = `"sha256:77b
 
 exports[`episode 1: renders of every room > episode 1 room 82 1`] = `"sha256:3a1c581120e015fea668cb8f8714c3acb6aeecdcec1a4394c3be35e3aec3b854"`;
 
-exports[`episode 1: renders of every room > episode 1 room 99 1`] = `"sha256:86c13a0feea79d504d81517e620501756b2971161fab15b5f907c7b36da74e0a"`;
+exports[`episode 1: renders of every room > episode 1 room 99 1`] = `"sha256:e845136398ec50dd5cedbfcf9618c638a6abfae725bda02a22671060bd4f0281"`;
 
 exports[`episode 1: renders of every room > episode 1 room 117 1`] = `"sha256:b4555fae7fb735817d9cc8213649bc956d7fa23fe830bcbc47145bfc170a4897"`;
 
@@ -132,7 +132,7 @@ exports[`episode 1: renders of every room > episode 1 room 126 1`] = `"sha256:4a
 
 exports[`episode 1: renders of every room > episode 1 room 127 1`] = `"sha256:a56bd1857db67ec18678bc8e0458e378045c5a29b2367d05fe7bd7d947390478"`;
 
-exports[`episode 1: renders of every room > episode 1 room 128 1`] = `"sha256:4f146ede34aa000b74a545b359c3f46e08645509646893c1a7665a163861985e"`;
+exports[`episode 1: renders of every room > episode 1 room 128 1`] = `"sha256:2bb173f1b809758b406049ca001f904e2e5b98fdcd095f2f3032d9c9ecb2cbac"`;
 
 exports[`episode 1: renders of every room > episode 1 room 129 1`] = `"sha256:b70e152c3b2b884b1f6269e63607faad21e97b2c3719605d007b81c0b50fa8e1"`;
 
@@ -230,7 +230,7 @@ exports[`episode 2: renders of every room > episode 2 room 134 1`] = `"sha256:38
 
 exports[`episode 2: renders of every room > episode 2 room 135 1`] = `"sha256:e23339807349cefc6c3a07e85114098d6706aa6e51bff7fbe79e5c2f340cbb21"`;
 
-exports[`episode 2: renders of every room > episode 2 room 142 1`] = `"sha256:1337e88d66c67910551291ccc7d126a2d4dcf71fa623ce95581cf11b0f92d852"`;
+exports[`episode 2: renders of every room > episode 2 room 142 1`] = `"sha256:d4471fc1951b3d4e6e4dc705d72997122458852845fd24e1e1c708c2bfab7f2f"`;
 
 exports[`episode 2: renders of every room > episode 2 room 143 1`] = `"sha256:e00099d17300af404d47686bbe9c4aa3b74170dfb556e32b506e610de7f4b701"`;
 

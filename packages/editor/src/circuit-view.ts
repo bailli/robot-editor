@@ -23,6 +23,8 @@ export interface CircuitContext {
   /** The tile types of LETTER and GATE in this episode (none outside episodes I, II). */
   letter?: number;
   gate?: number;
+  /** A node's bulb, not lit (nodeBulb; state 1 lit). */
+  bulb?: number;
   /** A selected cell a node could be added at (not a logic cell), if any. */
   free?: number;
 }
@@ -158,14 +160,20 @@ export class CircuitView {
     go.addEventListener("click", () => {
       this.events.open(node.cell);
     });
-    const dot = element("span", "circuit-dot");
+    // the node's bulb as the game will light it
+    const lit = node.scanned && node.signal === 1;
+    const bulb =
+      context.bulb === undefined
+        ? element("span", "circuit-bulb")
+        : this.events.preview(context.bulb | (lit ? 0x100 : 0));
+    bulb.classList.add("circuit-bulb");
     const text = element("span", "circuit-text", state);
     const details = [
       node.final ? undefined : stairsText(node, context),
       node.end && node.scanned ? node.end.reason : undefined,
     ].filter(Boolean);
     if (details.length > 0) text.textContent += ` – ${details.join("; ")}`;
-    row.append(dot, go, text);
+    row.append(bulb, go, text);
     return row;
   }
 

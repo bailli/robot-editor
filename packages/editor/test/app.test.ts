@@ -486,6 +486,12 @@ describe("circuits", () => {
     expect(document.querySelector('.circuit-node[data-state="1"]')?.textContent).toMatch(
       /^Node 1 \(4, 3\)on/,
     );
+    // its bulb is lit in the room while the signals are shown, as the game will light it
+    const lit = app.view.pixels();
+    await circuit().getByRole("checkbox", { name: "Show the signals in the room" }).click();
+    const at = firstDifference(lit, app.view.pixels()) / 4;
+    expect([Math.floor((at % 640) / 16), Math.floor(at / 640 / 12)]).toEqual([4, 3]);
+    await circuit().getByRole("checkbox", { name: "Show the signals in the room" }).click();
     // the final node's stairs to 228 are listed with what they wait for
     expect(document.querySelector(".circuit-final")?.textContent).toMatch(
       /stairs down at \(22, 27\) to room 228 appear once all 7 nodes are on/,

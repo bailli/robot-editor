@@ -25,6 +25,9 @@ import { LOGIC_CELL, ROOM_CELLS, ROOM_WIDTH, type Room, resolveCell } from "./sc
  * west of its operator; input A comes from above the inputs half, B from below. The game
  * reads the cells as it holds them: logic cells as their record's cell, overlay objects
  * on top of the base (circuitCell).
+ *
+ * A node shows its record's cell with a BULB on top (class 77; 0x4329f2), lit while
+ * byte 7 holds a 1 (nodeBulb).
  */
 
 export const LETTER_CLASS = 59;
@@ -32,6 +35,16 @@ export const GATE_CLASS = 76;
 /** The area the game looks for nodes in (inclusive). */
 export const CIRCUIT_AREA = { x0: 1, x1: 37, y0: 2, y1: 26 } as const;
 export const CIRCUIT_NODE_RECORD = 11;
+export const BULB_CLASS = 77;
+
+/**
+ * The bulb drawn over a node (a BULB cell: state 1 lit, 0 not), or undefined where the
+ * episode has none.
+ */
+export function nodeBulb(classes: EpisodeClasses, lit: boolean): number | undefined {
+  const type = classes.typeOfClass.get(BULB_CLASS);
+  return type === undefined ? undefined : type | (lit ? 0x100 : 0);
+}
 
 export type CircuitPieceKind = "gate" | "not" | "wire" | "corner" | "inputs";
 

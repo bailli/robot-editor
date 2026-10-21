@@ -530,23 +530,16 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-/* a node's state, in the colours of the room's overlay */
-.circuit-dot {
+/* a node's bulb, lit as the game lights it */
+.circuit-node .circuit-bulb {
   flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgb(40 110 255);
+  width: 24px;
+  height: 18px;
   align-self: center;
 }
 
-.circuit-node[data-state="1"] .circuit-dot {
-  background: rgb(255 180 0);
-}
-
-.circuit-node[data-state="unscanned"] .circuit-dot {
-  background: none;
-  border: 2px dashed var(--error);
+.circuit-node[data-state="unscanned"] .circuit-bulb {
+  outline: 2px solid var(--error);
 }
 
 .circuit-problems {
