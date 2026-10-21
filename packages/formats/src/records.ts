@@ -44,9 +44,10 @@ import type { LogicRecord } from "./scene.ts";
  *       and below the left half. The game evaluates all nodes when such a piece is taken
  *       or put down. A lit node (byte 7) places stairs (up if byte 6, else down) at (byte
  *       4, byte 5), if byte 5 is not 0; a final node (byte 1 bit 0) only once all the
- *       room's nodes are lit (episode I room 128: the stairs to room 228). Tried: a 1
- *       directly, through a wire, through AND with 1 and 1 lit their nodes, AND with 1
- *       and 0 did not
+ *       room's nodes are lit, itself included (episode I room 128: the stairs to room
+ *       228; byte 1 bit 1 remembers it); a lit node casts a light (byte 8 holds it at
+ *       run time). See circuits.ts. Tried: a 1 directly, through a wire, through AND with
+ *       1 and 1 lit their nodes, AND with 1 and 0 did not
  *   12  oracle (episodes II, III, tile 0x51): it only works once its symbol lies in the
  *       room, a 2×2 block of tangram pieces (tile 0x50) whose states are pattern n of
  *       readOracleSymbols (n: low 4 bits of the oracle's state; 0x412860, which then shows

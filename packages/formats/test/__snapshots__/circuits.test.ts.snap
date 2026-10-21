@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the original circuits 1`] = `
+{
+  "I 128": [
+    "node 1 (4, 3): -1 open (3, 3): nothing lies there",
+    "node 2 (12, 5): -1 open (11, 5): nothing lies there",
+    "node 3 (22, 7): -1 open (21, 7): nothing lies there",
+    "final node 7 (32, 15): -1 open (31, 15): no circuit piece lies there",
+    "node 6 (22, 22): -1 open (21, 22): nothing lies there",
+    "node 5 (12, 24): -1 open (11, 24): nothing lies there",
+    "node 4 (4, 26): -1 open (3, 26): nothing lies there",
+  ],
+  "I 99": [
+    "node 1 (23, 9): -1 open (22, 9): nothing lies there",
+    "node 3 (34, 12): -1 open (33, 12): nothing lies there",
+    "node 2 (23, 13): -1 open (22, 13): nothing lies there",
+  ],
+  "II 142": [
+    "node 0 (25, 14): -1 open (24, 14): no circuit piece lies there",
+  ],
+}
+`;

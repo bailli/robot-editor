@@ -8,6 +8,7 @@ import {
   type Rgb,
   type Room,
   type RoomActor,
+  type RoomCircuit,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
   type Shape,
@@ -117,6 +118,7 @@ export class RoomView {
   private areas: readonly PlacementArea[] = [];
   private highlights: readonly Highlight[] = [];
   private selection: Highlight | undefined;
+  private circuit: RoomCircuit | undefined;
   private floating: { x: number; y: number; image: HTMLCanvasElement } | undefined;
   private actorSprite: (actor: RoomActor, n: number) => HTMLCanvasElement | undefined = () =>
     undefined;
@@ -207,6 +209,12 @@ export class RoomView {
   /** Outlines cells or areas a script names (empty: none). */
   setHighlights(highlights: readonly Highlight[]): void {
     this.highlights = highlights;
+    this.drawMarks();
+  }
+
+  /** Shows a circuit's signals, nodes, ends and stairs (undefined: none). */
+  setCircuit(circuit: RoomCircuit | undefined): void {
+    this.circuit = circuit;
     this.drawMarks();
   }
 
@@ -334,6 +342,7 @@ export class RoomView {
       g.lineWidth = 3;
       g.strokeRect(area.x * w + 1.5, area.y * h + 1.5, area.w * w - 3, area.h * h - 3);
     }
+    if (this.circuit) drawCircuit(g, this.circuit, w, h);
     if (this.floating) {
       const { x, y, image } = this.floating;
       const [fw, fh] = [(image.width / TILE_WIDTH) * w, (image.height / TILE_HEIGHT) * h];
@@ -381,6 +390,79 @@ export class RoomView {
 }
 
 const ACTOR = "rgb(230 30 30)";
+
+/** Circuit colours: a signal that is on, off, or none (the trace failed). */
+const SIGNAL = { on: "rgb(255 180 0)", off: "rgb(40 110 255)", none: "rgb(140 140 140)" };
+const signalColour = (signal: number) =>
+  signal === 1 ? SIGNAL.on : signal === 0 ? SIGNAL.off : SIGNAL.none;
+
+/**
+ * A circuit over the room: each traced cell framed in its signal's colour, nodes as
+ * discs (dashed red: never evaluated; a double ring: the final node), where traces end
+ * (a dashed ring: open, a cross: broken) and the stairs nodes place (solid while placed).
+ */
+function drawCircuit(g: CanvasRenderingContext2D, circuit: RoomCircuit, w: number, h: number) {
+  const corner = (cell: number) => [(cell % ROOM_WIDTH) * w, Math.floor(cell / ROOM_WIDTH) * h];
+  g.lineWidth = 3;
+  for (const { cell, signal } of circuit.cells) {
+    const [x = 0, y = 0] = corner(cell);
+    g.strokeStyle = signalColour(signal);
+    g.setLineDash(signal === -1 ? [4, 3] : []);
+    g.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
+  }
+  g.setLineDash([]);
+  const r = Math.min(w, h) * 0.32;
+  for (const node of circuit.nodes) {
+    const [x = 0, y = 0] = corner(node.cell);
+    const [cx, cy] = [x + w / 2, y + h / 2];
+    g.beginPath();
+    g.arc(cx, cy, r, 0, Math.PI * 2);
+    g.fillStyle = node.scanned ? signalColour(node.signal === 1 ? 1 : 0) : "rgb(255 255 255 / 0.6)";
+    g.fill();
+    g.strokeStyle = node.scanned ? "rgb(0 0 0 / 0.7)" : ACTOR;
+    g.lineWidth = 2;
+    g.setLineDash(node.scanned ? [] : [3, 2]);
+    g.stroke();
+    if (node.final) {
+      g.beginPath();
+      g.arc(cx, cy, r + 4, 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.setLineDash([]);
+    const end = node.scanned ? node.end : undefined;
+    if (end) {
+      const [ex = 0, ey = 0] = corner(end.cell);
+      g.strokeStyle = end.kind === "broken" ? ACTOR : "rgb(255 120 0)";
+      g.lineWidth = 3;
+      g.beginPath();
+      if (end.kind === "broken") {
+        g.moveTo(ex + 5, ey + 5);
+        g.lineTo(ex + w - 5, ey + h - 5);
+        g.moveTo(ex + w - 5, ey + 5);
+        g.lineTo(ex + 5, ey + h - 5);
+      } else {
+        g.setLineDash([3, 3]);
+        g.arc(ex + w / 2, ey + h / 2, r, 0, Math.PI * 2);
+      }
+      g.stroke();
+      g.setLineDash([]);
+    }
+    if (node.stairs) {
+      const [sx = 0, sy = 0] = corner(node.stairs.cell);
+      const placed = node.final ? circuit.allOn && node === circuit.final : node.signal === 1;
+      g.strokeStyle = "rgb(0 150 70)";
+      g.lineWidth = 2;
+      g.setLineDash(placed ? [] : [5, 3]);
+      g.strokeRect(sx + 1, sy + 1, w - 2, h - 2);
+      g.setLineDash([]);
+      g.fillStyle = "rgb(0 150 70)";
+      g.font = `bold ${Math.round(h * 0.7)}px system-ui, sans-serif`;
+      g.textAlign = "center";
+      g.fillText(node.stairs.up ? "↑" : "↓", sx + w / 2, sy + h * 0.75);
+      g.textAlign = "left";
+    }
+  }
+}
 
 /**
  * Actor marks: a ring for actors placed in the map, a dashed ring for sources that let

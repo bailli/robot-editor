@@ -14,6 +14,7 @@ import {
   type ScriptExit,
   type ScriptTeleport,
   exitMode,
+  roomCircuitStairs,
   roomExits,
   roomPassages,
   roomScript,
@@ -32,6 +33,8 @@ export interface Connections {
   buses: ScriptBus[];
   /** Doors and stairs to room +/- 100. */
   passages: Passage[];
+  /** Stairs a circuit places once its node is on (see the Circuit tab). */
+  circuitStairs: Passage[];
   /** Oracles and teleporters among the logic records. */
   records: RecordTeleport[];
 }
@@ -43,6 +46,7 @@ export function connections(
 ): Connections {
   const { exits, teleports, buses } = roomScriptExits(roomScript(room));
   const passages = roomPassages(room, classes, ids);
+  const circuitStairs = roomCircuitStairs(room, ids);
   const records = roomTeleports(room);
   const modes = Object.fromEntries(DIRECTIONS.map((d) => [d, exitMode(room, d)])) as Record<
     Direction,
@@ -55,6 +59,7 @@ export function connections(
     teleports,
     buses,
     passages,
+    circuitStairs,
     records,
   };
 }
@@ -63,9 +68,14 @@ export function connections(
 export function leadsTo(c: Connections, id: number): boolean {
   return (
     DIRECTIONS.some((d) => c.exits[d] === id) ||
-    [...c.scripted, ...c.teleports, ...c.buses, ...c.passages, ...c.records].some(
-      (link) => link.room === id,
-    )
+    [
+      ...c.scripted,
+      ...c.teleports,
+      ...c.buses,
+      ...c.passages,
+      ...c.circuitStairs,
+      ...c.records,
+    ].some((link) => link.room === id)
   );
 }
 
@@ -155,6 +165,19 @@ export class ExitsView {
       const label = kind.charAt(0).toUpperCase() + kind.slice(1);
       this.group("passage", label, targets, kind);
     }
+    const at = (cell: number | undefined) =>
+      cell === undefined ? "" : ` at (${cell % ROOM_WIDTH}, ${Math.floor(cell / ROOM_WIDTH)})`;
+    this.group(
+      "circuit-stairs",
+      "Circuit stairs",
+      c.circuitStairs.map((p) =>
+        this.target(
+          p.room,
+          `${p.kind}${at(p.cell)}, placed once the circuit's node is on (tab Circuit)`,
+          "conditional",
+        ),
+      ),
+    );
     this.group(
       "bus",
       "Bus",
@@ -166,8 +189,6 @@ export class ExitsView {
         ),
       ),
     );
-    const at = (cell: number | undefined) =>
-      cell === undefined ? "" : ` at (${cell % ROOM_WIDTH}, ${Math.floor(cell / ROOM_WIDTH)})`;
     const oracles = c.records.filter((r) => r.kind === "oracle");
     this.group(
       "oracles",

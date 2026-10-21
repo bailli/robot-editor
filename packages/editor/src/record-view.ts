@@ -189,12 +189,27 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
         1,
         0,
         "Final node",
-        "places the stairs once all the room's nodes are on (other nodes: while it is on)",
+        "its stairs appear once every node in the room is on, itself included (a normal " +
+          "node's stairs: while it is on); only the room's last final node counts",
       ),
       byte(4, "Stairs x", 39),
       byte(5, "Stairs y", 28, "0: no stairs"),
-      byte(6, "Stairs up", 255, "0: stairs down, else up"),
-      byte(7, "Signal", 255, "its input, set by the game"),
+      {
+        label: "Stairs up",
+        kind: "flag",
+        max: 1,
+        get: (d) => (d[6] ? 1 : 0),
+        set: (d, v) => {
+          d[6] = v;
+        },
+        hint: "stairs up to room id - 100; unchecked: stairs down to room id + 100",
+      },
+      byte(
+        7,
+        "Last signal",
+        255,
+        "set by the game, keep 0: it acts only when a node's signal changes from this",
+      ),
     ],
   },
 ];

@@ -75,6 +75,7 @@ Files in `packages/formats/src`:
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants       |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                         |
 | `records.ts`                 | what logic records do                                                                          |
+| `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                 |
 | `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`)                    |
 | `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts)  |
 | `game.ts`                    | `Game`: loads an exe, episodes lazily, saves edited scenes and texts (`withScene`, `withText`) |
@@ -457,6 +458,26 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   and episode III's old mechanism (above). The other uses of 0x42f910 are the room
   change check itself and its dialog (0x42f4f0, 0x42f660 resume the blocked room change);
   the episodes' code only keeps the number in savegames.
+- **Circuits** (`circuits.ts`, episodes I and II): nothing but cells. LETTER cells
+  (class 59) `1`/`0` are the sources, GATE cells (class 76, items the hero carries) the
+  wiring by state (0–8 a gate's operator: OR, AND, NOR, NAND, XOR and the four with an
+  inverted input; 9 NOT; 0x0a ─, 0x0b │; 0x0c ┐ and 0x0d ┘, turning west; 0x0e a
+  gate's inputs half, west of its operator, A from above it, B from below), circuit
+  nodes (logic records of type 11) the outputs. Taking or putting down a GATE piece
+  (0x40fdf0, 0x40fc50; not letters, not entering the room) makes the game evaluate every
+  node in columns 1–37, rows 2–26 (0x40f700), row by row: it traces from the cell west
+  of the node (0x40f9a0, comparing class | state << 8 of the one-layer map, so pieces
+  put down on other objects count) and stops at the first cell that does not continue
+  the trace; anything but a `1`/`0` at the end counts as 0. A node that changes places
+  or empties its stairs cell (0x433300: not on water, stacked on what lies there;
+  turned off, the cell becomes empty) and casts or drops a light (byte 8 holds it at run
+  time). The final node (the last with byte 1 bit 0 in the scan) waits until every
+  scanned node is on, **itself included**, then places its stairs (event 0x127; bit 1
+  remembers it) and takes them away when one goes off. The gates' outputs match the
+  truth tables in the GATE tile's own texts (test). In the originals every node is open:
+  the hero builds the circuits from pieces lying in the room (I 128: spare pieces in
+  racks, a final node behind an electric fence that pieces can be laid over; II 142: `1`
+  and `0` legs that meet where a gate's inputs half belongs).
 - **Logic records** (`records.ts`, every byte the game reads), all 1177 in the game
   classified: 1 stacked (object on another cell; byte 1 its level, e.g. bridges), 3
   buried (dug up with the shovel), 5 spawner (robots near the hero), 7 native (episode
@@ -595,6 +616,15 @@ Supported:
   (in the base layer, where the game keeps them; it shows the cell it replaces, lowest
   free slot, refused once records and overlay objects fill the game's 200), remove one
   (the cell becomes what it showed); all undoable
+- circuit (tab Circuit): the room's circuit evaluated as the cells are now
+  (`roomCircuit`): how many nodes are on, the final node's stairs and what they wait for,
+  per node on/off/no signal with where its trace stops, problems (nodes the game never
+  evaluates, broken pieces, extra final nodes, stairs on water or on top of objects, the
+  bytes the game keeps at run time not 0);
+  in the room each traced cell framed in its signal's colour (amber on, blue off, grey
+  dashed none), nodes as discs, open ends as dashed rings, broken ones as crosses, the
+  stairs nodes place; a palette of the pieces (`1`, `0`, every GATE state with the game's
+  graphics) to paint with, and "Add node" at the cell selected with the Inspect tool
 - actors (toggle "Actors", key A): marks where actors appear (ring: placed in the map;
   dashed: appear later or from a record; spawner radius; arrow: heading somewhere),
   robots drawn with the episode's `_Aliens` sprites in turn (their look and colours vary
@@ -639,7 +669,8 @@ Roughly by value for the editor.
 1. **Logic records in play.** All types are decoded byte by byte and most are tried in
    the game (see logic records above). Open: the thief (not tried), following a leaving
    actor through its wall opening, circuits with the other gates and NOT (only AND
-   tried), records in rooms whose objects and records exceed the table. **How to test
+   tried; the code and the GATE texts agree on all of them), a final node waiting for
+   itself (from the code), records in rooms whose objects and records exceed the table. **How to test
    an edit in the game:** build the exe (`Game.withScene`, or the editor's "Save exe"),
    put the change next to the hero's start (see "The hero's start" above) and run
    `python3 -I tools/wine/harness.py shot E OUT.png --exe EXE --keys Right:0.1 wait:2`

@@ -335,6 +335,19 @@ test("doors and stairs are listed with the exits", async () => {
   );
 });
 
+test("stairs a circuit places are listed with the exits", async () => {
+  app.showRoom(128); // episode I: the final node's stairs down to 228
+  // conditional targets end in "?"
+  const stairs = exits().getByRole("button", { name: /^228/ });
+  await expect.element(stairs).toBeVisible();
+  expect(stairs.element().getAttribute("title")).toMatch(/stairs down at \(22, 27\), placed once/);
+  expect(document.querySelector(".circuit-stairs")?.textContent).toBe("Circuit stairs228");
+  await stairs.click();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 228" })).toBeVisible();
+  // and back: 228 has no way out but the wizard's door, yet 128 leads to it
+  expect(app.roomsLeadingTo(228)).toContain(128);
+});
+
 test("oracles and teleporters are listed with the exits", async () => {
   app.showEpisode(2, 55);
   const teleporters = document.querySelector(".teleports");
@@ -447,6 +460,66 @@ describe("logic records", () => {
     expect((defined(app.editor).room(1, 43).base[index] ?? 0) & 0xff).toBe(0x7f);
     await page.getByRole("button", { name: "Remove record" }).click();
     expect(defined(app.editor).room(1, 43).base[index]).toBe(game.room(1, 43).base[index]);
+  });
+});
+
+describe("circuits", () => {
+  const circuit = () => page.getByRole("tabpanel", { name: "Circuit" });
+
+  test("the circuit tab evaluates the room as it is painted", async () => {
+    app.showRoom(128); // episode I: seven nodes, the hero lays the pieces
+    await page.getByRole("tab", { name: "Circuit" }).click();
+    await expect
+      .element(circuit().getByRole("heading", { name: "Circuit: 0 of 7 nodes on" }))
+      .toBeVisible();
+    expect(app.view.outlines()).toBe(0);
+    // node 1 at (4, 3) reads the 1 at (1, 3) once wires fill (2, 3) and (3, 3)
+    await circuit()
+      .getByRole("button", { name: /wire ─/ })
+      .click();
+    expect(app.tool).toBe("paint");
+    await clickCell(3 * ROOM_WIDTH + 2);
+    await clickCell(3 * ROOM_WIDTH + 3);
+    await expect
+      .element(circuit().getByRole("heading", { name: "Circuit: 1 of 7 nodes on" }))
+      .toBeVisible();
+    expect(document.querySelector('.circuit-node[data-state="1"]')?.textContent).toMatch(
+      /^Node 1 \(4, 3\)on/,
+    );
+    // the final node's stairs to 228 are listed with what they wait for
+    expect(document.querySelector(".circuit-final")?.textContent).toMatch(
+      /stairs down at \(22, 27\) to room 228 appear once all 7 nodes are on/,
+    );
+    await userEvent.keyboard("{Control>}z{/Control}");
+    await expect
+      .element(circuit().getByRole("heading", { name: "Circuit: 0 of 7 nodes on" }))
+      .toBeVisible();
+  });
+
+  test("a node is added at the selected cell and opens its record", async () => {
+    app.showRoom(43);
+    app.sidePanel.show("circuit");
+    await expect.element(circuit().getByRole("heading", { name: "No circuit" })).toBeVisible();
+    await page.getByRole("radio", { name: "Inspect" }).click();
+    const index = 5 * ROOM_WIDTH + 20;
+    await clickCell(index);
+    app.sidePanel.show("circuit");
+    await circuit().getByRole("button", { name: "Add node at (20, 5)" }).click();
+    const cell = defined(app.editor).room(1, 43).base[index] ?? 0;
+    expect(cell & 0xff).toBe(0x7f);
+    const record = defined(app.editor)
+      .room(1, 43)
+      .records.find((r) => r.slot === cell >> 8);
+    expect(record?.data[0]).toBe(11);
+    await expect
+      .element(circuit().getByRole("heading", { name: "Circuit: 0 of 1 nodes on" }))
+      .toBeVisible();
+    await circuit()
+      .getByRole("button", { name: /^Node \d+ \(20, 5\)$/ })
+      .click();
+    await expect
+      .element(page.getByRole("heading", { name: /^Logic record \d+ at \(20, 5\)/ }))
+      .toBeVisible();
   });
 });
 

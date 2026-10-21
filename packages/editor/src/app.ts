@@ -1,11 +1,14 @@
 import {
+  CIRCUIT_NODE_RECORD,
   type Direction,
   EPISODES,
   EPISODE_NAMES,
   EVENT_TEXT,
   type ExitMode,
+  GATE_CLASS,
   Game,
   KEYWORD_FUNCTION,
+  LETTER_CLASS,
   LOGIC_CELL,
   MAX_ROOMS,
   NAMED_ROOMS,
@@ -30,6 +33,7 @@ import {
   readEventTable,
   readOracleSymbols,
   roomActors,
+  roomCircuit,
   roomSaveTime,
   roomScript,
   roomSettings,
@@ -42,6 +46,7 @@ import {
 } from "@robot/formats";
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
+import { CircuitView } from "./circuit-view.ts";
 import { confirmDialog } from "./confirm-dialog.ts";
 import {
   type Area,
@@ -252,6 +257,26 @@ export class App {
     icon: (type) =>
       (this.isRobot(type) ? this.robotSprite(0) : undefined) ?? this.cellPreview(type),
   });
+  readonly circuitView = new CircuitView({
+    select: (cell) => {
+      this.select(cell);
+    },
+    open: (cell) => {
+      this.select(cell);
+      this.sidePanel.show("record");
+    },
+    piece: (value) => {
+      this.setTile(value);
+      this.setTool("paint");
+    },
+    preview: (value) => this.cellPreview(value),
+    signals: () => {
+      this.refreshCircuit();
+    },
+    addNode: () => {
+      this.addRecord(CIRCUIT_NODE_RECORD);
+    },
+  });
   private readonly status = h("span", { class: "status" });
   private readonly episodeSelect = h("select", { "aria-label": "Episode" });
   private readonly roomList = h("div", { class: "room-list" });
@@ -379,23 +404,7 @@ export class App {
       this.recordEdit((editor, room, slot) => editor.setRecord(this.episode, room, slot, data));
     },
     add: (type) => {
-      const selected = this.selected;
-      if (!selected) return;
-      const editor = this.need();
-      const room = editor.room(this.episode, this.roomId);
-      if (
-        editor.addRecord(this.episode, this.roomId, selected.layer, selected.index, type) ===
-        undefined
-      ) {
-        this.setStatus(
-          recordCapacity(room) < 1
-            ? `No room for another record: the game holds ${MAX_RECORD_SLOTS} records and overlay objects per room`
-            : "Cannot add a record here",
-          true,
-        );
-        return;
-      }
-      this.afterRecordEdit();
+      this.addRecord(type);
     },
     remove: () => {
       const selected = this.selected;
@@ -442,6 +451,7 @@ export class App {
       { name: "tiles", label: "Tiles", content: this.tilesTab },
       { name: "record", label: "Record", content: this.recordTab },
       { name: "actors", label: "Actors", content: this.actorsView.element },
+      { name: "circuit", label: "Circuit", content: this.circuitView.element },
       { name: "script", label: "Script", content: this.scriptView.element },
       { name: "room", label: "Room", content: this.settingsView.element },
     ],
@@ -694,6 +704,7 @@ export class App {
     this.scriptView.show(roomScript(room), `${this.episode} ${id}`);
     this.showSettings(room);
     this.refreshActors();
+    this.refreshCircuit();
     this.refreshRoomList();
     const shown = `${this.episode} ${id}`;
     if (this.lastRoom !== shown) {
@@ -1083,6 +1094,7 @@ export class App {
     if (index === undefined) {
       this.selected = undefined;
       this.recordView.hide();
+      this.refreshCircuit();
       return;
     }
     // new records go into the base layer: the game drops logic cells in the overlay
@@ -1098,6 +1110,8 @@ export class App {
       const classes = game.episode(this.episode).classes;
       this.recordView.show(record, where, classes, readOracleSymbols(game.image));
     } else this.recordView.showEmpty(where);
+    // where a node can be added
+    this.refreshCircuit();
   }
 
   setLayer(layer: Layer): void {
@@ -1590,6 +1604,7 @@ export class App {
       this.refreshRoomList();
       this.refreshButtons();
       this.refreshActors();
+      this.refreshCircuit();
     }
   }
 
@@ -1624,6 +1639,51 @@ export class App {
     );
   }
 
+  /** Evaluates the room's circuit again (after painting, record edits, …) and shows it. */
+  private refreshCircuit(): void {
+    const editor = this.need();
+    const room = editor.room(this.episode, this.roomId);
+    const classes = editor.game.episode(this.episode).classes;
+    const circuit = roomCircuit(room, classes);
+    const shown = circuit.nodes.length > 0 && this.circuitView.signals;
+    this.view.setCircuit(shown ? circuit : undefined);
+    const selected = this.selected;
+    const free =
+      selected && ((room.base[selected.index] ?? 0) & 0xff) !== LOGIC_CELL
+        ? selected.index
+        : undefined;
+    const letter = classes.typeOfClass.get(LETTER_CLASS);
+    const gate = classes.typeOfClass.get(GATE_CLASS);
+    this.circuitView.show(circuit, {
+      room: this.roomId,
+      ids: new Set(editor.rooms(this.episode).map((r) => r.id)),
+      ...(letter === undefined ? {} : { letter }),
+      ...(gate === undefined ? {} : { gate }),
+      ...(free === undefined ? {} : { free }),
+    });
+  }
+
+  /** Adds a logic record of `type` at the selected cell. */
+  private addRecord(type: number): void {
+    const selected = this.selected;
+    if (!selected) return;
+    const editor = this.need();
+    const room = editor.room(this.episode, this.roomId);
+    if (
+      editor.addRecord(this.episode, this.roomId, selected.layer, selected.index, type) ===
+      undefined
+    ) {
+      this.setStatus(
+        recordCapacity(room) < 1
+          ? `No room for another record: the game holds ${MAX_RECORD_SLOTS} records and overlay objects per room`
+          : "Cannot add a record here",
+        true,
+      );
+      return;
+    }
+    this.afterRecordEdit();
+  }
+
   private pick(index: number): void {
     const cell = this.need().room(this.episode, this.roomId)[this.layer][index] ?? 0;
     if ((cell & 0xff) !== LOGIC_CELL) this.setTile(cell);
@@ -1645,6 +1705,7 @@ export class App {
       this.updateView(edit.changes.map((c) => c.index));
       // painted cells may be actors (as at the end of a stroke)
       this.refreshActors();
+      this.refreshCircuit();
     }
     this.refreshRoomList();
     this.refreshButtons();

@@ -118,6 +118,8 @@ export function mapBadges(room: Room, c: Connections): MapBadge[] {
       add(s.room, `${ARROWS[s.direction]}*`, `${s.direction}: room ${s.room}, set by the script`);
   }
   for (const p of c.passages) add(p.room, p.kind, `${p.kind} to room ${p.room}`);
+  for (const p of c.circuitStairs)
+    add(p.room, `${p.kind}*`, `${p.kind} to room ${p.room}, placed by the circuit`);
   for (const r of c.records) add(r.room, r.kind, `${r.kind} to room ${r.room} at (${r.x}, ${r.y})`);
   for (const t of c.teleports)
     add(

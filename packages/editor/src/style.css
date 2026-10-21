@@ -481,6 +481,118 @@ h2 {
   color: var(--muted);
 }
 
+.circuit-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  font-size: 13px;
+}
+
+.circuit-view h3,
+.circuit-view h4 {
+  font-size: 14px;
+  margin: 0;
+}
+
+.circuit-view h4 {
+  margin-top: 8px;
+}
+
+.circuit-view p {
+  margin: 0;
+}
+
+.circuit-final {
+  padding: 4px 8px;
+  border-left: 3px solid var(--line);
+}
+
+.circuit-final.on {
+  border-left-color: rgb(0 150 70);
+}
+
+.circuit-node {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.circuit-node button {
+  flex: none;
+  padding: 0 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.circuit-text {
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* a node's state, in the colours of the room's overlay */
+.circuit-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgb(40 110 255);
+  align-self: center;
+}
+
+.circuit-node[data-state="1"] .circuit-dot {
+  background: rgb(255 180 0);
+}
+
+.circuit-node[data-state="unscanned"] .circuit-dot {
+  background: none;
+  border: 2px dashed var(--error);
+}
+
+.circuit-problems {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.circuit-problems li {
+  overflow-wrap: anywhere;
+}
+
+.circuit-problems li.warning {
+  color: var(--error);
+}
+
+.circuit-problems li.note {
+  color: var(--muted);
+}
+
+.circuit-problems button {
+  padding: 0 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.circuit-pieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.circuit-piece {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 2px;
+  font-size: 12px;
+}
+
+.circuit-view > button {
+  justify-self: start;
+}
+
 .record-view {
   margin-top: 12px;
   padding: 8px 12px;

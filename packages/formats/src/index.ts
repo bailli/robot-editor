@@ -228,3 +228,23 @@ export type {
   RoomActor,
   ScriptActors,
 } from "./actors.ts";
+export {
+  CIRCUIT_AREA,
+  CIRCUIT_NODE_RECORD,
+  CIRCUIT_PIECES,
+  GATE_CLASS,
+  LETTER_CLASS,
+  circuitCell,
+  roomCircuit,
+  traceCircuit,
+} from "./circuits.ts";
+export type {
+  CircuitCell,
+  CircuitEnd,
+  CircuitNode,
+  CircuitPiece,
+  CircuitPieceKind,
+  CircuitProblem,
+  RoomCircuit,
+  Signal,
+} from "./circuits.ts";
