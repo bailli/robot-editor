@@ -184,7 +184,7 @@ h2 {
 
 .workspace {
   display: grid;
-  grid-template-columns: 150px minmax(320px, 1fr) var(--side-width, 400px);
+  grid-template-columns: 150px minmax(320px, 1fr) var(--side-width, 320px);
   gap: 16px;
   padding: 16px;
   align-items: start;
@@ -660,6 +660,11 @@ h2 {
   max-width: 30ch;
 }
 
+/* the record type: shrinks with the column instead of sticking out */
+.record-row select {
+  min-width: 0;
+}
+
 .record-view button {
   justify-self: start;
 }
@@ -982,11 +987,15 @@ header button.pressed {
 }
 
 .side-header .layers {
+  flex-wrap: wrap;
+  row-gap: 4px;
   margin: 0;
 }
 
+/* two rows of three, so the labels never widen the column */
 .side-tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   margin-bottom: 8px;
 }
