@@ -27,6 +27,9 @@ What is decoded, what the editor supports and what is still open: [STATUS.md](ST
 
 ## Editor
 
+Online: https://bailli.github.io/robot-editor/ (open your own `GameOfRobot.exe`; it never
+leaves the browser).
+
 `pnpm editor` starts it at http://localhost:5173 and opens `reference/GameOfRobot.exe`
 by itself; otherwise open or drop an exe (it never leaves the browser). Pick an episode
 and a room, then paint the base or overlay layer: left button paints, right button picks
@@ -93,7 +96,8 @@ animations and other runtime effects differ from a static render by nature.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, format check and
 `pnpm test:without-game` on every push and pull request, and publishes the editor's static
-build on GitHub Pages from `main` (Settings → Pages → Source: GitHub Actions).
+build from `main` on GitHub Pages at https://bailli.github.io/robot-editor/ (Settings →
+Pages → Source: GitHub Actions).
 
 TypeScript is restricted to erasable syntax, so Node.js (>= 22.18) runs the sources directly
 without a build step.
