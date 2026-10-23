@@ -6,8 +6,9 @@ import {
   teleporterCondition,
 } from "@robot/formats";
 
-/** The record type of oracles. */
+/** The record types of oracles and teleporters. */
 const ORACLE = 12;
+const TELEPORTER = 13;
 /** Texts: an oracle's hint (+ the low 4 bits of its state), a teleporter's message. */
 const ORACLE_HINTS = 330;
 const TELEPORTER_MESSAGES = 1200;
@@ -92,200 +93,219 @@ const flag = (at: number, bit: number, label: string, hint?: string): Field => (
   ...(hint === undefined ? {} : { hint }),
 });
 
-/** The record types and their fields (see records.ts in @robot/formats). */
-export const RECORD_TYPES: readonly { type: number; name: string; fields: readonly Field[] }[] = [
-  {
-    type: 13,
-    name: "Teleporter",
-    fields: [
-      cell(2, "Cell"),
-      {
-        ...byte(
-          7,
-          "Condition",
-          255,
-          "carry item: only a hero who carries an item like the cell (any state) can step " +
-            "on it, drawn on white; do not carry item: only one who carries none, drawn on black",
+/** Byte 1 bit 5, the same for every type. */
+const goneAfterLeaving = flag(
+  1,
+  5,
+  "Gone after leaving",
+  "when the hero leaves the room, the record is dropped and only its cell (offset 2) stays, " +
+    "a plain cell that does nothing (the game sets it on the exits travelling actors leave open)",
+);
+
+interface RecordType {
+  type: number;
+  name: string;
+  fields: readonly Field[];
+}
+
+/** The record types by number and their fields (see records.ts in @robot/formats). */
+export const RECORD_TYPES: readonly RecordType[] = (
+  [
+    {
+      type: 13,
+      name: "Teleporter",
+      fields: [
+        cell(2, "Cell"),
+        {
+          ...byte(
+            7,
+            "Condition",
+            255,
+            "carry item: only a hero who carries an item like the cell (any state) can step " +
+              "on it, drawn on white; do not carry item: only one who carries none, drawn on black",
+          ),
+          kind: "choice",
+          choices: [
+            [0, "none"],
+            [1, "carry item"],
+            [2, "do not carry item"],
+          ],
+        },
+        targetRoom,
+        packedX,
+        byte(6, "Arrival y", 28),
+        flag(
+          1,
+          1,
+          "Script may set the target",
+          "a script's Teleport(room, x, y) (room not 0) replaces the target",
         ),
-        kind: "choice",
-        choices: [
-          [0, "none"],
-          [1, "carry item"],
-          [2, "do not carry item"],
-        ],
-      },
-      targetRoom,
-      packedX,
-      byte(6, "Arrival y", 28),
-      flag(
-        1,
-        1,
-        "Script may set the target",
-        "a script's Teleport(room, x, y) (room not 0) replaces the target",
-      ),
-      {
-        ...flag(
+        {
+          ...flag(
+            1,
+            0,
+            "Always enterable",
+            "the hero can step on it whatever the cell is (e.g. a wall or water hiding a " +
+              "passage) and first steps onto the cell as if it lay there (e.g. picks up the " +
+              "item shown), then he is teleported; unchecked, he can step on it only where the " +
+              "cell lets him (not on a wall), and the cell stays; ignored with a condition",
+          ),
+          ignored: (d) => teleporterCondition(d) !== "none",
+        },
+        flag(
+          1,
+          3,
+          "Glows in the dark",
+          "lights a circle around it in a dark room (episode III only)",
+        ),
+        {
+          ...byte(
+            8,
+            "Message",
+            255,
+            "0: none, else message 1200 + this when used (not when redirected)",
+          ),
+          text: (d) => (d[8] ? TELEPORTER_MESSAGES + d[8] : undefined),
+        },
+      ],
+    },
+    {
+      type: 12,
+      name: "Oracle",
+      fields: [
+        cell(
+          2,
+          "Cell",
+          "tile 0x51; the low 4 bits of its state (n) pick the symbol, the hint and the event " +
+            "262 + n (3500 points once per game); bit 4: the symbol counts as found",
+        ),
+        {
+          label: "Hint (eastwards)",
+          kind: "number",
+          min: ORACLE_HINTS,
+          max: ORACLE_HINTS + 15,
+          get: (d) => ORACLE_HINTS + (d[3] & 15),
+          set: (d, v) => {
+            d[3] = (d[3] & 0xf0) | (v - ORACLE_HINTS);
+          },
+          hint:
+            "the message shown when it is walked into eastwards: 330 + the low 4 bits of the " +
+            "cell's state, which also pick its symbol (330-339; from 340 on there is none " +
+            "to lay, see Symbol found)",
+          text: (d) => ORACLE_HINTS + (d[3] & 15),
+        },
+        flag(
+          3,
+          4,
+          "Symbol found",
+          "it works without its symbol being laid in the room; the game sets it once it finds " +
+            "the symbol (bit 4 of the cell's state)",
+        ),
+        { ...targetRoom, hint: "walked into northwards" },
+        packedX,
+        byte(6, "Arrival y", 28),
+        cell(8, "Turns into", "walked into westwards"),
+      ],
+    },
+    {
+      type: 8,
+      name: "Travelling actor",
+      fields: [
+        cell(2, "Cell", "placed when the room is entered"),
+        targetRoom,
+        byte(6, "Target x", 39),
+        byte(7, "Target y", 28),
+        byte(
+          8,
+          "Actor",
+          255,
+          "0x80 + n: the episode's actor n (0x83 dealer, 0x85 thief); else a tile type",
+        ),
+      ],
+    },
+    {
+      type: 7,
+      name: "Native",
+      fields: [
+        cell(2, "Cell", "placed when the room is entered"),
+        cell(4, "Sells", "the object he offers after a few chats; 0: none"),
+        byte(6, "Price", 15, "in gold (counts up to 9)"),
+        byte(7, "Chatter", 15, "his texts: 300 + this or 310 + this"),
+      ],
+    },
+    {
+      type: 5,
+      name: "Spawner",
+      fields: [
+        cell(2, "Cell"),
+        byte(4, "Radius²", 255, "a robot appears while the hero's squared distance is below this"),
+        byte(5, "Period", 255, "ticks between robots"),
+        byte(6, "Countdown", 255, "ticks until the next robot"),
+        byte(7, "Animation", 255, "its animation phase (set by the game)"),
+      ],
+    },
+    {
+      type: 3,
+      name: "Buried",
+      fields: [
+        cell(2, "Visible cell"),
+        cell(4, "Buried cell", "dug up with the shovel: then it lies on the visible cell"),
+      ],
+    },
+    {
+      type: 1,
+      name: "Stacked",
+      fields: [
+        cell(4, "Top cell", "shown; taking it leaves the lower cell"),
+        cell(2, "Lower cell"),
+        {
+          label: "Level",
+          kind: "number",
+          max: 3,
+          get: (d) => d[1] >> 6,
+          set: (d, v) => {
+            d[1] = (d[1] & 0x3f) | (v << 6);
+          },
+          hint: "of the top object: actors reach it only from this level up (bridges)",
+        },
+      ],
+    },
+    {
+      type: 11,
+      name: "Circuit node",
+      fields: [
+        cell(2, "Cell"),
+        flag(
           1,
           0,
-          "Always enterable",
-          "the hero can step on it whatever the cell is (e.g. a wall or water hiding a " +
-            "passage) and first steps onto the cell as if it lay there (e.g. picks up the " +
-            "item shown), then he is teleported; unchecked, he can step on it only where the " +
-            "cell lets him (not on a wall), and the cell stays; ignored with a condition",
+          "Final node",
+          "its stairs appear once every node in the room is on, itself included (a normal " +
+            "node's stairs: while it is on); only the room's last final node counts",
         ),
-        ignored: (d) => teleporterCondition(d) !== "none",
-      },
-      flag(
-        1,
-        3,
-        "Glows in the dark",
-        "lights a circle around it in a dark room (episode III only)",
-      ),
-      {
-        ...byte(
-          8,
-          "Message",
+        byte(4, "Stairs x", 39),
+        byte(5, "Stairs y", 28, "0: no stairs"),
+        {
+          label: "Stairs up",
+          kind: "flag",
+          max: 1,
+          get: (d) => (d[6] ? 1 : 0),
+          set: (d, v) => {
+            d[6] = v;
+          },
+          hint: "stairs up to room id - 100; unchecked: stairs down to room id + 100",
+        },
+        byte(
+          7,
+          "Last signal",
           255,
-          "0: none, else message 1200 + this when used (not when redirected)",
+          "set by the game, keep 0: it acts only when a node's signal changes from this",
         ),
-        text: (d) => (d[8] ? TELEPORTER_MESSAGES + d[8] : undefined),
-      },
-    ],
-  },
-  {
-    type: 12,
-    name: "Oracle",
-    fields: [
-      cell(
-        2,
-        "Cell",
-        "tile 0x51; the low 4 bits of its state (n) pick the symbol, the hint and the event " +
-          "262 + n (3500 points once per game); bit 4: the symbol counts as found",
-      ),
-      {
-        label: "Hint (eastwards)",
-        kind: "number",
-        min: ORACLE_HINTS,
-        max: ORACLE_HINTS + 15,
-        get: (d) => ORACLE_HINTS + (d[3] & 15),
-        set: (d, v) => {
-          d[3] = (d[3] & 0xf0) | (v - ORACLE_HINTS);
-        },
-        hint:
-          "the message shown when it is walked into eastwards: 330 + the low 4 bits of the " +
-          "cell's state, which also pick its symbol (330-339; from 340 on there is none " +
-          "to lay, see Symbol found)",
-        text: (d) => ORACLE_HINTS + (d[3] & 15),
-      },
-      flag(
-        3,
-        4,
-        "Symbol found",
-        "it works without its symbol being laid in the room; the game sets it once it finds " +
-          "the symbol (bit 4 of the cell's state)",
-      ),
-      { ...targetRoom, hint: "walked into northwards" },
-      packedX,
-      byte(6, "Arrival y", 28),
-      cell(8, "Turns into", "walked into westwards"),
-    ],
-  },
-  {
-    type: 8,
-    name: "Travelling actor",
-    fields: [
-      cell(2, "Cell", "placed when the room is entered"),
-      targetRoom,
-      byte(6, "Target x", 39),
-      byte(7, "Target y", 28),
-      byte(
-        8,
-        "Actor",
-        255,
-        "0x80 + n: the episode's actor n (0x83 dealer, 0x85 thief); else a tile type",
-      ),
-    ],
-  },
-  {
-    type: 7,
-    name: "Native",
-    fields: [
-      cell(2, "Cell", "placed when the room is entered"),
-      cell(4, "Sells", "the object he offers after a few chats; 0: none"),
-      byte(6, "Price", 15, "in gold (counts up to 9)"),
-      byte(7, "Chatter", 15, "his texts: 300 + this or 310 + this"),
-    ],
-  },
-  {
-    type: 5,
-    name: "Spawner",
-    fields: [
-      cell(2, "Cell"),
-      byte(4, "Radius²", 255, "a robot appears while the hero's squared distance is below this"),
-      byte(5, "Period", 255, "ticks between robots"),
-      byte(6, "Countdown", 255, "ticks until the next robot"),
-      byte(7, "Animation", 255, "its animation phase (set by the game)"),
-    ],
-  },
-  {
-    type: 3,
-    name: "Buried",
-    fields: [
-      cell(2, "Visible cell"),
-      cell(4, "Buried cell", "dug up with the shovel: then it lies on the visible cell"),
-    ],
-  },
-  {
-    type: 1,
-    name: "Stacked",
-    fields: [
-      cell(4, "Top cell", "shown; taking it leaves the lower cell"),
-      cell(2, "Lower cell"),
-      {
-        label: "Level",
-        kind: "number",
-        max: 3,
-        get: (d) => d[1] >> 6,
-        set: (d, v) => {
-          d[1] = (d[1] & 0x3f) | (v << 6);
-        },
-        hint: "of the top object: actors reach it only from this level up (bridges)",
-      },
-    ],
-  },
-  {
-    type: 11,
-    name: "Circuit node",
-    fields: [
-      cell(2, "Cell"),
-      flag(
-        1,
-        0,
-        "Final node",
-        "its stairs appear once every node in the room is on, itself included (a normal " +
-          "node's stairs: while it is on); only the room's last final node counts",
-      ),
-      byte(4, "Stairs x", 39),
-      byte(5, "Stairs y", 28, "0: no stairs"),
-      {
-        label: "Stairs up",
-        kind: "flag",
-        max: 1,
-        get: (d) => (d[6] ? 1 : 0),
-        set: (d, v) => {
-          d[6] = v;
-        },
-        hint: "stairs up to room id - 100; unchecked: stairs down to room id + 100",
-      },
-      byte(
-        7,
-        "Last signal",
-        255,
-        "set by the game, keep 0: it acts only when a node's signal changes from this",
-      ),
-    ],
-  },
-];
+      ],
+    },
+  ] satisfies RecordType[]
+)
+  .map((t) => ({ ...t, fields: [...t.fields, goneAfterLeaving] }))
+  .sort((a, b) => a.type - b.type);
 
 export interface RecordViewEvents {
   change(data: Uint8Array): void;
@@ -359,10 +379,7 @@ export class RecordView {
       "record-summary",
       describeRecord(record, classes, symbols).summary,
     );
-    const type = element("select");
-    type.setAttribute("aria-label", "Record type");
-    for (const t of RECORD_TYPES) type.append(new Option(`${t.type} ${t.name}`, String(t.type)));
-    if (!known) type.append(new Option(`${data[0]} unknown`, String(data[0])));
+    const type = typeSelect(known ? undefined : data[0]);
     type.value = String(data[0]);
     type.addEventListener("change", () => {
       data[0] = Number(type.value);
@@ -414,9 +431,8 @@ export class RecordView {
   /** Offers to add a record to a plain cell. */
   showEmpty(where: string): void {
     this.element.hidden = false;
-    const type = element("select");
-    type.setAttribute("aria-label", "Record type");
-    for (const t of RECORD_TYPES) type.append(new Option(`${t.type} ${t.name}`, String(t.type)));
+    const type = typeSelect();
+    type.value = String(TELEPORTER);
     const add = element("button", undefined, "Add record");
     add.addEventListener("click", () => {
       this.events.add(Number(type.value));
@@ -507,6 +523,17 @@ export class RecordView {
     }
     return labelled(field.label, input, field.hint, ...extras);
   }
+}
+
+/** The record types by number; `unknown`, if given, among them. */
+function typeSelect(unknown?: number): HTMLSelectElement {
+  const select = element("select");
+  select.setAttribute("aria-label", "Record type");
+  const types = RECORD_TYPES.map((t) => [t.type, `${t.type} ${t.name}`] as const);
+  if (unknown !== undefined) types.push([unknown, `${unknown} unknown`]);
+  for (const [value, name] of types.sort((a, b) => a[0] - b[0]))
+    select.append(new Option(name, String(value)));
+  return select;
 }
 
 function labelled(text: string, control: HTMLElement, hint?: string, ...extras: HTMLElement[]) {

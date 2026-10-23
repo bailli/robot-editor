@@ -7,11 +7,14 @@ import type { LogicRecord } from "./scene.ts";
  * What logic records do (the 10 data bytes; data[0] is the type). A logic cell shows the
  * cell its record holds (resolveCell) and the record adds behaviour. On loading a room
  * the game converts the cells in it to class ids (offset 2 always, offset 4 of types 1,
- * 3 and 7, offset 8 of type 12, the actor of type 8) and old types: 2 and 10 become
- * teleporters, 6 and 9 oracles. Then every overlay object becomes a type 1 record on
- * its base cell, in a table of 200 records per room (0x4327c4; a logic cell in the
- * overlay is dropped, tried in the game). Type 0 marks a free entry; unknown types only
- * show their cell. Bytes not named below are never read. Byte 1 bit 5, of any type,
+ * 3 and 7, offset 8 of type 12, the actor of type 8) and old types (0x432e70): 2 and 10
+ * become teleporters, 6 and 9 oracles, 2 and 6 with the target room in byte 4 and x in
+ * byte 5 (packed into offset 4 then), 9 and 10 laid out as 12 and 13 already. Then
+ * every overlay object becomes a type 1 record on its base cell, in a table of 200
+ * records per room (0x4327c4; a logic cell in the overlay is dropped, tried in the
+ * game). Type 0 marks a free entry; the originals use only 1, 3, 5, 7, 8, 11, 12 and 13.
+ * Other types only show their cell, but for 4: the cell draws nothing (0x4328f0's case
+ * 4) and removing the record leaves its offset 2 alone (0x433000; not tried). Bytes not named below are never read. Byte 1 bit 5, of any type,
  * dissolves the record into its cell (offset 2) when the room is left and stored
  * (0x431f20; the game's own exit teleporters, see type 13; tried with an oracle: after
  * leaving and coming back it was a plain cell, blocking and dead even with its symbol
@@ -221,5 +224,7 @@ export function describeRecord(
       (d[8] ? `; shows message ${1200 + d[8]}` : ""),
     unknown: () => `record type ${d[0]}`,
   };
-  return { kind, summary: summaries[kind]() };
+  // byte 1 bit 5, any type: dropped when the room is left (0x431f20)
+  const gone = d[1] & 0x20 ? "; gone once the hero leaves the room" : "";
+  return { kind, summary: summaries[kind]() + gone };
 }

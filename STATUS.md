@@ -522,7 +522,9 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   bits 4–5 are set only by the game for the exit a type 8 actor leaves open, bit 2 and
   byte 9 are never read; episode III's teleporters with a condition hold 157 or 158 in
   byte 9). On loading a room the game converts the record cells to classes
-  and old types (2, 10 → 13; 6, 9 → 12), then turns every **overlay object into a type 1 record** on its base cell, in a
+  and old types (0x432e70: 2, 10 → 13; 6, 9 → 12; 2 and 6 with the room in byte 4 and x
+  in byte 5; none in the originals, which use only types 1, 3, 5, 7, 8, 11, 12 and 13;
+  other types show their cell and do nothing, type 4 draws nothing, code only), then turns every **overlay object into a type 1 record** on its base cell, in a
   table of 200 records (0x4327c4, 0x432e06; so records plus overlay objects ≤ 200, the
   originals reach 114); a logic cell in the overlay is dropped. **Verified under Wine**
   (episode I room 43 and the others' start rooms, records next to the hero): a stacked
@@ -665,8 +667,8 @@ Supported:
   current tile, right-click paints with the cell; target room with
   "Go", arrival position, spawner radius/period, a native's object, price and chatter,
   circuit stairs, an oracle's symbol, hint id and text, "Symbol found", a teleporter's condition and message,
-  …) and the raw
-  bytes; change the type, add a record to a plain cell
+  …, "Gone after leaving" (byte 1 bit 5, every type)) and the raw
+  bytes; change the type (listed by number), add a record to a plain cell
   (in the base layer, where the game keeps them; it shows the cell it replaces, lowest
   free slot, refused once records and overlay objects fill the game's 200), remove one
   (the cell becomes what it showed); all undoable

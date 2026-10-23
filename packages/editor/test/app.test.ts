@@ -469,6 +469,27 @@ describe("logic records", () => {
     expect(defined(app.editor).isEdited(2, 55)).toBe(false);
   });
 
+  test("record types are listed by number; any record can be gone after leaving", async () => {
+    app.showEpisode(2, 55);
+    const index = teleporterCell();
+    await clickCell(index);
+    const options = [
+      ...document.querySelectorAll<HTMLOptionElement>('[aria-label="Record type"] option'),
+    ].map((o) => Number(o.value));
+    expect(options).toEqual([1, 3, 5, 7, 8, 11, 12, 13]);
+    await page.getByRole("checkbox", { name: "Gone after leaving" }).click();
+    const slot = (defined(app.editor).room(2, 55).base[index] ?? 0) >> 8;
+    const record = defined(app.editor)
+      .room(2, 55)
+      .records.find((r) => r.slot === slot);
+    expect((record?.data[1] ?? 0) & 0x20).toBe(0x20);
+    expect(document.querySelector(".record-summary")?.textContent).toMatch(
+      /; gone once the hero leaves the room$/,
+    );
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(defined(app.editor).isEdited(2, 55)).toBe(false);
+  });
+
   test("a record's cell preview takes the current tile and gives its own", async () => {
     app.showEpisode(2, 55);
     const index = teleporterCell();
