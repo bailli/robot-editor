@@ -13,7 +13,9 @@ import type { LogicRecord } from "./scene.ts";
  * overlay is dropped, tried in the game). Type 0 marks a free entry; unknown types only
  * show their cell. Bytes not named below are never read. Byte 1 bit 5, of any type,
  * dissolves the record into its cell (offset 2) when the room is left and stored
- * (0x431f20; the game's own exit teleporters, see type 13); bits 6-7 are a level as
+ * (0x431f20; the game's own exit teleporters, see type 13; tried with an oracle: after
+ * leaving and coming back it was a plain cell, blocking and dead even with its symbol
+ * laid); bits 6-7 are a level as
  * type 1's for the other types too (the step-on check's default case, 0x44c8d2).
  *
  *   1   stacked: the object at offset 4 lies on the cell at offset 2 (0x44cd56); taking it

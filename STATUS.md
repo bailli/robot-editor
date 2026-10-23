@@ -547,7 +547,9 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   once per game; **verified:** a use gives 3500 points). Byte 7 is never read (III's hold 0,
   6, 7); byte 1 only for what every record type has: bits 6–7 a level (the step-on
   check's default case 0x44c8d2), bit 5 dissolves the record into its cell when the
-  room is stored on leaving (0x431f20; all originals 0). The editor shows the symbol,
+  room is stored on leaving (0x431f20; all originals 0; **verified under Wine** in II
+  room 43: after leaving and coming back the oracle was a plain cell that blocks the
+  hero and does nothing, even with its symbol laid). The editor shows the symbol,
   the hint (its message id editable, 330–345, which sets n) and "Symbol found".
   Also **verified:** using the shovel on a buried record digs it up (bonus "…gelernt,
   die Schaufel zu benutzen!"); a circuit of letters 1/0, wires and an AND gate lights
