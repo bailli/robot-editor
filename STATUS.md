@@ -537,10 +537,10 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   eastwards it shows its hint, message 330 + n, and vanishes (the tested
   oracle 0 has none in episode II, which has 331, 332, 334 and 339), westwards it turns
   into its object, southwards it vanishes and kills (text 945); with one piece wrong
-  nothing happens. Every byte of an oracle record is decoded (code only, beyond the
-  above): once found, the symbol is remembered in bit 4 of the oracle's state (set by
-  0x412860, written back to the record by the step-on handler; with it preset the
-  oracle works without a symbol); n from 10 on reads past the 10 symbols (pointers, no
+  nothing happens. Every byte of an oracle record is decoded: once found, the symbol
+  is remembered in bit 4 of the oracle's state (set by 0x412860, written back to the
+  record by the step-on handler; **verified under Wine:** with the bit preset the oracle
+  works without any pieces laid out); the rest from the code only: n from 10 on reads past the 10 symbols (pointers, no
   pieces match). Only episode II's oracles vanish after north and east (episode flags
   0x4000 and 0x8000, only II's constructor sets them; III's stay). Every use is event
   262 + n (0x42bef0: 3500 points once per game). Byte 7 is never read (III's hold 0,

@@ -55,7 +55,8 @@ import type { LogicRecord } from "./scene.ts";
  *       room, a 2×2 block of tangram pieces (tile 0x50) whose states are pattern n of
  *       readOracleSymbols (n: low 4 bits of the oracle's state, offset 2; 0x412860, which
  *       then shows the pieces as solved and sets bit 4 of the state: with it the symbol
- *       counts as found and is not looked for again; the originals' states are 0-9, n
+ *       counts as found and is not looked for again, tried: preset, the oracle works
+ *       without any pieces laid out; the originals' states are 0-9, n
  *       from 10 on reads past the 10 symbols, pointers no pieces match). Then, walked
  *       into (0x412ae0), northwards it sends to the target (offset 4, byte 6, see
  *       exits.ts), eastwards it shows its hint, message 330 + n (episode II has 331, 332,
