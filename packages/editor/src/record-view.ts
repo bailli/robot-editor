@@ -6,9 +6,8 @@ import {
   teleporterCondition,
 } from "@robot/formats";
 
-/** Record types of oracles and teleporters. */
+/** The record type of oracles. */
 const ORACLE = 12;
-const TELEPORTER = 13;
 /** Texts: an oracle's hint (+ the low 4 bits of its state), a teleporter's message. */
 const ORACLE_HINTS = 330;
 const TELEPORTER_MESSAGES = 1200;
@@ -17,6 +16,8 @@ const TELEPORTER_MESSAGES = 1200;
 interface Field {
   label: string;
   kind: "cell" | "number" | "room" | "flag" | "choice";
+  /** The range of values; min defaults to 0. */
+  min?: number;
   max: number;
   get: (d: Uint8Array) => number;
   set: (d: Uint8Array, value: number) => void;
@@ -25,6 +26,8 @@ interface Field {
   choices?: readonly (readonly [value: number, name: string])[];
   /** Whether the game ignores the field, given the record's other fields. */
   ignored?: (d: Uint8Array) => boolean;
+  /** The text the field names, shown next to it; undefined: none. */
+  text?: (d: Uint8Array) => number | undefined;
 }
 
 const u16 = (d: Uint8Array, at: number) => d[at] | (d[at + 1] << 8);
@@ -138,14 +141,49 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
         "Glows in the dark",
         "lights a circle around it in a dark room (episode III only)",
       ),
-      byte(8, "Message", 255, "0: none, else message 1200 + this when used (not when redirected)"),
+      {
+        ...byte(
+          8,
+          "Message",
+          255,
+          "0: none, else message 1200 + this when used (not when redirected)",
+        ),
+        text: (d) => (d[8] ? TELEPORTER_MESSAGES + d[8] : undefined),
+      },
     ],
   },
   {
     type: 12,
     name: "Oracle",
     fields: [
-      cell(2, "Cell", "tile 0x51; its state's low 4 bits pick message 330 + n and the sound"),
+      cell(
+        2,
+        "Cell",
+        "tile 0x51; the low 4 bits of its state (n) pick the symbol, the hint and the event " +
+          "262 + n (3500 points once per game); bit 4: the symbol counts as found",
+      ),
+      {
+        label: "Hint (eastwards)",
+        kind: "number",
+        min: ORACLE_HINTS,
+        max: ORACLE_HINTS + 15,
+        get: (d) => ORACLE_HINTS + (d[3] & 15),
+        set: (d, v) => {
+          d[3] = (d[3] & 0xf0) | (v - ORACLE_HINTS);
+        },
+        hint:
+          "the message shown when it is walked into eastwards: 330 + the low 4 bits of the " +
+          "cell's state, which also pick its symbol (330-339; from 340 on there is none " +
+          "to lay, see Symbol found)",
+        text: (d) => ORACLE_HINTS + (d[3] & 15),
+      },
+      flag(
+        3,
+        4,
+        "Symbol found",
+        "it works without its symbol being laid in the room; the game sets it once it finds " +
+          "the symbol (bit 4 of the cell's state)",
+      ),
       { ...targetRoom, hint: "walked into northwards" },
       packedX,
       byte(6, "Arrival y", 28),
@@ -332,18 +370,6 @@ export class RecordView {
     });
 
     const fields = (known?.fields ?? []).map((field) => this.field(field, data, commit));
-    // the texts the record shows: an oracle's hint eastwards, a teleporter's message
-    const message =
-      data[0] === ORACLE
-        ? { label: "Hint (eastwards)", id: ORACLE_HINTS + (data[3] & 15) }
-        : data[0] === TELEPORTER && data[8]
-          ? { label: "Message", id: TELEPORTER_MESSAGES + data[8] }
-          : undefined;
-    if (message) {
-      const text = this.events.text(message.id);
-      const shown = element("span", "record-text", text ?? "(none in this episode)");
-      fields.push(labelled(`${message.label} ${message.id}`, shown, text));
-    }
     const symbol = data[0] === ORACLE ? symbols?.[data[3] & 15] : undefined;
     if (symbol) {
       const block = element("span", "oracle-symbol");
@@ -440,7 +466,7 @@ export class RecordView {
     input.value = field.kind === "cell" ? hex(value) : String(value);
     input.addEventListener("change", () => {
       const v = parseNumber(input.value, field.kind);
-      if (Number.isInteger(v) && v >= 0 && v <= field.max) {
+      if (Number.isInteger(v) && v >= (field.min ?? 0) && v <= field.max) {
         field.set(data, v);
         commit();
       } else {
@@ -463,6 +489,14 @@ export class RecordView {
         this.events.useTile(field.get(data));
       });
       extras.push(preview);
+    }
+    const textId = field.text?.(data);
+    if (textId !== undefined) {
+      // the text the field names, as the game shows it
+      const text = this.events.text(textId);
+      const shown = element("span", "record-text", text ?? "(none in this episode)");
+      shown.title = text === undefined ? `text ${textId}` : `text ${textId}: ${text}`;
+      extras.push(shown);
     }
     if (field.kind === "room" && value !== 0) {
       const go = element("button", undefined, "Go");

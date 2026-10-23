@@ -537,7 +537,17 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   eastwards it shows its hint, message 330 + n, and vanishes (the tested
   oracle 0 has none in episode II, which has 331, 332, 334 and 339), westwards it turns
   into its object, southwards it vanishes and kills (text 945); with one piece wrong
-  nothing happens. The editor shows the symbol and the hint in the record inspector.
+  nothing happens. Every byte of an oracle record is decoded (code only, beyond the
+  above): once found, the symbol is remembered in bit 4 of the oracle's state (set by
+  0x412860, written back to the record by the step-on handler; with it preset the
+  oracle works without a symbol); n from 10 on reads past the 10 symbols (pointers, no
+  pieces match). Only episode II's oracles vanish after north and east (episode flags
+  0x4000 and 0x8000, only II's constructor sets them; III's stay). Every use is event
+  262 + n (0x42bef0: 3500 points once per game). Byte 7 is never read (III's hold 0,
+  6, 7); byte 1 only for what every record type has: bits 6–7 a level (the step-on
+  check's default case 0x44c8d2), bit 5 dissolves the record into its cell when the
+  room is stored on leaving (0x431f20; all originals 0). The editor shows the symbol,
+  the hint (its message id editable, 330–345, which sets n) and "Symbol found".
   Also **verified:** using the shovel on a buried record digs it up (bonus "…gelernt,
   die Schaufel zu benutzen!"); a circuit of letters 1/0, wires and an AND gate lights
   its nodes, which place their stairs, once a circuit piece is taken (the game evaluates
@@ -651,7 +661,7 @@ Supported:
   inspector with the record's fields per type (cells with previews: click takes the
   current tile, right-click paints with the cell; target room with
   "Go", arrival position, spawner radius/period, a native's object, price and chatter,
-  circuit stairs, an oracle's symbol and hint, a teleporter's condition and message,
+  circuit stairs, an oracle's symbol, hint id and text, "Symbol found", a teleporter's condition and message,
   …) and the raw
   bytes; change the type, add a record to a plain cell
   (in the base layer, where the game keeps them; it shows the cell it replaces, lowest
@@ -886,6 +896,7 @@ Roughly by value for the editor.
 | 0x40f700, 0x40f9a0           | circuits: evaluate the nodes (after taking or putting down a piece); trace     |
 | 0x4328f0, 0x432c90           | draw a map cell (classes; logic cells by record type); its jump table          |
 | 0x412860, 0x47be54           | an oracle's symbol check; the 10 symbols                                       |
+| 0x431f20                     | storing a room: records with byte 1 bit 5 dissolve into their cell             |
 | 0x42ca90, 0x430110, 0x430210 | read a word laid with letters; turn the Area square left, right                |
 | 0x42fdc0, 0x4302f0           | ShiftArea's shift; turn a punch card's square                                  |
 | 0x4130b0, 0x41f730, 0x448440 | dig (shovel); level tiles and bridges; the dealer's trade                      |

@@ -11,7 +11,10 @@ import type { LogicRecord } from "./scene.ts";
  * teleporters, 6 and 9 oracles. Then every overlay object becomes a type 1 record on
  * its base cell, in a table of 200 records per room (0x4327c4; a logic cell in the
  * overlay is dropped, tried in the game). Type 0 marks a free entry; unknown types only
- * show their cell. Bytes not named below are never read.
+ * show their cell. Bytes not named below are never read. Byte 1 bit 5, of any type,
+ * dissolves the record into its cell (offset 2) when the room is left and stored
+ * (0x431f20; the game's own exit teleporters, see type 13); bits 6-7 are a level as
+ * type 1's for the other types too (the step-on check's default case, 0x44c8d2).
  *
  *   1   stacked: the object at offset 4 lies on the cell at offset 2 (0x44cd56); taking it
  *       leaves the lower cell (tried in the game). Byte 1 bits 6-7: the object's level,
@@ -50,12 +53,18 @@ import type { LogicRecord } from "./scene.ts";
  *       1 and 1 lit their nodes, AND with 1 and 0 did not
  *   12  oracle (episodes II, III, tile 0x51): it only works once its symbol lies in the
  *       room, a 2×2 block of tangram pieces (tile 0x50) whose states are pattern n of
- *       readOracleSymbols (n: low 4 bits of the oracle's state; 0x412860, which then shows
- *       the pieces as solved). Then, walked into (0x412ae0), northwards it sends to the
- *       target (see exits.ts), eastwards it shows its hint, message 330 + n (episode II has
- *       331, 332, 334 and 339), and vanishes, westwards it turns into the object at offset
- *       8, southwards it vanishes and kills (text 945; all tried in the game, without the
- *       symbol nothing happens)
+ *       readOracleSymbols (n: low 4 bits of the oracle's state, offset 2; 0x412860, which
+ *       then shows the pieces as solved and sets bit 4 of the state: with it the symbol
+ *       counts as found and is not looked for again; the originals' states are 0-9, n
+ *       from 10 on reads past the 10 symbols, pointers no pieces match). Then, walked
+ *       into (0x412ae0), northwards it sends to the target (offset 4, byte 6, see
+ *       exits.ts), eastwards it shows its hint, message 330 + n (episode II has 331, 332,
+ *       334 and 339), westwards it turns into the object at offset 8, southwards it
+ *       vanishes and kills (text 945; all tried in the game, without the symbol nothing
+ *       happens). After north and east it vanishes only in episode II (episode flags
+ *       0x4000, 0x8000, which only II's constructor sets). Every use is event 262 + n
+ *       (0x42bef0: 3500 points once per game, n from 10 on other events). Byte 7 is never
+ *       read (episode III's hold 0, 6 or 7)
  *   13  teleporter (see exits.ts), only the hero steps on it (0x44c6f0, robots are kept
  *       off): offset 2 the cell it shows, offset 4 the target room (bits 0-9) and x (bits
  *       10-15), byte 6 y. Byte 7 a condition (teleporterCondition): 1 lets only a hero
@@ -193,7 +202,7 @@ export function describeRecord(
           `in a 2×2 block (top left to bottom right),`
         : "its symbol";
       return (
-        `an oracle; once ${pieces} lies in the room: walked into northwards it sends to ` +
+        `an oracle; ${d[3] & 0x10 ? "its symbol counts as found" : `once ${pieces} lies in the room`}: walked into northwards it sends to ` +
         `${target()}, eastwards it shows message ${330 + (d[3] & 15)}, westwards it turns ` +
         `into ${hex(u16(8))}, southwards it kills`
       );
