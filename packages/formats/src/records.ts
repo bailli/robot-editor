@@ -14,12 +14,13 @@ import type { LogicRecord } from "./scene.ts";
  * records per room (0x4327c4; a logic cell in the overlay is dropped, tried in the
  * game). Type 0 marks a free entry; the originals use only 1, 3, 5, 7, 8, 11, 12 and 13.
  * Other types only show their cell, but for 4: the cell draws nothing (0x4328f0's case
- * 4) and removing the record leaves its offset 2 alone (0x433000; not tried). Bytes not named below are never read. Byte 1 bit 5, of any type,
- * dissolves the record into its cell (offset 2) when the room is left and stored
- * (0x431f20; the game's own exit teleporters, see type 13; tried with an oracle: after
- * leaving and coming back it was a plain cell, blocking and dead even with its symbol
- * laid); bits 6-7 are a level as
- * type 1's for the other types too (the step-on check's default case, 0x44c8d2).
+ * 4) and removing the record leaves its offset 2 alone (0x433000; not tried). Bytes
+ * not named below are never read. Byte 1 bit 5, of any type, dissolves the record into
+ * its cell (offset 2) when the room is left and stored (0x431f20; the game's own exit
+ * teleporters, see type 13; tried with an oracle, after leaving and coming back a plain
+ * cell, blocking and dead even with its symbol laid, and with a teleporter); bits 6-7
+ * are a level as type 1's for the other types too (the step-on check's default case,
+ * 0x44c8d2).
  *
  *   1   stacked: the object at offset 4 lies on the cell at offset 2 (0x44cd56); taking it
  *       leaves the lower cell (tried in the game). Byte 1 bits 6-7: the object's level,

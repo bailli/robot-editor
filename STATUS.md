@@ -551,7 +551,7 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   check's default case 0x44c8d2), bit 5 dissolves the record into its cell when the
   room is stored on leaving (0x431f20; all originals 0; **verified under Wine** in II
   room 43: after leaving and coming back the oracle was a plain cell that blocks the
-  hero and does nothing, even with its symbol laid). The editor shows the symbol,
+  hero and does nothing, even with its symbol laid; likewise a teleporter). The editor shows the symbol,
   the hint (its message id editable, 330–345, which sets n) and "Symbol found".
   Also **verified:** using the shovel on a buried record digs it up (bonus "…gelernt,
   die Schaufel zu benutzen!"); a circuit of letters 1/0, wires and an AND gate lights
