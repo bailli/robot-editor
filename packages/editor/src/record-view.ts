@@ -124,10 +124,11 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
         ...flag(
           1,
           0,
-          "Use the cell first",
-          "the hero first steps onto the cell as if it lay there (e.g. picks up the item and " +
-            "gets its bonus), then he is teleported; unchecked, the cell stays and only " +
-            "decides whether he can step on it (not on a wall); ignored with a condition",
+          "Always enterable",
+          "the hero can step on it whatever the cell is (e.g. a wall or water hiding a " +
+            "passage) and first steps onto the cell as if it lay there (e.g. picks up the " +
+            "item shown), then he is teleported; unchecked, he can step on it only where the " +
+            "cell lets him (not on a wall), and the cell stays; ignored with a condition",
         ),
         ignored: (d) => teleporterCondition(d) !== "none",
       },

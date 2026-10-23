@@ -267,10 +267,13 @@ Files in `packages/formats/src`:
   case 0x432a27, fill 0x428ea0); a forbidden GATE piece (class 76, I 128) is drawn as
   its frame by the record's slot, white on black, without the cell. 48 records need
   their object, 72 forbid it, 152 ask nothing (Junior has no teleporters). Robots never
-  step on teleporters. Without a condition, byte 1 bit 0 ("Use the cell first" in the
+  step on teleporters. Without a condition, byte 1 bit 0 ("Always enterable" in the
   editor) lets the hero always step on it and first step onto the shown cell as if it
   lay there (taking an item); without the bit the shown cell stays and decides whether
-  he may step on it (a wall blocks). **Verified under Wine** (episode I room 21, the teleporter at (1, 2) showing
+  he may step on it (a wall blocks). The originals' five use it for ways through what
+  would block: III 14's whirlpool (water to 114), III 14's mossy stairs (back into the
+  room with message 1206), III 144's cave exit to 143, III 151's invisible one on the
+  floor, IV 185's wall to 285; none has bit 3. **Verified under Wine** (episode I room 21, the teleporter at (1, 2) showing
   a grain, the hero carrying nothing): with 1 he cannot step on it, with 2 he arrives in
   room 44 at (2, 15); with 0 and bit 0 he takes the grain (bonus 500) and then arrives
   there. Byte 1 bit 3 makes a teleporter a light source, in episode III only: on

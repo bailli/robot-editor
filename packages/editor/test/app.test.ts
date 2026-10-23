@@ -452,7 +452,7 @@ describe("logic records", () => {
     await clickCell(index);
     const condition = page.getByRole("combobox", { name: "Condition" });
     await expect.element(condition).toHaveValue("1"); // the hero must carry its object
-    const useCell = page.getByRole("checkbox", { name: "Use the cell first" });
+    const useCell = page.getByRole("checkbox", { name: "Always enterable" });
     await expect.element(useCell).toBeDisabled(); // the game ignores it with a condition
     const backed = app.view.pixels();
     await userEvent.selectOptions(condition, "none");
