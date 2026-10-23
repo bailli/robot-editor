@@ -207,7 +207,13 @@ export {
   requiredPoints,
 } from "./describe.ts";
 export type { CellDescription, NoteText } from "./describe.ts";
-export { TANGRAM_TILE, describeRecord, readOracleSymbols, teleporterCondition } from "./records.ts";
+export {
+  TANGRAM_TILE,
+  describeRecord,
+  readOracleSymbols,
+  recordCellOffsets,
+  teleporterCondition,
+} from "./records.ts";
 export { EVENT_TEXT, readEventTable } from "./events.ts";
 export type { GameEvent } from "./events.ts";
 export type { RecordInfo, RecordKind, TeleporterCondition } from "./records.ts";

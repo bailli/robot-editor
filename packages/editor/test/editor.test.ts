@@ -114,6 +114,9 @@ test("tilesOf lists the distinct values of a layer, empty first, without logic c
   expect(new Set(tiles).size).toBe(tiles.length);
   expect(tiles.some((t) => (t & 0xff) === LOGIC_CELL)).toBe(false);
   expect(tiles).toContain(room.base[free]);
+  // cells only records hold: in the base palette (episode IV room 185's teleporter wall)
+  expect(tilesOf(game.episode(4).rooms, "base")).toContain(0xd044);
+  expect(tilesOf(game.episode(4).rooms, "overlay")).not.toContain(0xd044);
 });
 
 describe("Editor records", () => {

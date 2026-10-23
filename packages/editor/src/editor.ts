@@ -33,6 +33,7 @@ import {
   parseTexts,
   readEpisodeStart,
   recordCell,
+  recordCellOffsets,
   roomName,
   roomNameText,
   roomNamesId,
@@ -1133,10 +1134,22 @@ function sameCells(a: Uint16Array, b: Uint16Array): boolean {
   return a.every((v, i) => v === b[i]);
 }
 
-/** The distinct cell values of a layer over all rooms of an episode, logic cells excluded. */
+/**
+ * The distinct cell values of a layer over all rooms of an episode, logic cells excluded;
+ * the base layer adds the cells its logic records hold (recordCellOffsets), e.g. what a
+ * teleporter shows, which may lie nowhere else.
+ */
 export function tilesOf(rooms: readonly Room[], layer: Layer): number[] {
   const values = new Set<number>([0]);
-  for (const room of rooms)
+  for (const room of rooms) {
     for (const cell of room[layer]) if (!isLogicCell(cell)) values.add(cell);
+    if (layer !== "base") continue;
+    for (const { data } of room.records) {
+      for (const at of recordCellOffsets(data[0])) {
+        const cell = data[at] | (data[at + 1] << 8);
+        if (!isLogicCell(cell)) values.add(cell);
+      }
+    }
+  }
   return [...values].sort((a, b) => (a & 0xff) - (b & 0xff) || a - b);
 }

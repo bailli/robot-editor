@@ -422,6 +422,10 @@ export class App {
         this.showRoom(room);
     },
     preview: (value) => this.cellPreview(value),
+    tile: () => this.tile,
+    useTile: (value) => {
+      this.setTile(value);
+    },
     text: (id) => {
       const texts = this.need().game.episodeTexts(this.episode)?.entries.get(id);
       const tile = (v: number) => this.names().tileName(v);

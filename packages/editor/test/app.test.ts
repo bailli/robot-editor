@@ -469,6 +469,32 @@ describe("logic records", () => {
     expect(defined(app.editor).isEdited(2, 55)).toBe(false);
   });
 
+  test("a record's cell preview takes the current tile and gives its own", async () => {
+    app.showEpisode(2, 55);
+    const index = teleporterCell();
+    await clickCell(index);
+    const slot = (defined(app.editor).room(2, 55).base[index] ?? 0) >> 8;
+    const shown = () =>
+      defined(
+        defined(app.editor)
+          .room(2, 55)
+          .records.find((r) => r.slot === slot),
+      ).data;
+    const preview = () =>
+      defined(document.querySelector<HTMLElement>(".record-row .pickable") ?? undefined);
+    app.setTile(0x0d15);
+    preview().click();
+    expect(shown()[2] | (shown()[3] << 8)).toBe(0x0d15);
+    await expect
+      .element(page.getByRole("textbox", { name: "Cell", exact: true }))
+      .toHaveValue("0x0d15");
+    app.setTile(0);
+    preview().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    expect(app.tile).toBe(0x0d15);
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(defined(app.editor).isEdited(2, 55)).toBe(false);
+  });
+
   test("the inspect tool adds and removes records", async () => {
     app.showEpisode(1, 43);
     await page.getByRole("radio", { name: "Inspect" }).click();

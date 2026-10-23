@@ -697,6 +697,10 @@ canvas.cell {
   display: block;
 }
 
+canvas.cell.pickable {
+  cursor: pointer;
+}
+
 .tile-preview canvas.cell {
   width: 48px;
   height: 36px;

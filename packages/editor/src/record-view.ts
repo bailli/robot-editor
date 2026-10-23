@@ -256,6 +256,10 @@ export interface RecordViewEvents {
   go(room: number): void;
   /** A canvas showing a cell value. */
   preview(value: number): HTMLCanvasElement;
+  /** The tile the editor paints with. */
+  tile(): number;
+  /** Makes a cell value the tile the editor paints with. */
+  useTile(value: number): void;
   /** The episode's text `id` as one paragraph, undefined if it has none. */
   text(id: number): string | undefined;
 }
@@ -444,7 +448,22 @@ export class RecordView {
       }
     });
     const extras: HTMLElement[] = [];
-    if (field.kind === "cell") extras.push(this.events.preview(value));
+    if (field.kind === "cell") {
+      // click: take the current tile; right-click: paint with this one
+      const preview = this.events.preview(value);
+      preview.classList.add("pickable");
+      preview.title += "\nClick: take the current tile · Right-click: paint with this one";
+      preview.addEventListener("click", (event) => {
+        event.preventDefault(); // inside the label: do not focus the input
+        field.set(data, this.events.tile());
+        commit();
+      });
+      preview.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        this.events.useTile(field.get(data));
+      });
+      extras.push(preview);
+    }
     if (field.kind === "room" && value !== 0) {
       const go = element("button", undefined, "Go");
       go.addEventListener("click", () => {

@@ -572,7 +572,9 @@ Supported:
   room with a backdrop (house interiors, see room connections) shows the backdrop room
   slightly dimmed in its class 99 cells, in the view and on the map; painting over its
   marks at (0, 1) and (39, 1) removes it
-- painting base or overlay with a tile from the episode's tiles (robots, which draw
+- painting base or overlay with a tile from the episode's tiles (those its rooms use in
+  that layer; the base layer's also those only logic records hold, e.g. IV 185's
+  teleporter wall 0xd044; robots, which draw
   nothing as tiles, show their first sprite; other invisible tiles a hatching; a filter
   by name, text or hex value) or any hex value; right click picks; dragging fills lines;
   undo/redo per stroke; grid (G); Dark (D) draws the room and the map as dark as the game
@@ -646,7 +648,8 @@ Supported:
   cells say what their record does, notes and diary pages their message, packages what
   they hold (drawn in the hover line)
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
-  inspector with the record's fields per type (cells with previews, target room with
+  inspector with the record's fields per type (cells with previews: click takes the
+  current tile, right-click paints with the cell; target room with
   "Go", arrival position, spawner radius/period, a native's object, price and chatter,
   circuit stairs, an oracle's symbol and hint, a teleporter's condition and message,
   …) and the raw

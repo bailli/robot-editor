@@ -92,6 +92,15 @@ export function readOracleSymbols(image: PeImage): number[][] {
 }
 
 /**
+ * The data offsets of a record that hold cells (tile values, as maps store them): offset
+ * 2 always, 4 of types 1, 3 and 7, 8 of type 12; the ones the game converts on loading
+ * a room. Type 8's actor (byte 8) is no cell.
+ */
+export function recordCellOffsets(type: number): number[] {
+  return type === 12 ? [2, 8] : type === 1 || type === 3 || type === 7 ? [2, 4] : [2];
+}
+
+/**
  * What a teleporter asks of the hero (byte 7, 0x44c6f0): "carry" lets him step on it only
  * while he carries an object of the class of the cell it shows (offset 2; any state, e.g.
  * a key of any colour; gold: any gold, letters: any letter), "not carry" only while he
