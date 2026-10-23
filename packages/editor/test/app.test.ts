@@ -442,7 +442,9 @@ describe("logic records", () => {
     expect(record && (record.data[4] | (record.data[5] << 8)) & 0x3ff).toBe(43);
     expect(document.querySelector(".teleports")?.textContent).toContain("43");
     await expect.element(page.getByRole("button", { name: "Save exe" })).toBeEnabled();
-    await userEvent.keyboard("{Control>}z{/Control}");
+    // the field keeps the focus (Ctrl+Z there is its own text undo)
+    expect(document.activeElement).toBe(room.element());
+    app.undo();
     expect(defined(app.editor).isEdited(2, 55)).toBe(false);
   });
 
@@ -465,6 +467,33 @@ describe("logic records", () => {
     // no longer on colour 15 with the teleporter's frame: the cell alone
     const at = firstDifference(backed, app.view.pixels()) / 4;
     expect(Math.floor((at % 640) / 16) + Math.floor(at / 640 / 12) * ROOM_WIDTH).toBe(index);
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(defined(app.editor).isEdited(2, 55)).toBe(false);
+  });
+
+  test("Tab after changing a field goes on to the next one", async () => {
+    app.showEpisode(2, 55);
+    const index = teleporterCell();
+    await clickCell(index);
+    const x = page.getByRole("textbox", { name: "Arrival x" });
+    await userEvent.fill(x, "5");
+    await userEvent.tab();
+    const y = page.getByRole("textbox", { name: "Arrival y" });
+    expect(document.activeElement).toBe(y.element());
+    const slot = (defined(app.editor).room(2, 55).base[index] ?? 0) >> 8;
+    const data = () =>
+      defined(
+        defined(app.editor)
+          .room(2, 55)
+          .records.find((r) => r.slot === slot),
+      ).data;
+    expect((data()[4] | (data()[5] << 8)) >> 10).toBe(5);
+    // the kept controls edit the record as it is now: x stays
+    await userEvent.fill(y, "7");
+    await userEvent.tab();
+    expect([(data()[4] | (data()[5] << 8)) >> 10, data()[6]]).toEqual([5, 7]);
+    expect(document.querySelector(".record-summary")?.textContent).toMatch(/at \(5, 7\)/);
+    await userEvent.keyboard("{Control>}z{/Control}");
     await userEvent.keyboard("{Control>}z{/Control}");
     expect(defined(app.editor).isEdited(2, 55)).toBe(false);
   });

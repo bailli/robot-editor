@@ -671,7 +671,8 @@ Supported:
   bytes; change the type (listed by number), add a record to a plain cell
   (in the base layer, where the game keeps them; it shows the cell it replaces, lowest
   free slot, refused once records and overlay objects fill the game's 200), remove one
-  (the cell becomes what it showed); all undoable
+  (the cell becomes what it showed); all undoable; an edit keeps the inspector's
+  controls (`patch.ts`), so focus stays and Tab goes on to the next field
 - circuit (tab Circuit): the room's circuit evaluated as the cells are now
   (`roomCircuit`): how many nodes are on, the final node's stairs and what they wait for,
   per node on/off/no signal with where its trace stops, problems (nodes the game never

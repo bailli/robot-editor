@@ -6,6 +6,8 @@ import {
   teleporterCondition,
 } from "@robot/formats";
 
+import { patchChildren } from "./patch.ts";
+
 /** The record types of oracles and teleporters. */
 const ORACLE = 12;
 const TELEPORTER = 13;
@@ -344,6 +346,10 @@ function parseNumber(text: string, kind: Field["kind"]): number {
 export class RecordView {
   readonly element = element("section", "record-view");
   private readonly events: RecordViewEvents;
+  /** The shown record's bytes, as edited; the controls' listeners work on these. */
+  private data = new Uint8Array(0);
+  /** Which record is shown (slot, cell, type): shown again, its controls are kept. */
+  private shown: string | undefined;
 
   constructor(events: RecordViewEvents) {
     this.events = events;
@@ -354,6 +360,11 @@ export class RecordView {
   hide(): void {
     this.element.hidden = true;
     this.element.replaceChildren();
+    this.shown = undefined;
+  }
+
+  private commit(): void {
+    this.events.change(this.data.slice());
   }
 
   /**
@@ -368,10 +379,8 @@ export class RecordView {
   ): void {
     this.element.hidden = false;
     const data = record.data.slice();
+    this.data = data;
     const known = RECORD_TYPES.find((t) => t.type === data[0]);
-    const commit = () => {
-      this.events.change(data.slice());
-    };
 
     const title = element("h3", undefined, `Logic record ${record.slot} at ${where}`);
     const summary = element(
@@ -382,11 +391,11 @@ export class RecordView {
     const type = typeSelect(known ? undefined : data[0]);
     type.value = String(data[0]);
     type.addEventListener("change", () => {
-      data[0] = Number(type.value);
-      commit();
+      this.data[0] = Number(type.value);
+      this.commit();
     });
 
-    const fields = (known?.fields ?? []).map((field) => this.field(field, data, commit));
+    const fields = (known?.fields ?? []).map((field) => this.field(field));
     const symbol = data[0] === ORACLE ? symbols?.[data[3] & 15] : undefined;
     if (symbol) {
       const block = element("span", "oracle-symbol");
@@ -404,11 +413,11 @@ export class RecordView {
         .trim()
         .split(/\s+/)
         .map((b) => Number.parseInt(b, 16));
-      if (bytes.length === data.length && bytes.every((b) => b >= 0 && b <= 255)) {
-        data.set(bytes);
-        commit();
+      if (bytes.length === this.data.length && bytes.every((b) => b >= 0 && b <= 255)) {
+        this.data.set(bytes);
+        this.commit();
       } else {
-        raw.value = [...data].map((b) => b.toString(16).padStart(2, "0")).join(" ");
+        raw.value = [...this.data].map((b) => b.toString(16).padStart(2, "0")).join(" ");
       }
     });
 
@@ -418,14 +427,20 @@ export class RecordView {
       this.events.remove();
     });
 
-    this.element.replaceChildren(
+    const children = [
       title,
       summary,
       labelled("Type", type),
       ...fields,
       labelled("Bytes", raw),
       remove,
-    );
+    ];
+    // the same record again (after an edit): keep the controls, so focus stays and Tab
+    // goes on to the next field
+    const shown = `${record.slot} ${where} ${data[0]}`;
+    if (shown === this.shown) patchChildren(this.element, children);
+    else this.element.replaceChildren(...children);
+    this.shown = shown;
   }
 
   /** Offers to add a record to a plain cell. */
@@ -437,6 +452,7 @@ export class RecordView {
     add.addEventListener("click", () => {
       this.events.add(Number(type.value));
     });
+    this.shown = undefined;
     this.element.replaceChildren(
       element("h3", undefined, `No logic record at ${where}`),
       element(
@@ -449,7 +465,8 @@ export class RecordView {
     );
   }
 
-  private field(field: Field, data: Uint8Array, commit: () => void): HTMLElement {
+  private field(field: Field): HTMLElement {
+    const data = this.data;
     const value = field.get(data);
     if (field.kind === "choice") {
       const select = element("select");
@@ -460,8 +477,8 @@ export class RecordView {
         select.append(new Option(String(value), String(value)));
       select.value = String(value);
       select.addEventListener("change", () => {
-        field.set(data, Number(select.value));
-        commit();
+        field.set(this.data, Number(select.value));
+        this.commit();
       });
       return labelled(field.label, select, field.hint);
     }
@@ -471,8 +488,8 @@ export class RecordView {
       box.checked = value !== 0;
       box.disabled = field.ignored?.(data) ?? false;
       box.addEventListener("change", () => {
-        field.set(data, box.checked ? 1 : 0);
-        commit();
+        field.set(this.data, box.checked ? 1 : 0);
+        this.commit();
       });
       return labelled(field.label, box, field.hint);
     }
@@ -483,10 +500,11 @@ export class RecordView {
     input.addEventListener("change", () => {
       const v = parseNumber(input.value, field.kind);
       if (Number.isInteger(v) && v >= (field.min ?? 0) && v <= field.max) {
-        field.set(data, v);
-        commit();
+        field.set(this.data, v);
+        this.commit();
       } else {
-        input.value = field.kind === "cell" ? hex(field.get(data)) : String(field.get(data));
+        input.value =
+          field.kind === "cell" ? hex(field.get(this.data)) : String(field.get(this.data));
       }
     });
     const extras: HTMLElement[] = [];
@@ -497,12 +515,12 @@ export class RecordView {
       preview.title += "\nClick: take the current tile · Right-click: paint with this one";
       preview.addEventListener("click", (event) => {
         event.preventDefault(); // inside the label: do not focus the input
-        field.set(data, this.events.tile());
-        commit();
+        field.set(this.data, this.events.tile());
+        this.commit();
       });
       preview.addEventListener("contextmenu", (event) => {
         event.preventDefault();
-        this.events.useTile(field.get(data));
+        this.events.useTile(field.get(this.data));
       });
       extras.push(preview);
     }
@@ -517,7 +535,7 @@ export class RecordView {
     if (field.kind === "room" && value !== 0) {
       const go = element("button", undefined, "Go");
       go.addEventListener("click", () => {
-        this.events.go(field.get(data));
+        this.events.go(field.get(this.data));
       });
       extras.push(go);
     }
@@ -538,6 +556,7 @@ function typeSelect(unknown?: number): HTMLSelectElement {
 
 function labelled(text: string, control: HTMLElement, hint?: string, ...extras: HTMLElement[]) {
   const label = element("label", "record-row");
+  label.dataset["key"] = text;
   label.append(element("span", "record-label", text), control, ...extras);
   if (hint) label.title = hint;
   return label;
