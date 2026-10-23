@@ -3,6 +3,7 @@ import {
   type LogicRecord,
   TANGRAM_TILE,
   describeRecord,
+  teleporterCondition,
 } from "@robot/formats";
 
 /** Record types of oracles and teleporters. */
@@ -12,14 +13,18 @@ const TELEPORTER = 13;
 const ORACLE_HINTS = 330;
 const TELEPORTER_MESSAGES = 1200;
 
-/** A record field shown as an input: a cell value (hex), a number or a flag. */
+/** A record field shown as an input: a cell value (hex), a number, a flag or a choice. */
 interface Field {
   label: string;
-  kind: "cell" | "number" | "room" | "flag";
+  kind: "cell" | "number" | "room" | "flag" | "choice";
   max: number;
   get: (d: Uint8Array) => number;
   set: (d: Uint8Array, value: number) => void;
   hint?: string;
+  /** The values of a choice and their names. */
+  choices?: readonly (readonly [value: number, name: string])[];
+  /** Whether the game ignores the field, given the record's other fields. */
+  ignored?: (d: Uint8Array) => boolean;
 }
 
 const u16 = (d: Uint8Array, at: number) => d[at] | (d[at + 1] << 8);
@@ -91,6 +96,21 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
     name: "Teleporter",
     fields: [
       cell(2, "Cell"),
+      {
+        ...byte(
+          7,
+          "Condition",
+          255,
+          "carry item: only a hero who carries an item like the cell (any state) can step " +
+            "on it, drawn on white; do not carry item: only one who carries none, drawn on black",
+        ),
+        kind: "choice",
+        choices: [
+          [0, "none"],
+          [1, "carry item"],
+          [2, "do not carry item"],
+        ],
+      },
       targetRoom,
       packedX,
       byte(6, "Arrival y", 28),
@@ -100,10 +120,24 @@ export const RECORD_TYPES: readonly { type: number; name: string; fields: readon
         "Script may set the target",
         "a script's Teleport(room, x, y) (room not 0) replaces the target",
       ),
-      flag(1, 0, "Cell acts first", "the shown cell acts first, while byte 7 is 0"),
-      byte(7, "Byte 7", 255, "with 'Cell acts first': 0 lets the cell act"),
-      flag(1, 3, "Effect", "a visual effect now and then"),
-      byte(8, "Message", 255, "0: none, else message 1200 + this when used"),
+      {
+        ...flag(
+          1,
+          0,
+          "Use the cell first",
+          "the hero first steps onto the cell as if it lay there (e.g. picks up the item and " +
+            "gets its bonus), then he is teleported; unchecked, the cell stays and only " +
+            "decides whether he can step on it (not on a wall); ignored with a condition",
+        ),
+        ignored: (d) => teleporterCondition(d) !== "none",
+      },
+      flag(
+        1,
+        3,
+        "Glows in the dark",
+        "lights a circle around it in a dark room (episode III only)",
+      ),
+      byte(8, "Message", 255, "0: none, else message 1200 + this when used (not when redirected)"),
     ],
   },
   {
@@ -370,10 +404,25 @@ export class RecordView {
 
   private field(field: Field, data: Uint8Array, commit: () => void): HTMLElement {
     const value = field.get(data);
+    if (field.kind === "choice") {
+      const select = element("select");
+      select.setAttribute("aria-label", field.label);
+      const choices = field.choices ?? [];
+      for (const [v, name] of choices) select.append(new Option(name, String(v)));
+      if (!choices.some(([v]) => v === value))
+        select.append(new Option(String(value), String(value)));
+      select.value = String(value);
+      select.addEventListener("change", () => {
+        field.set(data, Number(select.value));
+        commit();
+      });
+      return labelled(field.label, select, field.hint);
+    }
     if (field.kind === "flag") {
       const box = element("input");
       box.type = "checkbox";
       box.checked = value !== 0;
+      box.disabled = field.ignored?.(data) ?? false;
       box.addEventListener("change", () => {
         field.set(data, box.checked ? 1 : 0);
         commit();

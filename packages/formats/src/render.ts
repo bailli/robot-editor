@@ -1,6 +1,8 @@
-import { CIRCUIT_NODE_RECORD, nodeBulb } from "./circuits.ts";
+import { CIRCUIT_NODE_RECORD, GATE_CLASS, nodeBulb } from "./circuits.ts";
 import { type EpisodeClasses, FrameMethod, type ObjectClass } from "./classes.ts";
+import { TELEPORTER_RECORD } from "./exits.ts";
 import type { Rgb } from "./palette.ts";
+import { type TeleporterCondition, teleporterCondition } from "./records.ts";
 import {
   LOGIC_CELL,
   ROOM_CELLS,
@@ -307,22 +309,70 @@ export function cellPixels(
 
 const TILE_SIZE = TILE_WIDTH * TILE_HEIGHT;
 
+/** The class whose frame 0 lies under the cell of a teleporter that needs an object. */
+const TELEPORTER_CLASS = 0x43;
+
 /**
- * The 16x12 pixels of one map position: its base cell as a tile on colour 15, its
- * overlay cell as a sprite on top (see renderRoom).
+ * What the game draws under the cell a teleporter with a condition shows (0x4328f0, type
+ * 13 by byte 7, see teleporterCondition): for one that needs the object colour 15 with
+ * the teleporter's frame 0 (class 0x43) XORed in, for one that forbids it black; then the
+ * cell as a sprite. A GATE piece (class 76) that is forbidden is drawn instead as its
+ * frame, the record's slot (the game takes the logic cell's state), XORed onto black in
+ * colour 15. shownCells says which cells get a backing.
+ */
+export type Backing = Exclude<TeleporterCondition, "none">;
+
+function backedPixels(
+  cell: number,
+  backing: Backing,
+  objects: ShapeTable,
+  episode: EpisodeClasses,
+): Uint8Array {
+  const out = new Uint8Array(TILE_SIZE).fill(backing === "carry" ? TILE_BACKGROUND : 0);
+  if (backing === "not carry" && episode.classes.get(cell & 0xff)?.id === GATE_CLASS) {
+    const gate = objects.at(cell & 0xff);
+    const plane = gate ? frameMasks(gate, cell >> 8)[0] : null;
+    plane?.forEach((bit, i) => {
+      if (bit) out[i] ^= 0x0f;
+    });
+    return out;
+  }
+  const teleporter = episode.typeOfClass.get(TELEPORTER_CLASS);
+  const frame = backing === "carry" && teleporter !== undefined ? objects.at(teleporter) : null;
+  if (frame) xorFrame(out, frame, 0);
+  const sprite = cellPixels(cell, objects, episode, true);
+  if (sprite) {
+    for (const [i, c] of sprite.entries()) if (c !== TRANSPARENT) out[i] = c;
+  }
+  return out;
+}
+
+/**
+ * The 16x12 pixels of one map position: its base cell as a tile on colour 15 (or on a
+ * teleporter's backing, see Backing), its overlay cell as a sprite on top (see
+ * renderRoom).
  */
 export function renderCell(
   base: number,
   overlay: number,
   objects: ShapeTable,
   episode?: EpisodeClasses,
+  backing?: Backing,
 ): Uint8Array {
-  const out = cellPixels(base, objects, episode) ?? new Uint8Array(TILE_SIZE).fill(TILE_BACKGROUND);
+  const out =
+    (backing && episode
+      ? backedPixels(base, backing, objects, episode)
+      : cellPixels(base, objects, episode)) ?? new Uint8Array(TILE_SIZE).fill(TILE_BACKGROUND);
   const sprite = cellPixels(overlay, objects, episode, true);
   if (sprite) {
     for (const [i, c] of sprite.entries()) if (c !== TRANSPARENT) out[i] = c;
   }
   return out;
+}
+
+/** A number for what renderCell draws, e.g. to cache its pixels. */
+export function cellKey(base: number, overlay: number, backing?: Backing): number {
+  return (base * 0x10000 + overlay) * 3 + (backing ? (backing === "carry" ? 1 : 2) : 0);
 }
 
 /** Copies a cell's pixels (renderCell) to position `index` of a room image. */
@@ -367,7 +417,9 @@ export function backdropRoom(
  * The cells drawn at map position `index`: [base, overlay] of the room, logic cells
  * resolved, or of `backdrop` (backdropRoom) where the room's cell is of class 99. A
  * circuit node shows its bulb as the overlay (nodeBulb; not under an overlay object,
- * which the game would draw on top of it), lit as byte 7 is or as `lit` says.
+ * which the game would draw on top of it), lit as byte 7 is or as `lit` says. A
+ * teleporter with a condition adds its backing (Backing; a forbidden GATE piece then
+ * shows the record's slot as its state).
  */
 export function shownCells(
   room: Room,
@@ -375,7 +427,7 @@ export function shownCells(
   classes?: EpisodeClasses,
   backdrop?: Room,
   lit?: (index: number) => boolean | undefined,
-): [base: number, overlay: number, fromBackdrop: boolean] {
+): [base: number, overlay: number, fromBackdrop: boolean, backing?: Backing] {
   const cell = room.base[index] ?? 0;
   const base = resolveCell(room, cell);
   const overlay = resolveCell(room, room.overlay[index] ?? 0);
@@ -386,11 +438,16 @@ export function shownCells(
       true,
     ];
   }
-  if (classes && overlay === 0 && (cell & 0xff) === LOGIC_CELL) {
+  if (classes && (cell & 0xff) === LOGIC_CELL) {
     const record = room.records.find((r) => r.slot === cell >> 8);
-    if (record?.data[0] === CIRCUIT_NODE_RECORD) {
+    if (overlay === 0 && record?.data[0] === CIRCUIT_NODE_RECORD) {
       const bulb = nodeBulb(classes, lit?.(index) ?? record.data[7] !== 0);
       if (bulb !== undefined) return [base, bulb, false];
+    }
+    const condition = record?.data[0] === TELEPORTER_RECORD && teleporterCondition(record.data);
+    if (record && condition && condition !== "none") {
+      const gate = condition === "not carry" && classes.classes.get(base & 0xff)?.id === GATE_CLASS;
+      return [gate ? (base & 0xff) | (record.slot << 8) : base, overlay, false, condition];
     }
   }
   return [base, overlay, false];
@@ -414,11 +471,11 @@ export function renderRoom(
   const out = new Uint8Array(SCREEN_WIDTH * SCREEN_HEIGHT);
   const cells = new Map<number, Uint8Array>(); // rooms repeat few (base, overlay) pairs
   for (let i = 0; i < ROOM_CELLS; i++) {
-    const [base, overlay] = shownCells(room, i, episode, backdrop);
-    const key = base * 0x10000 + overlay;
+    const [base, overlay, , backing] = shownCells(room, i, episode, backdrop);
+    const key = cellKey(base, overlay, backing);
     let pixels = cells.get(key);
     if (!pixels) {
-      pixels = renderCell(base, overlay, objects, episode);
+      pixels = renderCell(base, overlay, objects, episode, backing);
       cells.set(key, pixels);
     }
     blitCell(out, i, pixels);

@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-10-20.
+Setup and commands are in the [README](README.md). Last updated: 2026-10-23.
 
 ## Goal and approach
 
@@ -255,7 +255,30 @@ Files in `packages/formats/src`:
   not. So in episode I a redirect lasts only while the hero stays in the room (episode
   I's teleport hubs 36 and 38 send their teleporters back to where the hero came from,
   by `LastRoom`). A teleporter record's byte 8, if not 0, shows message 1200 + it when
-  used (episode III: texts 1201–1207, "Du betrittst einen engen Gang…").
+  used, unless redirected (episode III: texts 1201–1207, "Du betrittst einen engen
+  Gang…").
+- **Teleporters with a condition** (record byte 7, `teleporterCondition`; 0x44c6f0, the
+  check whether an actor may step on a cell): 1 lets the hero on only while he carries
+  an object of the class of the cell the teleporter shows (any state; 0x42bd40 counts
+  the inventory slots by class; gold, class 0x0a, counts the gold, 0x4fe30e; letters,
+  class 0x3b, any letter, 0x4fe2b6), 2 only while he carries none; otherwise he cannot
+  step on it. The game draws the first kind on colour 15 with the teleporter's frame 0
+  (class 0x43) XORed in, the second on black, the cell on top as a sprite (0x4328f0's
+  case 0x432a27, fill 0x428ea0); a forbidden GATE piece (class 76, I 128) is drawn as
+  its frame by the record's slot, white on black, without the cell. 48 records need
+  their object, 72 forbid it, 152 ask nothing (Junior has no teleporters). Robots never
+  step on teleporters. Without a condition, byte 1 bit 0 ("Use the cell first" in the
+  editor) lets the hero always step on it and first step onto the shown cell as if it
+  lay there (taking an item); without the bit the shown cell stays and decides whether
+  he may step on it (a wall blocks). **Verified under Wine** (episode I room 21, the teleporter at (1, 2) showing
+  a grain, the hero carrying nothing): with 1 he cannot step on it, with 2 he arrives in
+  room 44 at (2, 15); with 0 and bit 0 he takes the grain (bonus 500) and then arrives
+  there. Byte 1 bit 3 makes a teleporter a light source, in episode III only: on
+  entering a room the hook of class 0xba (tile 0x72, only in III; 0x416ef0) adds a light
+  (0x42b230) at every teleporter with the bit. **Verified under Wine:** in III room 13
+  at darkness 100 its two teleporters glow with the bit and stay dark without it; in I
+  room 21 the bit lights nothing. The renders of the screenshots of I 11, 14, 21, 99, 128 and II 4, 99 match the
+  game at all their teleporters.
 - **Passages ±100** ("further in": building interiors, caves): door in = class 98 (tile
   0x53, state 6/7, a roof's door) → +100; door out = class 105 (0x5a) → −100; stairs =
   class 71 (0x3d), state bit 0 clear → +100 (down), set → −100 (up). The hero arrives
@@ -492,7 +515,10 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   III's friendly native, selling an object for gold), 8 travelling actor, 11 circuit node
   (episodes I, II; lit nodes place stairs, episode I room 128's final node the stairs to
   228, II 142's node those to 242), 12 oracle (one effect per direction it is walked
-  into), 13 teleporter. On loading a room the game converts the record cells to classes
+  into), 13 teleporter (every byte decoded, `records.ts`: byte 7 its condition, byte 1
+  bits 4–5 are set only by the game for the exit a type 8 actor leaves open, bit 2 and
+  byte 9 are never read; episode III's teleporters with a condition hold 157 or 158 in
+  byte 9). On loading a room the game converts the record cells to classes
   and old types (2, 10 → 13; 6, 9 → 12), then turns every **overlay object into a type 1 record** on its base cell, in a
   table of 200 records (0x4327c4, 0x432e06; so records plus overlay objects ≤ 200, the
   originals reach 114); a logic cell in the overlay is dropped. **Verified under Wine**
@@ -619,7 +645,8 @@ Supported:
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
   inspector with the record's fields per type (cells with previews, target room with
   "Go", arrival position, spawner radius/period, a native's object, price and chatter,
-  circuit stairs, an oracle's symbol and hint, a teleporter's message, …) and the raw
+  circuit stairs, an oracle's symbol and hint, a teleporter's condition and message,
+  …) and the raw
   bytes; change the type, add a record to a plain cell
   (in the base layer, where the game keeps them; it shows the cell it replaces, lowest
   free slot, refused once records and overlay objects fill the game's 200), remove one
@@ -757,14 +784,13 @@ Roughly by value for the editor.
 6. **Renderer gaps** (`pnpm robot eval --types`): empty floor in episodes I/II (runtime:
    actors, hero, animations), episode IV types 95/106/79/99/70, episode III types 83, 37,
    49, 76, episode II 85/77/110/25, Junior 23/25 (animated). Some are runtime effects that
-   a static render cannot match. Logic cells in some dark rooms (episode I room 11's
-   teleporters) are drawn on black in the game but on colour 15 by us. Lead: the game
-   draws a logic cell by its record's type (0x4328f0, jump table 0x432c90 by type − 1),
-   of which we only follow circuit nodes (the bulb): type 1 adds the stacked cell
+   a static render cannot match. The game draws a logic cell by its record's type
+   (0x4328f0, jump table 0x432c90 by type − 1), of which we follow circuit nodes (the
+   bulb) and teleporters (their condition, see above): type 1 adds the stacked cell
    (offset 4) as a sprite unless word 0 bits 14–15 are set, type 5 class 0x34 in state
-   byte 7 − 1 while byte 7 is set, type 13 clears the cell first (0x428ea0, colour 0 or
-   15 by byte 7 and the episode flag at 0x51bb18 + 8) and draws its cell as a sprite,
-   type 8 depends on byte 8 (0x103: class 0x2c, the dealer). Not traced further.
+   byte 7 − 1 while byte 7 is set, type 8 depends on byte 8 (0x103: class 0x2c, the
+   dealer). Not traced further. A teleporter with byte 1 bits 6–7 (a level) and no
+   condition is not drawn there (no original has one).
 7. **Description extras:** key colours (strings 0x9c50/0x9c51 from the exe's string
    table), messages 200/201 added by two classes, codes formatted by 0x41d2c0/0x40ff80, and
    four describe methods that depend on game flags/options.
@@ -834,6 +860,7 @@ Roughly by value for the editor.
 | 0x433a60, 0x433c30           | open/close exit tiles on the edges (task 0x66, started on entering a room)     |
 | 0x413d30, 0x4140d0, 0x426880 | door in, door out, stairs                                                      |
 | 0x412ae0, 0x44cc30           | oracle, teleporter (step-on handler 0x44cb60)                                  |
+| 0x44c6f0, 0x42bd40           | may an actor step on a cell (teleporter conditions); count a class carried     |
 | 0x42b6f0                     | room load: records 7/8 spawn actors                                            |
 | 0x432fd0, 0x433110           | logic record lookup; a cell's effective value                                  |
 | 0x401af0, 0x409d30           | draw a room over its backdrop (class 99 cells); which room (IV 0x40d4a0)       |

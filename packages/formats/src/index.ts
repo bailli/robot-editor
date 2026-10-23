@@ -97,6 +97,7 @@ export {
   backdropRoom,
   blitCell,
   cellFrame,
+  cellKey,
   cellPixels,
   glyphRow,
   renderCell,
@@ -104,6 +105,7 @@ export {
   shownCells,
   toRgba,
 } from "./render.ts";
+export type { Backing } from "./render.ts";
 export {
   NAMED_ROOMS,
   ROOM_NAME_ENTRY,
@@ -205,10 +207,10 @@ export {
   requiredPoints,
 } from "./describe.ts";
 export type { CellDescription, NoteText } from "./describe.ts";
-export { TANGRAM_TILE, describeRecord, readOracleSymbols } from "./records.ts";
+export { TANGRAM_TILE, describeRecord, readOracleSymbols, teleporterCondition } from "./records.ts";
 export { EVENT_TEXT, readEventTable } from "./events.ts";
 export type { GameEvent } from "./events.ts";
-export type { RecordInfo, RecordKind } from "./records.ts";
+export type { RecordInfo, RecordKind, TeleporterCondition } from "./records.ts";
 export {
   ACTOR_CLASS_NAMES,
   ACTOR_KIND_CLASSES,

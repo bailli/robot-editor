@@ -446,6 +446,29 @@ describe("logic records", () => {
     expect(defined(app.editor).isEdited(2, 55)).toBe(false);
   });
 
+  test("a teleporter's condition is chosen and drawn as the game draws it", async () => {
+    app.showEpisode(2, 55);
+    const index = teleporterCell();
+    await clickCell(index);
+    const condition = page.getByRole("combobox", { name: "Condition" });
+    await expect.element(condition).toHaveValue("1"); // the hero must carry its object
+    const useCell = page.getByRole("checkbox", { name: "Use the cell first" });
+    await expect.element(useCell).toBeDisabled(); // the game ignores it with a condition
+    const backed = app.view.pixels();
+    await userEvent.selectOptions(condition, "none");
+    await expect.element(useCell).toBeEnabled();
+    const slot = (defined(app.editor).room(2, 55).base[index] ?? 0) >> 8;
+    const record = defined(app.editor)
+      .room(2, 55)
+      .records.find((r) => r.slot === slot);
+    expect(record?.data[7]).toBe(0);
+    // no longer on colour 15 with the teleporter's frame: the cell alone
+    const at = firstDifference(backed, app.view.pixels()) / 4;
+    expect(Math.floor((at % 640) / 16) + Math.floor(at / 640 / 12) * ROOM_WIDTH).toBe(index);
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(defined(app.editor).isEdited(2, 55)).toBe(false);
+  });
+
   test("the inspect tool adds and removes records", async () => {
     app.showEpisode(1, 43);
     await page.getByRole("radio", { name: "Inspect" }).click();

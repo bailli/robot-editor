@@ -11,6 +11,7 @@ import {
   backdropRoom,
   cellFrame,
   renderRoom,
+  shownCells,
   toRgba,
 } from "../src/render.ts";
 import { cryptScene } from "../src/scene-crypt.ts";
@@ -35,6 +36,24 @@ for (let episode = 0; episode < 5; episode++) {
     }
   });
 }
+
+test("teleporters with a condition: on colour 15 with the frame, or on black", () => {
+  const { objects, rooms, classes } = loadEpisode(1);
+  const room21 = rooms.find((r) => r.id === 21);
+  assert.ok(room21);
+  const at = (x: number, y: number) => y * 40 + x;
+  // (1, 2) needs its object, (18, 14) forbids gold (both match the game's screenshot)
+  assert.equal(shownCells(room21, at(1, 2), classes)[3], "carry");
+  assert.deepEqual(shownCells(room21, at(18, 14), classes), [0x000a, 0, false, "not carry"]);
+  const pixels = renderRoom(room21, objects, classes);
+  const pixel = (x: number, y: number) => pixels[y * SCREEN_WIDTH + x];
+  assert.equal(pixel(18 * 16, 14 * 12), 0); // black around the gold
+  assert.equal(pixel(1 * 16, 2 * 12), 0); // the teleporter's frame, XORed onto colour 15
+  // a forbidden GATE piece shows its frame by the record's slot instead (room 128)
+  const room128 = rooms.find((r) => r.id === 128);
+  assert.ok(room128);
+  assert.deepEqual(shownCells(room128, at(37, 15), classes), [0x0042, 0, false, "not carry"]);
+});
 
 test("the room behind a room: id mod 100 in Junior to III, id - 100 in IV", () => {
   const behind = (episode: number) => {

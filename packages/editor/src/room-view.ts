@@ -1,4 +1,5 @@
 import {
+  type Backing,
   type Episode,
   LOGIC_CELL,
   type PlacementArea,
@@ -15,6 +16,7 @@ import {
   TILE_HEIGHT,
   TILE_WIDTH,
   TRANSPARENT,
+  cellKey,
   renderCell,
   resolveCell,
   shapePixels,
@@ -43,12 +45,13 @@ export class CellCache {
     this.palette = palette;
   }
 
-  get(base: number, overlay: number, dimmed = false): ImageData {
-    const key = base * 0x10000 + overlay;
+  get(base: number, overlay: number, dimmed = false, backing?: Backing): ImageData {
+    const key = cellKey(base, overlay, backing);
     const cells = dimmed ? this.dimmed : this.cells;
     let image = cells.get(key);
     if (!image) {
-      const pixels = renderCell(base, overlay, this.episode.objects, this.episode.classes);
+      const { objects, classes } = this.episode;
+      const pixels = renderCell(base, overlay, objects, classes, backing);
       const rgba = toRgba(pixels, this.palette);
       if (dimmed) dim(rgba);
       image = new ImageData(rgba, TILE_WIDTH, TILE_HEIGHT);
@@ -67,14 +70,14 @@ export class CellCache {
     backdrop: Room | undefined,
     lit?: (index: number) => boolean | undefined,
   ): ImageData {
-    const [base, overlay, fromBackdrop] = shownCells(
+    const [base, overlay, fromBackdrop, backing] = shownCells(
       room,
       index,
       this.episode.classes,
       backdrop,
       lit,
     );
-    return this.get(base, overlay, fromBackdrop);
+    return this.get(base, overlay, fromBackdrop, backing);
   }
 }
 

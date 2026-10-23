@@ -56,10 +56,25 @@ import type { LogicRecord } from "./scene.ts";
  *       331, 332, 334 and 339), and vanishes, westwards it turns into the object at offset
  *       8, southwards it vanishes and kills (text 945; all tried in the game, without the
  *       symbol nothing happens)
- *   13  teleporter (see exits.ts): byte 1 bit 1 lets a script's Teleport() set the target
- *       (tried in the game), bit 0 lets the shown cell act first while byte 7 is 0, bit 3
- *       adds a visual effect; message 1200 + byte 8 when used. A target room that does
- *       not exist does nothing (tried)
+ *   13  teleporter (see exits.ts), only the hero steps on it (0x44c6f0, robots are kept
+ *       off): offset 2 the cell it shows, offset 4 the target room (bits 0-9) and x (bits
+ *       10-15), byte 6 y. Byte 7 a condition (teleporterCondition): 1 lets only a hero
+ *       carrying an object of the shown cell's class step on it, 2 only one without; the
+ *       game draws them on colour 15 with the teleporter's frame and on black (see
+ *       render.ts). Byte 1: bit 0, while byte 7 is 0, lets the hero always step on it and
+ *       first act on the shown cell as if it lay there (tried: he takes the item it shows,
+ *       then is teleported; without the bit the shown cell stays and decides whether he
+ *       may step on it, e.g. a wall does not let him); bit 1 lets a script's Teleport() set the
+ *       target (tried in the game); bit 3 makes it a light source in episode III (a
+ *       circle around it lit in a dark room, tried; class 0xba's room-entry hook
+ *       0x416ef0, which only episode III has, adds the lights, 0x42b230);
+ *       bits 6-7 a level as type 1's (a teleporter with a level and no condition is not
+ *       drawn); bits 4 and 5 are the game's own (the exit an actor of a type 8 record
+ *       leaves open is a teleporter with bits 0, 4 and 5, 0x420c30; loading a room clears
+ *       bit 4), bit 2 is never read. Byte 8: message 1200 + it when used, unless a
+ *       script redirected it. Byte 9 is never read (episode III's teleporters with a
+ *       condition hold 157 or 158 there). A target room that does not exist does nothing
+ *       (tried)
  */
 
 /** The tangram pieces oracles' symbols are laid with (class 0x5f, episodes II and III). */
@@ -74,6 +89,19 @@ const SYMBOL_COUNT = 10;
 export function readOracleSymbols(image: PeImage): number[][] {
   const bytes = readVa(image, ORACLE_SYMBOLS, SYMBOL_COUNT * 4);
   return Array.from({ length: SYMBOL_COUNT }, (_, n) => [...bytes.subarray(n * 4, n * 4 + 4)]);
+}
+
+/**
+ * What a teleporter asks of the hero (byte 7, 0x44c6f0): "carry" lets him step on it only
+ * while he carries an object of the class of the cell it shows (offset 2; any state, e.g.
+ * a key of any colour; gold: any gold, letters: any letter), "not carry" only while he
+ * carries none. Other values than 1 and 2 ask nothing; above 2 also byte 1 bit 0 is
+ * ignored.
+ */
+export type TeleporterCondition = "none" | "carry" | "not carry";
+
+export function teleporterCondition(data: Uint8Array): TeleporterCondition {
+  return data[7] === 1 ? "carry" : data[7] === 2 ? "not carry" : "none";
 }
 
 export type RecordKind =
@@ -164,6 +192,11 @@ export function describeRecord(
     teleporter: () =>
       `a teleporter to ${target()}` +
       (d[1] & 0x02 ? ", or where a script's Teleport() says" : "") +
+      {
+        none: "",
+        carry: `; only for a hero who carries an object like ${hex(u16(2))}`,
+        "not carry": `; only for a hero who carries no object like ${hex(u16(2))}`,
+      }[teleporterCondition(d)] +
       (d[8] ? `; shows message ${1200 + d[8]}` : ""),
     unknown: () => `record type ${d[0]}`,
   };
