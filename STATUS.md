@@ -542,8 +542,9 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   record by the step-on handler; **verified under Wine:** with the bit preset the oracle
   works without any pieces laid out); the rest from the code only: n from 10 on reads past the 10 symbols (pointers, no
   pieces match). Only episode II's oracles vanish after north and east (episode flags
-  0x4000 and 0x8000, only II's constructor sets them; III's stay). Every use is event
-  262 + n (0x42bef0: 3500 points once per game). Byte 7 is never read (III's hold 0,
+  0x4000 and 0x8000, only II's constructor sets them; III's stay; **verified under
+  Wine** in II room 43 for north). Every use is event 262 + n (0x42bef0: 3500 points
+  once per game; **verified:** a use gives 3500 points). Byte 7 is never read (III's hold 0,
   6, 7); byte 1 only for what every record type has: bits 6–7 a level (the step-on
   check's default case 0x44c8d2), bit 5 dissolves the record into its cell when the
   room is stored on leaving (0x431f20; all originals 0). The editor shows the symbol,

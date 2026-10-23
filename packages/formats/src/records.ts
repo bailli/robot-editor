@@ -63,8 +63,8 @@ import type { LogicRecord } from "./scene.ts";
  *       334 and 339), westwards it turns into the object at offset 8, southwards it
  *       vanishes and kills (text 945; all tried in the game, without the symbol nothing
  *       happens). After north and east it vanishes only in episode II (episode flags
- *       0x4000, 0x8000, which only II's constructor sets). Every use is event 262 + n
- *       (0x42bef0: 3500 points once per game, n from 10 on other events). Byte 7 is never
+ *       0x4000, 0x8000, which only II's constructor sets; tried for north). Every use is
+ *       event 262 + n (0x42bef0: 3500 points once per game, tried, n from 10 on other events). Byte 7 is never
  *       read (episode III's hold 0, 6 or 7)
  *   13  teleporter (see exits.ts), only the hero steps on it (0x44c6f0, robots are kept
  *       off): offset 2 the cell it shows, offset 4 the target room (bits 0-9) and x (bits
