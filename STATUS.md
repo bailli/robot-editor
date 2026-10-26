@@ -635,9 +635,9 @@ Supported:
   same ones where free), the records of covered logic cells go, a paste beyond the game's
   200 records and overlay objects is refused; each one undo step
 - layout: the room fits the window's height with its exits around it (north above, south
-  below, west and east at the sides; doors, stairs, bus, oracles, teleporters and actors
-  in a line above); the column right of it has the tool and layer settings (always
-  visible) and tabs (Tiles, Record, Actors, Script, Room) that
+  below, west and east written vertically at the sides; doors, stairs, bus, oracles,
+  teleporters and actors in a line above); the column right of it has the tool and layer
+  settings (always visible) and tabs (Tiles, Record, Actors, Script, Room) that
   scroll on their own, its width can be dragged (remembered in the browser); clicking a
   logic cell opens the Record tab
 - exits: N/S/W/E targets incl. script changes; arrow keys follow fixed exits; per

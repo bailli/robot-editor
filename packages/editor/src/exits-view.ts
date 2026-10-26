@@ -87,11 +87,11 @@ export function fixedExit(c: Connections, direction: Direction): number {
 
 const PASSAGE_KINDS: readonly PassageKind[] = ["door in", "door out", "stairs down", "stairs up"];
 
-const LABELS: Readonly<Record<Direction, string>> = {
-  north: "↑ North",
-  south: "↓ South",
-  west: "← West",
-  east: "→ East",
+const LABELS: Readonly<Record<Direction, readonly [arrow: string, name: string]>> = {
+  north: ["↑", "North"],
+  south: ["↓", "South"],
+  west: ["←", "West"],
+  east: ["→", "East"],
 };
 
 export const MODE_LABELS: Readonly<Record<ExitMode, string>> = {
@@ -110,7 +110,7 @@ export interface ExitsViewEvents {
 
 /**
  * The exits of the shown room as links to the rooms they lead to, around the room: north
- * above, south below, west and east at its sides; doors, stairs, teleporters and the like
+ * above, south below, west and east at its sides (written vertically); doors, stairs, teleporters and the like
  * in a line above.
  */
 export class ExitsView {
@@ -142,7 +142,11 @@ export class ExitsView {
       if (!item) continue;
       const label = document.createElement("span");
       label.className = "label";
-      label.textContent = LABELS[direction];
+      const [arrow, name] = LABELS[direction];
+      const glyph = document.createElement("span");
+      glyph.className = "arrow";
+      glyph.textContent = arrow;
+      label.append(glyph, ` ${name}`);
       item.replaceChildren(
         label,
         this.modeSelect(direction, c.modes[direction]),

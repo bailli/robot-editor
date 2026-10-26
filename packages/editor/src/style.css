@@ -61,7 +61,7 @@ select {
 button:enabled:hover,
 select:enabled:hover {
   border-color: var(--muted);
-  background: var(--hover);
+  background-color: var(--hover);
 }
 
 button:enabled:active {
@@ -337,24 +337,27 @@ h2 {
   grid-area: south;
 }
 
+/* west and east written vertically: west reads upwards, east downwards */
 .exit.side.west,
 .exit.side.east {
-  flex-direction: column;
   align-self: center;
-  width: 92px;
 }
 
 .exit.side.west {
   grid-area: west;
+  writing-mode: sideways-lr;
 }
 
 .exit.side.east {
   grid-area: east;
+  writing-mode: sideways-rl;
 }
 
-.exit.side.west .exit-mode,
-.exit.side.east .exit-mode {
-  width: 100%;
+/* the arrows keep pointing west and east */
+.exit.side.west .arrow,
+.exit.side.east .arrow {
+  display: inline-block;
+  writing-mode: horizontal-tb;
 }
 
 .exit .label {
@@ -362,7 +365,8 @@ h2 {
 }
 
 .exit .target {
-  padding: 0 8px;
+  padding-block: 0;
+  padding-inline: 8px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -840,9 +844,38 @@ canvas.cell.pickable {
   white-space: pre-line;
 }
 
+/* drawn arrows, pointing down along the text (sideways in the vertical west and east ones) */
 .exit .exit-mode {
+  appearance: none;
   font-size: 12px;
-  padding: 0 2px;
+  padding-block: 0;
+  padding-inline: 4px 16px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  background-position:
+    right 9px center,
+    right 5px center;
+}
+
+.exit.side.west .exit-mode {
+  background-image:
+    linear-gradient(45deg, currentColor 50%, transparent 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    center 5px,
+    center 9px;
+}
+
+.exit.side.east .exit-mode {
+  background-image:
+    linear-gradient(-45deg, currentColor 50%, transparent 50%),
+    linear-gradient(-135deg, currentColor 50%, transparent 50%);
+  background-position:
+    center calc(100% - 9px),
+    center calc(100% - 5px);
 }
 
 header button.pressed {
