@@ -124,6 +124,11 @@ test("half-written scripts still show their handlers", () => {
   ]);
   expect(handlers("if (Event(")).toMatchObject([{ events: "Event()" }]);
   expect(handlers("if (Event(n))")).toMatchObject([{ events: "Event(n)", lines: [1, 1] }]);
+  // masks as wide as the compiler's 32 bits
+  expect(handlers("if (Event(0x80000000 | 1))")).toMatchObject([
+    { events: "take · event 2147483648" },
+  ]);
+  expect(handlers("if (Event(0xFFFFFFFF))")[0].events.split(" · ")).toHaveLength(32);
   expect(handlers("} else if (E_Drop(O_KEY) x = 1; }")).toMatchObject([
     { events: "dropping O_KEY" },
   ]);

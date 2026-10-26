@@ -140,7 +140,8 @@ function eventMask(code: readonly ScriptPiece[], from: number, to: number): numb
     return value;
   };
   const value = or();
-  return t === to ? value : undefined;
+  // 32 bits, as the compiler takes numbers
+  return t === to && value !== undefined ? value | 0 : undefined;
 }
 
 /** The token after the ")" that closes the "(" at `open`. */
@@ -192,8 +193,8 @@ export function scriptHandlers(source: string): ScriptHandler[] {
         const mask = eventMask(code, call + 2, to - 1);
         if (mask === undefined || mask === 0) return `Event(${args})`;
         const names = [];
-        for (let bit = 0; 1 << bit <= mask; bit++) {
-          if (mask & (1 << bit)) names.push(EVENT_NAMES[bit] ?? `event ${1 << bit}`);
+        for (let bit = 0; bit < 32; bit++) {
+          if (mask & (1 << bit)) names.push(EVENT_NAMES[bit] ?? `event ${2 ** bit}`);
         }
         return names.join(" · ");
       }
