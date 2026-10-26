@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, test } from "vitest";
 
@@ -10,6 +11,7 @@ import { readEpisodeStart, withExitMode } from "@robot/formats";
 import { Driver, type HeroState, type Key } from "../src/driver.ts";
 import { ROOT, loadGame } from "../src/game.ts";
 import { calmRoom } from "../src/patch.ts";
+import { readIndexedPng } from "../src/png.ts";
 
 /**
  * Runs the real game under Wine through the proxy DLL (see driver.ts). Opt-in, as it
@@ -26,6 +28,21 @@ async function withGame<T>(exe: string | undefined, use: (d: Driver) => Promise<
   } finally {
     d.close();
   }
+}
+
+/** The game's own screenshots in the Wine prefix (Documents/Robot/…), by modification time. */
+function gameScreenshots(): Map<string, number> {
+  const users = fileURLToPath(new URL(".wine/prefix/drive_c/users", ROOT));
+  const found = new Map<string, number>();
+  for (const user of existsSync(users) ? readdirSync(users) : []) {
+    const dir = join(users, user, "Documents", "Robot");
+    if (!existsSync(dir)) continue;
+    for (const file of readdirSync(dir, { recursive: true, encoding: "utf8" })) {
+      const path = join(dir, file);
+      if (file.endsWith(".png")) found.set(path, statSync(path).mtimeMs);
+    }
+  }
+  return found;
 }
 
 /** Holds `key` until `done` holds for the hero, then lets go. */
@@ -64,6 +81,28 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
       );
     }
     assert.deepEqual(ticks[1], ticks[0]);
+  }, 60_000);
+
+  test("a frame is what the game's own screenshot (Ctrl+Alt+P) saves", async () => {
+    await withGame(undefined, async (d) => {
+      await d.startEpisode(1);
+      await d.hold("right", 30);
+      await d.run(20);
+      const frame = await d.frame();
+      const before = gameScreenshots();
+      await d.key("control", true);
+      await d.key("alt", true);
+      await d.hold("P".charCodeAt(0), 5);
+      await d.key("alt", false);
+      await d.key("control", false);
+      await d.run(50);
+      const saved = [...gameScreenshots()].filter(([file, time]) => before.get(file) !== time);
+      assert.equal(saved.length, 1, "the game saved one screenshot");
+      const [file] = saved[0] ?? [""];
+      const shot = readIndexedPng(file);
+      assert.deepEqual([shot.width, shot.height], [frame.width, frame.height]);
+      assert.ok(Buffer.from(shot.indices).equals(frame.indices), "same palette indices");
+    });
   }, 60_000);
 
   test("episode I: without robots and with a west neighbour, room 43 leads to 42", async () => {

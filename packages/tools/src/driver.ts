@@ -3,7 +3,10 @@ import { type Socket, connect } from "node:net";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
+import { type Rgb, SCREEN_HEIGHT, SCREEN_WIDTH } from "@robot/formats";
+
 import { ROOT } from "./game.ts";
+import { type IndexedImage, writeIndexedPng } from "./png.ts";
 
 /**
  * Drives the real game step by step through the proxy DLL (tools/wine/proxy, built by
@@ -11,13 +14,18 @@ import { ROOT } from "./game.ts";
  * virtual time: nothing happens between commands, a step advances the game clock by
  * `stepMs` virtual milliseconds (default 7; the clock counts 147 ticks per second), and
  * keys pressed between steps reach the game before the next one. Runs are repeatable.
+ * Every answer comes when the game is idle again (the last step drawn and presented,
+ * the keys sent so far handled), so reads never see a half-drawn frame.
  */
 
 const HARNESS = fileURLToPath(new URL("tools/wine/harness.py", ROOT));
 
-/** Windows virtual-key codes of the keys the game uses. */
+/** Windows virtual-key codes of keys the game uses (letters and digits: their ASCII codes). */
 export const VK = {
   return: 13,
+  shift: 16,
+  control: 17,
+  alt: 18,
   escape: 27,
   space: 32,
   left: 37,
@@ -34,6 +42,17 @@ export interface Status {
   ms: number;
   /** Steps run so far. */
   steps: number;
+  /** Frames presented so far. */
+  frames: number;
+}
+
+/** A frame as the game presented it: palette indices of its 640 × 348 screen. */
+export interface Frame {
+  width: number;
+  height: number;
+  indices: Uint8Array;
+  /** Frames presented up to this one (Status.frames). */
+  frame: number;
 }
 
 /** Where the hero is: the room (0x4fe2fc) and its cell (hero object 0x53e9ac, +9/+0xa). */
@@ -48,7 +67,7 @@ const HERO = 0x53e9ac;
 
 function parseStatus(answer: string): Status {
   const field = (name: string) => Number(new RegExp(`${name}=(\\d+)`).exec(answer)?.[1]);
-  return { tick: field("tick"), ms: field("ms"), steps: field("steps") };
+  return { tick: field("tick"), ms: field("ms"), steps: field("steps"), frames: field("frames") };
 }
 
 export class Driver {
@@ -122,19 +141,21 @@ export class Driver {
     await this.command(`stepms ${String(ms)}`);
   }
 
-  async key(key: Key, down: boolean): Promise<void> {
-    await this.command(`key ${String(VK[key])} ${down ? "down" : "up"}`);
+  /** Presses (down) or releases a key: a name or a virtual-key code. */
+  async key(key: Key | number, down: boolean): Promise<void> {
+    const code = typeof key === "number" ? key : VK[key];
+    await this.command(`key ${String(code)} ${down ? "down" : "up"}`);
   }
 
   /** Holds a key for `steps` steps. */
-  async hold(key: Key, steps: number): Promise<void> {
+  async hold(key: Key | number, steps: number): Promise<void> {
     await this.key(key, true);
     await this.run(steps);
     await this.key(key, false);
   }
 
   /** A short press, then `after` steps for the game to react. */
-  async press(key: Key, after = 50): Promise<void> {
+  async press(key: Key | number, after = 50): Promise<void> {
     await this.hold(key, 5);
     await this.run(after);
   }
@@ -156,6 +177,40 @@ export class Driver {
   async poke(address: number, bytes: Uint8Array): Promise<void> {
     const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
     await this.command(`poke ${address.toString(16)} ${hex}`);
+  }
+
+  /**
+   * The last frame presented: the game's own frame buffer (palette indices, like its
+   * screenshots), cut to the screen it shows.
+   */
+  async frame(): Promise<Frame> {
+    const [width, height, frame, hex] = (await this.command("frame")).split(" ");
+    if (Number(width) !== SCREEN_WIDTH || Number(height) < SCREEN_HEIGHT) {
+      throw new Error(`unexpected frame buffer ${width}x${height}`);
+    }
+    const all = Uint8Array.from(hex.match(/../g) ?? [], (byte) => parseInt(byte, 16));
+    const indices = all.subarray(0, SCREEN_WIDTH * SCREEN_HEIGHT);
+    return { width: SCREEN_WIDTH, height: SCREEN_HEIGHT, indices, frame: Number(frame) };
+  }
+
+  /** The colours the last frame was presented with (the game changes them, e.g. in the dark). */
+  async palette(): Promise<Rgb[]> {
+    const hex = await this.command("palette");
+    return Array.from(hex.match(/.{8}/g) ?? [], (entry): Rgb => {
+      const rgb = parseInt(entry, 16);
+      return [(rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff];
+    });
+  }
+
+  /** The last frame with its colours. */
+  async image(): Promise<IndexedImage> {
+    const { width, height, indices } = await this.frame();
+    return { width, height, indices, palette: await this.palette() };
+  }
+
+  /** Writes the last frame as a palette PNG (pixel values are the game's indices). */
+  async screenshot(path: URL | string, zoom = 1): Promise<void> {
+    writeIndexedPng(path, await this.image(), zoom);
   }
 
   async u32(address: number): Promise<number> {

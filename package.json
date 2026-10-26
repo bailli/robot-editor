@@ -17,7 +17,7 @@
     "test:without-game": "vitest run packages/formats/test/cp437.test.ts packages/formats/test/omf.test.ts packages/tools/test/tools.test.ts packages/editor/test/script-view.test.ts packages/editor/test/patch.test.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "robot": "node packages/tools/src/robot.ts",
-    "proxy": "i686-w64-mingw32-gcc -O2 -Wall -Wextra -shared -static-libgcc -s -o tools/wine/proxy/ddraw.dll tools/wine/proxy/proxy.c tools/wine/proxy/proxy.def -lws2_32",
+    "proxy": "i686-w64-mingw32-gcc -O2 -Wall -Wextra -shared -static-libgcc -s -o tools/wine/proxy/ddraw.dll tools/wine/proxy/proxy.c tools/wine/proxy/proxy.def -lws2_32 -lgdi32",
     "editor": "pnpm --filter @robot/editor dev"
   },
   "devDependencies": {

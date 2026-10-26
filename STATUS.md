@@ -168,7 +168,20 @@ Files in `packages/formats/src`:
   WM_KEYDOWN (0x404677) into a DOS-style key code (0x42cd40, table 0x481b68: per virtual
   key the code plain, with Alt, Ctrl, Shift) and hands it to the key handler 0x43bc90;
   WM_KEYUP clears the held keys 0x51bb1c/0x51bb1e. GetAsyncKeyState and GetKeyState
-  only check Alt and the mouse buttons, GetCursorPos the mouse.
+  only check Alt and the mouse buttons, GetCursorPos the mouse. The shortcuts are an
+  accelerator table (resource type 9, id 1005; the main loop's TranslateAcceleratorA):
+  Ctrl+Alt+P is command 4015, the screenshot (0x404190: named after the room, the frame
+  buffer from 0x401210, written as a 640 × 348 palette PNG by 0x433710); Alt+B, E, G,
+  M, S, T, V, W, Alt+Return and Alt+F8 are commands 4003–4013, F11 is 4201 (not traced).
+- **Frames:** the game draws into a buffer of palette indices (0x401210 returns it) and
+  shows it in a window, without Flip. With GDI, which it uses under Wine, WM_PAINT
+  (0x402100) draws it with StretchDIBits (0x402220: 640 × 348, top-down, the colours
+  indices into its palette, bitmap info at app+0x7d8). With DirectDraw, the display
+  object (app+0x14: IDirectDraw2 +0x58, primary surface +0x5c, offscreen surface
+  +0x60, scale +0x44/+0x48 in 1/256, depth +0x1e4) keeps the buffer at +0x4c (640 × 400
+  when the screen has more than 8 bits) and presents it with 0x437620: converted
+  through the colour table +0x204 into the offscreen surface, then BltFast (or a scaled
+  Blt) to the primary.
 - **Time:** the main loop (0x405bb4) dispatches messages; when none are waiting it
   calls 0x4016a0, which reads the game clock (0x42cf70: timeGetTime since 0x51bb40 ×
   147 / 1000, i.e. 147 units per second) and runs the game once per elapsed unit (at most
@@ -185,12 +198,17 @@ Files in `packages/formats/src`:
   DirectX check, loads ddraw too). It redirects the main loop's call of 0x4016a0
   (0x405bde) so that the game runs only the steps the driver grants, each advancing
   the virtual clock (timeGetTime, QueryPerformanceCounter, GetLocalTime, SetTimer's
-  timers) by 7 ms; keys and clicks are posted as messages between steps. Runs repeat
-  exactly (same steps, same tick and hero cell). **Verified with the driver**
-  (`pnpm test:game`): every episode starts in the room and cell `readEpisodeStart`
-  reads; in episode I room 43 without robots and with west "neighbour", walking out
-  west arrives in room 42 at (38, 15). From launch to the hero in the start room takes
-  about 1 s once Wine is up.
+  timers) by 7 ms; keys and clicks are posted as messages between steps, and a key
+  message sets the thread's keyboard state when the game takes it (GetMessageA), so
+  the accelerators work. Each present (StretchDIBits, or the calls of 0x437620 at
+  0x402379 and 0x437270) is copied with its colours: `frame()` and `screenshot()`.
+  Answers wait until the game is idle (back in the step after drawing, every posted
+  message handled). Runs repeat exactly (same steps, same tick and hero cell).
+  **Verified with the driver** (`pnpm test:game`): every episode starts in the room and
+  cell `readEpisodeStart` reads; in episode I room 43 without robots and with west
+  "neighbour", walking out west arrives in room 42 at (38, 15); a captured frame equals
+  the game's own screenshot (Ctrl+Alt+P) pixel for pixel. From launch to the hero in
+  the start room takes about 1 s once Wine is up.
 
 ### Scenes (rooms)
 
@@ -981,6 +999,8 @@ Roughly by value for the editor.
 | 0x53e9ac, 0x53e9a8, 0x51a114 | the hero (x +9, y +0xa); the room's first actor; actor per cell (40 per row)   |
 | 0x405bb4, 0x4016a0, 0x42cf70 | main loop; run the game per elapsed clock unit (tick 0x51bb38); clock 147/s    |
 | 0x404677, 0x42cd40, 0x43bc90 | WM_KEYDOWN; virtual key → DOS key code (table 0x481b68); the key handler       |
+| 0x401210, 0x402100, 0x437620 | the frame buffer; WM_PAINT (StretchDIBits); DirectDraw present (display obj.)  |
+| 0x404190, 0x433710           | the screenshot command (4015, Ctrl+Alt+P); write a palette PNG                 |
 | 0x44c5a0, 0x44c680           | hero walks off an edge (sets the RandObj reference point); pending room change |
 | 0x44dc60, 0x44d520           | create an actor (kind, x, y); factory lookup by class                          |
 | 0x4073a0, 0x407650           | script RandObj; count a tile type in the room                                  |
