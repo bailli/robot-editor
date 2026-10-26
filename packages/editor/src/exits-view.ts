@@ -22,6 +22,8 @@ import {
   roomTeleports,
 } from "@robot/formats";
 
+import { patchChildren } from "./patch.ts";
+
 export interface Connections {
   /** What the room's exits byte says per direction. */
   modes: Readonly<Record<Direction, ExitMode>>;
@@ -147,17 +149,21 @@ export class ExitsView {
       glyph.className = "arrow";
       glyph.textContent = arrow;
       label.append(glyph, ` ${name}`);
-      item.replaceChildren(
+      const scripted = c.scripted
+        .filter((x) => x.direction === direction)
+        .map((s) => {
+          const how = s.conditional
+            ? "set by the script, depending on the game state"
+            : "set by the script";
+          return this.target(s.room, how, s.conditional ? "conditional" : "scripted");
+        });
+      // patched: the select keeps the focus when its change shows the room again
+      patchChildren(item, [
         label,
         this.modeSelect(direction, c.modes[direction]),
         this.target(c.exits[direction], "from the room's exits byte"),
-      );
-      for (const s of c.scripted.filter((x) => x.direction === direction)) {
-        const how = s.conditional
-          ? "set by the script, depending on the game state"
-          : "set by the script";
-        item.append(this.target(s.room, how, s.conditional ? "conditional" : "scripted"));
-      }
+        ...scripted,
+      ]);
     }
     this.links.replaceChildren();
     for (const kind of PASSAGE_KINDS) {
@@ -282,6 +288,7 @@ export class ExitsView {
     }
     const button = document.createElement("button");
     button.className = `target ${kind}`;
+    button.dataset["key"] = String(room); // its listener goes there (patchChildren)
     button.textContent = room === OUTSIDE_ROOM ? `${room} outside` : String(room);
     button.title = `${this.events.label(room)} (${how})`;
     button.addEventListener("click", () => {

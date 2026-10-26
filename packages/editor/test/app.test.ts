@@ -871,8 +871,12 @@ test("the script explains itself and can be edited", async () => {
 test("the exits byte can be changed per direction, undoably", async () => {
   // episode I room 43: west is closed in its exits byte
   const west = () => defined(document.querySelector('[data-direction="west"]') ?? undefined);
-  await userEvent.selectOptions(page.getByRole("combobox", { name: "west exit" }), "neighbour");
+  const select = page.getByRole("combobox", { name: "west exit" });
+  (select.element() as HTMLSelectElement).focus();
+  await userEvent.selectOptions(select, "neighbour");
   expect(exitMode(defined(app.editor).room(1, 43), "west")).toBe("neighbour");
+  // the select keeps the focus: the arrow keys stay with it, not walking out of the room
+  expect(document.activeElement).toBe(select.element());
   // room 42 exists: west now leads there
   expect(west().querySelector(".target.default")?.textContent).toBe("42");
   await userEvent.selectOptions(page.getByRole("combobox", { name: "east exit" }), "outside");
@@ -881,6 +885,15 @@ test("the exits byte can be changed per direction, undoably", async () => {
   app.undo();
   expect(defined(app.editor).isEdited(1, 43)).toBe(false);
   expect(west().querySelector("select")?.value).toBe("none");
+  // a kept exit button goes where the shown room's exit leads
+  const goWest = () => {
+    defined(west().querySelector<HTMLButtonElement>(".target.default") ?? undefined).click();
+  };
+  app.showRoom(45);
+  goWest();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
+  goWest();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
 });
 
 test("the Room tab edits darkness, points, music and episode III's flags, undoably", async () => {
