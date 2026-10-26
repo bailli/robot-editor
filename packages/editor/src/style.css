@@ -140,6 +140,43 @@ dialog::backdrop {
   margin: 0 0 8px;
 }
 
+.help-dialog {
+  width: min(620px, calc(100vw - 32px));
+}
+
+.help-dialog table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+}
+
+.help-dialog caption {
+  text-align: left;
+  font-weight: 600;
+  padding-bottom: 2px;
+}
+
+.help-dialog td {
+  padding: 2px 0;
+  vertical-align: top;
+}
+
+.help-dialog td:first-child {
+  width: 40%;
+  padding-right: 12px;
+  color: var(--muted);
+}
+
+kbd {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+}
+
 header {
   display: flex;
   align-items: center;

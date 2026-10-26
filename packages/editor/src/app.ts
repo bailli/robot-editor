@@ -70,6 +70,7 @@ import {
   wrapsRow,
 } from "./editor.ts";
 import { type Connections, ExitsView, connections, fixedExit, leadsTo } from "./exits-view.ts";
+import { showHelp } from "./help-dialog.ts";
 import { MapView } from "./map-view.ts";
 import { type NewRoomCheck, NewRoomDialog } from "./new-room-dialog.ts";
 import { RecordView } from "./record-view.ts";
@@ -604,6 +605,7 @@ export class App {
         h("label", { title: "Where actors appear (A)" }, this.actorsToggle, " Actors"),
         this.mapButton,
         this.status,
+        h("button", { title: "Keyboard and mouse (?)", click: showHelp }, "Keys"),
       ),
       this.welcome,
       this.workspace,
@@ -1482,15 +1484,20 @@ export class App {
         const toggle =
           target instanceof HTMLInputElement && ["checkbox", "radio"].includes(target.type);
         if (
-          !this.editor ||
           (target instanceof HTMLInputElement && !toggle) ||
           target instanceof HTMLTextAreaElement ||
           target instanceof HTMLSelectElement ||
           (toggle && event.key.startsWith("Arrow")) ||
-          (target instanceof HTMLElement && target.isContentEditable) // the script editor
+          (target instanceof HTMLElement && target.isContentEditable) || // the script editor
+          (target instanceof Element && target.closest("dialog"))
         ) {
           return;
         }
+        if (event.key === "?" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          showHelp();
+          return;
+        }
+        if (!this.editor) return;
         if (event.key === "Backspace" && !event.ctrlKey && !event.metaKey && !event.altKey) {
           event.preventDefault();
           this.back();

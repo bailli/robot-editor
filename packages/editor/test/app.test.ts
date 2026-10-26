@@ -90,6 +90,22 @@ test("the Dark toggle draws rooms as dark as the game on entering them", async (
   expect(firstDifference(app.view.pixels(), drawn(42, 0))).toBe(-1);
 });
 
+test("? and the Keys button show the help; keys in it leave the room alone", async () => {
+  const help = page.getByRole("dialog", { name: "Keys" });
+  await userEvent.keyboard("?");
+  await expect.element(help).toBeVisible();
+  expect(help.element().textContent).toMatch(/Ctrl\+V.*Paste/);
+  const grid = page.getByRole("checkbox", { name: "Grid" }).element() as HTMLInputElement;
+  const before = grid.checked;
+  await userEvent.keyboard("g");
+  expect(grid.checked).toBe(before);
+  await userEvent.keyboard("{Escape}");
+  await expect.element(help).not.toBeInTheDocument();
+  await page.getByRole("button", { name: "Keys" }).click();
+  await help.getByRole("button", { name: "Close" }).click();
+  await expect.element(help).not.toBeInTheDocument();
+});
+
 /** A room as the renderer draws it, with its backdrop dimmed (as the editor shows it). */
 function drawnWithBackdrop(episode: number, id: number): Uint8ClampedArray {
   const ep = game.episode(episode);
