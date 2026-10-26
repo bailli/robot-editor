@@ -31,10 +31,12 @@ function patchNode(a: Node, b: Node): void {
   for (const { name } of [...a.attributes]) if (!b.hasAttribute(name)) a.removeAttribute(name);
   for (const { name, value } of b.attributes)
     if (a.getAttribute(name) !== value) a.setAttribute(name, value);
+  // read before its options move over: b then falls back to its first one
+  const selected = b instanceof HTMLSelectElement ? b.value : undefined;
   patchChildren(a, [...b.childNodes]);
   // what the attributes do not carry
   if (a instanceof HTMLInputElement && b instanceof HTMLInputElement) {
     if (a.value !== b.value) a.value = b.value;
     a.checked = b.checked;
-  } else if (a instanceof HTMLSelectElement && b instanceof HTMLSelectElement) a.value = b.value;
+  } else if (a instanceof HTMLSelectElement && selected !== undefined) a.value = selected;
 }
