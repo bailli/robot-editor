@@ -1667,6 +1667,11 @@ export class App {
   /** Paints up to `index`, filling the cells between the previous and this one. */
   private paintTo(index: number): void {
     const editor = this.need();
+    if (!editor.stroking) {
+      // undone or saved during the drag: the drag paints no more
+      this.painting = false;
+      return;
+    }
     const cells = this.lastPainted === undefined ? [index] : line(this.lastPainted, index);
     this.lastPainted = index;
     const changed = cells.filter((i) => editor.paint(i, this.tile));

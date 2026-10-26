@@ -203,6 +203,19 @@ test("dragging paints every cell along the way", () => {
   expect(app.editor?.undo()?.changes.length).toBeGreaterThan(1);
 });
 
+test("undo during a drag ends it: moving on paints no more", async () => {
+  const original = game.room(1, 43).base;
+  app.setTile(original[3 * ROOM_WIDTH + 1] ?? 0);
+  const [from, to] = [6 * ROOM_WIDTH + 12, 6 * ROOM_WIDTH + 24];
+  fireAt("mousedown", from);
+  await userEvent.keyboard("{Control>}z{/Control}");
+  expect(app.editor?.room(1, 43).base[from]).toBe(original[from]);
+  fireAt("mousemove", to);
+  window.dispatchEvent(new MouseEvent("mouseup"));
+  expect(app.editor?.room(1, 43).base[to]).toBe(original[to]);
+  expect(app.editor?.isEdited(1, 43)).toBe(false);
+});
+
 /** Sends a mouse event to the room view at a cell. */
 function fireAt(type: string, index: number, init: MouseEventInit = {}) {
   const rect = app.view.element.getBoundingClientRect();

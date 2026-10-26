@@ -638,6 +638,11 @@ export class Editor {
     return !isLogicCell(room[layer][index] ?? 0) && !isLogicCell(value);
   }
 
+  /** Whether a stroke is open (undo, saving and other edits end it). */
+  get stroking(): boolean {
+    return this.stroke !== undefined;
+  }
+
   beginStroke(episode: number, room: number, layer: Layer): void {
     this.endStroke();
     this.stroke = { episode, room, layer, changes: [] };
