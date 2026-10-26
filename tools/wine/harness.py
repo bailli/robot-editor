@@ -20,10 +20,11 @@ frame. The harness closes the name dialog and the room-name banner first.
 `play` runs the game on this display (DISPLAY) to be played, with sound unless --mute,
 in a window of its own (a Wine virtual desktop). It presses nothing: choose the episode
 in the game (its number is only printed). It ends when the game ends; a game started
-by an earlier `play` is ended first. Screenshots and saved games stay in the prefix.
+by an earlier `play` is ended first. Screenshots and saved games stay in the prefix
+until the next `shot`, which deletes them.
 
-Requires Wine (WineHQ packages install to /opt/wine-stable), Xvfb and xdotool. The game
-runs silently (Wine's audio drivers are disabled for it).
+Requires Wine (WineHQ packages install to /opt/wine-stable), Xvfb and xdotool. `shot`
+runs the game silently (Wine's audio drivers are disabled for it).
 The prefix is sandboxed: user folders are real directories inside the prefix instead
 of links into $HOME, and the Z: drive (the whole filesystem) is removed.
 """
@@ -154,7 +155,7 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
         sys.exit("run `harness.py setup` first")
     sandbox()
     for d in screenshot_dir():
-        shutil.rmtree(d)  # only screenshots/saves the harness itself produced
+        shutil.rmtree(d)  # screenshots and saves, also those of games played with `play`
     shutil.copyfile(exe, os.path.join(GAME_DIR, "GameOfRobot.exe"))
     display = free_display()
     xvfb = subprocess.Popen(["Xvfb", display, "-screen", "0", "1024x768x24", "-nolisten", "tcp"],

@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-10-26.
+Setup and commands are in the [README](README.md). Last updated: 2026-10-27.
 
 ## Goal and approach
 
@@ -107,7 +107,8 @@ Files in `packages/formats/src`:
 - **Texts** (`1E10`): numbered entries `N:k` with `|`-separated variants ending in `;`;
   headers without text share the next text. Entries 0–127 describe tile type N, higher
   numbers are messages (`Message(id, …)`); 510 is "no description". `displayText` removes
-  colour codes (`²x`) and the wrapping of the game's message boxes; `_` is a hard space.
+  colour codes (`²x`) and the wrapping of the game's message boxes (a backslash breaks a
+  line, also without a line feed after it); `_` is a hard space.
   **Tiles in texts** (`textPieces`, drawn by 0x42a56b): `@` + 1–4 hex digits is a tile
   (type | state << 8, e.g. "bei der Bank @14") drawn as a cell, two characters wide;
   `*0`/`*1`/`*2` after it draw it three times enlarged, one 12-pixel slice per line;
@@ -212,7 +213,7 @@ Files in `packages/formats/src`:
   frame method (12 methods incl. walls, terrain quarters, masks, doors, letters with the
   game font, underlays); logic cells show their record's cell, circuit nodes with a
   BULB on top (see circuits), class 99 cells the backdrop's (see room connections).
-  **763 cells differ** in 31
+  **745 cells differ** in 31
   reference screenshots (`pnpm robot eval`), most from runtime effects (see open items).
 - **Reference screenshots of any room** use a patched exe (`patch.ts`): the room in the
   start room's slot, without scripts and without anything that moves or kills
@@ -647,7 +648,7 @@ Supported:
 - layout: the room fits the window's height with its exits around it (north above, south
   below, west and east written vertically at the sides; doors, stairs, bus, oracles,
   teleporters and actors in a line above); the column right of it has the tool and layer
-  settings (always visible) and tabs (Tiles, Record, Actors, Script, Room) that
+  settings (always visible) and tabs (Tiles, Record, Actors, Circuit, Script, Room) that
   scroll on their own, its width can be dragged (remembered in the browser); clicking a
   logic cell opens the Record tab
 - help (button "Keys", key ?): a dialog listing the keys and mouse buttons
@@ -705,8 +706,9 @@ Supported:
   the name stays in the texts); undoable
 - "Test in game": the edited exe with the episode starting in the shown room, the hero
   at the picked cell (Select tool, one cell, or Inspect) or the episode's start cell; `pnpm editor` runs it under Wine
-  (`/play` on the dev server, `harness.py play`, the game window on this display; the
-  episode is chosen by hand), the static build downloads it
+  (`/play` on the dev server, only for requests from the editor's own page;
+  `harness.py play`, the game window on this display; the episode is chosen by hand),
+  the static build downloads it
 - tile names (items) and the game's descriptions in tooltips and the hover line; logic
   cells say what their record does, notes and diary pages their message, packages what
   they hold (drawn in the hover line)
@@ -735,12 +737,12 @@ Supported:
   robots drawn with the episode's `_Aliens` sprites in turn (their look and colours vary
   in the game), actors from records (dealer 0x2c, thief 0x40, natives) with the tile
   that names them, their logic cell then only framed; the hover line describes such an
-  actor once (by its record); a list below the map groups them with name, origin and positions (click
+  actor once (by its record); a list (tab Actors) groups them with name, origin and positions (click
   to select), plus what the script's `RandObj(…)` does with the room's current number
 - the room's settings (tab Room): darkness, points for the first visit, music (the
   episode's pieces, the ones rooms play first), episode III's flags (dizzy, labyrinth),
   each change one undo step; the original editor's save date
-- the room's script below the map: names explain themselves on hover (functions,
+- the room's script (tab Script): names explain themselves on hover (functions,
   game variables, `O_` constants as tiles, message ids as their text, room numbers as
   room names, `Enigma` entries as their points and text), calls with plain coordinates (`SetWarea`, `SetObj`, `Area`, …) outline
   their cells on the map; the bytecode on request; Edit (CodeMirror, marked up the same
