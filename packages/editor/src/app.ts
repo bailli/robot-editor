@@ -1512,7 +1512,16 @@ export class App {
     window.addEventListener(
       "keydown",
       (event) => {
+        // a modal dialog keeps its keys, also when nothing in it has the focus
+        if (document.querySelector("dialog[open]")) return;
         const target = event.target;
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+          // also while typing; as with the Save button, the field hands over its value first
+          event.preventDefault();
+          if (target instanceof HTMLElement && !target.isContentEditable) target.blur();
+          if (this.editor) this.save();
+          return;
+        }
         // checkboxes and radio buttons (the tools, the layers) keep their arrow keys only
         const toggle =
           target instanceof HTMLInputElement && ["checkbox", "radio"].includes(target.type);
@@ -1521,8 +1530,7 @@ export class App {
           target instanceof HTMLTextAreaElement ||
           target instanceof HTMLSelectElement ||
           (toggle && event.key.startsWith("Arrow")) ||
-          (target instanceof HTMLElement && target.isContentEditable) || // the script editor
-          (target instanceof Element && target.closest("dialog"))
+          (target instanceof HTMLElement && target.isContentEditable) // the script editor
         ) {
           return;
         }
@@ -1571,9 +1579,6 @@ export class App {
         } else if ((event.ctrlKey || event.metaKey) && key === "y") {
           event.preventDefault();
           this.redo();
-        } else if ((event.ctrlKey || event.metaKey) && key === "s") {
-          event.preventDefault();
-          this.save();
         } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "g") {
           this.gridToggle.checked = !this.gridToggle.checked;
           this.view.setGrid(this.gridToggle.checked);

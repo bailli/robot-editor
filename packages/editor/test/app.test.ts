@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 
 import {
@@ -97,6 +97,10 @@ test("? and the Keys button show the help; keys in it leave the room alone", asy
   expect(help.element().textContent).toMatch(/Ctrl\+V.*Paste/);
   const grid = page.getByRole("checkbox", { name: "Grid" }).element() as HTMLInputElement;
   const before = grid.checked;
+  await userEvent.keyboard("g");
+  expect(grid.checked).toBe(before);
+  // also when nothing in it has the focus (a click on its text)
+  (document.activeElement as HTMLElement).blur();
   await userEvent.keyboard("g");
   expect(grid.checked).toBe(before);
   await userEvent.keyboard("{Escape}");
@@ -462,6 +466,30 @@ describe("logic records", () => {
     expect(document.activeElement).toBe(room.element());
     app.undo();
     expect(defined(app.editor).isEdited(2, 55)).toBe(false);
+  });
+
+  test("Ctrl+S in a field saves the exe with what was typed", async () => {
+    app.showEpisode(2, 55);
+    const index = teleporterCell();
+    await clickCell(index);
+    const slot = (defined(app.editor).room(2, 55).base[index] ?? 0) >> 8;
+    const target = () => {
+      const record = defined(app.editor)
+        .room(2, 55)
+        .records.find((r) => r.slot === slot);
+      return record && (record.data[4] | (record.data[5] << 8)) & 0x3ff;
+    };
+    let saved: number | undefined;
+    const save = vi.spyOn(app, "save").mockImplementation(() => {
+      saved = target();
+      return undefined;
+    });
+    const room = page.getByRole("textbox", { name: "Target room" });
+    await userEvent.clear(room);
+    await userEvent.type(room, "44");
+    await userEvent.keyboard("{Control>}s{/Control}");
+    expect(save).toHaveBeenCalledOnce();
+    expect(saved).toBe(44);
   });
 
   test("a teleporter's condition is chosen and drawn as the game draws it", async () => {
