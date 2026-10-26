@@ -748,6 +748,7 @@ export class Editor {
     const used = new Set(records.map((r) => r.slot));
     const free = Array.from({ length: MAX_RECORD_SLOTS }, (_, k) => k).filter((k) => !used.has(k));
     const slots = new Map<number, number>();
+    const added = new Map<number, LogicRecord>();
     for (const slot of wanted) {
       const record = incoming.find((r) => r.slot === slot);
       // the same slot if it is free (pasting where the cells came from changes nothing)
@@ -756,8 +757,19 @@ export class Editor {
       const to = free[at];
       free.splice(at, 1);
       slots.set(slot, to);
-      records.push({ ...record, slot: to, data: record.data.slice() });
+      added.set(to, { ...record, slot: to, data: record.data.slice() });
     }
+    // the room's order stays (an unchanged area is no edit): a new record in a slot an
+    // overwritten one had takes its place, the others follow
+    const kept = new Set(records);
+    const inPlace = room.records.flatMap((r) => {
+      if (kept.has(r)) return [r];
+      const again = added.get(r.slot);
+      added.delete(r.slot);
+      return again ? [again] : [];
+    });
+    const appended = [...added.values()].sort((a, b) => a.slot - b.slot);
+    records.splice(0, Infinity, ...inPlace, ...appended);
     // a logic cell without its record becomes an empty cell
     const remap = (cell: number) => {
       if (!isLogicCell(cell)) return cell;
@@ -774,7 +786,6 @@ export class Editor {
         if (before !== after) changes.push({ index: w.index, before, after, layer });
       }
     }
-    records.sort((a, b) => a.slot - b.slot);
     if (changes.length === 0 && sameRecords(records, room.records)) return undefined;
     if (recordCapacity({ ...room, overlay, records }) < 0) {
       throw new RangeError(

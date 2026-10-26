@@ -252,6 +252,20 @@ describe("Editor areas", () => {
     expect(editor.clearArea(2, 55, { x: 0, y: 0, w: 0, h: 0 })).toBeUndefined();
   });
 
+  test("an area edit that changes nothing is no edit, also with records out of slot order", () => {
+    const editor = new Editor(game);
+    editor.clearArea(2, 55, area);
+    const cleared = new Set(areaCells(area));
+    const cell = room55.base.findIndex(
+      (c, i) => i > 40 && !cleared.has(i) && (c & 0xff) !== LOGIC_CELL,
+    );
+    editor.addRecord(2, 55, "base", cell, 13); // the slot just freed, after higher ones
+    const slots = editor.room(2, 55).records.map((r) => r.slot);
+    expect(slots).not.toEqual(slots.toSorted((a, b) => a - b));
+    expect(editor.clearArea(2, 55, area)).toBeUndefined();
+    expect(editor.pasteArea(2, 55, area.x, area.y, editor.copyArea(2, 55, area))).toBeUndefined();
+  });
+
   test("pasting where the cells came from changes nothing; pasting over records replaces them", () => {
     const editor = new Editor(game);
     const clip = editor.copyArea(2, 55, area);
