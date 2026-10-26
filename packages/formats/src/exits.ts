@@ -111,7 +111,6 @@ export const GRID_STEP: Readonly<Record<Direction, number>> = {
   west: -1,
   east: 1,
 };
-const STEP = GRID_STEP;
 
 export const OPPOSITE: Readonly<Record<Direction, Direction>> = {
   north: "south",
@@ -157,7 +156,7 @@ export function roomExits(room: Room, ids: ReadonlySet<number>): Exits {
   const byte = exitsByte(room);
   const target = (direction: Direction, i: number) => {
     const mode = (byte >> (2 * i)) & 3;
-    const neighbour = room.id + STEP[direction];
+    const neighbour = room.id + GRID_STEP[direction];
     return mode === 0 ? (ids.has(neighbour) ? neighbour : 0) : mode === 1 ? OUTSIDE_ROOM : 0;
   };
   return {
@@ -194,27 +193,6 @@ export function roomPassages(
     });
   }
   return passages;
-}
-
-export const CIRCUIT_RECORD = 11;
-
-/**
- * The stairs a room's circuit nodes place once lit (record bytes 4, 5: x, y, none if y
- * is 0; byte 6: up, else down), as passages to room +/- 100.
- */
-export function roomCircuitStairs(room: Room, ids: ReadonlySet<number>): Passage[] {
-  return room.records.flatMap((record): Passage[] => {
-    const [type = 0, , , , x = 0, y = 0, up = 0] = record.data;
-    if (type !== CIRCUIT_RECORD || y === 0) return [];
-    const target = room.id + (up ? -100 : 100);
-    return [
-      {
-        cell: y * ROOM_WIDTH + x,
-        kind: up ? "stairs up" : "stairs down",
-        room: ids.has(target) ? target : 0,
-      },
-    ];
-  });
 }
 
 /**

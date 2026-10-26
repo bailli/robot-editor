@@ -12,7 +12,6 @@ export {
   ACTOR_RECORD,
   OPEN_EXIT_CELLS,
   DIRECTIONS,
-  CIRCUIT_RECORD,
   DOOR_IN_CLASS,
   DOOR_OUT_CLASS,
   EXIT_CELL,
@@ -33,7 +32,6 @@ export {
   isConditional,
   roomExits,
   raisedRoom,
-  roomCircuitStairs,
   roomScript,
   roomPassages,
   roomScriptExits,
@@ -253,6 +251,7 @@ export {
   circuitCell,
   nodeBulb,
   roomCircuit,
+  roomCircuitStairs,
   traceCircuit,
 } from "./circuits.ts";
 export type {

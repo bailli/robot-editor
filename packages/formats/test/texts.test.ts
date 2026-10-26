@@ -116,6 +116,7 @@ test("entries can be set, added and removed; shared texts stay with the others",
   expect(textEntryProblem("a;b")).toBeDefined();
   expect(textEntryProblem("ok\n12: no")).toBeDefined();
   expect(textEntryProblem("Raum 12 ist hier")).toBeUndefined();
+  expect(textEntryProblem("DEL \x7f")).toBeDefined(); // crunch cannot store it
   expect(() => withTextEntry(text, 1, ["a|b"])).toThrow(RangeError);
 });
 

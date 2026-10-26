@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { expect, test } from "vitest";
 
+import { roomCircuitStairs } from "../src/circuits.ts";
 import {
   DIRECTIONS,
   EXIT_CELL,
@@ -13,7 +14,6 @@ import {
   exitMode,
   exitsByte,
   raisedRoom,
-  roomCircuitStairs,
   roomExits,
   roomPassages,
   roomScript,

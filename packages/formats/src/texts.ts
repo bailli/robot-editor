@@ -117,10 +117,12 @@ const MAX_LINE = 254;
 
 /**
  * Why a variant cannot be stored as it is, or undefined: "|" and ";" end variants, a
- * line of digits and a colon is a header for the game (0x431300), long lines get split.
+ * line of digits and a colon is a header for the game (0x431300), long lines get split,
+ * DEL (0x7f) is the line feed in CRUNCHED resources (crunch).
  */
 export function textEntryProblem(variant: string): string | undefined {
   if (/[|;]/.test(variant)) return `"|" and ";" separate texts`;
+  if (variant.includes("\x7f")) return "the character DEL (0x7f) cannot be stored";
   for (const line of variant.split("\n")) {
     if (/^\d*:/.test(line)) return `a line must not start with digits and ":"`;
     if (line.length > MAX_LINE) return `lines are at most ${MAX_LINE} characters long`;

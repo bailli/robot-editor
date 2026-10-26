@@ -1,5 +1,5 @@
 import type { EpisodeClasses } from "./classes.ts";
-import { STAIRS_CLASS } from "./exits.ts";
+import { type Passage, STAIRS_CLASS } from "./exits.ts";
 import { LOGIC_CELL, ROOM_CELLS, ROOM_WIDTH, type Room, resolveCell } from "./scene.ts";
 
 /**
@@ -398,4 +398,23 @@ export function roomCircuit(room: Room, classes: EpisodeClasses): RoomCircuit {
     cells: [...cells.values()],
     problems,
   };
+}
+
+/**
+ * The stairs a room's circuit nodes place once lit (record bytes 4, 5: x, y, none if y
+ * is 0; byte 6: up, else down), as passages to room +/- 100.
+ */
+export function roomCircuitStairs(room: Room, ids: ReadonlySet<number>): Passage[] {
+  return room.records.flatMap((record): Passage[] => {
+    const [type = 0, , , , x = 0, y = 0, up = 0] = record.data;
+    if (type !== CIRCUIT_NODE_RECORD || y === 0) return [];
+    const target = room.id + (up ? -100 : 100);
+    return [
+      {
+        cell: y * ROOM_WIDTH + x,
+        kind: up ? "stairs up" : "stairs down",
+        room: ids.has(target) ? target : 0,
+      },
+    ];
+  });
 }

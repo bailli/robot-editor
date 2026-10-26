@@ -37,7 +37,7 @@ import type { LogicRecord } from "./scene.ts";
  *   7   native (episode III): on entering the room the cell at offset 2 is placed and a
  *       friendly native (kind 0x107) appears (tried in the game) and wanders; after a few
  *       chats (texts 300 + byte 7 or 310 + byte 7) he sells the object at offset 4 for
- *       byte 6 gold (0x42b78b, 0x415c10)
+ *       byte 6's low 4 bits in gold, at most 9 (0x42b78b, 0x415c10)
  *   8   travelling actor: on entering the room the cell at offset 2 is placed and an
  *       actor appears (byte 8, see recordActorKind: the dealer or the thief) and walks up
  *       to the hero. Walked into, the dealer offers items for gold (cursor keys, Enter

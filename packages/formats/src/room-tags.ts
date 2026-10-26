@@ -48,10 +48,11 @@ function tag(room: Room, kind: number): RoomTag | undefined {
 export function roomSettings(room: Room): RoomSettings {
   const music = tag(room, MUSIC_TAG)?.data;
   return {
-    darkness: tag(room, DARKNESS_TAG)?.value ?? 0,
+    // kinds 1-3 are bytes for the game (scene.ts)
+    darkness: (tag(room, DARKNESS_TAG)?.value ?? 0) & 0xff,
     points: (tag(room, POINTS_TAG)?.value ?? 0) * POINTS_STEP,
     music: music ? musicName(music) : "",
-    flags: tag(room, FLAGS_TAG)?.value ?? 0,
+    flags: (tag(room, FLAGS_TAG)?.value ?? 0) & 0xff,
   };
 }
 

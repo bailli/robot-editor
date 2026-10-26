@@ -17,6 +17,15 @@ test("settings are written back like the original scenes keep them", () => {
 test("episode I room 42: darkness and points for the first visit", () => {
   const room = game.room(1, 42);
   expect(roomSettings(room)).toEqual({ darkness: 80, points: 1000, music: "", flags: 0 });
+  // the game takes darkness and flags as bytes
+  const wide = {
+    ...room,
+    tags: [
+      { kind: 2, value: 0x12c },
+      { kind: 3, value: 0x102 },
+    ],
+  };
+  expect(roomSettings(wide)).toMatchObject({ darkness: 0x2c, flags: 2 });
 });
 
 test("the original editor's save time", () => {
