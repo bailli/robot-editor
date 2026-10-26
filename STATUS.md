@@ -133,6 +133,17 @@ Files in `packages/formats/src`:
   room's music names a piece of its episode, but for `HUMBA`.
 - **Sound tables** (`1E06`): `N:SOUND ;note`; the notes name objects by tile type
   (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names.
+- **Where resources come from** (opener 0x430d20, used by all resource reads; read from
+  the code, not tried in the game): first a loose file, then the exe, then
+  `WorldOfRobot.DLL`. Loose files only for CRUNCHED texts: if the registry value
+  `RessourcePath` (HKCU `Software\TOM-Productions\Robot`) is set, `1E10`/`1E11` are read
+  from `<path>\ITEM<E>GEN.CRN`/`ITEM<E>E.CRN` (E = `J` for Junior, else the digit),
+  `1320` from `DIARY3GEN.CRN`, `9900`/`9901` from `INTROGEN.CRN`/`INTROE.CRN`. The
+  first file found asks once (message box, texts 0x9c4c/0x9c4d, flag 0x4821dc: 2 ask,
+  1 yes, 0 no). The DLL (0x405960) is only loaded when the exe has no `SHAPES` 1001
+  (the shipped exe has it, so system info says "embedded"); it must export
+  `R32Version` returning exactly 0x132 and `R32DateTime`, and serves only resources the
+  exe lacks (handle 0x4c5d78, after the exe's 0x4c5d74).
 
 ### Scenes (rooms)
 
