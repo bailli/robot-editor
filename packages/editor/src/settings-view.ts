@@ -9,6 +9,8 @@ import {
 export interface SettingsViewEvents {
   /** The user changed one setting (Editor.setRoomSettings). */
   change(settings: Partial<RoomSettings>): void;
+  /** The user changed the description (Editor.setRoomDescription). */
+  describe(description: string): void;
 }
 
 /** What the view needs to know about the room's episode. */
@@ -20,6 +22,10 @@ export interface SettingsContext {
   roomMusic: ReadonlySet<string>;
   /** When the original editor saved the room. */
   saved?: Date | undefined;
+  /** The description of the room's name (lines joined by "\n"); undefined: it has none to give. */
+  description: string | undefined;
+  /** What the description field is about, or why it is off. */
+  descriptionNote: string;
 }
 
 /** Episodes whose rooms have no music in the originals. */
@@ -68,7 +74,10 @@ export class SettingsView {
   private readonly flags = document.createElement("fieldset");
   private readonly flagInputs = new Map<number, HTMLInputElement>();
   private readonly saved = note("");
+  private readonly description = document.createElement("textarea");
+  private readonly descriptionNote = note("");
   private settings: RoomSettings | undefined;
+  private shownDescription = "";
 
   constructor(events: SettingsViewEvents) {
     this.element.className = "settings-view record-view";
@@ -93,6 +102,22 @@ export class SettingsView {
     this.music.addEventListener("change", () => {
       events.change({ music: this.music.value });
     });
+    this.description.className = "record-field room-description";
+    this.description.rows = 6;
+    this.description.spellcheck = false;
+    this.description.setAttribute("aria-label", "Description");
+    this.description.addEventListener("change", () => {
+      events.describe(this.description.value);
+    });
+    this.description.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) this.description.blur();
+      else if (event.key === "Escape") {
+        this.description.value = this.shownDescription;
+        this.description.blur();
+      }
+    });
+    const descriptionHeading = document.createElement("h3");
+    descriptionHeading.textContent = "Description";
     const legend = document.createElement("legend");
     legend.textContent = "Episode III";
     this.flags.className = "settings-flags";
@@ -111,6 +136,9 @@ export class SettingsView {
       this.flags.append(element);
     }
     this.element.append(
+      descriptionHeading,
+      this.description,
+      this.descriptionNote,
       heading,
       row(
         "Darkness",
@@ -135,6 +163,10 @@ export class SettingsView {
 
   show(settings: RoomSettings, context: SettingsContext): void {
     this.settings = settings;
+    this.shownDescription = context.description ?? "";
+    this.description.value = this.shownDescription;
+    this.description.disabled = context.description === undefined;
+    this.descriptionNote.textContent = context.descriptionNote;
     this.darkness.value = String(settings.darkness);
     this.points.value = String(settings.points);
     const option = (value: string, text = value) => {

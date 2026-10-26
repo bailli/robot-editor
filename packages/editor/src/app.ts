@@ -84,7 +84,7 @@ import {
   spriteCanvas,
 } from "./room-view.ts";
 import { type ScriptName, ScriptView } from "./script-view.ts";
-import { SettingsView } from "./settings-view.ts";
+import { type SettingsContext, SettingsView } from "./settings-view.ts";
 import { SidePanel } from "./side-panel.ts";
 import { TileNames } from "./tile-info.ts";
 
@@ -443,6 +443,15 @@ export class App {
       this.showRoom(this.roomId);
       this.refreshButtons();
     },
+    describe: (description) => {
+      try {
+        this.need().setRoomDescription(this.episode, this.roomId, description);
+      } catch (error) {
+        this.setStatus(`Cannot change the description: ${message(error)}`, true);
+      }
+      this.showRoom(this.roomId);
+      this.refreshButtons();
+    },
   });
   /** Per episode: the pieces of its MUSIC resource. */
   private readonly musicPieces = new Map<number, string[]>();
@@ -756,7 +765,30 @@ export class App {
       pieces,
       roomMusic: this.roomMusic,
       saved: roomSaveTime(room),
+      ...this.descriptionContext(room.id),
     });
+  }
+
+  /** The description field of the Room tab: the description of the name the room shows. */
+  private descriptionContext(id: number): Pick<SettingsContext, "description" | "descriptionNote"> {
+    const editor = this.need();
+    const named = editor.nameRoom(this.episode, id);
+    const name = editor.roomName(this.episode, id);
+    if (named === undefined)
+      return {
+        description: undefined,
+        descriptionNote: `The game shows no names or descriptions for rooms from ${String(NAMED_ROOMS[this.episode])} on.`,
+      };
+    if (!name) return { description: undefined, descriptionNote: "Give the room a name first." };
+    return {
+      description: name.description ?? "",
+      descriptionNote: [
+        named === id ? "" : `The description of room ${named}, whose name this room shows.`,
+        "The banner on entering the room shows it below the name. Enter breaks a line, the game wraps the rest; Ctrl+Enter applies, Escape reverts.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    };
   }
 
   /** The name field: the name the game shows, editable where the game shows names. */
@@ -789,6 +821,7 @@ export class App {
   }
 
   private afterRename(): void {
+    this.showSettings(this.need().room(this.episode, this.roomId)); // the description field
     this.refreshRoomList();
     this.refreshButtons();
     this.remember(this.episode, this.roomId); // labels of back/forward

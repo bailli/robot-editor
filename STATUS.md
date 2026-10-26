@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-10-24.
+Setup and commands are in the [README](README.md). Last updated: 2026-10-26.
 
 ## Goal and approach
 
@@ -121,11 +121,21 @@ Files in `packages/formats/src`:
   (0x43bfd0: underlines dropped, an empty line ends it; 0x438850 fetches texts without
   line breaks and with `_` as a hard space). Rooms without a name show "Szene <id>"
   (rooms 1 and 99, episode II's 600s, a few others). The game shows the whole text in
-  the banner on entering a room (0x406560; episode III: name and description; seen under
+  the banner on entering a room (0x406560; seen under
   Wine for episode I room 42, underlines included) and names
   its own screenshots after the name (`R1-043-DER START.png`). Styles: episode I
   underlines (`DER START\` + a line of `═`), Junior and II frame with stars
   (`*** Die Festung ***`), III and IV write plainly; `roomNameText` writes new names so.
+- **Room descriptions** (`splitRoomText`, `roomDescriptionText`): the text after the
+  name. Two forms: a leading `!` (40 rooms of episode III) puts the description after
+  the first backslash, and the banner (0x4063d0, message box flag 0x200) shows the name
+  in the box's title bar; otherwise an empty line ends the name and the rest follows it
+  inside the box (episode I's 27 "RING-PLATZ" and 74, episode III's 43, 48, 66, 76).
+  `\` breaks lines, the game wraps the rest; it fetches at most 999 characters
+  (0x438850, the banner's 1000-byte buffer). New descriptions take episode III's `!`
+  form there and the empty line elsewhere. **Verified under Wine:** a new description
+  for episode I room 43 (empty line, two paragraphs) and III room 41 (`!`, name in the
+  title bar) show in the banner as written, wrapped anew.
 - **MUSIC** (`1E05`, `music.ts`): "MUC1" at 0x1a, the number of instruments (u32 at
   0x22, 32-byte entries from 0x30, name first), the number of pieces (u16 at 0x2e), then
   86-byte piece entries starting with an 8-byte CP437 name (sorted; songs and sound
@@ -658,10 +668,14 @@ Supported:
   the room they lead to) and Backspace move between them, across episodes; loading the
   page with a room in the address opens that room
 - the room's name next to the title (and in the room list's, exits' and history's
-  tooltips; episode III's descriptions in the name's tooltip), editable in place: written
+  tooltips; the description in the name's tooltip), editable in place: written
   in the episode's style into the German texts (episode III: resource 1320, keeping a
   description), saved CRUNCHED; rooms showing the name of the room 100 below rename
   that room; empty removes the name; undoable
+- the description of the room's name in the Room tab (rooms with a name; caves and
+  cellars that of the room above): lines as typed, applied on leaving the field or
+  Ctrl+Enter (Escape reverts), in the entry's form or the episode's (see Room
+  descriptions above); empty removes it; undoable
 - rooms added ("New room…" below the episode, or a map's + slot) in a dialog: the id
   (1–1023, at most 200 per episode; a free one after the shown room is offered, never one
   ending in 0), checked while typing (taken, out of range; its grid neighbours and how
@@ -748,8 +762,8 @@ Not supported (yet):
 - painting over logic cells (use the inspector or the area tools); records are edited
   field by field
 - painting exit tiles is plain painting (0x0017 in the base layer)
-- English texts: room names are edited in the German texts only (Junior and I also
-  have English ones, which keep the old names, or none for new rooms)
+- English texts: room names and descriptions are edited in the German texts only
+  (Junior and I also have English ones, which keep the old names, or none for new rooms)
 - copying areas between editor windows or exes (the clip lives in the page)
 - English UI texts / English descriptions (German only; English exists for Junior and I)
 - remembering the last exe or unsaved work across reloads

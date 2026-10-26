@@ -37,7 +37,8 @@ the tile under the cursor, Ctrl+Z / Ctrl+Y undo and redo, G shows the grid (? or
 "Keys" button lists all keys). The Fill
 tool fills connected cells; with the Select tool an area is copied (Ctrl+C), cut
 (Ctrl+X), cleared (Delete) and pasted (Ctrl+V, then click), logic records included. The
-Room tab sets the darkness, the points for the first visit and the music. "Save exe"
+Room tab sets the description shown under the room's name on entering, the darkness, the
+points for the first visit and the music. "Save exe"
 downloads a copy with the edited scenes and texts. Scenes that grow move to the end of
 the resource section (the exe's signature is dropped). Logic cells (magenta) refer to
 the room's logic records and cannot be painted over (the inspector and the area tools change them). The room's name is edited in the

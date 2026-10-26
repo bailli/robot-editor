@@ -12,13 +12,18 @@
  *   followed by a description, so the name ends at the first backslash; otherwise
  *   backslashes become spaces and two in a row (an empty line) end it. "═" underlines
  *   are dropped, spaces and "*" collapse into single spaces, and the ends are trimmed.
- *   Where the game shows the descriptions is not known.
+ * - The banner on entering a room (0x406560) shows the whole text: what follows the name
+ *   is the room's description, after the backslash of a "!" entry (shown without the "!",
+ *   0x4063d0) or after an empty line (episode I's "RING-PLATZ", a few of episode III's).
+ *   The game fetches at most ROOM_TEXT_SIZE - 1 characters of it.
  */
 import type { EpisodeClasses } from "./classes.ts";
 import type { Room } from "./scene.ts";
-import { type Texts, displayText } from "./texts.ts";
+import type { Texts } from "./texts.ts";
 
 export const ROOM_NAME_ENTRY = 1000;
+/** The banner's buffer for a room's text (0x406560). */
+export const ROOM_TEXT_SIZE = 1000;
 /** Rooms of this class at NAME_CELL share the name of room id - 100. */
 export const SAME_NAME_CLASS = 99;
 const NAME_CELL = 40;
@@ -29,7 +34,10 @@ export interface RoomName {
   /** The room whose text it is (the room itself, or one 100, 200, ... below). */
   room: number;
   name: string;
-  /** The text after the name of a "!" entry (episode III), as one paragraph. */
+  /**
+   * The text after the name, its lines (hard line breaks, "\" in the text) joined by
+   * "\n", the game's wrapping removed (see splitRoomText).
+   */
   description?: string;
 }
 
@@ -43,14 +51,44 @@ export function nameRoom(id: number, rooms: readonly Room[], classes: EpisodeCla
   return id;
 }
 
-/** The game's one-line name from a room's text, plus a "!" entry's description. */
+/** The game's one-line name from a room's text, plus the description after it. */
 export function parseRoomName(text: string): Omit<RoomName, "room"> {
   const fetched = fetchText(text);
-  const described = fetched.startsWith("!") && !fetched.startsWith("!!");
+  const described = isDescribed(fetched);
   const name = shortName(described ? fetched.slice(1) : fetched, described);
-  const end = text.indexOf("\\");
-  const description = described && end >= 0 ? displayText(text.slice(end + 1)) : "";
+  const { description } = splitRoomText(text);
   return description ? { name, description } : { name };
+}
+
+const isDescribed = (text: string) => text.startsWith("!") && !text.startsWith("!!");
+
+/**
+ * A room's text as the part with the name (`head`) and the description after it: a "!"
+ * entry's description follows the first backslash, others' the first empty line (two
+ * backslashes with only spaces and line breaks between them, where 0x43bfd0 ends the
+ * name). The description's lines are the text's hard line breaks; spaces and the
+ * text's own line breaks collapse into single spaces, as the game fetches it.
+ */
+export function splitRoomText(text: string): {
+  head: string;
+  description: string;
+  form?: "!" | "empty line";
+} {
+  const described = isDescribed(text);
+  const end = described ? /\\/.exec(text) : /\\[ \n]*\\/.exec(text);
+  if (!end) return { head: text, description: "" };
+  const description = text
+    .slice(end.index + end[0].length)
+    .split("\\")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .join("\n")
+    .replace(/^\n+|\n+$/g, "");
+  return { head: text.slice(0, end.index), description, form: described ? "!" : "empty line" };
+}
+
+/** How many characters of a room's text the game fetches (at most ROOM_TEXT_SIZE - 1 fit). */
+export function roomTextLength(text: string): number {
+  return fetchText(text).length;
 }
 
 /**
@@ -127,23 +165,68 @@ const NAME_STYLES: readonly ("stars" | "underlined" | "plain")[] = [
  * The text of a room's name entry for `name`, in the style of the entry it replaces
  * (`old`) or else the episode's: episode I underlines its names ("DER START\" + a line
  * of "═"), Junior and II frame them with stars ("*** Die Festung ***"), III and IV write
- * them plainly. Episode III's "!" entries keep their description. The game shows the
- * whole text in the banner on entering the room.
+ * them plainly. The description of `old` stays, in its form (roomDescriptionText).
  */
 export function roomNameText(name: string, episode: number, old?: string): string {
   const trimmed = name.trim();
-  const style =
-    old === undefined
-      ? (NAME_STYLES[episode] ?? "plain")
-      : old.includes("═")
-        ? "underlined"
-        : /^\s*\*/.test(old)
-          ? "stars"
-          : "plain";
-  if (old?.startsWith("!") && !old.startsWith("!!")) {
-    const end = old.indexOf("\\");
-    return `!${trimmed}${end >= 0 ? old.slice(end) : ""}`;
+  if (old === undefined) return styledName(trimmed, NAME_STYLES[episode] ?? "plain");
+  const { head } = splitRoomText(old);
+  const rest = old.slice(head.length);
+  if (isDescribed(head)) return `!${trimmed}${rest}`;
+  const style = head.includes("═") ? "underlined" : /^\s*\*/.test(head) ? "stars" : "plain";
+  return styledName(trimmed, style) + rest;
+}
+
+/**
+ * The text of a room's name entry `old` with the description `description` (lines
+ * joined by "\n", empty: none) after the name, which stays as it is. Entries with a
+ * description keep its form, others take the episode's: episode III writes a "!" before
+ * the name and the description after its backslash, the others an empty line after the
+ * name (episode I's "RING-PLATZ"). Lines are wrapped at DESCRIPTION_WIDTH (the game
+ * wraps them anew); an unchanged description keeps the text as it is.
+ */
+export function roomDescriptionText(description: string, episode: number, old: string): string {
+  const split = splitRoomText(old);
+  const { head, form = episode === DESCRIBED_EPISODE ? "!" : "empty line" } = split;
+  const name = isDescribed(head) ? head.slice(1) : head;
+  const lines = description
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .join("\n")
+    .replace(/^\n+|\n+$/g, "");
+  if (lines === split.description) return old; // as it is, wrapping included
+  if (!lines) return name;
+  const text = lines.split("\n").map(wrap).join("\\\n");
+  return form === "!" ? `!${name}\\\n${text}` : `${name}\\\n\\\n${text}`;
+}
+
+/** The episode whose rooms write their descriptions after a "!" name. */
+const DESCRIBED_EPISODE = 3;
+/** The longest line of a description as written (the originals' are up to 78). */
+const DESCRIPTION_WIDTH = 78;
+
+function styledName(name: string, style: "stars" | "underlined" | "plain"): string {
+  if (style === "underlined") return `${name}\\\n${"═".repeat(name.length)}`;
+  return style === "stars" ? `*** ${name} ***` : name;
+}
+
+/**
+ * A line broken into lines of at most DESCRIPTION_WIDTH characters at spaces; never
+ * before a word that would start a line like a text entry's header ("12:").
+ */
+function wrap(line: string): string {
+  let out = "";
+  let width = 0;
+  for (const word of line.split(" ").filter(Boolean)) {
+    if (width === 0) out += word;
+    else if (width + 1 + word.length > DESCRIPTION_WIDTH && !/^\d*:/.test(word)) {
+      out += `\n${word}`;
+      width = 0;
+    } else {
+      out += ` ${word}`;
+      width++;
+    }
+    width += word.length;
   }
-  if (style === "underlined") return `${trimmed}\\\n${"═".repeat(trimmed.length)}`;
-  return style === "stars" ? `*** ${trimmed} ***` : trimmed;
+  return out;
 }

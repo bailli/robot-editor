@@ -457,6 +457,40 @@ describe("Editor rooms and names", () => {
     expect(() => editor.setRoomName(2, 44, "€")).toThrow(RangeError);
   });
 
+  test("room descriptions follow the name, saved and undone", () => {
+    const editor = new Editor(game);
+    expect(editor.setRoomDescription(1, 43, "Hier beginnt es.\nViel Glück!")?.text).toBeDefined();
+    expect(editor.roomName(1, 43)).toEqual({
+      room: 43,
+      name: "DER START",
+      description: "Hier beginnt es.\nViel Glück!",
+    });
+    expect(editor.isEdited(1, 43)).toBe(true);
+    const saved = new Game(editor.save());
+    expect(saved.episodeTexts(1)?.entries.get(1043)).toEqual([
+      "DER START\\\n═════════\\\n\\\nHier beginnt es.\\\nViel Glück!",
+    ]);
+    // renaming keeps the description
+    editor.setRoomName(1, 43, "START");
+    expect(editor.roomName(1, 43)?.description).toBe("Hier beginnt es.\nViel Glück!");
+    editor.undo();
+    editor.undo();
+    expect(editor.roomName(1, 43)).toEqual(game.roomName(1, 43));
+    // episode III: a "!" entry; caves describe the room above
+    expect(editor.setRoomDescription(3, 43, "")).toBeDefined();
+    expect(editor.roomName(3, 43)?.description).toBeUndefined();
+    expect(
+      editor.setRoomDescription(3, 11, game.roomName(3, 11)?.description ?? ""),
+    ).toBeUndefined();
+    expect(editor.nameRoom(3, 111)).toBe(11);
+    editor.setRoomDescription(3, 111, "Ein Haus.");
+    expect(editor.roomName(3, 11)?.description).toBe("Ein Haus.");
+    expect(() => editor.setRoomDescription(3, 11, "x".repeat(990))).toThrow(RangeError);
+    expect(() => editor.setRoomDescription(3, 11, "a;b")).toThrow(RangeError);
+    editor.setRoomName(2, 43, "");
+    expect(() => editor.setRoomDescription(2, 43, "Wald")).toThrow(RangeError);
+  });
+
   test("the test exe starts the episode in the room, with the edits", () => {
     const editor = new Editor(game);
     editor.addRoom(1, 999, { copy: 43 });

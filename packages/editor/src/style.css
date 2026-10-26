@@ -1124,6 +1124,15 @@ canvas.cell.text-tile {
   gap: 0;
 }
 
+/* the room's description: lines as in the text, the game wraps them */
+.room-description {
+  width: auto;
+  min-height: 6em;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .settings-flags {
   display: grid;
   gap: 4px;

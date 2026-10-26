@@ -18,6 +18,7 @@ import {
   ROOM_CELLS,
   ROOM_HEIGHT,
   ROOM_NAME_ENTRY,
+  ROOM_TEXT_SIZE,
   ROOM_WIDTH,
   type Room,
   type RoomName,
@@ -34,11 +35,13 @@ import {
   readEpisodeStart,
   recordCell,
   recordCellOffsets,
+  roomDescriptionText,
   roomName,
   roomNameText,
   roomNamesId,
   roomScript,
   roomSettings,
+  roomTextLength,
   withEpisodeStart,
   withExitMode,
   withRoomScript,
@@ -284,6 +287,29 @@ export class Editor {
    * store or rooms without names.
    */
   setRoomName(episode: number, id: number, name: string): Edit | undefined {
+    return this.setRoomText(episode, id, (old) =>
+      name.trim() === "" ? undefined : roomNameText(name, episode, old),
+    );
+  }
+
+  /**
+   * Gives the name of room `id` the description `description` (lines joined by "\n",
+   * empty: none), which the banner shows below the name (roomDescriptionText). One undo
+   * step. Throws a RangeError for rooms without a name and texts the game cannot store.
+   */
+  setRoomDescription(episode: number, id: number, description: string): Edit | undefined {
+    return this.setRoomText(episode, id, (old) => {
+      if (old === undefined) throw new RangeError("the room has no name to describe");
+      return roomDescriptionText(description, episode, old);
+    });
+  }
+
+  /** Sets the name entry room `id` shows to what `text` makes of the old one. */
+  private setRoomText(
+    episode: number,
+    id: number,
+    text: (old: string | undefined) => string | undefined,
+  ): Edit | undefined {
     this.endStroke();
     const named = this.nameRoom(episode, id);
     if (named === undefined)
@@ -292,17 +318,20 @@ export class Editor {
     const before = this.textSource(resource);
     if (before === undefined) throw new RangeError("the exe has no room names");
     const entry = ROOM_NAME_ENTRY + named;
-    const old = this.textEntries(resource)?.entries.get(entry)?.[0];
-    const text = name.trim() === "" ? undefined : roomNameText(name, episode, old);
-    if (text !== undefined) encodeCp437(text);
-    const renamed = withTextEntry(before, entry, text === undefined ? undefined : [text]);
-    if (renamed === before) return undefined;
+    const set = text(this.textEntries(resource)?.entries.get(entry)?.[0]);
+    if (set !== undefined) {
+      encodeCp437(set);
+      if (roomTextLength(set) >= ROOM_TEXT_SIZE)
+        throw new RangeError(`the game reads at most ${ROOM_TEXT_SIZE - 1} characters`);
+    }
+    const changed = withTextEntry(before, entry, set === undefined ? undefined : [set]);
+    if (changed === before) return undefined;
     const step: Edit = {
       episode,
       room: id,
       layer: "base",
       changes: [],
-      text: { id: resource, before, after: renamed },
+      text: { id: resource, before, after: changed },
     };
     this.apply(step, after);
     this.push(step);

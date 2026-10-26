@@ -109,11 +109,15 @@ export type { Backing } from "./render.ts";
 export {
   NAMED_ROOMS,
   ROOM_NAME_ENTRY,
+  ROOM_TEXT_SIZE,
   SAME_NAME_CLASS,
   nameRoom,
   parseRoomName,
+  roomDescriptionText,
   roomName,
   roomNameText,
+  roomTextLength,
+  splitRoomText,
 } from "./room-names.ts";
 export type { RoomName } from "./room-names.ts";
 export {

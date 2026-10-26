@@ -1,7 +1,14 @@
 import { expect, test } from "vitest";
 
 import { EPISODES, Game, roomNamesId } from "../src/game.ts";
-import { ROOM_NAME_ENTRY, parseRoomName, roomNameText } from "../src/room-names.ts";
+import {
+  ROOM_NAME_ENTRY,
+  parseRoomName,
+  roomDescriptionText,
+  roomNameText,
+  roomTextLength,
+  splitRoomText,
+} from "../src/room-names.ts";
 import { parseTexts } from "../src/texts.ts";
 import { exe, sha256 } from "./data.ts";
 
@@ -9,18 +16,30 @@ const game = new Game(exe());
 
 test("the game cuts room texts down to one line", () => {
   expect(parseRoomName("*** Das Versteck ***")).toEqual({ name: "Das Versteck" });
-  // underlines dropped, "_" indents underlines, an empty line ends the name
+  // underlines dropped, "_" indents underlines
   expect(parseRoomName("_RAUM DES\\\n_════════\\\nZAUBERSTABS\\\n═══════════")).toEqual({
     name: "RAUM DES ZAUBERSTABS",
-  });
-  expect(parseRoomName("KAMPFPLATZ\\\n══════════\\\n\\\nBaue Fallen!")).toEqual({
-    name: "KAMPFPLATZ",
   });
   // "!": a name and a description
   expect(parseRoomName("!Der Binnensee\\\nDies ist ein\nBinnensee.")).toEqual({
     name: "Der Binnensee",
     description: "Dies ist ein Binnensee.",
   });
+  // an empty line ends the name, the rest is a description too; "\\" breaks its lines
+  expect(parseRoomName("KAMPFPLATZ\\\n══════════\\\n\\\nBaue  Fallen\nfür\\\nMonster!")).toEqual({
+    name: "KAMPFPLATZ",
+    description: "Baue Fallen für\nMonster!",
+  });
+  expect(splitRoomText("*** Der See ***\\\n\\\nTief.")).toEqual({
+    head: "*** Der See ***",
+    description: "Tief.",
+    form: "empty line",
+  });
+  expect(splitRoomText("RAUM DES\\\n════════\\\nWURMS")).toEqual({
+    head: "RAUM DES\\\n════════\\\nWURMS",
+    description: "",
+  });
+  expect(roomTextLength("!Der See\\\nTief\nund_kalt.")).toBe(23);
 });
 
 test("rooms have names, caves share the name of the room above", () => {
@@ -73,5 +92,34 @@ test("new names are written like the episode writes its names", () => {
   expect(roomNameText("Der See", 3, "!Der Binnensee\\\nDies ist ein\nBinnensee.")).toBe(
     "!Der See\\\nDies ist ein\nBinnensee.",
   );
+  expect(roomNameText("ARENA", 1, "KAMPFPLATZ\\\n══════════\\\n\\\nBaue Fallen!")).toBe(
+    "ARENA\\\n═════\\\n\\\nBaue Fallen!",
+  );
   expect(roomNameText("Neu", 1, "*** Alt ***")).toBe("*** Neu ***");
+});
+
+test("descriptions follow the name, in the entry's form or the episode's", () => {
+  for (const episode of EPISODES) {
+    const texts = parseTexts(game.textSource(roomNamesId(episode)) ?? "");
+    for (const room of game.episode(episode).rooms) {
+      const old = texts.entries.get(ROOM_NAME_ENTRY + room.id)?.[0];
+      const name = game.roomName(episode, room.id);
+      if (old === undefined || name?.room !== room.id) continue;
+      // rewritten, the game reads the same name and description
+      const description = `${name.description ?? ""}\nNeu.`;
+      expect(parseRoomName(roomDescriptionText(description, episode, old))).toEqual({
+        name: name.name,
+        description: description.trim(),
+      });
+      expect(parseRoomName(roomDescriptionText("", episode, old))).toEqual({ name: name.name });
+    }
+  }
+  expect(roomDescriptionText("Viel Sand.\n\nUnd  Meer.", 1, "DER START\\\n═════════")).toBe(
+    "DER START\\\n═════════\\\n\\\nViel Sand.\\\n\\\nUnd Meer.",
+  );
+  expect(roomDescriptionText("Viel Sand.", 3, "Der Strand")).toBe("!Der Strand\\\nViel Sand.");
+  expect(roomDescriptionText("", 3, "!Der Strand\\\nViel Sand.")).toBe("Der Strand");
+  // wrapped like the originals, not before a line that would read as a header
+  const long = roomDescriptionText(`${"Wort ".repeat(15)}12:00 Uhr`, 4, "Der Strand");
+  expect(long.split("\n").map((l) => l.length)).toEqual([11, 1, 80, 3]);
 });

@@ -1045,6 +1045,32 @@ test("the room's name is edited in place", async () => {
   expect(name.placeholder).toBe("Szene 600 (no name)");
 });
 
+test("the Room tab edits the description of the room's name", async () => {
+  await page.getByRole("tab", { name: "Room" }).click();
+  const field = page.getByRole("textbox", { name: "Description" });
+  const description = () => field.element() as HTMLTextAreaElement;
+  expect(description().value).toBe("");
+  await userEvent.fill(field, "Hier beginnt es.\nViel Glück!");
+  await userEvent.keyboard("{Control>}{Enter}{/Control}");
+  expect(app.editor?.roomName(1, 43)?.description).toBe("Hier beginnt es.\nViel Glück!");
+  // Escape reverts what was typed
+  await userEvent.fill(field, "Anders.");
+  await userEvent.keyboard("{Escape}");
+  expect(description().value).toBe("Hier beginnt es.\nViel Glück!");
+  app.undo();
+  expect(description().value).toBe("");
+  expect(defined(app.editor).isEdited(1, 43)).toBe(false);
+  // episode III: its "!" entries; caves show the description of the room above
+  app.showEpisode(3, 111);
+  expect(description().value).toMatch(/^Du entdeckst ein großes Haus/);
+  expect(document.querySelector(".settings-view")?.textContent).toContain(
+    "The description of room 11",
+  );
+  // rooms without a name have none
+  app.showEpisode(2, 600);
+  expect(description().disabled).toBe(true);
+});
+
 test("rooms are added empty or as a copy of the shown room", async () => {
   const dialog = page.getByRole("dialog", { name: "New room" });
   const id = dialog.getByRole("spinbutton", { name: "Room id" });
