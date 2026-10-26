@@ -337,9 +337,12 @@ function element<K extends keyof HTMLElementTagNameMap>(
 
 const hex = (value: number, digits = 4) => `0x${value.toString(16).padStart(digits, "0")}`;
 
+/** A field's number: decimal, or hex with 0x (cells: always hex); NaN for anything else. */
 function parseNumber(text: string, kind: Field["kind"]): number {
   const t = text.trim();
-  return kind === "cell" || /^0x/i.test(t) ? Number.parseInt(t.replace(/^0x/i, ""), 16) : Number(t);
+  const hexDigits = (kind === "cell" ? /^(?:0x)?([0-9a-f]+)$/i : /^0x([0-9a-f]+)$/i).exec(t);
+  if (hexDigits) return Number.parseInt(hexDigits[1], 16);
+  return /^\d+$/.test(t) ? Number(t) : Number.NaN;
 }
 
 /** The inspector for the selected cell's logic record (or for adding one). */
@@ -412,7 +415,7 @@ export class RecordView {
       const bytes = raw.value
         .trim()
         .split(/\s+/)
-        .map((b) => Number.parseInt(b, 16));
+        .map((b) => (/^[0-9a-f]{1,2}$/i.test(b) ? Number.parseInt(b, 16) : Number.NaN));
       if (bytes.length === this.data.length && bytes.every((b) => b >= 0 && b <= 255)) {
         this.data.set(bytes);
         this.commit();

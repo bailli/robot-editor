@@ -653,6 +653,7 @@ export class App {
     this.thumbnails.clear();
     this.musicPieces.clear();
     this.roomMusic = undefined;
+    this.lastRoom = undefined; // nothing stays selected from the exe before
     this.welcome.hidden = true;
     this.workspace.hidden = false;
     this.testButton.disabled = false;

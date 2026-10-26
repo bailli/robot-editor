@@ -2,6 +2,7 @@ import {
   DIRECTIONS,
   type Direction,
   type EpisodeClasses,
+  GRID_STEP,
   OUTSIDE_ROOM,
   type Room,
   type ScriptExit,
@@ -11,6 +12,7 @@ import {
   roomScriptExits,
 } from "@robot/formats";
 
+import { MAX_ROOM_ID } from "./editor.ts";
 import { type Connections, connections } from "./exits-view.ts";
 
 /**
@@ -30,8 +32,6 @@ export interface MapLink {
   title: string;
 }
 
-const STEP: Readonly<Record<Direction, number>> = { north: -10, south: 10, west: -1, east: 1 };
-
 /** Where a room sits on the map: its floor (hundreds), row (tens) and column (ones). */
 export function mapPosition(id: number): { floor: number; row: number; column: number } {
   return { floor: Math.floor(id / 100), row: Math.floor((id % 100) / 10), column: id % 10 };
@@ -39,7 +39,7 @@ export function mapPosition(id: number): { floor: number; row: number; column: n
 
 /** The grid neighbour in `direction` if it is drawn next to the room (same floor and row). */
 export function adjacent(id: number, direction: Direction): number | undefined {
-  const to = id + STEP[direction];
+  const to = id + GRID_STEP[direction];
   if (to < 0) return undefined;
   const a = mapPosition(id);
   const b = mapPosition(to);
@@ -147,9 +147,6 @@ export interface MapViewEvents {
   /** Whether the episode can take another room. */
   canAdd(): boolean;
 }
-
-/** The highest room id (record targets have 10 bits). */
-const MAX_ROOM_ID = 1023;
 
 const LINK_ARROWS: Readonly<Record<Direction, string>> = {
   north: "▲",

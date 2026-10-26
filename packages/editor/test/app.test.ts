@@ -479,6 +479,23 @@ describe("logic records", () => {
     expect(document.activeElement).toBe(room.element());
     app.undo();
     expect(defined(app.editor).isEdited(2, 55)).toBe(false);
+    // what is no number leaves the record as it is
+    for (const text of ["", "4x", "0x2g"]) {
+      await userEvent.fill(room, text);
+      await userEvent.keyboard("{Enter}");
+      expect(defined(app.editor).isEdited(2, 55)).toBe(false);
+    }
+  });
+
+  test("loading an exe again leaves nothing selected", async () => {
+    app.showEpisode(2, 55);
+    await clickCell(teleporterCell());
+    expect(app.selected).toBeDefined();
+    app.load(bytes);
+    expect(app.selected).toBeUndefined();
+    await expect
+      .element(page.getByRole("heading", { name: /^Logic record/ }))
+      .not.toBeInTheDocument();
   });
 
   test("Ctrl+S in a field saves the exe with what was typed", async () => {

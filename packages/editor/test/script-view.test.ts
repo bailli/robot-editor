@@ -69,7 +69,9 @@ test("completion offers the game's names and the script's own variables", async 
     ]),
   );
   // the word being typed is not a variable of the script
-  expect(labels).not.toContain("Mes variable of this script");
+  const typing = (await complete("count = 1;\ncou"))?.options.map((o) => o.label);
+  expect(typing).toContain("count");
+  expect(typing).not.toContain("cou");
   // nothing in comments and strings, nothing without a word unless asked for
   expect(await complete("// Mes")).toBeNull();
   expect(await complete('Message("Mes')).toBeNull();

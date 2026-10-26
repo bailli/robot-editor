@@ -427,8 +427,11 @@ describe("Editor rooms and names", () => {
     expect(editor.rooms(2).some((r) => r.id === 244)).toBe(false);
     expect(editor.interiorStairsProblem(2, 244, 5)).toMatch(/status line/);
     expect(editor.interiorStairsProblem(2, 244, 40)).toMatch(/class 99/);
-    const logic = below.base.findIndex((c) => (c & 0xff) === LOGIC_CELL);
-    if (logic >= 0) expect(editor.interiorStairsProblem(2, 244, logic)).toMatch(/logic record/);
+    // room 144 has no logic cell: one added for the check
+    expect(below.base.some((c) => (c & 0xff) === LOGIC_CELL)).toBe(false);
+    editor.addRecord(2, 144, "base", cell, 13);
+    expect(editor.interiorStairsProblem(2, 244, cell)).toMatch(/logic record/);
+    editor.undo();
     expect(() => editor.addRoom(2, 244, { interior: { stairs: 40 } })).toThrow(RangeError);
   });
 
