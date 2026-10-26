@@ -10,6 +10,7 @@ const ROOT = new URL("../../", import.meta.url);
 const REFERENCE_EXE = new URL("reference/GameOfRobot.exe", ROOT);
 const HARNESS = new URL("tools/wine/harness.py", ROOT);
 const PLAY_EXE = new URL(".wine/play.exe", ROOT);
+const MAX_EXE_BYTES = 8 << 20; // the game's exe has about 2 MB
 
 /** In development, serves reference/GameOfRobot.exe (see README) so it opens by itself. */
 function referenceExe(): Plugin {
@@ -31,7 +32,8 @@ function referenceExe(): Plugin {
 
 /**
  * In development, POST /play?episode=N with an exe runs it in the game under Wine on
- * this display (tools/wine/harness.py play): the editor's "Test in game".
+ * this display (tools/wine/harness.py play): the editor's "Test in game". Only the
+ * editor's own page may: any other site open in the browser could post an exe here too.
  */
 function playInWine(): Plugin {
   return {
@@ -50,12 +52,24 @@ function playInWine(): Plugin {
           fail(400, "POST an exe to /play?episode=0..4");
           return;
         }
+        const origin = req.headers.origin;
+        if (origin === undefined || URL.parse(origin)?.host !== req.headers.host) {
+          fail(403, "only the editor's page may run the game");
+          return;
+        }
         if (!existsSync(new URL(".wine/prefix/", ROOT))) {
           fail(503, "no Wine prefix: run python3 tools/wine/harness.py setup");
           return;
         }
         const chunks: Buffer[] = [];
-        req.on("data", (chunk: Buffer) => chunks.push(chunk));
+        let size = 0;
+        req.on("data", (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > MAX_EXE_BYTES) {
+            fail(413, "not the game's exe: too large");
+            req.destroy();
+          } else chunks.push(chunk);
+        });
         req.on("end", () => {
           writeFileSync(PLAY_EXE, Buffer.concat(chunks));
           const args = ["-I", fileURLToPath(HARNESS), "play", String(episode)];
