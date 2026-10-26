@@ -56,15 +56,17 @@ export function parseObjectNames(text: string): Map<number, string> {
 
 /**
  * A text as one plain paragraph: colours removed, the line wrapping of the game's text
- * windows (narrow boxes break lines with a backslash, words with "-") undone, `_` (a hard
- * space) as a non-breaking space. Tile codes (`@14`, see textPieces) stay as they are, or
- * become `[name]` with `tileName`.
+ * windows (narrow boxes break lines with a backslash and a line break, words with "-")
+ * undone, other backslashes (breaks too) as spaces, `_` (a hard space) as a
+ * non-breaking space. Tile codes (`@14`, see textPieces) stay as they are, or become
+ * `[name]` with `tileName`.
  */
 export function displayText(text: string, tileName?: (value: number) => string): string {
   const plain = text
     .replace(/²./g, "")
     .replace(/-\\\n/g, "")
     .replace(/\\?\n\s*/g, " ")
+    .replace(/\s*\\+\s*/g, " ") // e.g. episode II's message 994
     .replaceAll("_", "\u00a0")
     .trim();
   if (!tileName) return plain;

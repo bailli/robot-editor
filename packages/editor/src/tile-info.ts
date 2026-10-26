@@ -94,7 +94,7 @@ export class TileNames {
         : `Old writing, picked up and read with the dictionary (message ${note.text}):`,
       diary: `Diary page ${note.text}:`,
     }[note.read];
-    return [`${how} ${text}`];
+    return [`${how} ${displayText(text)}`];
   }
 
   /** A tooltip: value, name and the descriptions. */

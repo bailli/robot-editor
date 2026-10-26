@@ -67,6 +67,7 @@ test("displayText undoes the game's line wrapping and colours", () => {
   expect(displayText("Mit einer Leiter kann man\nalles überwinden.")).toBe(
     "Mit einer Leiter kann man alles überwinden.",
   );
+  expect(displayText("Liebling,\\bring │\n└──┘\\")).toBe("Liebling, bring │ └──┘");
 });
 
 test("the sound tables name the episodes' objects", () => {
