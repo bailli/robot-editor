@@ -1321,6 +1321,29 @@ test("deleting a room asks first, naming the rooms that lead to it", async () =>
   await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
 });
 
+test("back and forward pass over deleted rooms", async () => {
+  const heading = (name: string) => page.getByRole("heading", { name });
+  app.showRoom(45);
+  app.showRoom(44);
+  app.showRoom(42);
+  await page.getByRole("button", { name: "◀ 44" }).click();
+  await expect.element(heading("Robot I – room 44")).toBeVisible();
+  await page.getByRole("button", { name: "Delete room…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Delete room" });
+  await dialog.getByRole("button", { name: "Delete room" }).click();
+  // 43 45 44 45: back to 43, not to the deleted 44 or the 45 shown
+  await expect.element(heading("Robot I – room 45")).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "◀ 43" })).toBeEnabled();
+  await expect.element(page.getByRole("button", { name: "▶" })).toBeDisabled();
+  window.history.back(); // the browser's own back too
+  await expect.element(heading("Robot I – room 43")).toBeVisible();
+  await page.getByRole("button", { name: "45 ▶" }).click();
+  await expect.element(heading("Robot I – room 45")).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "▶" })).toBeDisabled();
+  await page.getByRole("button", { name: "◀ 43" }).click();
+  await expect.element(heading("Robot I – room 43")).toBeVisible();
+});
+
 test("Enigma's number says what the entry gives", () => {
   app.showEpisode(4, 135); // Enigma(192) when a slot gets the lock
   const number = [...document.querySelectorAll(".script-source .number")].find(

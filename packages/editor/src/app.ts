@@ -1073,11 +1073,13 @@ export class App {
 
   /** Goes back to the previously shown room (the browser's back, also across episodes). */
   back(): void {
-    if (this.historyIndex > 0) window.history.back();
+    const to = this.nearest(this.historyIndex, -1);
+    if (to !== undefined) window.history.go(to - this.historyIndex);
   }
 
   forward(): void {
-    if (this.historyIndex < this.history.length - 1) window.history.forward();
+    const to = this.nearest(this.historyIndex, 1);
+    if (to !== undefined) window.history.go(to - this.historyIndex);
   }
 
   /** History entry `index`, undefined outside the history. */
@@ -1085,11 +1087,31 @@ export class App {
     return index >= 0 ? this.history.at(index) : undefined;
   }
 
+  /**
+   * The next history entry from `index` in direction `step` whose room still exists
+   * (rooms are deleted, or added and undone again) and is not the one shown: after a
+   * deletion, the room shown instead can be on both sides of the deleted one.
+   */
+  private nearest(index: number, step: -1 | 1): number | undefined {
+    const shown = this.entry(this.historyIndex);
+    for (let i = index + step; i >= 0 && i < this.history.length; i += step) {
+      const entry = this.history[i];
+      if (entry.episode === shown?.episode && entry.room === shown.room) continue;
+      if (this.editor?.rooms(entry.episode).some((r) => r.id === entry.room)) return i;
+    }
+    return undefined;
+  }
+
   /** The browser went back or forward to one of our entries: show its room. */
   private arrive(state: unknown): void {
     if (!this.editor || !isHistoryState(state)) return;
-    // a room deleted, or added and undone again
-    if (!this.editor.rooms(state.episode).some((r) => r.id === state.room)) return;
+    if (!this.editor.rooms(state.episode).some((r) => r.id === state.room)) {
+      // the room is gone: on in the same direction, else back to where the browser came from
+      const step = state.index < this.historyIndex ? -1 : 1;
+      const to = this.nearest(state.index, step) ?? this.historyIndex;
+      window.history.go(to - state.index);
+      return;
+    }
     // set first: showing the room must not record it again
     this.historyIndex = state.index;
     this.history[state.index] = { episode: state.episode, room: state.room };
@@ -1118,10 +1140,12 @@ export class App {
       entry
         ? `${what} to ${entry.episode === episode ? "" : `${EPISODE_NAMES[entry.episode] ?? ""} `}${this.roomLabel(entry.episode, entry.room)}`
         : what;
-    const previous = this.entry(this.historyIndex - 1);
-    const next = this.entry(this.historyIndex + 1);
-    this.backButton.disabled = this.historyIndex <= 0;
-    this.forwardButton.disabled = this.historyIndex >= this.history.length - 1;
+    const back = this.nearest(this.historyIndex, -1);
+    const forward = this.nearest(this.historyIndex, 1);
+    const previous = back === undefined ? undefined : this.entry(back);
+    const next = forward === undefined ? undefined : this.entry(forward);
+    this.backButton.disabled = back === undefined;
+    this.forwardButton.disabled = forward === undefined;
     this.backButton.textContent = previous ? `◀ ${previous.room}` : "◀";
     this.forwardButton.textContent = next ? `${next.room} ▶` : "▶";
     this.backButton.title = `${label(previous, "Back")} (browser back, Alt+←, Backspace)`;
