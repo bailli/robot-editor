@@ -1,0 +1,14 @@
+LIBRARY ddraw.dll
+EXPORTS
+  AcquireDDThreadLock=forward_AcquireDDThreadLock
+  DirectDrawCreate=forward_DirectDrawCreate
+  DirectDrawCreateClipper=forward_DirectDrawCreateClipper
+  DirectDrawCreateEx=forward_DirectDrawCreateEx
+  DirectDrawEnumerateA=forward_DirectDrawEnumerateA
+  DirectDrawEnumerateExA=forward_DirectDrawEnumerateExA
+  DirectDrawEnumerateExW=forward_DirectDrawEnumerateExW
+  DirectDrawEnumerateW=forward_DirectDrawEnumerateW
+  DllCanUnloadNow=forward_DllCanUnloadNow PRIVATE
+  DllGetClassObject=forward_DllGetClassObject PRIVATE
+  GetSurfaceFromDC=forward_GetSurfaceFromDC
+  ReleaseDDThreadLock=forward_ReleaseDDThreadLock

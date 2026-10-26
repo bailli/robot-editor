@@ -16,3 +16,6 @@ shots/
 
 # Vitest browser mode failure screenshots
 .vitest/
+
+# Proxy DLL for the driver (built by `pnpm proxy`)
+tools/wine/proxy/ddraw.dll

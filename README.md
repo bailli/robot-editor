@@ -78,6 +78,29 @@ another room keeps its id and that room). The game runs silently. The tests comp
 when present and fail whenever the set of differing cells changes. Actors (hero, robots),
 animations and other runtime effects differ from a static render by nature.
 
+## Driving the game step by step
+
+`packages/tools/src/driver.ts` runs the real game for tests: on virtual time (nothing
+happens between commands, so runs repeat exactly), with keys and clicks sent between
+steps, reading where the hero is and in which room. It needs the proxy DLL, a
+`ddraw.dll` placed next to the exe that Wine loads instead of its own; build it once
+with the mingw-w64 cross-compiler (`apt install gcc-mingw-w64-i686`):
+
+    pnpm proxy          build tools/wine/proxy/ddraw.dll
+    pnpm test:game      the tests that run the game (Wine, Xvfb, harness.py setup)
+
+`python3 tools/wine/harness.py serve` starts the game with the proxy on a virtual
+display; `Driver.start()` does that and connects, `Driver.connect()` connects to a game
+served by hand (the protocol is one text line per command, see `proxy.c`).
+
+```ts
+const d = await Driver.start();
+await d.startEpisode(1); // { room: 43, x: 5, y: 14 }
+await d.hold("right", 60); // 60 steps of 7 ms
+await d.hero(); // { room: 43, x: 11, y: 14 }
+d.close();
+```
+
 ## Resources
 
 - The official info booklets ("Infohefte", German) for episodes I–IV, with very specific

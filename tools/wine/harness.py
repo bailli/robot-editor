@@ -5,12 +5,13 @@ usage:
   harness.py setup                         create the sandboxed Wine prefix in .wine/
   harness.py shot EPISODE OUT.png [--exe PATH] [--wait SECONDS] [--keep] [--debug DIR] [--keys KEY...]
   harness.py play [EPISODE] [--exe PATH] [--mute]
+  harness.py serve [--exe PATH] [--port PORT]
 
 `shot` starts a new game of EPISODE (0 = Junior .. 4 = IV) and saves the game's own
 screenshot (Ctrl+Alt+P) of the start room: a 640x348 PNG whose pixel values are the
 game's palette indices. --exe runs a different (e.g. patched) copy of the game; --wait
 is how long to wait in the room before the screenshot; --keys presses keys (held
-briefly, the game polls the keyboard; KEY:SECONDS holds one longer or shorter,
+briefly; KEY:SECONDS holds one longer or shorter,
 wait:SECONDS pauses) before it, with --debug a capture after each; --keep leaves the game running.
 
 What the screenshot shows: the start room with the status line in row 0 and the
@@ -23,8 +24,13 @@ in the game (its number is only printed). It ends when the game ends; a game sta
 by an earlier `play` is ended first. Screenshots and saved games stay in the prefix
 until the next `shot`, which deletes them.
 
+`serve` runs the game on a virtual display with the proxy DLL (tools/wine/proxy, built
+by `pnpm proxy`) on virtual time and prints "ready PORT" once the proxy listens on
+127.0.0.1:PORT; a driver (packages/tools/src/driver.ts) then steps the game, presses
+keys and reads memory. It stops when the game ends or on SIGTERM/SIGINT.
+
 Requires Wine (WineHQ packages install to /opt/wine-stable), Xvfb and xdotool. `shot`
-runs the game silently (Wine's audio drivers are disabled for it).
+and `serve` run the game silently (Wine's audio drivers are disabled for them).
 The prefix is sandboxed: user folders are real directories inside the prefix instead
 of links into $HOME, and the Z: drive (the whole filesystem) is removed.
 """
@@ -32,6 +38,8 @@ import argparse
 import glob
 import os
 import shutil
+import signal
+import socket
 import subprocess
 import sys
 import time
@@ -42,19 +50,23 @@ PREFIX = os.path.join(BASE, "prefix")
 GAME_DIR = os.path.join(PREFIX, "drive_c", "robot")
 EXE = os.path.join(ROOT, "reference", "GameOfRobot.exe")
 WINE_BIN = "/opt/wine-stable/bin"
+PROXY = os.path.join(ROOT, "tools", "wine", "proxy", "ddraw.dll")
 
 # Episode buttons on the start screen, in screen coordinates of the 1024x768 Wine virtual
 # desktop (which centres the game window).
 EPISODE_BUTTONS = {e: (340, 313 + 51 * e) for e in range(5)}
 
 
-def env(display=None, sound=False):
+def env(display=None, sound=False, proxy_port=None):
     e = dict(os.environ)
     if os.path.isdir(WINE_BIN):
         e["PATH"] = WINE_BIN + os.pathsep + e["PATH"]
     # Silent: without audio drivers the game plays neither sounds nor (MIDI) music.
     audio = "" if sound else ";winepulse.drv,winealsa.drv,wineoss.drv=d"
     e.update(WINEPREFIX=PREFIX, WINEDEBUG="-all", WINEDLLOVERRIDES="mscoree,mshtml=" + audio)
+    if proxy_port:  # the proxy ddraw.dll next to the exe, see `serve`
+        e["WINEDLLOVERRIDES"] += ";ddraw=n,b"
+        e["ROBOT_PROXY_PORT"] = str(proxy_port)
     if display:
         e["DISPLAY"] = display
     return e
@@ -101,7 +113,7 @@ def xdo(display, *args):
 
 
 def hold(display, key, seconds):
-    """Press a key for a while: the game polls the keyboard state (GetAsyncKeyState)."""
+    """Press a key for a while (the game sees WM_KEYDOWN, then WM_KEYUP)."""
     xdo(display, "keydown", key)
     time.sleep(seconds)
     xdo(display, "keyup", key)
@@ -182,8 +194,8 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
         advance(display, window, lambda: click(display, *EPISODE_BUTTONS[episode]),
                 f"choose episode {episode}", timeout=6.0)
         capture("title")
-        # The game polls the keyboard, also in its own menus and dialogs, and sometimes
-        # drops a press: each step holds Return until the screen reacts.
+        # The game sometimes misses a press here, also in its own menus and dialogs:
+        # each step holds Return until the screen reacts.
         # Title screen: Return opens the game menu with "Spielstart" selected, Return
         # starts. (F4, its shortcut, closes the game under Wine.)
         advance(display, window, "Return", "open the title menu")
@@ -262,6 +274,52 @@ def play(episode=None, exe=EXE, mute=False):
                    stderr=subprocess.DEVNULL, check=False)
 
 
+DRIVE_DIR = os.path.join(PREFIX, "drive_c", "robot-drive")
+
+
+def serve(exe=EXE, port=7531):
+    """Run the game with the proxy DLL for a driver (see the module doc)."""
+    if not os.path.isdir(GAME_DIR):
+        sys.exit("run `harness.py setup` first")
+    if not os.path.isfile(PROXY):
+        sys.exit("build the proxy first: pnpm proxy")
+    sandbox()
+    os.makedirs(DRIVE_DIR, exist_ok=True)
+    shutil.copyfile(exe, os.path.join(DRIVE_DIR, "GameOfRobot.exe"))
+    shutil.copyfile(PROXY, os.path.join(DRIVE_DIR, "ddraw.dll"))
+    display = free_display()
+    xvfb = subprocess.Popen(["Xvfb", display, "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    game = None
+
+    def stop(*_):
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    try:
+        time.sleep(1)
+        game = subprocess.Popen(["wine", "explorer", "/desktop=robot,1024x768", "C:\\robot-drive\\GameOfRobot.exe"],
+                                cwd=DRIVE_DIR, env=env(display, proxy_port=port),
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        deadline = time.time() + 30
+        while True:
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=1).close()
+                break
+            except OSError:
+                if time.time() > deadline or game.poll() is not None:
+                    raise RuntimeError("the proxy did not start listening")
+                time.sleep(0.2)
+        print("ready", port, display, flush=True)
+        game.wait()
+    finally:
+        run("wineserver", "-k", check=False)
+        if game:
+            game.wait(timeout=10)
+        xvfb.terminate()
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -279,9 +337,14 @@ def main():
     s.add_argument("episode", type=int, choices=range(5), nargs="?")
     s.add_argument("--exe", default=EXE)
     s.add_argument("--mute", action="store_true")
+    s = sub.add_parser("serve")
+    s.add_argument("--exe", default=EXE)
+    s.add_argument("--port", type=int, default=7531)
     a = p.parse_args()
     if a.cmd == "setup":
         setup()
+    elif a.cmd == "serve":
+        serve(os.path.abspath(a.exe), a.port)
     elif a.cmd == "play":
         play(a.episode, os.path.abspath(a.exe), a.mute)
     else:

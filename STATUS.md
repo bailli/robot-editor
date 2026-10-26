@@ -16,7 +16,10 @@ the exe itself; findings are checked three ways where possible:
    virtual addresses in the exe; `.text` file offset = address − 0x400000).
 3. **The real game:** screenshots under Wine (`tools/wine/harness.py`, `pnpm robot shots`),
    compared pixel by pixel with our renderer. The harness runs the game silently and can
-   press keys before the screenshot (`--keys`), e.g. to walk the hero somewhere.
+   press keys before the screenshot (`--keys`), e.g. to walk the hero somewhere. The
+   **driver** (`packages/tools/src/driver.ts`, see "Input, time and the driver") runs the
+   game step by step on virtual time instead and reads its memory: where the hero is,
+   in which room.
 
 What the game itself says helps too: its help texts (text 995 in each episode: controls,
 the rucksack) and the official info booklets (see Resources in the README) with hints
@@ -37,6 +40,8 @@ for episodes I–IV.
   sha256); `pnpm snapshots` re-records them, and the diff must be reviewed. Almost all
   tests need `reference/GameOfRobot.exe`; the few that don't are listed in
   `pnpm test:without-game` (add new data-free test files there), which is what CI runs.
+  `pnpm test:game` runs the tests that start the real game through the driver (opt-in:
+  they need Wine, Xvfb and the proxy DLL; about 4 s per game start).
 - **Git:** commit freely; subject within ~72 characters, a short body when more
   needs saying (not a longer subject), **no attribution footer**; linear history
   (`merge.ff=only`, rebase on pull), never merge commits. Identity: bailli. **Never push**: only the user pushes to `origin` (GitHub).
@@ -55,7 +60,8 @@ for episodes I–IV.
 | `packages/formats/src`  | `@robot/formats`: all decoders/encoders, no dependencies, Node and browser                    |
 | `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build; CodeMirror 6 for the script source)  |
 | `packages/tools/src`    | `@robot/tools`: CLI `pnpm robot …` (render, compare, eval, patch, shots, script, start, play) |
-| `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool                                 |
+| `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool; `serve` runs it for the driver |
+| `tools/wine/proxy`      | the only C: proxy `ddraw.dll` for the driver (mingw-w64, `pnpm proxy`)                        |
 | `shots.json`            | per reference screenshot: hash, palette offset, cells where our render still differs          |
 
 Files in `packages/formats/src`:
@@ -155,6 +161,36 @@ Files in `packages/formats/src`:
   (the shipped exe has it, so system info says "embedded"); it must export
   `R32Version` returning exactly 0x132 and `R32DateTime`, and serves only resources the
   exe lacks (handle 0x4c5d78, after the exe's 0x4c5d74).
+
+### Input, time and the driver
+
+- **Keys** reach the game only as window messages: the window procedure turns
+  WM_KEYDOWN (0x404677) into a DOS-style key code (0x42cd40, table 0x481b68: per virtual
+  key the code plain, with Alt, Ctrl, Shift) and hands it to the key handler 0x43bc90;
+  WM_KEYUP clears the held keys 0x51bb1c/0x51bb1e. GetAsyncKeyState and GetKeyState
+  only check Alt and the mouse buttons, GetCursorPos the mouse.
+- **Time:** the main loop (0x405bb4) dispatches messages; when none are waiting it
+  calls 0x4016a0, which reads the game clock (0x42cf70: timeGetTime since 0x51bb40 ×
+  147 / 1000, i.e. 147 units per second) and runs the game once per elapsed unit (at most
+  20 per call), counting the tick 0x51bb38; then it draws (0x402740), otherwise it
+  sleeps 1 ms. Every game timing comes from this clock; the window's only timer (id
+  0x1234, 200 ms) comes from SetTimer. The clock stands still while a dialog is open
+  (the player-name prompt, banners): the tick does not advance.
+- **The hero** is the actor object at 0x53e9ac (vtable 0x46d8d8; cell x at +9, y at
+  +0xa); 0x53e9a8 is the first actor of the room. 0x51a114 holds a pointer per cell (40
+  per row) to the actor standing there. The player's name is at 0x4fe311.
+- **The driver** (`driver.ts`, the proxy `tools/wine/proxy/proxy.c`, started by
+  `harness.py serve`): the proxy replaces the system ddraw.dll next to the exe
+  (`WINEDLLOVERRIDES=ddraw=n,b`; it forwards every export, as Wine's DxDiag, the game's
+  DirectX check, loads ddraw too). It redirects the main loop's call of 0x4016a0
+  (0x405bde) so that the game runs only the steps the driver grants, each advancing
+  the virtual clock (timeGetTime, QueryPerformanceCounter, GetLocalTime, SetTimer's
+  timers) by 7 ms; keys and clicks are posted as messages between steps. Runs repeat
+  exactly (same steps, same tick and hero cell). **Verified with the driver**
+  (`pnpm test:game`): every episode starts in the room and cell `readEpisodeStart`
+  reads; in episode I room 43 without robots and with west "neighbour", walking out
+  west arrives in room 42 at (38, 15). From launch to the hero in the start room takes
+  about 1 s once Wine is up.
 
 ### Scenes (rooms)
 
@@ -942,6 +978,9 @@ Roughly by value for the editor.
 | 0x43c0b0, 0x43bfd0           | a room's name; cut a text down to one line                                     |
 | 0x43b2e0, 0x43b46a           | episode constructor; class tables 0x4c6ce0 (objects) / 0x4c70e0 (class → type) |
 | 0x4fe2fc, 0x4fe35e…0x4fe364  | current room; RoomNorth/South/West/East                                        |
+| 0x53e9ac, 0x53e9a8, 0x51a114 | the hero (x +9, y +0xa); the room's first actor; actor per cell (40 per row)   |
+| 0x405bb4, 0x4016a0, 0x42cf70 | main loop; run the game per elapsed clock unit (tick 0x51bb38); clock 147/s    |
+| 0x404677, 0x42cd40, 0x43bc90 | WM_KEYDOWN; virtual key → DOS key code (table 0x481b68); the key handler       |
 | 0x44c5a0, 0x44c680           | hero walks off an edge (sets the RandObj reference point); pending room change |
 | 0x44dc60, 0x44d520           | create an actor (kind, x, y); factory lookup by class                          |
 | 0x4073a0, 0x407650           | script RandObj; count a tile type in the room                                  |
@@ -994,6 +1033,12 @@ Roughly by value for the editor.
   entering the room: a test needs the hero to move a piece.
 - Each `App` in the editor listens on `window`; tests must `dispose()` old instances,
   or they react to history and key events too.
-- `harness.py play` and `shot` share the prefix: each ends a game the other started
-  (`wineserver -k`), and `shot` deletes `Documents/Robot` in the prefix, i.e. also the
-  screenshots and saved games of played games.
+- `harness.py play`, `shot` and `serve` share the prefix: each ends a game another
+  started (`wineserver -k`), and `shot` deletes `Documents/Robot` in the prefix, i.e.
+  also the screenshots and saved games of played games. A worktree of the repository
+  has its own `.wine/` (run `harness.py setup` there), so its games do not collide.
+- The proxy does nothing but forward unless `ROBOT_PROXY_PORT` is set;
+  `ROBOT_PROXY_LOG=C:\…` makes it write a log (a path in the prefix, e.g.
+  `C:\robot-drive\proxy.log`).
+- `run` answers "stalled" when the game stops stepping for 3 s: a message box or a
+  modal dialog, or a crash (Wine's crash dialog is then on the virtual display).
