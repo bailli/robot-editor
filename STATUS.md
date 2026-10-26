@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-10-23.
+Setup and commands are in the [README](README.md). Last updated: 2026-10-24.
 
 ## Goal and approach
 
@@ -295,6 +295,11 @@ Files in `packages/formats/src`:
   (16, 19)), and the score must pass the registration check (0x42f7c0, below). The
   score is kept obfuscated at 0x4fe098: 0x42b600 reads it as ~[+4] ^ [+0] ^ 0x7895321e,
   0x42b610 sets it ([+4] = [+4] × 0xbb38435 + 0x3619636b, then [+0] to match).
+  Both setters (and 0x42b640, which adds) leave the result in plain at +0x258
+  (0x4fe2f0): the score shown (watched at 0x51bce0) and the scripts' `Score`. A script
+  writing `Score` changes only that copy: the display, and the scripts' tests, until the
+  next points are added to the hidden value; the game's own checks read the hidden one.
+  No original script writes `Score`.
   **Verified under Wine** in episode II room 15: without the key the hero stops at
   the door, with it he enters 115.
 - **Backdrops** (`backdropRoom`, `shownCells`): a room whose cell (0, 1) or (39, 1) is
