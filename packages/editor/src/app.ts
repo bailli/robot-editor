@@ -17,6 +17,7 @@ import {
   ROOM_WIDTH,
   type Room,
   type RoomActor,
+  SCRIPT_EVENTS,
   START_ROOMS,
   backdropRoom,
   compileScript,
@@ -393,10 +394,9 @@ export class App {
           Array.from({ length: k.args }, (_, i) => `arg${i + 1}`);
         return { name: k.name, kind: "function", args };
       });
-      const constants = [...game.scriptConstants(this.episode).keys()].map((name): ScriptName => ({
-        name,
-        kind: "constant",
-      }));
+      const constants = [...SCRIPT_EVENTS.keys(), ...game.scriptConstants(this.episode).keys()].map(
+        (name): ScriptName => ({ name, kind: "constant" }),
+      );
       return [...keywords, ...constants];
     },
   });

@@ -94,6 +94,14 @@ test("the game's keywords and the script constants", () => {
   expect(game.scriptConstants(1).get("O_KEY")).toBe(21);
 });
 
+test("the event constants compile to their numbers", () => {
+  const compile = (source: string) => compileScript(source, { keywords });
+  expect(compile("if (Event(EV_TAKE + EV_DROP + EV_ROOM)) return;")).toEqual(
+    compile("if (Event(1 + 2 + 8)) return;"),
+  );
+  expect(compile("x = EV_AREA | EV_SLOT;")).toEqual(compile("x = 4 | 16;"));
+});
+
 test("the compiler rejects what the game would not run", () => {
   const constants = game.scriptConstants(1);
   const compile = (source: string) => () => compileScript(source, { constants, keywords });
@@ -102,6 +110,7 @@ test("the compiler rejects what the game would not run", () => {
   expect(compile("Area(1, 2);")).toThrow("Area takes 3 or 4 arguments, not 2");
   expect(compile("Foo = 1;")).toThrow("unknown variable Foo");
   expect(compile("RandObj(O_NOTHING, 1, 2);")).toThrow("unknown constant O_NOTHING");
+  expect(compile("Event(EV_WALK);")).toThrow("unknown constant EV_WALK");
   expect(compile("if (Score > 1 Message(1, 0);")).toThrow('expected ")" at line 1, column 15');
   expect(compile("Message(1, 0); Message(1, 2, 3);")).toThrow(
     "Message has 3 arguments here, 2 before",
@@ -139,6 +148,10 @@ test("every keyword of the game is described", () => {
   ]);
   expect(scriptDoc("score", keywords)).toBe("Score: the points (dword at 0x4fe2f0)");
   expect(scriptDoc("count", keywords)).toBeUndefined();
+  expect(scriptDoc("EV_ROOM", keywords)).toBe(
+    "EV_ROOM = 8, event for Event(mask): the hero enters the room, after its script ran " +
+      "(E_Value: the room)",
+  );
   expect(scriptArgument("Message", 0, 2)).toBe("text");
   expect(scriptArgument("SetMan", 3, 6)).toBe("room");
   expect(scriptArgument("Message", 1, 2)).toBeUndefined();

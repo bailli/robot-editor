@@ -287,6 +287,19 @@ export const SCRIPT_OBJECT_CLASSES: Readonly<Record<string, number>> = {
 };
 
 /**
+ * The events of `Event(mask)` (0x408970), as constants every script knows. Ours, not the
+ * game's: the original scripts write the numbers (`Event(1+2+8)`), and like the O_ names
+ * they compile to plain numbers.
+ */
+export const SCRIPT_EVENTS: ReadonlyMap<string, number> = new Map([
+  ["EV_TAKE", 1],
+  ["EV_DROP", 2],
+  ["EV_AREA", 4],
+  ["EV_ROOM", 8],
+  ["EV_SLOT", 16],
+]);
+
+/**
  * An episode's script constants ("O_KEY" -> tile type): the names of its sound table
  * (`objectNames`, Game.objectNames) and SCRIPT_OBJECT_CLASSES for its classes.
  */
@@ -398,7 +411,7 @@ const BINARY_LEVELS: readonly (readonly string[])[] = [
 type Emitted = { op: number; operand: number; text?: string } | { jump: number; label: number };
 
 export interface CompileOptions {
-  /** Named constants (O_KEY = 21, ...), replaced by their values. */
+  /** Named constants (O_KEY = 21, ...), replaced by their values; SCRIPT_EVENTS too. */
   constants?: ReadonlyMap<string, number>;
   /**
    * The game's keywords: names starting with an upper-case letter must be one of them
@@ -497,12 +510,12 @@ export function compileScript(source: string, options: CompileOptions = {}): Uin
         emit(Op.DROP, args);
         return;
       }
-      const constant = constants.get(token.text);
+      const constant = constants.get(token.text) ?? SCRIPT_EVENTS.get(token.text);
       if (constant !== undefined) {
         emit(Op.PUSH, constant);
         return;
       }
-      if (token.text.startsWith("O_")) fail(`unknown constant ${token.text}`, token);
+      if (/^(?:O|EV)_/.test(token.text)) fail(`unknown constant ${token.text}`, token);
       emit(Op.LOAD, symbol(token.text, SymbolKind.VARIABLE, 0));
       return;
     }

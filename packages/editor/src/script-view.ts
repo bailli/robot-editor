@@ -5,11 +5,12 @@ import {
   snippetCompletion,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { EditorState, type Extension, StateField } from "@codemirror/state";
+import { EditorState, type Extension, type Range, StateField, type Text } from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
   EditorView,
+  WidgetType,
   drawSelection,
   highlightActiveLine,
   highlightSpecialChars,
@@ -17,7 +18,7 @@ import {
   lineNumbers,
 } from "@codemirror/view";
 
-import { ScriptError, type ScriptPiece, scanScript } from "@robot/formats";
+import { ScriptError, type ScriptPiece, scanScript, scriptHandlers } from "@robot/formats";
 
 export interface ScriptViewEvents {
   /** What a name means (function, game variable, constant), undefined if unknown. */
@@ -108,7 +109,7 @@ export function markUp(source: string, events: ScriptViewEvents): Shown[] {
         shown.title = events.explain(piece.text) ?? "unknown function";
         shown.call = { fn: piece.text, args: callArguments(code, i + 1) };
       } else if (/^[A-Z]/.test(piece.text)) {
-        shown.className = piece.text.startsWith("O_") ? "constant" : "variable";
+        shown.className = /^(?:O|EV)_/.test(piece.text) ? "constant" : "variable";
         shown.title = events.explain(piece.text) ?? "unknown name";
       } else {
         shown.className = "local";
@@ -195,9 +196,96 @@ interface Marked {
   decorations: DecorationSet;
 }
 
-/** Spans for the pieces of the source and, where the compiler knows it, its error. */
-function decorate(shown: readonly Shown[], error: unknown): DecorationSet {
-  const marks = shown
+/** A line between the source's lines: what a handler waits for, or a warning about it. */
+class NoteWidget extends WidgetType {
+  readonly text: string;
+  readonly className: string;
+  readonly title: string;
+
+  constructor(text: string, className: string, title: string) {
+    super();
+    this.text = text;
+    this.className = className;
+    this.title = title;
+  }
+
+  override eq(other: NoteWidget): boolean {
+    return (
+      other.text === this.text && other.className === this.className && other.title === this.title
+    );
+  }
+
+  toDOM(): HTMLElement {
+    const note = document.createElement("div");
+    note.className = this.className;
+    note.textContent = this.text;
+    note.title = this.title;
+    return note;
+  }
+}
+
+const HANDLER_TITLE =
+  "A handler: when the script runs, its event function only registers the block and " +
+  "returns 0, so the block is skipped; the game runs it when the event happens, until return.";
+
+/**
+ * The handlers of a script: a line above each saying what it waits for, a bar along its
+ * lines and, when it does not end with return, a warning below it.
+ */
+function handlerDecorations(doc: Text): Range<Decoration>[] {
+  const decorations: Range<Decoration>[] = [];
+  const lineOf = (at: number) => doc.lineAt(Math.min(at, doc.length)).number;
+  const lines = (list: readonly number[]) => {
+    const numbers = [...new Set(list.map(lineOf))];
+    const last = numbers.pop();
+    return numbers.length === 0 ? `line ${last}` : `lines ${numbers.join(", ")} and ${last}`;
+  };
+  for (const handler of scriptHandlers(doc.toString())) {
+    const first = doc.lineAt(handler.at);
+    const last = doc.line(lineOf(Math.max(handler.to, handler.at)));
+    const label = `▸ on ${handler.events}${handler.conditional ? ", if …" : ""}`;
+    const title =
+      `A handler for ${handler.events}` +
+      (handler.conditional ? ", run when the rest of its condition holds as well" : "") +
+      `. ${HANDLER_TITLE}`;
+    decorations.push(
+      Decoration.widget({
+        widget: new NoteWidget(label, "script-handler-label", title),
+        block: true,
+        side: -1,
+      }).range(first.from),
+    );
+    for (let n = first.number; n <= last.number; n++) {
+      decorations.push(Decoration.line({ class: "script-handler" }).range(doc.line(n).from));
+    }
+    if (handler.runsOn === undefined) continue;
+    const runsOn = lineOf(handler.runsOn);
+    const again = handler.again.length > 0 ? lines(handler.again) : undefined;
+    const warning = `⚠ no return: ${again ? `registers ${again} again` : `runs on into line ${runsOn}`}`;
+    const explained =
+      `No return: after this handler the script runs on at line ${runsOn}` +
+      (again
+        ? `, and each time it registers the handler in ${again} once more, which ` +
+          "then runs more than once (nothing checks for doubles)"
+        : "") +
+      ". End the block with return; unless the code after it is meant to run as well.";
+    decorations.push(
+      Decoration.widget({
+        widget: new NoteWidget(warning, "script-handler-warning", explained),
+        block: true,
+        side: 1,
+      }).range(last.to),
+    );
+  }
+  return decorations;
+}
+
+/**
+ * Spans for the pieces of the source, the handlers and, where the compiler knows it, its
+ * error.
+ */
+function decorate(shown: readonly Shown[], doc: Text, error: unknown): DecorationSet {
+  const marks: Range<Decoration>[] = shown
     .filter(({ piece }) => piece.kind !== "space")
     .map(({ piece, className, title }) =>
       Decoration.mark({ class: className, attributes: title ? { title } : {} }).range(
@@ -215,7 +303,7 @@ function decorate(shown: readonly Shown[], error: unknown): DecorationSet {
     const mark = Decoration.mark({ class: "script-error", attributes: { title: error.message } });
     marks.push(mark.range(piece.at, piece.at + piece.text.length));
   }
-  return Decoration.set(marks, true);
+  return Decoration.set([...marks, ...handlerDecorations(doc)], true);
 }
 
 /** The editor's state field: the source marked up, compiled too when `compile` is given. */
@@ -231,7 +319,7 @@ function marking(events: ScriptViewEvents, compile?: (source: string) => void) {
       error = e;
       message = e instanceof Error ? e.message : String(e);
     }
-    return { shown, error: message, decorations: decorate(shown, error) };
+    return { shown, error: message, decorations: decorate(shown, state.doc, error) };
   };
   return StateField.define<Marked>({
     create: mark,
@@ -349,8 +437,8 @@ export class ScriptView {
       const hint = document.createElement("p");
       hint.className = "hint";
       hint.textContent =
-        "The game runs the script once when the hero enters the room; the blocks after " +
-        "Event(…) and E_…(…) run when their event happens, until return.";
+        "The game runs the script once when the hero enters the room; the marked blocks " +
+        "(handlers, after Event(…) and E_…(…)) run when their event happens, until return.";
       parts.push(hint);
       button(
         this.showCode ? "Hide bytecode" : "Bytecode",

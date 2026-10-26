@@ -78,6 +78,7 @@ Files in `packages/formats/src`:
 | `start.ts`                   | the room and cell an episode starts in, and patching them                                      |
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants       |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                         |
+| `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on               |
 | `records.ts`                 | what logic records do                                                                          |
 | `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                 |
 | `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`)                    |
@@ -376,7 +377,22 @@ Files in `packages/formats/src`:
   `E_Take(O_KEY)` handlers (there `E_Value == O_KEY` and `Possess(O_KEY)` hold); taking
   the lamp gives E_Value 56 (`PrintVal`); a `SetWarea` area raises `E_Area(1)` with
   E_Value 1 on entering. Room 1's script is the global one (episode start, game load);
-  its handlers run when no room handler matches.
+  its handlers run when no room handler matches. From the code (0x407b30, 0x408970):
+  every matching handler of the room runs; the call's value in the handler is the
+  event when its mask names several, else E_Value (room 1's `ev == 8`); registering
+  does not check for doubles, so a handler without `return` that runs on into another
+  event function registers that one again (episode IV: entering room 145 and every
+  take in room 156 add another area handler; not yet tried in the game; room 157
+  returns just before its next handler).
+  Starting a script clears its own handlers (room or global, 0x407fb4). Room 1's global
+  script (Junior, I, II, IV; III has none): on take, drop or entering a room, Night
+  becomes the room's darkness, or 20 in a dark room while the hero carries the lamp in
+  state 1 (`SetNight` redraws at once on take and drop).
+- **Event names:** `EV_TAKE` 1, `EV_DROP` 2, `EV_AREA` 4, `EV_ROOM` 8, `EV_SLOT` 16
+  (`SCRIPT_EVENTS`) are ours, compiled to their numbers like the `O_` names; the
+  original sources write numbers. `scriptHandlers` (`script-handlers.ts`) finds the
+  handlers in a source: what each waits for, whether it returns, what it registers
+  again when it runs on.
 - **NewRoom** is 1 only on the first visit of a room in a game: entering a room whose
   record lacks the visited flag (+4 bit 2) sets it, sets NewRoom = 1 and awards the
   first-visit points; any later entry sets NewRoom = 0 (0x4392dc). `HaveSeen(room)`
@@ -704,7 +720,9 @@ Supported:
   way while typing, its own undo, completion of the game's functions with their arguments
   as fields, variables, constants and the script's own variables) compiles while typing (errors with line and column,
   syntax errors underlined where they are) and Apply sets source and compiled script as
-  one undo step
+  one undo step; handlers are marked (a bar along their lines, a line above naming the
+  events, a warning below one that has no `return` and runs on, naming the handlers it
+  registers again)
 - buttons: in every dialog and editor Cancel comes first, the confirming action last and
   filled (Create, Apply, Delete room); actions that remove something are red; "Save
   exe" is filled while there are unsaved changes; questions (deleting a room,

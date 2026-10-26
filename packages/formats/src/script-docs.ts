@@ -6,15 +6,18 @@
  * How scripts run: on entering a room its script runs once from the top (0x4394f3). The
  * event functions (Event, E_Take, …) do not test anything then: they register the code
  * after their call as a handler (0x407b30, 20 handlers at 0x4c5df8) and return 0, so the
- * block they guard is skipped. When the event happens (0x408970), the script continues at
- * that block with E_Value set until `return` (or the end: without a `return` it runs on
- * into the code after the block). Room 1's script is the global one (run when an episode
- * starts or a game is loaded); its handlers run when no handler of the room matches.
+ * block they guard is skipped. When the event happens (0x408970), every matching handler
+ * of the room continues its script at that block with E_Value set until `return` (or the
+ * end: without a `return` it runs on into the code after the block, and an event function
+ * met there registers its handler once more: nothing checks for doubles). The call's
+ * value there is the event when its mask names several, else E_Value. Room 1's script is
+ * the global one (run when an episode starts or a game is loaded); its handlers run when
+ * no handler of the room matches.
  * Events: 1 take (filter: tile type, E_Value: the object), 2 drop (the same), 4 walk area
  * (filter: area number, E_Value +n entering, −n leaving), 8 entering the room (filter and
  * E_Value: the room), 16 slot (filter and E_Value: the slot number, state bits 12–15).
  */
-import { KEYWORD_FUNCTION, type ScriptKeyword } from "./script.ts";
+import { KEYWORD_FUNCTION, SCRIPT_EVENTS, type ScriptKeyword } from "./script.ts";
 
 /** What a number argument refers to, where the editor can show it. */
 /** What a number argument refers to: a text, a room, an entry of the event table. */
@@ -44,7 +47,8 @@ const RECT = (x: number): ScriptPlace => ({ x, y: x + 1, w: x + 2, h: x + 3 });
 
 const HANDLER =
   "Registers the block after it as a handler and returns 0 when the script runs; " +
-  "when the event happens the script continues there (end the block with return).";
+  "when the event happens the script continues there (end the block with return: " +
+  "otherwise it runs on, and event functions after it register their handlers again).";
 
 /** By upper-case name; Area has two forms, keyed AREA/3 and AREA/4. */
 const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
@@ -159,8 +163,10 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
   EVENT: {
     args: ["mask"],
     doc:
-      "event: any of the events in mask (1 take, 2 drop, 4 walk area, 8 entering the room, " +
-      `16 slot); the call's value in the handler says which (or E_Value). ${HANDLER}`,
+      "event: any of the events in mask (EV_TAKE 1, EV_DROP 2, EV_AREA 4 walk area, " +
+      "EV_ROOM 8 entering the room, EV_SLOT 16; combined with | or +). In the handler the " +
+      "call's value is the event when the mask names several, else E_Value (0x408970). " +
+      HANDLER,
   },
   ENIGMA: {
     args: ["n"],
@@ -299,11 +305,22 @@ export function scriptArgument(
   return scriptFunctionDoc(fn, count)?.kinds?.[index];
 }
 
+/** The events SCRIPT_EVENTS names. */
+const EVENTS: Readonly<Partial<Record<string, string>>> = {
+  EV_TAKE: "the hero takes an object (E_Value: its class | state << 8)",
+  EV_DROP: "the hero drops an object (E_Value: its class | state << 8)",
+  EV_AREA: "the hero enters or leaves a walk area of SetWarea (E_Value: +n, −n)",
+  EV_ROOM: "the hero enters the room, after its script ran (E_Value: the room)",
+  EV_SLOT: "an event of a slot, O_SLOT (E_Value: its number, state bits 12–15 of its cell)",
+};
+
 /**
- * One text about a name: its signature (or type) and meaning, for the game's keywords;
- * undefined for names the game does not know.
+ * One text about a name: its signature (or type) and meaning, for the game's keywords and
+ * the event constants; undefined for names the game does not know.
  */
 export function scriptDoc(name: string, keywords: readonly ScriptKeyword[]): string | undefined {
+  const event = SCRIPT_EVENTS.get(name);
+  if (event !== undefined) return `${name} = ${event}, event for Event(mask): ${EVENTS[name]}`;
   const known = keywords.filter((k) => k.name.toUpperCase() === name.toUpperCase());
   if (known.length === 0) return undefined;
   return known

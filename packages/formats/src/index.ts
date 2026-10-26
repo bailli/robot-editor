@@ -135,6 +135,7 @@ export {
   KEYWORD_VARIABLE,
   OPERATORS,
   Op,
+  SCRIPT_EVENTS,
   SCRIPT_OBJECT_CLASSES,
   SCRIPT_TAG,
   ScriptError,
@@ -159,6 +160,8 @@ export type {
   ScriptSymbol,
 } from "./script.ts";
 export { scriptArgument, scriptDoc, scriptFunctionDoc, scriptTextVariants } from "./script-docs.ts";
+export { scriptHandlers } from "./script-handlers.ts";
+export type { ScriptHandler } from "./script-handlers.ts";
 export type { ScriptArgumentKind, ScriptFunctionDoc, ScriptPlace } from "./script-docs.ts";
 export { MUSIC_NAME_LENGTH, MusicFormatError, musicName, musicPieces } from "./music.ts";
 export { findResource, readResources, replaceResource, ResourceType } from "./resources.ts";

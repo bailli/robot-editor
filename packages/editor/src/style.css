@@ -803,6 +803,27 @@ canvas.cell.pickable {
   text-decoration-skip-ink: none;
 }
 
+/* handlers: a bar along their lines, the line above saying what they wait for */
+.script-source .script-handler,
+.script-source .script-handler-label {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.script-source .script-handler-label,
+.script-source .script-handler-warning {
+  padding-left: 10px;
+  font-size: 12px;
+  white-space: normal;
+}
+
+.script-source .script-handler-label {
+  color: var(--accent);
+}
+
+.script-source .script-handler-warning {
+  color: var(--edited);
+}
+
 .script-verdict {
   margin: 0;
   color: var(--muted);

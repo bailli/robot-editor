@@ -793,6 +793,27 @@ test("the script explains itself and can be edited", async () => {
   await userEvent.fill(area, "RoomWest = 42;\nRoomEast = ;");
   expect(document.querySelector(".script-verdict")?.textContent).toMatch(/at line 2, column 12/);
   expect(document.querySelector(".script-edit .script-error")?.textContent).toBe(";");
+  // handlers: a line above saying what they wait for, a warning where they run on
+  await userEvent.fill(
+    area,
+    "if (Event(EV_TAKE | EV_ROOM))\n   Message(1, 0);\nif (E_Area(1))\n   {\n   return;\n   }",
+  );
+  expect(document.querySelector(".script-verdict")?.textContent).toBe("Compiles.");
+  const notes = (selector: string) =>
+    [...document.querySelectorAll(`.script-edit ${selector}`)].map((e) => e.textContent);
+  expect(notes(".script-handler-label")).toEqual([
+    "▸ on take · entering the room",
+    "▸ on walk area 1",
+  ]);
+  expect(notes(".script-handler-warning")).toEqual(["⚠ no return: registers line 3 again"]);
+  expect(document.querySelector(".script-handler-warning")?.getAttribute("title")).toMatch(
+    /^No return: after this handler the script runs on at line 3, and each time it registers the handler in line 3 once more/,
+  );
+  expect(document.querySelectorAll(".script-edit .cm-line.script-handler").length).toBe(6);
+  const constant = [...document.querySelectorAll(".script-edit .constant")].find(
+    (e) => e.textContent === "EV_ROOM",
+  );
+  expect(constant?.getAttribute("title")).toMatch(/^EV_ROOM = 8, event for Event\(mask\)/);
   await userEvent.fill(area, "RoomWest = 42;");
   expect(document.querySelector(".script-verdict")?.textContent).toBe("Compiles.");
   await scriptView().getByRole("button", { name: "Apply" }).click();
