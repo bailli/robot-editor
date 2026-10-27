@@ -8,6 +8,7 @@ import {
   backdropRoom,
   darkPalette,
   darknessBlock,
+  renderCell,
   renderRoom,
   toRgba,
 } from "@robot/formats";
@@ -315,6 +316,33 @@ test("palette tiles that draw nothing show a robot or a hatching instead", () =>
   expect(document.querySelector('.tile-grid [data-tile="84"]')?.getAttribute("title")).toMatch(
     /draws nothing in the game/,
   );
+});
+
+test("palette robots: episode IV's sprite, not its tile's ?, and colours by the flags", async () => {
+  const pixels = (value: number) => {
+    const canvas = document.querySelector(`.tile-grid [data-tile="${value}"] canvas`);
+    if (!(canvas instanceof HTMLCanvasElement)) throw new Error(`no tile ${value}`);
+    return [...defined(canvas.getContext("2d") ?? undefined).getImageData(0, 0, 16, 12).data];
+  };
+  const title = () => document.querySelector('.tile-grid [data-tile="2"]')?.getAttribute("title");
+  app.showEpisode(4, 135);
+  const ep = game.episode(4);
+  const tile = toRgba(renderCell(0x0002, 0, ep.objects, ep.classes), ep.palette);
+  expect(firstDifference(pixels(0x0002), tile)).not.toBe(-1);
+  expect(title()).toMatch(/robot sprites, in that sprite's colours/);
+  // Junior: random colours, its sprite's once the flag says so
+  app.showEpisode(0, 43);
+  expect(title()).toMatch(/in three random colours/);
+  const random = pixels(0x0002);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  await page
+    .getByRole("region", { name: "Flags" })
+    .getByRole("checkbox", { name: /sprite's colours/ })
+    .click();
+  expect(title()).toMatch(/in that sprite's colours/);
+  expect(pixels(0x0002)).not.toEqual(random);
+  app.undo();
+  expect(pixels(0x0002)).toEqual(random);
 });
 
 test("undoing a painted robot takes it out of the actors", () => {

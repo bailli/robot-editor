@@ -67,11 +67,6 @@ export const ACTOR_LOAD_METHODS: ReadonlySet<number> = new Set([
 export const BOMB_LOAD_METHOD = 0x421f80;
 
 /**
- * Room-load methods that start a timer (0x408ae0) after which creatures appear: hatching
- * eggs, the snake basket, "something behind the wall" (tile types 0x30, 0x3c, 0x22 in
- * Junior), and episode IV's cylinders (0x68, "don't leave too many lying around").
- */
-/**
  * Sand (describe method 0x413430, every episode): states 6 and 7 are small heaps hiding
  * scorpions ("Unter diesen kleinen Häufchen verbergen sich stachelige, giftige Gesellen").
  * Each episode has its own sand class object; in Junior and I (vtable 0x46bd00, touch
@@ -85,7 +80,19 @@ export const SAND_SCORPION_STATES: ReadonlySet<number> = new Set([6, 7]);
 /** The touch methods (vtable +0x0c) of the sand classes that hide scorpions. */
 export const SCORPION_SAND_TOUCH_METHODS: ReadonlySet<number> = new Set([0x423de0, 0x4134c0]);
 
-export const HATCHING_LOAD_METHODS: ReadonlySet<number> = new Set([0x426330, 0x4237e0, 0x41b030]);
+/**
+ * Room-load methods that start a timer (0x408ae0) after which creatures appear: hatching
+ * eggs, the snake basket, "something behind the wall" (tile types 0x30, 0x3c, 0x22 in
+ * Junior).
+ */
+export const HATCHING_LOAD_METHODS: ReadonlySet<number> = new Set([0x426330, 0x4237e0]);
+
+/**
+ * The room-load method of episode IV's cylinders (tile 0x68, class 0xeb): it starts a
+ * timer too, but its task (vtable 0x46a5f0, tick 0x419dd0) only makes the cell blink,
+ * flipping state bit 0x200 every 0x28 ticks; it creates no actor.
+ */
+export const BLINK_LOAD_METHOD = 0x41b030;
 
 export interface EpisodeClasses {
   /** Class per tile type, for the types that have one. */

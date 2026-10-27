@@ -6,6 +6,7 @@ import {
   SAND_SCORPION_STATES,
   SCORPION_SAND_TOUCH_METHODS,
 } from "./classes.ts";
+import { ROBOTS_KEEP_COLOURS } from "./episode-flags.ts";
 import { isConditional } from "./exits.ts";
 import {
   LOGIC_CELL,
@@ -15,6 +16,7 @@ import {
   type Room,
   resolveCell,
 } from "./scene.ts";
+import type { Colours } from "./shapes.ts";
 
 /**
  * The moving actors of a room (robots, androids, animals, the bus, …) and where they come
@@ -125,6 +127,30 @@ export function robotSpriteCount(episode: number, aliens: number): number {
  */
 export function robotSprite(actor: RoomActor, count: number): number | undefined {
   return actor.order === undefined ? undefined : (actor.order + 1) % count;
+}
+
+/**
+ * Whether robots of class `classId` take three random colours instead of their sprite's
+ * own (0x445c4b): class 2's do unless the episode flags have ROBOTS_KEEP_COLOURS (only
+ * III's constructor sets it); episode IV's robot (class 0xbd, 0x44ac70) always keeps its
+ * sprite's and reads no flag.
+ */
+export function robotsTakeRandomColours(classId: number, flags: number): boolean {
+  return classId === 0x02 && !(flags & ROBOTS_KEEP_COLOURS);
+}
+
+/**
+ * Three random robot colours as the game picks them (0x445c4b): each from 8–14,
+ * `random(min, max)` inclusive (0x436890), drawn again while it equals an earlier one.
+ */
+export function randomRobotColours(random: (min: number, max: number) => number): Colours {
+  const colours: number[] = [];
+  while (colours.length < 3) {
+    const c = random(8, 14);
+    if (!colours.includes(c)) colours.push(c);
+  }
+  const [c0, c1, c2] = colours;
+  return [c0, c1, c2];
 }
 
 const RECORD_SOURCES: Readonly<Partial<Record<number, ActorSource>>> = {

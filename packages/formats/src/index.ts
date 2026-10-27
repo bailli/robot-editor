@@ -3,6 +3,7 @@ export {
   BOMB_LOAD_METHOD,
   EMPTY_CLASS_OBJECT,
   FrameMethod,
+  BLINK_LOAD_METHOD,
   HATCHING_LOAD_METHODS,
   SAND_DESCRIBE_METHOD,
   SAND_SCORPION_STATES,
@@ -295,8 +296,10 @@ export {
   recordActorKind,
   cellActorSource,
   randomPlacement,
+  randomRobotColours,
   robotSprite,
   robotSpriteCount,
+  robotsTakeRandomColours,
   roomActors,
   scriptActors,
 } from "./actors.ts";

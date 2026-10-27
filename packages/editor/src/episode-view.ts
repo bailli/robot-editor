@@ -111,7 +111,7 @@ const FLAGS = [
   [
     ROBOTS_KEEP_COLOURS,
     "Robots keep their sprite's colours",
-    "Only episode III's do; elsewhere each robot gets three random colours.",
+    "Only episode III's do; in Junior, I and II each robot gets three random colours on every visit. Episode IV's robots keep theirs either way.",
   ],
   [
     TELEPORT_POINT_CLEARED,

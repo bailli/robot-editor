@@ -5,13 +5,17 @@ import { expect, test } from "vitest";
 import {
   ACTOR_CLASS_NAMES,
   type ScriptActors,
+  cellActorSource,
   randomPlacement,
+  randomRobotColours,
   recordActorKind,
   robotSprite,
   robotSpriteCount,
+  robotsTakeRandomColours,
   roomActors,
   scriptActors,
 } from "../src/actors.ts";
+import { ROBOTS_KEEP_COLOURS, readEpisodeFlags } from "../src/episode-flags.ts";
 import { roomScript } from "../src/exits.ts";
 import { EPISODES, Game } from "../src/game.ts";
 import { ROOM_WIDTH, type Room } from "../src/scene.ts";
@@ -145,6 +149,26 @@ test("robots take their sprite by their place among the actors created on enteri
   expect(robotSprite(first, 7)).toBe(1);
   // the bomb lets its robots appear later
   expect(actors.find((a) => a.source === "bomb")?.order).toBeUndefined();
+});
+
+test("robots take random colours in Junior, I and II, their sprite's in III and IV", () => {
+  const random = EPISODES.map((e) => {
+    const id = game.episode(e).classes.classes.get(0x02)?.id ?? -1;
+    return robotsTakeRandomColours(id, readEpisodeFlags(game.image, e));
+  });
+  expect(random).toEqual([true, true, true, false, false]);
+  // IV's robot (class 0xbd) reads no flag
+  expect(robotsTakeRandomColours(0xbd, 0)).toBe(false);
+  expect(robotsTakeRandomColours(0x02, ROBOTS_KEEP_COLOURS)).toBe(false);
+  // three distinct ones from 8–14, drawn again while one repeats
+  const draws = [9, 9, 14, 9, 8];
+  expect(randomRobotColours(() => draws.shift() ?? 0)).toEqual([9, 14, 8]);
+});
+
+test("episode IV's cylinders only blink: no actors appear from them", () => {
+  const classes = game.episode(4).classes;
+  expect(classes.classes.get(0x68)?.id).toBe(0xeb);
+  expect(cellActorSource(0x68, classes)).toBeUndefined();
 });
 
 test("only cells the game loads become actors", () => {

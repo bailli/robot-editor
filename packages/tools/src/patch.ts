@@ -1,7 +1,9 @@
 import {
+  BLINK_LOAD_METHOD,
   type EpisodeClasses,
   type Game,
   type LogicRecord,
+  ROOM_WIDTH,
   type Room,
   SCRIPT_TAG,
   START_ROOMS,
@@ -23,7 +25,8 @@ const isScript = (kind: number, value: number) =>
  * The room without anything that moves or could kill the hero before a screenshot (a
  * death's message box would cover the room): every actor source (roomActors) goes. Actor
  * tiles, hatcheries and bombs become empty, scorpion sand plain sand; records that let
- * actors appear are removed and their cells show what the records showed.
+ * actors appear are removed and their cells show what the records showed. Cells that
+ * blink (IV's cylinders) go too: the shot would depend on the frame.
  */
 export function calmRoom(room: Room, classes: EpisodeClasses): Room {
   const base = room.base.slice();
@@ -41,6 +44,12 @@ export function calmRoom(room: Room, classes: EpisodeClasses): Room {
       layer[actor.cell] = calm(resolveCell(room, layer[actor.cell] ?? 0));
     } else {
       layer[actor.cell] = calm(layer[actor.cell] ?? 0);
+    }
+  }
+  for (const layer of [base, overlay]) {
+    for (let i = ROOM_WIDTH; i < layer.length; i++) {
+      const cls = classes.classes.get((layer[i] ?? 0) & 0xff);
+      if (cls?.loadMethod === BLINK_LOAD_METHOD) layer[i] = 0;
     }
   }
   return { ...room, base, overlay, records: room.records.filter((r) => !removed.has(r)) };

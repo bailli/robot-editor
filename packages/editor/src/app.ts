@@ -17,11 +17,13 @@ import {
   NAMED_ROOMS,
   PLACEMENT_AREAS,
   ROBOT_CLASSES,
+  ROOM_CELLS,
   ROOM_WIDTH,
   type Room,
   type RoomActor,
   SCRIPT_EVENTS,
   START_ROOMS,
+  type Shape,
   actorKindClass,
   actorKindName,
   cellGood,
@@ -41,6 +43,7 @@ import {
   parseMod,
   parseScene,
   randomPlacement,
+  randomRobotColours,
   readBackdropRule,
   readDealer,
   readDiagonalMoves,
@@ -52,6 +55,7 @@ import {
   recordActorKind,
   robotSprite,
   robotSpriteCount,
+  robotsTakeRandomColours,
   roomActors,
   roomCircuit,
   roomSaveTime,
@@ -309,7 +313,10 @@ export class App {
   );
   private mapShown = false;
   private actors: RoomActor[] = [];
-  private readonly robotSprites = new Map<number, HTMLCanvasElement[]>();
+  /** Each episode's `_Aliens` sprites that have frames (robots take them in turn). */
+  private readonly alienShapes = new Map<number, Shape[]>();
+  /** Robot sprites drawn, by episode, sprite and colours. */
+  private readonly robotSprites = new Map<string, HTMLCanvasElement>();
   readonly actorsView = new ActorsView({
     select: (cell) => {
       this.select(cell);
@@ -319,7 +326,7 @@ export class App {
       this.view.setAreas(show ? PLACEMENT_AREAS : []);
     },
     icon: (type) =>
-      (this.isRobot(type) ? this.robotCanvas(0) : undefined) ?? this.cellPreview(type),
+      (this.isRobot(type) ? this.robotCanvas(type, 0, -1) : undefined) ?? this.cellPreview(type),
   });
   readonly circuitView = new CircuitView({
     select: (cell) => {
@@ -539,6 +546,9 @@ export class App {
     },
     flags: (flags) => {
       this.editEpisode(() => this.need().setEpisodeFlags(this.episode, this.roomId, flags));
+      // robots' colours follow the flags
+      this.showTiles();
+      this.refreshActors();
     },
     diagonal: (diagonal) => {
       this.editEpisode(() => this.need().setDiagonalMoves(this.episode, this.roomId, diagonal));
@@ -857,6 +867,7 @@ export class App {
     this.clipImage = undefined;
     this.refreshAreaButtons();
     this.tileNames.clear();
+    this.alienShapes.clear();
     this.robotSprites.clear();
     this.thumbnails.clear();
     this.sourceCaches.clear();
@@ -2000,7 +2011,7 @@ export class App {
     const room = editor.room(this.episode, this.roomId);
     this.actors = roomActors(room, editor.game.episode(this.episode).classes);
     // robots are drawn with the sprite the game gives them by their place among the room's
-    // actors (in Junior, I and II in random colours); actors from records (the dealer, the
+    // actors (in Junior, I and II in random colours, fixed per cell here); actors from records (the dealer, the
     // thief, natives) with the tile that names them (assigned once here: the view redraws
     // its marks on every mouse move)
     const sprites = this.actors.map((actor) => {
@@ -2008,7 +2019,8 @@ export class App {
       if (actor.source === "tile") {
         const count = robotSpriteCount(this.episode, this.alienSprites().length);
         const n = this.isRobot(actor.type) ? robotSprite(actor, count) : undefined;
-        return n === undefined ? undefined : this.robotCanvas(n);
+        const seed = this.roomId * ROOM_CELLS + actor.cell;
+        return n === undefined ? undefined : this.robotCanvas(actor.type, n, seed);
       }
       if (actor.source === "travelling" || actor.source === "creature") {
         // a tile that draws nothing leaves just the marks
@@ -2185,6 +2197,7 @@ export class App {
   private gameChanged(): void {
     this.caches.clear();
     this.tileNames.clear();
+    this.alienShapes.clear();
     this.robotSprites.clear();
     this.thumbnails.clear();
     this.showEpisode(this.episode, this.roomId);
@@ -2360,6 +2373,8 @@ export class App {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);
       if (this.selected) this.select(this.selected.index);
+      // robots' colours follow the flags
+      if (edit.flags) this.showTiles();
     } else {
       this.updateView(edit.changes.map((c) => c.index));
       // as at the end of a stroke: painted cells may be passages or actors
@@ -2454,23 +2469,45 @@ export class App {
   }
 
   /** The episode's `_Aliens` sprites (robots take them in turn, see robotSprite). */
-  private alienSprites(): HTMLCanvasElement[] {
-    let sprites = this.robotSprites.get(this.episode);
-    if (!sprites) {
-      const game = this.need().game;
-      const palette = game.episode(this.episode).palette;
-      sprites = game
-        .aliens(this.episode)
-        .flatMap((shape) => (shape?.frames.length ? [spriteCanvas(shape, palette)] : []));
-      this.robotSprites.set(this.episode, sprites);
+  private alienSprites(): Shape[] {
+    let shapes = this.alienShapes.get(this.episode);
+    if (!shapes) {
+      shapes = this.need()
+        .game.aliens(this.episode)
+        .filter((shape): shape is Shape => (shape?.frames.length ?? 0) > 0);
+      this.alienShapes.set(this.episode, shapes);
     }
-    return sprites;
+    return shapes;
   }
 
-  /** Robot sprite n, as the game draws robots. */
-  private robotCanvas(n: number): HTMLCanvasElement | undefined {
-    const sprites = this.alienSprites();
-    return sprites.at(n % robotSpriteCount(this.episode, sprites.length));
+  /** Whether robots of tile type `type` take random colours (robotsTakeRandomColours). */
+  private randomColours(type: number): boolean {
+    const editor = this.need();
+    const id = editor.game.episode(this.episode).classes.classes.get(type)?.id;
+    return id !== undefined && robotsTakeRandomColours(id, editor.episodeFlags(this.episode));
+  }
+
+  /**
+   * Robot sprite n for a robot of tile type `type`, as the game draws it: in its own
+   * colours, or where the game rolls three random ones, in colours picked from `seed`
+   * (the same ones for the same robot while the editor runs).
+   */
+  private robotCanvas(type: number, n: number, seed: number): HTMLCanvasElement | undefined {
+    const shapes = this.alienSprites();
+    const index = n % robotSpriteCount(this.episode, shapes.length);
+    const shape = shapes.at(index);
+    if (!shape) return undefined;
+    const colours = this.randomColours(type)
+      ? randomRobotColours(seededRandom(seed * 5 + this.episode))
+      : shape.colours;
+    const key = `${this.episode} ${index} ${colours.join(" ")}`;
+    let sprite = this.robotSprites.get(key);
+    if (!sprite) {
+      const palette = this.need().game.episode(this.episode).palette;
+      sprite = spriteCanvas(shape, palette, 0, colours);
+      this.robotSprites.set(key, sprite);
+    }
+    return sprite;
   }
 
   private cellPreview(value: number): HTMLCanvasElement {
@@ -2584,19 +2621,25 @@ export class App {
   }
 
   /**
-   * A tile for the palette. Tiles that draw nothing show what they are instead: robots
-   * their first sprite (the game turns them into actors), others a hatching (invisible in
-   * the game, e.g. the marker 0x54 of rooms named after the room 100 below).
+   * A tile for the palette. Robots show their first sprite on an empty cell (the game
+   * turns them into actors; episode IV's robot tile has a "?" of its own, never seen),
+   * in random colours where the game rolls them. Other tiles that draw nothing show a
+   * hatching (invisible in the game, e.g. the marker 0x54 of rooms named after the room
+   * 100 below).
    */
   private tileCanvas(value: number): HTMLCanvasElement {
+    const type = value & 0xff;
+    if (this.isRobot(type)) {
+      const element = cellCanvas(this.cache(), 0);
+      const sprite = this.robotCanvas(type, 0, -1);
+      if (sprite) element.getContext("2d")?.drawImage(sprite, 0, 0);
+      return element;
+    }
     const [base, overlay] = this.layer === "base" ? [value, 0] : [0, value];
     const element = cellCanvas(this.cache(), base, overlay);
     if (value === 0 || !this.drawsNothing(base, overlay)) return element;
     const g = element.getContext("2d");
-    const sprite = this.isRobot(value & 0xff) ? this.robotCanvas(0) : undefined;
-    if (g && sprite) {
-      g.drawImage(sprite, 0, 0, element.width, element.height);
-    } else if (g) {
+    if (g) {
       g.strokeStyle = "rgb(150 150 150)";
       g.lineWidth = 1;
       for (let x = -element.height; x < element.width; x += 4) {
@@ -2620,10 +2663,15 @@ export class App {
   private tileTitle(value: number): string {
     const title = this.names().title(value);
     const [base, overlay] = this.layer === "base" ? [value, 0] : [0, value];
-    if (value === 0 || !this.drawsNothing(base, overlay)) return title;
-    const note = this.isRobot(value & 0xff)
-      ? "(a robot: the game turns it into an actor with one of its robot sprites)"
-      : "(draws nothing in the game)";
+    let note: string;
+    if (this.isRobot(value & 0xff)) {
+      const colours = this.randomColours(value & 0xff)
+        ? ", in three random colours on every visit"
+        : ", in that sprite's colours";
+      note = `(a robot: the game turns it into an actor with one of its robot sprites${colours})`;
+    } else if (value !== 0 && this.drawsNothing(base, overlay)) {
+      note = "(draws nothing in the game)";
+    } else return title;
     const [head, ...rest] = title.split("\n");
     return [`${head} ${note}`, ...rest].join("\n");
   }
@@ -2756,6 +2804,18 @@ function roomKey(room: Room): string {
     for (const b of r.data) mix(b);
   }
   return `${hash >>> 0} ${room.records.length}`;
+}
+
+/**
+ * A stable stand-in for the game's random(min, max) (inclusive): the same numbers for the
+ * same seed, mixed first so that neighbouring seeds differ.
+ */
+function seededRandom(seed: number): (min: number, max: number) => number {
+  let state = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
+  return (min, max) => {
+    state = (Math.imul(state ^ (state >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) >>> 0;
+    return min + ((state >>> 16) % (max - min + 1));
+  };
 }
 
 /** Added to the tooltip of a room with a script draft not applied. */

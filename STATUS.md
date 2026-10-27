@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-10-27.
+Setup and commands are in the [README](README.md). Last updated: 2026-10-28.
 
 ## Goal and approach
 
@@ -327,7 +327,10 @@ Files in `packages/formats/src`:
   `ACTOR_LOAD_METHODS`: robots, androids, snakes, the worm, …), delayed creature sources
   (`HATCHING_LOAD_METHODS`: eggs, snake basket, "something behind the wall"), bombs
   (they release robots), sand heaps hiding scorpions (sand states 6/7) and the records
-  that let actors appear (spawners, natives, travelling actors). Otherwise the hero can
+  that let actors appear (spawners, natives, travelling actors). IV's cylinders (tile
+  0x68) go too, though no actor comes from them: their task (`BLINK_LOAD_METHOD`
+  0x41b030 → tick 0x419dd0) only flips state bit 0x200 of class 0xeb every 0x28 ticks,
+  so the shot would depend on the frame. Otherwise the hero can
   die before the screenshot and the death's message box covers the room. A room with a
   backdrop keeps its id and its backdrop room (calm as well), and the episode starts in
   it (`withEpisodeStart`): in the start room's slot it would be its own backdrop.
@@ -819,7 +822,11 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   sprite is the scorpions' (robots from sand heaps, 0x44dcf0 with flag 1: sprite number
   +0x2c, its own colours). **Colours:** three distinct random colours 8–14 unless the
   episode flags (+8) have bit 0x20 (only III's constructor sets it) or the robot is a
-  scorpion; IV's robot keeps its sprite's colours. **Other actors** are drawn with their
+  scorpion (0x445c4b: three draws of random(8, 14), each repeated while it equals an
+  earlier one; `randomRobotColours`); IV's robot (class 0xbd, 0x44ac70) always copies
+  its sprite's colours and reads no flag (`robotsTakeRandomColours`). The colours are
+  the XOR colours of the sprite's three planes (descriptor +8, drawn by 0x428f70).
+  **Other actors** are drawn with their
   class's shape (episode vtable +0xc): `_Rob_object` of the class's tile type, as the
   map; in Junior, I and II the registry option `AltShapes` (bit 4 of 0x4c5d88, off by
   default) replaces a list of types (0x4757a0, 0x476d68, 0x479a70) with the shapes of
@@ -935,10 +942,12 @@ Supported:
 - painting base or overlay with a tile from the episode's tiles (those its rooms use in
   that layer, and the tile types copied from other episodes in each state their shape
   has a frame for; the base layer's also those only logic records hold, e.g. IV 185's
-  teleporter wall 0xd044; robots, which draw
-  nothing as tiles, show their first sprite; other invisible tiles a hatching; a filter
+  teleporter wall 0xd044; robots show their first sprite on an empty cell (Junior to
+  III draw nothing as tiles, IV's tile is a "?" the game never shows), in random colours
+  where the game rolls them (fixed per palette and per cell, following the flag); other invisible tiles a hatching; a filter
   by name, text or hex value) or any hex value; right click picks; dragging fills lines;
-  the last 12 tiles painted with (per episode) in a row above the palette; undo/redo
+  the last 12 tiles painted with (per episode, kept until the page reloads or another
+  exe or mod is opened) in a row above the palette; undo/redo
   per stroke; grid (G); Dark (D) draws the room and the map as dark as the game
   on entering (the darkness setting; scripts and light sources are not modelled)
 - tools Paint (P), Fill (F; the connected cells of the clicked value, 4 neighbours,
@@ -1051,7 +1060,8 @@ Supported:
 - actors (toggle "Actors", key A): marks where actors appear (ring: placed in the map;
   dashed: appear later or from a record; spawner radius; arrow: heading somewhere),
   robots drawn with the `_Aliens` sprite the game gives them (by their place among the
-  room's actors; Junior, I and II roll random colours for them), actors from records (dealer 0x2c, thief 0x40, natives) with the tile
+  room's actors; Junior, I and II roll random colours for them, here picked by room and
+  cell, so they stay while the editor runs; the flag 0x20 gives their sprite's), actors from records (dealer 0x2c, thief 0x40, natives) with the tile
   that names them, their logic cell then only framed; the hover line describes such an
   actor once (by its record); a list (tab Actors) groups them with name, origin and positions (click
   to select), plus what the script's `RandObj(…)` does with the room's current number

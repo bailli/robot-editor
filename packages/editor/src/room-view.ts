@@ -1,5 +1,6 @@
 import {
   type Backing,
+  type Colours,
   type Episode,
   LOGIC_CELL,
   type PlacementArea,
@@ -572,10 +573,15 @@ export function cellCanvas(cache: CellCache, base: number, overlay = 0): HTMLCan
   return element;
 }
 
-/** A shape's frame as a canvas, transparent where the shape does not draw. */
-export function spriteCanvas(shape: Shape, palette: readonly Rgb[], frame = 0): HTMLCanvasElement {
+/** A shape's frame as a canvas (in `colours`), transparent where the shape does not draw. */
+export function spriteCanvas(
+  shape: Shape,
+  palette: readonly Rgb[],
+  frame = 0,
+  colours: Colours = shape.colours,
+): HTMLCanvasElement {
   const element = canvas(shape.width, shape.height, "cell");
-  const pixels = shapePixels(shape, frame);
+  const pixels = shapePixels(shape, frame, undefined, colours);
   const rgba = new Uint8ClampedArray(toRgba(pixels, palette));
   pixels.forEach((c, i) => {
     if (c === TRANSPARENT) rgba[i * 4 + 3] = 0;
