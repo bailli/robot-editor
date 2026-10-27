@@ -263,9 +263,12 @@ export {
   PLACEMENT_AREAS,
   ROBOT_CLASSES,
   actorKindClass,
+  actorKindName,
   recordActorKind,
   cellActorSource,
   randomPlacement,
+  robotSprite,
+  robotSpriteCount,
   roomActors,
   scriptActors,
 } from "./actors.ts";

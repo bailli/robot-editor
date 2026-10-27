@@ -22,6 +22,7 @@ import {
   SCRIPT_EVENTS,
   START_ROOMS,
   actorKindClass,
+  actorKindName,
   backdropRoom,
   cellGood,
   compileScript,
@@ -44,6 +45,8 @@ import {
   readEventTable,
   readOracleSymbols,
   recordActorKind,
+  robotSprite,
+  robotSpriteCount,
   roomActors,
   roomCircuit,
   roomSaveTime,
@@ -310,7 +313,7 @@ export class App {
       this.view.setAreas(show ? PLACEMENT_AREAS : []);
     },
     icon: (type) =>
-      (this.isRobot(type) ? this.robotSprite(0) : undefined) ?? this.cellPreview(type),
+      (this.isRobot(type) ? this.robotCanvas(0) : undefined) ?? this.cellPreview(type),
   });
   readonly circuitView = new CircuitView({
     select: (cell) => {
@@ -487,6 +490,8 @@ export class App {
       const tile = (v: number) => this.names().tileName(v);
       return texts?.map((t) => displayText(t, tile)).join(" – or – ");
     },
+    actor: (kind) =>
+      actorKindName(kind, this.episode) ?? `no known actor (kind 0x${kind.toString(16)})`,
   });
   readonly settingsView = new SettingsView({
     change: (settings) => {
@@ -1922,14 +1927,17 @@ export class App {
     const editor = this.need();
     const room = editor.room(this.episode, this.roomId);
     this.actors = roomActors(room, editor.game.episode(this.episode).classes);
-    // robots are drawn with the episode's sprites, one after the other (their look varies);
-    // actors from records (the dealer, the thief, natives) with the tile that names them
-    // (assigned once here: the view redraws its marks on every mouse move)
-    let robots = 0;
+    // robots are drawn with the sprite the game gives them by their place among the room's
+    // actors (in Junior, I and II in random colours); actors from records (the dealer, the
+    // thief, natives) with the tile that names them (assigned once here: the view redraws
+    // its marks on every mouse move)
     const sprites = this.actors.map((actor) => {
       if (actor.type === undefined) return undefined;
-      if (actor.source === "tile")
-        return this.isRobot(actor.type) ? this.robotSprite(robots++) : undefined;
+      if (actor.source === "tile") {
+        const count = robotSpriteCount(this.episode, this.alienSprites().length);
+        const n = this.isRobot(actor.type) ? robotSprite(actor, count) : undefined;
+        return n === undefined ? undefined : this.robotCanvas(n);
+      }
       if (actor.source === "travelling" || actor.source === "creature") {
         // a tile that draws nothing leaves just the marks
         return this.drawsNothing(actor.type, 0) ? undefined : cellCanvas(this.cache(), actor.type);
@@ -2266,8 +2274,8 @@ export class App {
     return id !== undefined && ROBOT_CLASSES.includes(id);
   }
 
-  /** Robot sprite n (in turn through the episode's sprites), as the game draws robots. */
-  private robotSprite(n: number): HTMLCanvasElement | undefined {
+  /** The episode's `_Aliens` sprites (robots take them in turn, see robotSprite). */
+  private alienSprites(): HTMLCanvasElement[] {
     let sprites = this.robotSprites.get(this.episode);
     if (!sprites) {
       const game = this.need().game;
@@ -2277,7 +2285,13 @@ export class App {
         .flatMap((shape) => (shape?.frames.length ? [spriteCanvas(shape, palette)] : []));
       this.robotSprites.set(this.episode, sprites);
     }
-    return sprites.at(n % Math.max(1, sprites.length));
+    return sprites;
+  }
+
+  /** Robot sprite n, as the game draws robots. */
+  private robotCanvas(n: number): HTMLCanvasElement | undefined {
+    const sprites = this.alienSprites();
+    return sprites.at(n % robotSpriteCount(this.episode, sprites.length));
   }
 
   private cellPreview(value: number): HTMLCanvasElement {
@@ -2397,7 +2411,7 @@ export class App {
     const element = cellCanvas(this.cache(), base, overlay);
     if (value === 0 || !this.drawsNothing(base, overlay)) return element;
     const g = element.getContext("2d");
-    const sprite = this.isRobot(value & 0xff) ? this.robotSprite(0) : undefined;
+    const sprite = this.isRobot(value & 0xff) ? this.robotCanvas(0) : undefined;
     if (g && sprite) {
       g.drawImage(sprite, 0, 0, element.width, element.height);
     } else if (g) {

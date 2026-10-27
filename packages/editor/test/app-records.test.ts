@@ -99,6 +99,22 @@ describe("logic records", () => {
     expect(defined(app.editor).isEdited(2, 55)).toBe(false);
   });
 
+  test("a travelling actor is picked from the episode's actors", async () => {
+    app.showEpisode(0, 31);
+    const room = () => defined(app.editor).room(0, 31);
+    const record = defined(room().records.find((r) => r.data[0] === 8));
+    await clickCell(room().base.findIndex((c) => c === (0x7f | (record.slot << 8))));
+    const actor = page.getByRole("combobox", { name: "Actor" });
+    await expect.element(actor).toHaveValue(String(record.data[8]));
+    // Junior's four actors, by their index + 0x80
+    const options = [...(actor.element() as HTMLSelectElement).options].map((o) => o.text);
+    expect(options).toEqual(["0x80 Hero", "0x81 Robot", "0x82 Hero's double", "0x83 Dealer"]);
+    await userEvent.selectOptions(actor, "0x81 Robot");
+    expect(room().records.find((r) => r.slot === record.slot)?.data[8]).toBe(0x81);
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(defined(app.editor).isEdited(0, 31)).toBe(false);
+  });
+
   test("Tab after changing a field goes on to the next one", async () => {
     app.showEpisode(2, 55);
     const index = teleporterCell();

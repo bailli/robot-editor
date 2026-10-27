@@ -7,15 +7,31 @@ import {
   SAND_SCORPION_STATES,
 } from "./classes.ts";
 import { isConditional } from "./exits.ts";
-import { LOGIC_CELL, type LogicRecord, ROOM_CELLS, ROOM_WIDTH, type Room } from "./scene.ts";
+import {
+  LOGIC_CELL,
+  type LogicRecord,
+  ROOM_CELLS,
+  ROOM_WIDTH,
+  type Room,
+  resolveCell,
+} from "./scene.ts";
 
 /**
  * The moving actors of a room (robots, androids, animals, the bus, …) and where they come
  * from. The game creates actors with 0x44dc60(kind, x, y, …) when a room is entered or
  * later; the map cell is cleared. Kinds 0x100 + n name a class through the table at
  * 0x47ec98 (ACTOR_KIND_CLASSES); a factory registered for that class (0x44d4e0, 20 of
- * them) creates the actor. Robots pick one of their episode's `_Aliens` sprites and three
- * random colours (0x445bd0), so they look different on every visit.
+ * them) creates the actor. Every actor but the hero joins the room's actor list
+ * (0x53e9a8, 0x44c140); robots take their `_Aliens` sprite from its length (robotSprite),
+ * and in Junior, I and II three random colours (0x445bd0), so they look different on
+ * every visit. The other actors are drawn with their class's tile shape (`_Rob_object`,
+ * episode vtable +0xc; the registry option AltShapes, off by default, swaps some for those
+ * of SHAPES 1003 in Junior and 1903 in I and II).
+ *
+ * Entering a room (0x42b6f0) goes through rows 1-28 cell by cell: a native or travelling
+ * actor record lets its actor appear, then the cell's class gets its room-load method,
+ * from the top of the cell down (0x433110: an overlay object lies on the base cell) for
+ * as long as the method clears the cell. Row 0, under the status line, is not loaded.
  *
  * Sources:
  *   tile       a cell whose class turns it into an actor on entering (room-load method in
@@ -43,6 +59,11 @@ export interface RoomActor {
   layer: "base" | "overlay";
   /** The tile type that names the actor (its description, its tile graphic), if known. */
   type: number | undefined;
+  /**
+   * How many actors the game creates on entering the room before this one (tiles,
+   * natives, travelling actors); undefined for actors that appear later.
+   */
+  order?: number;
   /** The record behind it (spawner, creature, travelling actor). */
   record?: LogicRecord;
   /** Spawners: robots appear while the hero is within this many cells. */
@@ -53,17 +74,56 @@ export interface RoomActor {
   target?: { room: number; x: number; y: number };
 }
 
-/** Actor kinds 0x100..0x10a -> class id (0x47ec98, first word of 28-byte entries). */
+/**
+ * Actor kinds 0x100..0x10a -> class id (0x47ec98, first dword of 28-byte entries; the code
+ * reads nothing else of them, 0x407412 and 0x44c0e2, the other six dwords are unused).
+ */
 export const ACTOR_KIND_CLASSES: readonly number[] = [
   0x01, 0x02, 0x03, 0x2c, 0x2d, 0x4a, 0xa0, 0x9f, 0xa3, 0xbd, 0xc0,
 ];
 
+/** Names of the actor kinds 0x100..0x10a (episode III's android is a snake). */
+export function actorKindName(kind: number, episode: number): string | undefined {
+  const names = [
+    "Hero",
+    episode === 3 ? "Creature" : "Robot",
+    "Hero's double",
+    "Dealer",
+    episode === 3 ? "Snake" : "Android",
+    "Thief",
+    "Turtle",
+    "Friendly native",
+    "Wild boar",
+    "Robot",
+    "Unknown (tile 0x0c)",
+  ];
+  return kind & 0x100 ? names[kind & 0xff] : undefined;
+}
+
 /**
  * Classes of robots (the actors spawners and bombs let appear: 0x44dd60). Robots are
- * drawn with one of their episode's `_Aliens` sprites (Game.aliens): the n-th actor of
- * the room takes sprite n modulo their number, in three random colours (0x445bd0).
+ * drawn with one of their episode's `_Aliens` sprites (Game.aliens, see robotSprite).
  */
 export const ROBOT_CLASSES: readonly number[] = [0x02, 0xbd];
+
+/**
+ * How many `_Aliens` sprites robots take in turn (episode +0x2c, the sprites before the
+ * one with frame count 0xff): Junior to III leave out the last one (their constructors
+ * decrement the count, e.g. 0x408ca6), the sprite of scorpions (robots from sand heaps,
+ * 0x44dcf0, which take sprite number count in their own colours).
+ */
+export function robotSpriteCount(episode: number, aliens: number): number {
+  return episode < 4 ? Math.max(1, aliens - 1) : aliens;
+}
+
+/**
+ * The `_Aliens` sprite of a robot created on entering the room: the length of the room's
+ * actor list, itself included, modulo robotSpriteCount (0x445c15, 0x445b60; episode IV
+ * 0x44ac9e), so a room's first actor, if a robot, takes sprite 1.
+ */
+export function robotSprite(actor: RoomActor, count: number): number | undefined {
+  return actor.order === undefined ? undefined : (actor.order + 1) % count;
+}
 
 const RECORD_SOURCES: Readonly<Partial<Record<number, ActorSource>>> = {
   5: "spawner",
@@ -111,33 +171,55 @@ export function cellActorSource(cell: number, classes: EpisodeClasses): ActorSou
   return undefined;
 }
 
+/**
+ * The room's actors in the order the game meets them on entering the room (see above).
+ * Records count in the base layer only (the game drops logic cells in the overlay); a
+ * cell's tiles count from the top down while they turn into actors, so nothing appears
+ * from under an object that stays.
+ */
 export function roomActors(room: Room, classes: EpisodeClasses): RoomActor[] {
   const typeOf = (classId: number) => classes.typeOfClass.get(classId);
   const robot = ROBOT_CLASSES.map(typeOf).find((t) => t !== undefined);
   const actors: RoomActor[] = [];
-  for (const layer of ["base", "overlay"] as const) {
-    for (let cell = 0; cell < ROOM_CELLS; cell++) {
-      const value = room[layer][cell] ?? 0;
-      if ((value & 0xff) === LOGIC_CELL) {
-        const record = room.records.find((r) => r.slot === value >> 8);
-        const source = record && RECORD_SOURCES[record.data[0]];
-        if (!record || !source) continue;
+  let order = 0;
+  for (let cell = ROOM_WIDTH; cell < ROOM_CELLS; cell++) {
+    const base = room.base[cell] ?? 0;
+    let shown = base;
+    if ((base & 0xff) === LOGIC_CELL) {
+      const record = room.records.find((r) => r.slot === base >> 8);
+      const source = record && RECORD_SOURCES[record.data[0]];
+      if (record && source) {
         const d = record.data;
+        const actor = { source, cell, layer: "base" as const, record };
         if (source === "spawner") {
-          const actor = { source, cell, layer, type: robot, record };
-          actors.push({ ...actor, radius: Math.sqrt(d[4]), period: d[5] });
+          actors.push({ ...actor, type: robot, radius: Math.sqrt(d[4]), period: d[5] });
         } else if (source === "creature") {
-          actors.push({ source, cell, layer, type: typeOf(actorKindClass(0x107)), record });
+          actors.push({ ...actor, type: typeOf(actorKindClass(0x107)), order: order++ });
         } else {
           const target = { room: (d[4] | (d[5] << 8)) & 0x3ff, x: d[6], y: d[7] };
           const kind = recordActorKind(d[8], classes);
           const type = kind === undefined ? undefined : typeOf(actorKindClass(kind));
-          actors.push({ source, cell, layer, type, record, target });
+          actors.push({ ...actor, type, target, order: order++ });
         }
-        continue;
       }
+      // the cell the record shows takes the logic cell's place (natives and travelling
+      // actors leave theirs in the map, 0x42b7fc)
+      shown = resolveCell(room, base);
+    }
+    const overlay = room.overlay[cell] ?? 0;
+    const tiles = [
+      ...((overlay & 0xff) === LOGIC_CELL || overlay === 0 ? [] : [["overlay", overlay] as const]),
+      ["base", shown] as const,
+    ];
+    for (const [layer, value] of tiles) {
       const source = cellActorSource(value, classes);
-      if (source) actors.push({ source, cell, layer, type: value & 0xff });
+      if (!source) break;
+      const type = value & 0xff;
+      if (source !== "tile") {
+        actors.push({ source, cell, layer, type });
+        break;
+      }
+      actors.push({ source, cell, layer, type, order: order++ });
     }
   }
   return actors;
@@ -210,12 +292,24 @@ export interface RandomPlacement {
   free: number;
 }
 
+/** The class of an actor created on entering the room (what stands on its cell then). */
+function actorClass(actor: RoomActor, classes: EpisodeClasses): number | undefined {
+  if (actor.source === "creature") return actorKindClass(0x107);
+  if (actor.source === "travelling") {
+    const kind = actor.record && recordActorKind(actor.record.data[8], classes);
+    return kind === undefined ? undefined : actorKindClass(kind);
+  }
+  return actor.type === undefined ? undefined : classes.classes.get(actor.type)?.id;
+}
+
 /**
  * What RandObj(O_NAME, min, max) does in a room (0x4073a0): it counts the room's objects
- * of that tile type (map cells and actors, 0x407650), draws a number between min and max,
- * removes random ones above it and adds new ones below it, each on an empty cell found
- * with up to 20 random tries (0x433230, 0x433420). `constants` are the episode's script
- * constants (Game.scriptConstants).
+ * of that class in rows 1-28 (0x407650: per cell the actor standing there, else the top of
+ * the cell, 0x433230; scripts run once the room's actors are there, so natives, the dealer
+ * and the thief count as well), draws a number between min and max, removes random ones
+ * above it and adds new ones below it, each on an empty cell found with up to 20 random
+ * tries (0x433230, 0x433420). `constants` are the episode's script constants
+ * (Game.scriptConstants).
  */
 export function randomPlacement(
   call: ScriptActors,
@@ -224,15 +318,24 @@ export function randomPlacement(
   constants: ReadonlyMap<string, number>,
 ): RandomPlacement {
   const type = constants.get(`O_${call.name}`);
+  const id = type === undefined ? undefined : classes.classes.get(type)?.id;
+  // the actor on each cell: the last one created there
+  const standing = new Map(
+    roomActors(room, classes).flatMap((a) =>
+      a.order === undefined ? [] : [[a.cell, actorClass(a, classes)] as const],
+    ),
+  );
   let existing = 0;
   let free = 0;
-  for (let cell = 0; cell < ROOM_CELLS; cell++) {
+  for (let cell = ROOM_WIDTH; cell < ROOM_CELLS; cell++) {
     const base = room.base[cell] ?? 0;
     const overlay = room.overlay[cell] ?? 0;
-    if (type !== undefined && ((base & 0xff) === type || (overlay & 0xff) === type)) existing++;
-    if (base === 0 && overlay === 0 && cell >= ROOM_WIDTH) free++;
+    const top =
+      (overlay & 0xff) === LOGIC_CELL || overlay === 0 ? resolveCell(room, base) : overlay;
+    const at = standing.has(cell) ? standing.get(cell) : classes.classes.get(top & 0xff)?.id;
+    if (id !== undefined && at === id) existing++;
+    if (base === 0 && overlay === 0) free++;
   }
-  const id = type === undefined ? undefined : classes.classes.get(type)?.id;
   const awayFromHero = id !== undefined && AWAY_FROM_HERO_CLASSES.includes(id);
   return { type, existing, awayFromHero, free };
 }

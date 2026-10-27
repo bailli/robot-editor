@@ -701,7 +701,29 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   room 43 lets the dealer appear and walk up to the hero (bytes 0x03 and 0x83 alike;
   tile 3 is class 3, which happens to map to the dealer's kind); walked into, he offers
   his items (cursor keys, Enter buys, Esc ends); after the purchase he wandered off and
-  left through the bottom wall, which stood open briefly.
+  left through the bottom wall, which stood open briefly. **Verified by playing** (the
+  original game, many times): following a leaving actor through that opening takes the
+  hero to the record's room.
+- **Actors** (`actors.ts`, code only): entering a room (0x42b6f0) goes through rows 1–28
+  (row 0 is never loaded) cell by cell: a native or travelling actor record lets its
+  actor appear and leaves its cell in the map, then the cell's class gets its room-load
+  method, from the top of the cell down (0x433110: an overlay object is a type 1 record
+  on the base cell) and again for what is below while the method clears the cell, so a
+  robot under an object that stays never appears. Every actor but the hero joins the
+  room's actor list (0x53e9a8, appended by 0x44c140). **Robots' sprites:** a robot takes
+  `_Aliens` sprite (length of the list, itself included) mod episode +0x2c (0x445bd0 →
+  0x445b60; IV's robot 0x44ac70), so a room's first actor, if a robot, takes sprite 1;
+  +0x2c counts the sprites before the one with frame count 0xff, and Junior to III
+  decrement it (0x40e049, 0x408ca6, 0x409ec6, 0x40b12f): 7 there, 5 in IV. Their 8th
+  sprite is the scorpions' (robots from sand heaps, 0x44dcf0 with flag 1: sprite number
+  +0x2c, its own colours). **Colours:** three distinct random colours 8–14 unless the
+  episode flags (+8) have bit 0x20 (only III's constructor sets it) or the robot is a
+  scorpion; IV's robot keeps its sprite's colours. **Other actors** are drawn with their
+  class's shape (episode vtable +0xc): `_Rob_object` of the class's tile type, as the
+  map; in Junior, I and II the registry option `AltShapes` (bit 4 of 0x4c5d88, off by
+  default) replaces a list of types (0x4757a0, 0x476d68, 0x479a70) with the shapes of
+  SHAPES 1003 (Junior) or 1903 (I, II), 0x43b220; IV draws class 0xdc (tile 0x74, in no
+  room) with `_Bond`. `_Dealer`, `_Android` and `_Hero1` in 1003 are never looked up.
 - **The dealer's goods** (code only): both constructors (record 0x448ad5, `SetMan`
   0x448c8b) take the goods table from the episode (vtable +0x10: address, entry count,
   most goods shown) and then build the offer once (0x448440, the only caller): a count
@@ -849,7 +871,7 @@ Supported:
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
   inspector with the record's fields per type (cells with previews: click takes the
   current tile, right-click paints with the cell; target room with
-  "Go", arrival position, spawner radius/period, a native's object, price and chatter,
+  "Go", arrival position, a travelling actor picked from the episode's actors, spawner radius/period, a native's object, price and chatter,
   circuit stairs, an oracle's symbol, hint id and text, "Symbol found", a teleporter's condition and message,
   …, "Gone after leaving" (byte 1 bit 5, every type)) and the raw
   bytes; change the type (listed by number), add a record to a plain cell
@@ -868,8 +890,8 @@ Supported:
   graphics) to paint with, and "Add node" at the cell selected with the Inspect tool
 - actors (toggle "Actors", key A): marks where actors appear (ring: placed in the map;
   dashed: appear later or from a record; spawner radius; arrow: heading somewhere),
-  robots drawn with the episode's `_Aliens` sprites in turn (their look and colours vary
-  in the game), actors from records (dealer 0x2c, thief 0x40, natives) with the tile
+  robots drawn with the `_Aliens` sprite the game gives them (by their place among the
+  room's actors; Junior, I and II roll random colours for them), actors from records (dealer 0x2c, thief 0x40, natives) with the tile
   that names them, their logic cell then only framed; the hover line describes such an
   actor once (by its record); a list (tab Actors) groups them with name, origin and positions (click
   to select), plus what the script's `RandObj(…)` does with the room's current number
@@ -1083,8 +1105,7 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
 Roughly by value for the editor.
 
 1. **Logic records in play.** All types are decoded byte by byte and most are tried in
-   the game (see logic records above). Open: the thief (not tried), following a leaving
-   actor through its wall opening, circuits with OR, NOR and the inverted-input gates
+   the game (see logic records above). Open: the thief (not tried), circuits with OR, NOR and the inverted-input gates
    (AND, NAND, XOR and NOT tried; the code and the GATE texts agree on all of them), a
    final node waiting for itself (from the code), records in rooms whose objects and records exceed the table. **How to test
    an edit in the game:** build the exe (`Game.withScene`, or the editor's "Save exe"),
@@ -1105,12 +1126,10 @@ Roughly by value for the editor.
    `robot start E ROOM OUT.exe --at X,Y` makes an exe starting the hero anywhere (the
    whole episode stays as it is), `robot play` and the editor's "Test in game" run one
    to be played by hand.
-2. **Actors.** Known: creation (0x44dc60, kinds 0x100 + n → class via 0x47ec98, 20
-   factories registered by class id, 0x44d4e0), which tiles and records produce actors,
-   robots' sprites (`_Aliens`, `1E01`) and random colours. Open: the exact sprite order
-   (which actors count before a robot), sprites of the other actors (androids etc. use
-   their tile graphic in the editor), and the six dwords
-   after the class id in each 0x47ec98 entry. Kinds found so far: 0x100 hero, 0x101
+2. **Actors.** Known: creation (0x44dc60, kinds 0x100 + n → class via 0x47ec98, whose
+   other six dwords per entry the code never reads; 20 factories registered by class
+   id, 0x44d4e0), which tiles and records produce actors and in which order, their
+   sprites and colours (see Actors above). Kinds found so far: 0x100 hero, 0x101
    robot, 0x102 the hero's double (class 3), 0x103 the dealer (class 0x2c), 0x104
    android (episode III: snake), 0x105 the thief (class 74, tile 0x40), 0x106 turtle,
    0x107 friendly native, 0x108 wild boar (the last three episode III), 0x109 episode IV
@@ -1137,9 +1156,12 @@ Roughly by value for the editor.
    (25, 14), east (15, 14), north (20, 22), south (20, 7); the bus (20, 14); teleporters
    and stairs keep the old one), other objects anywhere. The script's
    `Teleport(room, x, y)` only redirects teleporters that allow it (0x407900). Script
-   object names are tile types (`scriptConstants`, see room scripts above). The editor's `RandObj` counts
-   (`randomPlacement`) look at map cells only; the game also counts actors standing on
-   cells (0x407650 via 0x433230), e.g. those from records.
+   object names are tile types (`scriptConstants`, see room scripts above). What it
+   counts (0x407650): per cell of rows 1–28 the class of the actor standing there, else
+   of the top of the cell (0x433230, 0x433110), compared with the object's class (and
+   its state, if the argument has one); the script runs once the room's actors are
+   there, so natives, the dealer and the thief count too, and a cell with an overlay
+   object counts once (`randomPlacement`).
 3. **Scripts.** Decoded, compiled and editable; every function is decoded (see room
    scripts above) and most are tried in the game. Open: what `Phone`'s n limits (still
    answered after 60 s), whether `Area`/`ShiftArea` settings survive leaving the room,
@@ -1278,7 +1300,8 @@ Roughly by value for the editor.
 | 0x404190, 0x433710           | the screenshot command (4015, Ctrl+Alt+P); write a palette PNG                 |
 | 0x44c5a0, 0x44c680           | hero walks off an edge (sets the RandObj reference point); pending room change |
 | 0x44dc60, 0x44d520           | create an actor (kind, x, y); factory lookup by class                          |
-| 0x4073a0, 0x407650           | script RandObj; count a tile type in the room                                  |
+| 0x4073a0, 0x407650           | script RandObj; count a class in the room (actors, else the top of each cell)  |
+| 0x445bd0, 0x445b60, 0x44ac70 | robot constructor; its sprite and colours; episode IV's robot                  |
 | 0x41e4d0, 0x47efe0, 0x41e100 | telephone (episode II): dial; numbers → handlers; Ghostbusters (robot-free)    |
 | 0x4827f0                     | base palette (episode III: 0x477c10)                                           |
 | 0x4314b0, 0x438710, 0x431300 | CRUNCHED: next character; load a text resource; parse an entry header          |

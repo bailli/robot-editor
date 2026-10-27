@@ -3,6 +3,7 @@ import {
   type LogicRecord,
   TANGRAM_TILE,
   describeRecord,
+  recordActorKind,
   teleporterCondition,
 } from "@robot/formats";
 
@@ -25,12 +26,38 @@ interface Field {
   get: (d: Uint8Array) => number;
   set: (d: Uint8Array, value: number) => void;
   hint?: string;
-  /** The values of a choice and their names. */
-  choices?: readonly (readonly [value: number, name: string])[];
+  /**
+   * The values of a choice and their names, or a function giving them for the record and
+   * the episode (`actor` names an actor kind).
+   */
+  choices?:
+    readonly Choice[] | ((d: Uint8Array, classes: EpisodeClasses, actor: ActorName) => Choice[]);
   /** Whether the game ignores the field, given the record's other fields. */
   ignored?: (d: Uint8Array) => boolean;
   /** The text the field names, shown next to it; undefined: none. */
   text?: (d: Uint8Array) => number | undefined;
+}
+
+type Choice = readonly [value: number, name: string];
+type ActorName = (kind: number) => string;
+
+/**
+ * A travelling actor's byte 8: the episode's actors (0x80 + their index, as the originals
+ * have it); the current value, if another, as the tile type whose class names the actor.
+ */
+function actorChoices(d: Uint8Array, classes: EpisodeClasses, actor: ActorName): Choice[] {
+  const hex2 = (v: number) => `0x${v.toString(16).padStart(2, "0")}`;
+  const choices = classes.actorKinds.map((kind, i): Choice => [
+    0x80 | i,
+    `${hex2(0x80 | i)} ${actor(kind)}`,
+  ]);
+  if (choices.some(([v]) => v === d[8])) return choices;
+  const kind = recordActorKind(d[8], classes);
+  const name =
+    d[8] & 0x80
+      ? "past the episode's actors"
+      : `tile type: ${kind === undefined ? "?" : actor(kind)}`;
+  return [...choices, [d[8], `${hex2(d[8])} ${name}`]];
 }
 
 const u16 = (d: Uint8Array, at: number) => d[at] | (d[at + 1] << 8);
@@ -217,12 +244,17 @@ export const RECORD_TYPES: readonly RecordType[] = (
         targetRoom,
         byte(6, "Target x", 39),
         byte(7, "Target y", 28),
-        byte(
-          8,
-          "Actor",
-          255,
-          "0x80 + n: the episode's actor n (0x83 dealer, 0x85 thief); else a tile type",
-        ),
+        {
+          ...byte(
+            8,
+            "Actor",
+            255,
+            "who appears: 0x80 + n is the episode's actor n (the originals: the dealer or " +
+              "the thief); another value is a tile type, whose class picks the actor",
+          ),
+          kind: "choice",
+          choices: actorChoices,
+        },
       ],
     },
     {
@@ -322,6 +354,8 @@ export interface RecordViewEvents {
   useTile(value: number): void;
   /** The episode's text `id` as one paragraph, undefined if it has none. */
   text(id: number): string | undefined;
+  /** The name of an actor kind (0x100 + n). */
+  actor: ActorName;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -351,6 +385,8 @@ export class RecordView {
   private readonly events: RecordViewEvents;
   /** The shown record's bytes, as edited; the controls' listeners work on these. */
   private data = new Uint8Array(0);
+  /** The shown record's episode. */
+  private classes: EpisodeClasses | undefined;
   /** Which record is shown (slot, cell, type): shown again, its controls are kept. */
   private shown: string | undefined;
 
@@ -383,6 +419,7 @@ export class RecordView {
     this.element.hidden = false;
     const data = record.data.slice();
     this.data = data;
+    this.classes = classes;
     const known = RECORD_TYPES.find((t) => t.type === data[0]);
 
     const title = element("h3", undefined, `Logic record ${record.slot} at ${where}`);
@@ -474,7 +511,12 @@ export class RecordView {
     if (field.kind === "choice") {
       const select = element("select");
       select.setAttribute("aria-label", field.label);
-      const choices = field.choices ?? [];
+      const choices =
+        typeof field.choices === "function"
+          ? this.classes
+            ? field.choices(data, this.classes, this.events.actor)
+            : []
+          : (field.choices ?? []);
       for (const [v, name] of choices) select.append(new Option(name, String(v)));
       if (!choices.some(([v]) => v === value))
         select.append(new Option(String(value), String(value)));

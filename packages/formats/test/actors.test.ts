@@ -4,13 +4,17 @@ import { expect, test } from "vitest";
 
 import {
   ACTOR_CLASS_NAMES,
+  type ScriptActors,
   randomPlacement,
   recordActorKind,
+  robotSprite,
+  robotSpriteCount,
   roomActors,
   scriptActors,
 } from "../src/actors.ts";
 import { roomScript } from "../src/exits.ts";
 import { EPISODES, Game } from "../src/game.ts";
+import { ROOM_WIDTH, type Room } from "../src/scene.ts";
 import { exe } from "./data.ts";
 
 const game = new Game(exe());
@@ -112,4 +116,79 @@ test("script object names resolve through the sound tables first", () => {
   expect(
     tree && randomPlacement(tree, room, game.episode(1).classes, game.scriptConstants(1)).type,
   ).toBe(11);
+});
+
+/** Room `id` of `episode` with cells (x, y) set in a layer and the records it has. */
+function edited(
+  episode: number,
+  id: number,
+  cells: readonly (readonly [x: number, y: number, value: number, layer?: "overlay"])[],
+): Room {
+  const room = game.room(episode, id);
+  const copy = { ...room, base: room.base.slice(), overlay: room.overlay.slice() };
+  for (const [x, y, value, layer = "base"] of cells) copy[layer][y * ROOM_WIDTH + x] = value;
+  return copy;
+}
+
+test("robots take their sprite by their place among the actors created on entering", () => {
+  // Junior to III keep the last _Aliens sprite for scorpions
+  expect(EPISODES.map((e) => robotSpriteCount(e, game.aliens(e).length))).toEqual([7, 7, 7, 7, 5]);
+  const classes = game.episode(2).classes;
+  const actors = roomActors(game.room(2, 123), classes);
+  const created = actors.filter((a) => a.order !== undefined);
+  // the game's order: row by row, cell by cell
+  expect(created.map((a) => a.order)).toEqual(created.map((_, i) => i));
+  expect(created.map((a) => a.cell)).toEqual(created.map((a) => a.cell).sort((a, b) => a - b));
+  // the first actor, itself counted, takes sprite 1
+  const first = created.at(0);
+  assert.ok(first);
+  expect(robotSprite(first, 7)).toBe(1);
+  // the bomb lets its robots appear later
+  expect(actors.find((a) => a.source === "bomb")?.order).toBeUndefined();
+});
+
+test("only cells the game loads become actors", () => {
+  const classes = game.episode(2).classes;
+  const robot = 0x02;
+  const at = (room: Room) =>
+    roomActors(room, classes)
+      .filter((a) => a.source === "tile" && a.cell < 3 * ROOM_WIDTH)
+      .map((a) => [a.cell, a.layer]);
+  const room = (cells: Parameters<typeof edited>[2]) =>
+    edited(2, 123, [
+      ...[0, 1, 2].flatMap((y) => [0, 1, 2].map((x) => [x, y, 0] as const)),
+      ...cells,
+    ]);
+  // row 0 lies under the status line
+  expect(at(room([[1, 0, robot]]))).toEqual([]);
+  // an object that stays hides a robot under it; a robot on a robot: both appear
+  expect(
+    at(
+      room([
+        [1, 1, robot],
+        [1, 1, 0x0b, "overlay"],
+      ]),
+    ),
+  ).toEqual([]);
+  expect(
+    at(
+      room([
+        [1, 1, robot],
+        [1, 1, robot, "overlay"],
+      ]),
+    ),
+  ).toEqual([
+    [ROOM_WIDTH + 1, "overlay"],
+    [ROOM_WIDTH + 1, "base"],
+  ]);
+});
+
+test("RandObj counts the actors records let appear, by class", () => {
+  // episode III room 11: three natives from records (class 0x9f, tile 0x2c); its script
+  // names have none, a constant for the tile stands in
+  const call: ScriptActors = { name: "NATIVE", min: 0, max: 5, conditional: false };
+  const room = game.room(3, 11);
+  expect(room.base.filter((v) => (v & 0xff) === 0x2c)).toHaveLength(0);
+  const classes = game.episode(3).classes;
+  expect(randomPlacement(call, room, classes, new Map([["O_NATIVE", 0x2c]])).existing).toBe(3);
 });
