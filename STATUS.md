@@ -711,7 +711,14 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   on the base cell). Clearing the top of such a cell brings up the cell below
   (0x4331a0), which is loaded too if it differs from what was there in class or state
   (0x42b8cf): a robot under an object that stays, or under a robot in the same state,
-  never appears; under a robot in another state it does. Every actor but the hero joins the
+  never appears; under a robot in another state it does. **A robot cell's state does
+  nothing else** (code only): the load method (0x40a8e0) takes only x and y and creates
+  kind 0x101 without it, the describe method (0x40e6d0) always gives text 2, the frame
+  method (`NIBBLE`) has no shape to pick from in I, and `RandObj` compares states only
+  for an argument with one (the originals use plain `O_ALIEN`). The originals have
+  states 0–8, 0x0c and 0x0e (I: 0x0102 in rooms 23 and 53, 0x0202 in 53, 65 and 99,
+  0x0302 and 0x0502 only in the debug room 99; II room 51: 1–8 side by side), perhaps
+  left from an older version. Every actor but the hero joins the
   room's actor list (0x53e9a8, appended by 0x44c140). **Robots' sprites:** a robot takes
   `_Aliens` sprite (length of the list, itself included) mod episode +0x2c (0x445bd0 →
   0x445b60; IV's robot 0x44ac70), so a room's first actor, if a robot, takes sprite 1;
