@@ -3,6 +3,7 @@ import {
   DIRECTIONS,
   DOOR_IN_CLASS,
   DOOR_OUT_CLASS,
+  type Dealer,
   type Direction,
   EXIT_CELL,
   type EpisodeClasses,
@@ -32,11 +33,13 @@ import {
   applyMod,
   backdropRoom,
   checkMod,
+  dealerCapacity,
   encodeCp437,
   exitMode,
   nameRoom,
   parsePe,
   parseTexts,
+  readDealer,
   readEpisodeStart,
   recordCell,
   recordCellOffsets,
@@ -48,8 +51,10 @@ import {
   roomScript,
   roomSettings,
   roomTextLength,
+  sameDealer,
   sha256,
   textChanges,
+  withDealer,
   withEpisodeStart,
   withExitMode,
   withRoomChanges,
@@ -106,6 +111,8 @@ export interface Edit {
   removed?: Room;
   /** A text resource before and after (room names). */
   text?: { id: number; before: string; after: string };
+  /** The episode's dealer before and after (its goods). */
+  dealer?: { before: Dealer; after: Dealer };
   /** Steps done and undone together, in this order (the edit's own fields: the first's). */
   parts?: Edit[];
 }
@@ -226,14 +233,16 @@ const inRoom = (index: number) => Number.isInteger(index) && index >= 0 && index
  *
  * With a mod (mod.ts), the editor works on its base: the pristine exe with the changes
  * it does not edit (tile types, events, code, text copies, the start) applied. The
- * mod's rooms and texts are where editing starts; saveMod gives them back with the
- * edits, as the differences to the base.
+ * mod's rooms, texts and dealers are where editing starts; saveMod gives them back with
+ * the edits, as the differences to the base.
  */
 export class Editor {
   private readonly edited = new Map<number, Room[]>();
   /** Edited text resources by id, and the last one parsed. */
   private readonly texts = new Map<number, string>();
   private readonly parsed = new Map<number, { source: string; texts: Texts }>();
+  /** Edited dealers by episode. */
+  private readonly dealers = new Map<number, Dealer>();
   private readonly undoStack: Edit[] = [];
   private readonly redoStack: Edit[] = [];
   private stroke: Edit | undefined;
@@ -254,7 +263,7 @@ export class Editor {
       this.mod = { name: "", author: "", description: "", changes: NO_CHANGES };
       return;
     }
-    const { tileTypes, events, code, copyTexts, start, rooms, texts } = mod.changes;
+    const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
     const kept: ModChanges = { ...NO_CHANGES, tileTypes, events, code, copyTexts, start };
     this.game = new Game(applyMod(game.image, { ...mod, changes: kept }));
     this.mod = { ...mod, changes: kept };
@@ -267,6 +276,11 @@ export class Editor {
       if (source === undefined) throw new RangeError(`the exe has no text resource ${resource}`);
       const set = texts.filter((c) => c.resource === resource);
       this.texts.set(resource, withTextChanges(source, set));
+    }
+    for (const { episode, goods, most } of dealer) {
+      const problem = this.dealerProblem(episode, { goods, most });
+      if (problem) throw new RangeError(`episode ${episode}'s dealer: ${problem}`);
+      this.dealers.set(episode, { goods, most });
     }
   }
 
@@ -306,6 +320,58 @@ export class Editor {
   /** A text resource as edited (see texts.ts), undefined if the exe has none. */
   textSource(id: number): string | undefined {
     return this.texts.get(id) ?? this.game.textSource(id);
+  }
+
+  /** The episode's dealer as edited, undefined if the episode has none (episode III). */
+  dealer(episode: number): Dealer | undefined {
+    return this.dealers.get(episode) ?? readDealer(this.game.image, episode);
+  }
+
+  /** How many goods the episode's dealer can sell (dealerCapacity; 0: no dealer). */
+  dealerCapacity(episode: number): number {
+    return dealerCapacity(this.game.image, episode);
+  }
+
+  /** Why the episode's dealer cannot sell `dealer` (dealerProblem), undefined if it can. */
+  dealerProblem(episode: number, dealer: Dealer): string | undefined {
+    try {
+      withDealer(this.game.image, episode, dealer);
+    } catch (error) {
+      return error instanceof RangeError ? error.message : String(error);
+    }
+    return undefined;
+  }
+
+  /**
+   * Gives the episode's dealer other goods or another number shown at once; one undo
+   * step (shown in room `room`). Throws a RangeError for what the game's table cannot
+   * hold (dealerProblem).
+   */
+  setDealer(episode: number, room: number, dealer: Dealer): Edit | undefined {
+    this.endStroke();
+    const old = this.dealer(episode);
+    const problem = this.dealerProblem(episode, dealer);
+    if (!old || problem) throw new RangeError(problem ?? "the episode has no dealer");
+    if (sameDealer(old, dealer)) return undefined;
+    const step: Edit = {
+      episode,
+      room,
+      layer: "base",
+      changes: [],
+      dealer: {
+        before: old,
+        after: { goods: dealer.goods.map((g) => ({ ...g })), most: dealer.most },
+      },
+    };
+    this.apply(step, after);
+    this.push(step);
+    return step;
+  }
+
+  /** Whether the episode's dealer differs from the base's. */
+  isDealerEdited(episode: number): boolean {
+    const dealer = this.dealers.get(episode);
+    return dealer !== undefined && !sameDealer(dealer, readDealer(this.game.image, episode));
   }
 
   /** The name the game shows for a room, with the edited names. */
@@ -1015,10 +1081,13 @@ export class Editor {
         entries: c.entries.filter(([to]) => !written.has(`${c.resource} ${to}`)),
       }))
       .filter((c) => c.entries.length > 0);
+    const dealer = [...this.dealers]
+      .filter(([episode]) => this.isDealerEdited(episode))
+      .map(([episode, { goods, most }]) => ({ episode, goods, most }));
     const mod: Mod = {
       ...this.mod,
       base: sha256(this.pristine.image.data),
-      changes: { ...this.mod.changes, copyTexts, texts, rooms },
+      changes: { ...this.mod.changes, dealer, copyTexts, texts, rooms },
     };
     checkMod(mod);
     this.saved = this.undoStack.at(-1);
@@ -1051,6 +1120,9 @@ export class Editor {
     for (const [id, text] of this.texts) {
       if (text !== this.game.textSource(id)) exe = new Game(exe).withText(id, text);
     }
+    for (const [episode, dealer] of this.dealers) {
+      if (this.isDealerEdited(episode)) exe = withDealer(parsePe(exe), episode, dealer);
+    }
     return exe;
   }
 
@@ -1075,6 +1147,10 @@ export class Editor {
     }
     if (edit.text) {
       this.texts.set(edit.text.id, value === before ? edit.text.before : edit.text.after);
+      return;
+    }
+    if (edit.dealer) {
+      this.dealers.set(edit.episode, value === before ? edit.dealer.before : edit.dealer.after);
       return;
     }
     const present = value === after ? edit.added : edit.removed;

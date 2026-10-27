@@ -71,9 +71,12 @@ const RECORD_SOURCES: Readonly<Partial<Record<number, ActorSource>>> = {
   8: "travelling",
 };
 
+/** The dealer's class: buys platinum for points, sells items for gold (0x448440, dealer.ts). */
+export const DEALER_CLASS = 0x2c;
+
 /** Names of actors whose tiles do not say what they are. */
 export const ACTOR_CLASS_NAMES: Readonly<Partial<Record<number, string>>> = {
-  0x2c: "Dealer", // buys platinum for points, sells items for gold (0x448440)
+  [DEALER_CLASS]: "Dealer",
   0x4a: "Thief", // takes about half of the hero's items (0x41f470)
 };
 

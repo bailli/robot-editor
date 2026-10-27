@@ -242,10 +242,22 @@ export {
   withEventEntries,
 } from "./events.ts";
 export type { GameEvent } from "./events.ts";
+export {
+  MAX_PRICE,
+  MAX_SHOWN,
+  MIN_SHOWN,
+  dealerCapacity,
+  dealerProblem,
+  readDealer,
+  sameDealer,
+  withDealer,
+} from "./dealer.ts";
+export type { Dealer, DealerGood } from "./dealer.ts";
 export type { RecordInfo, RecordKind, TeleporterCondition } from "./records.ts";
 export {
   ACTOR_CLASS_NAMES,
   ACTOR_KIND_CLASSES,
+  DEALER_CLASS,
   PLACEMENT_AREAS,
   ROBOT_CLASSES,
   actorKindClass,
@@ -304,6 +316,7 @@ export {
 export type {
   CodeChange,
   CopyTextsChange,
+  DealerChange,
   EventChange,
   Mod,
   ModChanges,

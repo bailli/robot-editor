@@ -5,6 +5,18 @@ export interface SideTab {
   content: HTMLElement;
 }
 
+/** What a tab's button tells about its content without opening it. */
+export interface TabState {
+  /** A short text after the label: a count, a mark. */
+  badge?: string;
+  /** Nothing there for the shown room: the label is dimmed. */
+  empty?: boolean;
+  /** Something to look at (unapplied or edited): the badge in the edited colour. */
+  note?: boolean;
+  /** What the badge stands for, in the button's tooltip. */
+  title?: string;
+}
+
 const WIDTH_KEY = "robot-editor-side-width";
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 900;
@@ -17,7 +29,10 @@ const MAX_WIDTH = 900;
 export class SidePanel {
   readonly element = document.createElement("aside");
   private readonly bar = document.createElement("div");
-  private readonly tabs = new Map<string, { button: HTMLButtonElement; panel: HTMLElement }>();
+  private readonly tabs = new Map<
+    string,
+    { button: HTMLButtonElement; badge: HTMLElement; panel: HTMLElement }
+  >();
   private current = "";
 
   /** `resize` gets the new width while the edge is dragged. */
@@ -31,7 +46,14 @@ export class SidePanel {
     this.element.append(handle, this.bar);
     for (const tab of tabs) {
       const button = document.createElement("button");
-      button.textContent = tab.label;
+      const label = document.createElement("span");
+      label.textContent = tab.label;
+      // the tab's name stays its label; the tooltip says what the badge stands for
+      const badge = document.createElement("span");
+      badge.className = "tab-badge";
+      badge.setAttribute("aria-hidden", "true");
+      badge.hidden = true;
+      button.append(label, badge);
       button.setAttribute("role", "tab");
       button.addEventListener("click", () => {
         this.show(tab.name);
@@ -41,7 +63,7 @@ export class SidePanel {
       panel.setAttribute("role", "tabpanel");
       panel.setAttribute("aria-label", tab.label);
       panel.append(tab.content);
-      this.tabs.set(tab.name, { button, panel });
+      this.tabs.set(tab.name, { button, badge, panel });
       this.bar.append(button);
       this.element.append(panel);
     }
@@ -84,6 +106,29 @@ export class SidePanel {
     header.className = "side-header";
     header.append(...elements);
     this.bar.before(header);
+  }
+
+  /** Marks a tab's button: a badge, dimmed when empty (see TabState). */
+  setState(name: string, state: TabState): void {
+    const tab = this.tabs.get(name);
+    if (!tab) return;
+    tab.badge.textContent = state.badge ?? "";
+    tab.badge.hidden = state.badge === undefined;
+    tab.badge.classList.toggle("note", state.note === true);
+    tab.button.classList.toggle("empty", state.empty === true);
+    tab.button.title = state.title ?? "";
+    if (state.title) tab.button.setAttribute("aria-description", state.title);
+    else tab.button.removeAttribute("aria-description");
+  }
+
+  /** The state a tab's button shows (setState). */
+  state(name: string): { badge: string | undefined; empty: boolean; title: string } {
+    const tab = this.tabs.get(name);
+    return {
+      badge: tab && !tab.badge.hidden ? tab.badge.textContent : undefined,
+      empty: tab?.button.classList.contains("empty") ?? false,
+      title: tab?.button.title ?? "",
+    };
   }
 
   get shown(): string {

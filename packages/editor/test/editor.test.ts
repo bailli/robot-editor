@@ -13,6 +13,7 @@ import {
   modJson,
   parseMod,
   parsePe,
+  readDealer,
   readEpisodeStart,
   roomCompiledScript,
   roomScript,
@@ -661,4 +662,58 @@ describe("Editor and mods", () => {
     paint(editor, free, 0x0105);
     expect(() => new Editor(new Game(editor.save()), aMod())).toThrow(/for another exe/);
   });
+});
+
+describe("Editor and the dealer", () => {
+  const original = defined(readDealer(game.image, 1), "episode I's dealer");
+  const cheaper = { goods: original.goods.with(0, { tile: 0x0020, price: 1 }), most: 6 };
+
+  test("the dealer's goods change as one step, saved into the exe and undone", () => {
+    const editor = new Editor(game);
+    expect(editor.dealer(1)).toEqual(original);
+    expect(editor.dealer(3)).toBeUndefined();
+    expect(editor.dealerCapacity(1)).toBe(27);
+    const edit = editor.setDealer(1, 43, cheaper);
+    expect(edit?.room).toBe(43);
+    expect(editor.dirty).toBe(true);
+    expect(editor.isDealerEdited(1)).toBe(true);
+    // the same again is no edit
+    expect(editor.setDealer(1, 43, cheaper)).toBeUndefined();
+    expect(readDealer(parsePe(editor.save()), 1)).toEqual(cheaper);
+    expect(editor.dirty).toBe(false);
+    editor.undo();
+    expect(editor.dealer(1)).toEqual(original);
+    expect(editor.isDealerEdited(1)).toBe(false);
+    editor.redo();
+    expect(editor.dealer(1)).toEqual(cheaper);
+  });
+
+  test("goods the table cannot hold are refused", () => {
+    const editor = new Editor(game);
+    const tooMany = { goods: [...original.goods, original.goods[0]], most: 8 };
+    expect(editor.dealerProblem(1, tooMany)).toMatch(/at most 27/);
+    expect(() => editor.setDealer(1, 43, tooMany)).toThrow(RangeError);
+    expect(() => editor.setDealer(3, 41, cheaper)).toThrow(/no dealer/);
+    expect(editor.canUndo).toBe(false);
+  });
+
+  test("a mod's dealer is where editing starts; saved as the difference to the base", () => {
+    const editor = new Editor(game);
+    editor.setDealer(1, 43, cheaper);
+    const mod = editor.saveMod();
+    expect(mod.changes.dealer).toEqual([{ episode: 1, ...cheaper }]);
+    sameExe(new Game(applyMod(game.image, parseMod(modJson(mod)))), new Game(editor.save()));
+    const opened = new Editor(game, mod);
+    expect(opened.dealer(1)).toEqual(cheaper);
+    expect(opened.dirty).toBe(false);
+    expect(modJson(opened.saveMod())).toBe(modJson(mod));
+    // back to the original goods: nothing left to save
+    opened.setDealer(1, 43, original);
+    expect(opened.saveMod().changes.dealer).toEqual([]);
+  });
+
+  function sameExe(a: Game, b: Game): void {
+    expect(readDealer(a.image, 1)).toEqual(readDealer(b.image, 1));
+    expect(firstDifference(a.image.data, b.image.data)).toBe(-1);
+  }
 });

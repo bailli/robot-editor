@@ -1080,17 +1080,52 @@ header button.pressed {
   margin: 0;
 }
 
-/* two rows of three, so the labels never widen the column */
+/* rows of equal buttons, as many as fit, so the labels never widen the column */
 .side-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(6.5em, 1fr));
   gap: 4px;
   margin-bottom: 8px;
+}
+
+.side-tabs button {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .side-tabs button.selected {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* nothing there for the shown room */
+.side-tabs button.empty:not(.selected) {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+/* a count or mark: what the tab holds, without opening it */
+.tab-badge {
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.tab-badge[hidden] {
+  display: none;
+}
+
+.tab-badge.note {
+  background: var(--edited);
+  color: var(--on-accent);
 }
 
 .side-content {
@@ -1274,4 +1309,67 @@ canvas.cell.text-tile {
 .new-room-tile-label {
   width: 4em;
   color: var(--muted);
+}
+
+/* the Episode tab: the dealer's goods */
+.dealer-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dealer-view h3,
+.dealer-view p {
+  margin: 0;
+}
+
+.dealer-goods {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dealer-good {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dealer-good canvas {
+  flex: none;
+}
+
+.dealer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dealer-good button {
+  padding: 1px 6px;
+}
+
+.dealer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dealer-bar button:last-child {
+  margin-left: auto;
+}
+
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
 }

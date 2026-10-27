@@ -39,6 +39,8 @@ export interface ScriptViewEvents {
   hover(fn: string | undefined, args: readonly (number | undefined)[]): void;
   /** The game's names a script can use, for completion. */
   names(): readonly ScriptName[];
+  /** Editing began or ended, or the draft changed (see ScriptView.drafting). */
+  drafted?(): void;
 }
 
 /** A name of the game: a function (one per argument count), a variable or a constant. */
@@ -400,6 +402,11 @@ export class ScriptView {
     this.render();
   }
 
+  /** Whether the script is being edited and the draft differs from the room's script. */
+  get drafting(): boolean {
+    return this.editing && this.draft !== this.source;
+  }
+
   /** Leaves the editor, dropping the draft. */
   close(): void {
     this.editing = false;
@@ -425,6 +432,7 @@ export class ScriptView {
     };
     if (this.editing) {
       this.element.replaceChildren(bar, ...this.editor(button));
+      this.events.drafted?.();
       return;
     }
     button(this.source ? "Edit" : "Add script", "Edit the script's source", () => {
@@ -458,6 +466,7 @@ export class ScriptView {
       if (this.showCode) parts.push(this.bytecode(this.source));
     }
     this.element.replaceChildren(...parts);
+    this.events.drafted?.();
   }
 
   /**
@@ -546,6 +555,7 @@ export class ScriptView {
           (this.draft.trim() === "" ? "Empty: the room will have no script." : "Compiles.")) +
         changed;
       apply.disabled = error !== undefined || this.draft === this.source;
+      this.events.drafted?.();
     };
     const compile = (source: string) => {
       if (source.trim() !== "") this.events.compile(source);

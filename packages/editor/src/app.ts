@@ -1,5 +1,7 @@
 import {
+  ACTOR_RECORD,
   CIRCUIT_NODE_RECORD,
+  DEALER_CLASS,
   type Direction,
   EPISODES,
   EPISODE_NAMES,
@@ -19,6 +21,7 @@ import {
   type RoomActor,
   SCRIPT_EVENTS,
   START_ROOMS,
+  actorKindClass,
   backdropRoom,
   compileScript,
   cryptScene,
@@ -35,8 +38,10 @@ import {
   parseMod,
   parseScene,
   randomPlacement,
+  readDealer,
   readEventTable,
   readOracleSymbols,
+  recordActorKind,
   roomActors,
   roomCircuit,
   roomSaveTime,
@@ -53,6 +58,7 @@ import {
 import { ActorsView, actorOrigin } from "./actors-view.ts";
 import { CircuitView } from "./circuit-view.ts";
 import { confirmDialog } from "./confirm-dialog.ts";
+import { DealerView } from "./dealer-view.ts";
 import {
   type Area,
   type Clip,
@@ -88,7 +94,7 @@ import {
 } from "./room-view.ts";
 import { type ScriptName, ScriptView } from "./script-view.ts";
 import { type SettingsContext, SettingsView } from "./settings-view.ts";
-import { SidePanel } from "./side-panel.ts";
+import { SidePanel, type TabState } from "./side-panel.ts";
 import { TileNames } from "./tile-info.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
@@ -416,6 +422,9 @@ export class App {
       );
       return [...keywords, ...constants];
     },
+    drafted: () => {
+      if (this.editor) this.refreshScriptTab();
+    },
   });
   readonly recordView = new RecordView({
     change: (data) => {
@@ -464,13 +473,34 @@ export class App {
       this.refreshButtons();
     },
   });
+  readonly dealerView = new DealerView({
+    change: (dealer) => {
+      try {
+        this.need().setDealer(this.episode, this.roomId, dealer);
+      } catch (error) {
+        this.setStatus(`Cannot change the dealer: ${message(error)}`, true);
+      }
+      this.refreshDealer();
+      this.refreshButtons();
+    },
+    preview: (value) => this.cellPreview(value),
+    // the item's name; unnamed ones by what the game says about them
+    name: (value) => this.names().info(value).name ?? (this.names().summary(value) || hex(value)),
+    tile: () => this.tile,
+    useTile: (value) => {
+      this.setTile(value);
+    },
+    go: (room) => {
+      if (this.need().hasRoom(this.episode, room)) this.showRoom(room);
+    },
+  });
   /** Per episode: the pieces of its MUSIC resource. */
   private readonly musicPieces = new Map<number, string[]>();
   /** The pieces some room of the loaded exe plays. */
   private roomMusic: Set<string> | undefined;
   /**
    * The column right of the room: tiles, the selected record, the actors, the script,
-   * the room's settings.
+   * the room's settings, the episode's (the dealer).
    */
   readonly sidePanel: SidePanel = new SidePanel(
     [
@@ -480,6 +510,7 @@ export class App {
       { name: "circuit", label: "Circuit", content: this.circuitView.element },
       { name: "script", label: "Script", content: this.scriptView.element },
       { name: "room", label: "Room", content: this.settingsView.element },
+      { name: "episode", label: "Episode", content: this.dealerView.element },
     ],
     (width) => {
       this.workspace.style.setProperty("--side-width", `${width}px`);
@@ -773,13 +804,16 @@ export class App {
     this.view.show(room, this.roomCache(room), this.backdrop(room));
     this.refreshConnections();
     this.scriptView.show(roomScript(room), `${this.episode} ${id}`);
+    this.refreshScriptTab();
     this.showSettings(room);
     this.refreshActors();
     this.refreshCircuit();
+    this.refreshDealer();
     this.refreshRoomList();
     const shown = `${this.episode} ${id}`;
     if (this.lastRoom !== shown) {
       if (this.selected) this.select(undefined);
+      else this.sidePanel.setState("record", NO_RECORD);
       this.setArea(undefined);
     }
     this.lastRoom = shown;
@@ -815,7 +849,15 @@ export class App {
         ),
       ),
     );
-    this.settingsView.show(roomSettings(room), {
+    const settings = roomSettings(room);
+    this.sidePanel.setState("room", {
+      title: [
+        `darkness ${settings.darkness}`,
+        `${settings.points} points for the first visit`,
+        settings.music ? `music ${settings.music}` : "no music",
+      ].join(", "),
+    });
+    this.settingsView.show(settings, {
       episode: this.episode,
       pieces,
       roomMusic: this.roomMusic,
@@ -1207,6 +1249,7 @@ export class App {
     if (index === undefined) {
       this.selected = undefined;
       this.recordView.hide();
+      this.sidePanel.setState("record", NO_RECORD);
       this.refreshCircuit();
       return;
     }
@@ -1222,7 +1265,16 @@ export class App {
     if (record) {
       const classes = game.episode(this.episode).classes;
       this.recordView.show(record, where, classes, readOracleSymbols(game.image));
-    } else this.recordView.showEmpty(where);
+      this.sidePanel.setState("record", {
+        title: `${cellAt(index)}: ${describeRecord(record, classes).summary}`,
+      });
+    } else {
+      this.recordView.showEmpty(where);
+      this.sidePanel.setState("record", {
+        empty: true,
+        title: `${cellAt(index)}: no record (one can be added here)`,
+      });
+    }
     // where a node can be added
     this.refreshCircuit();
   }
@@ -1791,13 +1843,28 @@ export class App {
     this.view.setActors(this.actorsToggle.checked ? this.actors : [], (_, n) => sprites[n]);
     const classes = editor.game.episode(this.episode).classes;
     const constants = editor.game.scriptConstants(this.episode);
+    const calls = scriptActors(roomScript(room));
     this.actorsView.show(
       this.actors,
-      scriptActors(roomScript(room)).map((call) => ({
+      calls.map((call) => ({
         call,
         placement: randomPlacement(call, room, classes, constants),
       })),
     );
+    const count = this.actors.length + calls.length;
+    this.sidePanel.setState("actors", {
+      ...(count > 0 ? { badge: String(count) } : {}),
+      empty: count === 0,
+      title:
+        count === 0
+          ? "No actors in this room"
+          : [
+              plural(this.actors.length, "actor"),
+              calls.length ? plural(calls.length, "RandObj call") : "",
+            ]
+              .filter(Boolean)
+              .join(", "),
+    });
   }
 
   /** Evaluates the room's circuit again (after painting, record edits, …) and shows it. */
@@ -1816,6 +1883,17 @@ export class App {
     const letter = classes.typeOfClass.get(LETTER_CLASS);
     const gate = classes.typeOfClass.get(GATE_CLASS);
     const bulb = nodeBulb(classes, false);
+    const on = circuit.nodes.filter((n) => n.signal === 1).length;
+    const problems = circuit.problems.length;
+    this.sidePanel.setState("circuit", {
+      ...(circuit.nodes.length > 0 ? { badge: `${on}/${circuit.nodes.length}` } : {}),
+      empty: circuit.nodes.length === 0,
+      note: problems > 0,
+      title:
+        circuit.nodes.length === 0
+          ? "No circuit nodes in this room"
+          : `${on} of ${plural(circuit.nodes.length, "node")} on${problems ? `, ${plural(problems, "problem")}` : ""}`,
+    });
     this.circuitView.show(circuit, {
       room: this.roomId,
       ids: new Set(editor.rooms(this.episode).map((r) => r.id)),
@@ -1824,6 +1902,61 @@ export class App {
       ...(bulb === undefined ? {} : { bulb }),
       ...(free === undefined ? {} : { free }),
     });
+  }
+
+  /** The Script tab's button: whether the room has a script, a draft not applied. */
+  private refreshScriptTab(): void {
+    const source = roomScript(this.need().room(this.episode, this.roomId));
+    const drafting = this.scriptView.drafting;
+    const lines = source === "" ? 0 : source.trimEnd().split("\n").length;
+    this.sidePanel.setState("script", {
+      ...(drafting ? { badge: "✎" } : source ? { badge: "●" } : {}),
+      empty: source === "" && !drafting,
+      note: drafting,
+      title: [
+        source ? `A script of ${plural(lines, "line")}` : "No script",
+        drafting ? "edited, not applied" : "",
+      ]
+        .filter(Boolean)
+        .join(", "),
+    });
+  }
+
+  /** The Episode tab: the episode's dealer, the rooms he appears in. */
+  private refreshDealer(): void {
+    const editor = this.need();
+    const dealer = editor.dealer(this.episode);
+    const edited = editor.isDealerEdited(this.episode);
+    this.dealerView.show({
+      episode: EPISODE_NAMES[this.episode] ?? `episode ${this.episode}`,
+      dealer,
+      original: readDealer(editor.game.image, this.episode),
+      capacity: editor.dealerCapacity(this.episode),
+      rooms: this.dealerRooms(),
+    });
+    this.sidePanel.setState("episode", {
+      ...(edited ? { badge: "●" } : {}),
+      empty: dealer === undefined,
+      note: edited,
+      title: dealer
+        ? `The dealer sells ${plural(dealer.goods.length, "good")}${edited ? " (edited)" : ""}`
+        : "No dealer in this episode",
+    });
+  }
+
+  /** The rooms of the episode with a dealer record (a travelling actor that is the dealer). */
+  private dealerRooms(): number[] {
+    const editor = this.need();
+    const classes = editor.game.episode(this.episode).classes;
+    const isDealer = (data: Uint8Array) => {
+      if (data[0] !== ACTOR_RECORD) return false;
+      const kind = recordActorKind(data[8], classes);
+      return kind !== undefined && actorKindClass(kind) === DEALER_CLASS;
+    };
+    return editor
+      .rooms(this.episode)
+      .filter((r) => r.records.some((record) => isDealer(record.data)))
+      .map((r) => r.id);
   }
 
   /** Adds a logic record of `type` at the selected cell. */
@@ -1860,7 +1993,7 @@ export class App {
       this.showEpisode(edit.episode, this.lastSeen(edit.episode, edit.room));
     } else if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
     else if (edit.room !== this.roomId) this.showRoom(edit.room);
-    else if (edit.records || edit.tags || edit.text) {
+    else if (edit.records || edit.tags || edit.text || edit.dealer) {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);
       if (this.selected) this.select(this.selected.index);
@@ -2209,12 +2342,12 @@ function isHistoryState(state: unknown): state is HistoryState {
 
 const HISTORY_KEY = "robot-editor-history";
 
-/** A short fingerprint of what a room looks like (its cells and records). */
 /** A cell index as "(x, y)". */
 function cellAt(index: number): string {
   return `(${index % ROOM_WIDTH}, ${Math.floor(index / ROOM_WIDTH)})`;
 }
 
+/** A short fingerprint of what a room looks like (its cells and records). */
 function roomKey(room: Room): string {
   let hash = 0x811c9dc5;
   const mix = (v: number) => {
@@ -2229,7 +2362,16 @@ function roomKey(room: Room): string {
   return `${hash >>> 0} ${room.records.length}`;
 }
 
+/** The Record tab's button while no cell is selected. */
+const NO_RECORD: TabState = {
+  empty: true,
+  title: "No cell selected: click a magenta cell, or any cell with the Inspect tool",
+};
+
 const capitalize = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
+/** "1 node", "3 nodes". */
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** A button of the Area tools, named "<label> area" for screen readers. */
 function areaButton(label: string, title: string): HTMLButtonElement {

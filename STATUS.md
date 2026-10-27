@@ -88,6 +88,7 @@ Files in `packages/formats/src`:
 | `records.ts`                 | what logic records do                                                                         |
 | `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                |
 | `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`); patching them    |
+| `dealer.ts`                  | the dealer's goods per episode: items, prices, how many shown; patching them                  |
 | `mod.ts`, `sha256.ts`        | mods: keyed changes to the pristine exe, their JSON file, compiled to a patch and applied     |
 | `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
 | `game.ts`                    | `Game`: loads an exe, episodes lazily, saves scenes, texts, tile types from other episodes    |
@@ -722,6 +723,14 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   gold (0x4fe30e) take all of it and give nothing (text 507 entry 4); otherwise event
   0x101, the gold is paid, and goods the inventory does not take (0x42c010) are placed
   on the dealer's cell (0x433300; then text 507 entry 5).
+  **Editable** (`dealer.ts`, code only, not tried in the game): the goods method is
+  `mov [eax], count; mov [ecx], most; mov eax, table` (immediates at +0x0b, +0x11,
+  +0x16), so `withDealer` rewrites the table's entries in place and both counts. The
+  table has no room to grow (a 4-byte pad, then other data): at most as many goods as
+  the original (`dealerCapacity`), fewer are fine; at least 5 (the distinct pick);
+  most shown 5–10 (the offer holds 20, 0x448458; more than I's 10 not tried) and no
+  more than there are goods. Giving III a dealer would need a goods method of its own
+  (a vtable entry and code).
 
 ## The editor (`pnpm editor`)
 
@@ -754,9 +763,14 @@ Supported:
 - layout: the room fits the window's height with its exits around it (north above, south
   below, west and east written vertically at the sides; doors, stairs, bus, oracles,
   teleporters and actors in a line above); the column right of it has the tool and layer
-  settings (always visible) and tabs (Tiles, Record, Actors, Circuit, Script, Room) that
-  scroll on their own, its width can be dragged (remembered in the browser); clicking a
-  logic cell opens the Record tab
+  settings (always visible) and tabs (Tiles, Record, Actors, Circuit, Script, Room,
+  Episode) that scroll on their own, its width can be dragged (remembered in the
+  browser); clicking a logic cell opens the Record tab; the tab buttons tell what is
+  there without opening them (`SidePanel.setState`): dimmed and dashed when empty for
+  the shown room (no record selected, no actors, no circuit nodes, no script, no
+  dealer), a badge with the number of actors and RandObj calls, the circuit's nodes on
+  of all (orange with problems), ● for a script (✎ in orange while a draft is not
+  applied), ● in orange for an edited dealer; the tooltip says it in words
 - help (button "Shortcuts", key ?): a dialog listing the keys and mouse buttons
   (`help-dialog.ts`); keys typed in a dialog do not reach the room
 - exits: N/S/W/E targets incl. script changes; arrow keys follow fixed exits; per
@@ -866,6 +880,12 @@ Supported:
   browser's
 - save: downloads the exe with all edited episodes and texts (warns about unsaved changes
   on leave)
+- the episode's dealer (tab Episode, `dealer-view.ts`): the goods every dealer of the
+  episode sells, with picture, name and price, the most shown at once, the rooms with
+  a dealer record (links); a picture click sells the current tile instead, right-click
+  paints with it; prices typed, goods moved, removed (at least 5) or added (the current
+  tile, up to the table's size), "Original goods"; each change one undo step (patched
+  in place: focus stays, Tab goes on); saved into the exe and the mod (`dealer`)
 - mods (see "The mod format"): "Open mod…" (or dropping a `.json`) opens a mod for the
   loaded exe, "Save mod" downloads the edits as one (named after the opened mod, else
   the exe); with a mod "Save exe" makes the exe from it at any time
@@ -975,22 +995,25 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
      scripts award 180–196, no code raises those ids). III has no such spare entry.
   2. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
      if the exe holds `expect` there (e.g. the oracle flags in Junior). Later.
-  3. `texts` (key: resource id, entry): `{ resource, entry, variants | null }` →
+  3. `dealer` (key: episode): `{ episode, most, goods: [[type, state, price], …] }` →
+     `withDealer` (see "The dealer's goods"): the episode's whole list, at most as many
+     goods as its table has room for.
+  4. `texts` (key: resource id, entry): `{ resource, entry, variants | null }` →
      `withTextEntry`, entry by entry (room names, descriptions, hints, messages), never
      whole resources: the file holds only what the mod wrote, and two changes to one
      resource compose. `copyTexts` (same keys: an entry is either copied or written):
      `{ resource, from, entries: [[to, of], …] }` copies entries of resource `from` (as
-     kinds 1–2 left the exe) into `resource`, e.g. episode II's oracle hints and death
+     kinds 1–3 left the exe) into `resource`, e.g. episode II's oracle hints and death
      message (1210: 331, 334, 945) into Junior's 1010, so the mod carries no text of
      the game's own.
-  4. `rooms` (key: episode, room id): the room as its SCNV3 bytes (id, tags with the
+  5. `rooms` (key: episode, room id): the room as its SCNV3 bytes (id, tags with the
      script, map, records; as `serializeScene` writes one room), base64; `null` removes
      the room. Others keep their place; once a room is added or removed, the episode's
      rooms are sorted by id, as the editor keeps them → `withScene`.
-  5. `start` (key: episode): `{ episode, room, x, y }` → `withEpisodeStart`.
+  6. `start` (key: episode): `{ episode, room, x, y }` → `withEpisodeStart`.
 - **File:** one JSON file (`*.robotmod.json`) with `format` (1), `name`, `author`,
-  `description`, `base` (`{ sha256 }`) and `changes` (`tileTypes`, `code`, `texts`,
-  `rooms`, `start`: arrays of the changes above). `base` is the sha256 of the whole
+  `description`, `base` (`{ sha256 }`) and `changes` (`tileTypes`, `events`, `code`,
+  `dealer`, `copyTexts`, `texts`, `rooms`, `start`: arrays of the changes above). `base` is the sha256 of the whole
   pristine exe (the Windows version 2018, `reference/GameOfRobot.exe`); applying
   refuses any other exe. A changed room carries the original content it keeps (a fan
   episode's rooms are mostly new; cell diffs only if that matters).
@@ -1018,11 +1041,11 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   `serializeRoom`/`parseRoom` in `scene.ts`. On the command line
   `robot mod apply MOD OUT.exe`, later `robot mod compile MOD OUT.patch` for the proxy.
 - **The editor** works on two images: the **base** (pristine + kinds 1–2, the parts the
-  editor does not edit) and the **edited** state on top (kinds 3–5, what it edits
-  today: rooms, texts; later the start). Opening takes an exe and, optionally, a mod;
-  "Save mod" writes kinds 1–2 as loaded plus kinds 3–5 as the difference between the
-  edited state and the base (rooms that differ byte for byte, text entries that
-  differ), so text copied by `tileTypes` never shows up as an edit; a text entry
+  editor does not edit) and the **edited** state on top (kinds 3–6, what it edits
+  today: the dealers, rooms, texts; later the start). Opening takes an exe and,
+  optionally, a mod; "Save mod" writes kinds 1–2 as loaded plus kinds 3–6 as the
+  difference between the edited state and the base (dealers that differ, rooms that
+  differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
   written in the editor replaces its copy in `copyTexts`. "Save exe" and "Test in
   game" stay, built from the base and the edits. Undo/redo, dirty state (either save
   clears it) and the room list work as now; rooms the mod changes show as edited.

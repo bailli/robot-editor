@@ -6,10 +6,11 @@
  *   1. tileTypes  (episode, target type)  tile types from another episode (withTileTypes)
  *   2. events     (episode, entry)        an event table entry's id and points
  *   3. code       (address)               bytes written where the exe holds `expect`
- *   4. copyTexts  (resource, entry)       a text entry copied from another one of the exe
+ *   4. dealer     (episode)               the dealer's goods and how many shown (withDealer)
+ *   5. copyTexts  (resource, entry)       a text entry copied from another one of the exe
  *      texts      (resource, entry)       a text entry set or removed (withTextEntry)
- *   5. rooms      (episode, room id)      a room replaced, added or removed (withScene)
- *   6. start      (episode)               where the episode starts (withEpisodeStart)
+ *   6. rooms      (episode, room id)      a room replaced, added or removed (withScene)
+ *   7. start      (episode)               where the episode starts (withEpisodeStart)
  * copyTexts and texts share their keys: an entry is either copied or written. Copies read
  * the exe as kinds 1-3 left it, so the mod carries no text of the game's own. The event
  * tables are full: a new event takes over an entry the episode never uses.
@@ -18,8 +19,10 @@
  * (applyPatch) and, later, the proxy as an in-memory loader apply only that patch.
  *
  * The file is JSON: format, name, author, description, base { sha256 }, changes with one
- * array per kind; code as hex strings, rooms as base64 of serializeRoom (null removes).
+ * array per kind; code as hex strings, the dealer's goods as [type, state, price], rooms
+ * as base64 of serializeRoom (null removes).
  */
+import { type Dealer, dealerProblem, withDealer } from "./dealer.ts";
 import {
   EVENT_IDS_END,
   FIRST_EVENT_ID,
@@ -63,6 +66,10 @@ export interface CodeChange {
   bytes: Uint8Array;
 }
 
+export interface DealerChange extends Dealer {
+  episode: number;
+}
+
 export interface CopyTextsChange {
   /** The CRUNCHED resource the entries go to. */
   resource: number;
@@ -95,6 +102,7 @@ export interface ModChanges {
   tileTypes: readonly TileTypesChange[];
   events: readonly EventChange[];
   code: readonly CodeChange[];
+  dealer: readonly DealerChange[];
   copyTexts: readonly CopyTextsChange[];
   texts: readonly TextChange[];
   rooms: readonly RoomChange[];
@@ -136,6 +144,7 @@ export const NO_CHANGES: ModChanges = {
   tileTypes: [],
   events: [],
   code: [],
+  dealer: [],
   copyTexts: [],
   texts: [],
   rooms: [],
@@ -162,7 +171,7 @@ function episodeOk(episode: number, where: string): void {
 /** Throws a ModError naming the change if any change is invalid or a key repeats. */
 export function checkMod(mod: Mod): void {
   need(/^[0-9a-f]{64}$/.test(mod.base), "base", "not a sha256 (64 lowercase hex digits)");
-  const { tileTypes, events, code, copyTexts, texts, rooms, start } = mod.changes;
+  const { tileTypes, events, code, dealer, copyTexts, texts, rooms, start } = mod.changes;
   const keys = new Set<string>();
   const once = (key: string, where: string) => {
     need(!keys.has(key), where, "changed twice");
@@ -204,6 +213,14 @@ export function checkMod(mod: Mod): void {
     const [[, end, before], [va, , where]] = [ranges[i - 1], ranges[i]];
     need(end <= va, where, `overlaps ${before}`);
   }
+  dealer.forEach((c, i) => {
+    const where = `dealer[${i}] (episode ${c.episode})`;
+    episodeOk(c.episode, where);
+    // the room the table has is checked against the exe (withDealer)
+    const problem = dealerProblem(c, Infinity);
+    need(problem === undefined, where, problem ?? "");
+    once(`dealer ${c.episode}`, where);
+  });
   const textId = (v: number) => isInt(v, 0, 0xffff);
   copyTexts.forEach((c, i) => {
     const where = `copyTexts[${i}]`;
@@ -275,6 +292,7 @@ function canonical(changes: ModChanges): ModChanges {
       ),
     ),
     code: changes.code.toSorted(byKeys((c) => c.va)),
+    dealer: changes.dealer.toSorted(byKeys((c) => c.episode)),
     copyTexts: changes.copyTexts
       .map((c) => ({ ...c, entries: c.entries.toSorted(byKeys(([to]) => to)) }))
       .toSorted(
@@ -338,6 +356,14 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
       out.set(c.bytes, at);
     });
     game = new Game(out);
+  }
+  for (const c of changes.dealer) {
+    try {
+      game = new Game(withDealer(game.image, c.episode, c));
+    } catch (error) {
+      if (error instanceof RangeError) need(false, `dealer (episode ${c.episode})`, error.message);
+      throw error;
+    }
   }
   // copies read the texts before any is changed, then go with the others in key order
   const copied = changes.copyTexts.flatMap((c, i) => {
@@ -519,7 +545,9 @@ function fromHex(text: string, where: string): Uint8Array {
 /** The mod as its JSON file; changes in key order, so saving again gives the same file. */
 export function modJson(mod: Mod): string {
   checkMod(mod);
-  const { tileTypes, events, code, copyTexts, texts, rooms, start } = canonical(mod.changes);
+  const { tileTypes, events, code, dealer, copyTexts, texts, rooms, start } = canonical(
+    mod.changes,
+  );
   const file: Json = {
     format: MOD_FORMAT,
     name: mod.name,
@@ -542,6 +570,11 @@ export function modJson(mod: Mod): string {
         va: `0x${c.va.toString(16)}`,
         expect: hex(c.expect),
         bytes: hex(c.bytes),
+      })),
+      dealer: dealer.map((c) => ({
+        episode: c.episode,
+        most: c.most,
+        goods: c.goods.map(({ tile, price }) => [tile & 0xff, tile >> 8, price]),
       })),
       copyTexts: copyTexts.map((c) => ({
         resource: c.resource,
@@ -639,6 +672,18 @@ export function parseMod(text: string): Mod {
           bytes: fromHex(string(o["bytes"], `${w}.bytes`), `${w}.bytes`),
         };
       }),
+      dealer: list("dealer", (o, w) => ({
+        episode: int(o["episode"], `${w}.episode`),
+        most: int(o["most"], `${w}.most`),
+        goods: array(o["goods"], `${w}.goods`).map((v, n) => {
+          const where = `${w}.goods[${n}]`;
+          const items = array(v, where).map((item) => int(item, where));
+          need(items.length === 3, where, "not [type, state, price]");
+          const [type, state, price] = items;
+          need(isInt(type, 0, 0xff) && isInt(state, 0, 0xff), where, "type and state are bytes");
+          return { tile: type | (state << 8), price };
+        }),
+      })),
       copyTexts: list("copyTexts", (o, w) => ({
         resource: int(o["resource"], `${w}.resource`),
         from: int(o["from"], `${w}.from`),

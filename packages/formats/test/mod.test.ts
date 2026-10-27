@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { expect, test } from "vitest";
 
 import { readClassTable } from "../src/classes.ts";
+import { type Dealer, readDealer, withDealer } from "../src/dealer.ts";
 import { readEventTable, withEventEntries } from "../src/events.ts";
 import { Game } from "../src/game.ts";
 import {
@@ -38,6 +39,12 @@ const room41: Room = (() => {
 })();
 const room300: Room = { ...game.room(3, 3), id: 300 };
 
+/** Episode I's dealer with six goods, a SLING for 99 gold first, at most 6 shown. */
+const dealer1: Dealer = (() => {
+  const goods = readDealer(game.image, 1)?.goods.slice(0, 6) ?? [];
+  return { goods: goods.with(0, { tile: 0x0020, price: 99 }), most: 6 };
+})();
+
 const changes: ModChanges = {
   tileTypes: [
     {
@@ -59,6 +66,7 @@ const changes: ModChanges = {
     { episode: 3, entry: 0x59, id: 76, points: 250 },
   ],
   code: [],
+  dealer: [{ episode: 1, ...dealer1 }],
   // the oracles' hints and death message for Junior, from episode II's texts
   copyTexts: [
     {
@@ -109,6 +117,7 @@ test("a mod applies its changes as the editing functions do, in the order of kin
     [198, { id: 266, points: 3500 }],
   ]);
   direct = new Game(withEventEntries(direct.image, 4, oracleEvents));
+  direct = new Game(withDealer(direct.image, 1, dealer1));
   let text = direct.textSource(1310) ?? "";
   text = withTextEntry(withTextEntry(text, 0x59, ["Ein Gatter."]), 0x5b, undefined);
   direct = new Game(direct.withText(1310, text));
@@ -145,6 +154,7 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   expect(modded.room(3, 300)).toEqual(room300);
   expect(modded.episode(3).rooms.some((r) => r.id === 3)).toBe(false);
   expect(readEpisodeStart(modded.image, 3)).toEqual(start);
+  expect(readDealer(modded.image, 1)).toEqual(dealer1);
   for (const e of [0, 1, 2, 4]) {
     expect(modded.episode(e).rooms).toEqual(game.episode(e).rooms);
   }
@@ -160,6 +170,8 @@ test("compiled: byte writes in the tables and the start method, whole resources"
       [0x4780d8, 12 * 187], // III's event table
       [0x479068, 12 * 201], // IV's event table
       [0x40b460, 23], // III's start method
+      [0x408de0, 0x1a], // I's goods method
+      [0x475730, 4 * 27], // I's goods
     ] as const;
     assert.ok(
       tables.some(([start, length]) => within(va, start, length) && within(end, start, length)),
@@ -211,6 +223,7 @@ test("the file: saving again gives the same file, in key order", () => {
   expect(JSON.parse(json)).toMatchObject({ format: 1, base: { sha256: emptyMod(exe()).base } });
   expect(json).toContain("[64, 37]");
   expect(json).toContain("[945, 945]");
+  expect(json).toContain("[32, 0, 99]");
   // the mod carries no text of the game's own
   expect(json).not.toContain(game.texts(1210)?.entries.get(945)?.[0]?.slice(0, 20));
   // texts keep their brackets and spaces
@@ -239,6 +252,11 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { events: [{ episode: 4, entry: 197, id: 392, points: 0 }] },
     { events: [{ episode: 4, entry: 197, id: 256, points: 0 }] },
     { events: [{ episode: 4, entry: 197, id: 263, points: 2 ** 31 }] },
+    // no dealer in III; more goods than I's table holds; too few shown; no item
+    { dealer: [{ episode: 3, ...dealer1 }] },
+    { dealer: [{ episode: 1, goods: Array(28).fill(dealer1.goods[0]), most: 6 }] },
+    { dealer: [{ episode: 1, ...dealer1, most: 4 }] },
+    { dealer: [{ episode: 1, goods: dealer1.goods.with(1, { tile: 0x7f, price: 1 }), most: 6 }] },
     // an entry copied and written, a missing source entry or resource, a self copy
     {
       copyTexts: [{ resource: 1010, from: 1210, entries: [[331, 331]] }],
