@@ -526,7 +526,13 @@ export class Editor {
     const above = rooms.find((r) => r.id === id - 100);
     if (!above) throw new RangeError(`there is no room ${id - 100} to lead in from`);
     const passages = interiorPassages(above, classes);
-    const room = { ...above, id, base: interiorFiller(classes), records: [] };
+    const room = {
+      ...above,
+      id,
+      base: interiorFiller(classes),
+      overlay: new Uint16Array(ROOM_CELLS),
+      records: [],
+    };
     return {
       above: above.id,
       backdrop: backdropRoom(episode, room, rooms, classes)?.id,

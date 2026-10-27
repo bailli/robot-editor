@@ -6,6 +6,7 @@ export {
   HATCHING_LOAD_METHODS,
   SAND_DESCRIBE_METHOD,
   SAND_SCORPION_STATES,
+  SCORPION_SAND_TOUCH_METHODS,
   freeTileTypes,
   readClassTable,
   readEpisodeClasses,
@@ -106,6 +107,7 @@ export {
   renderCell,
   renderRoom,
   shownCells,
+  showsBackdrop,
   toRgba,
 } from "./render.ts";
 export type { Backing } from "./render.ts";

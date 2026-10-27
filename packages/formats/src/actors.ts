@@ -3,8 +3,8 @@ import {
   BOMB_LOAD_METHOD,
   type EpisodeClasses,
   HATCHING_LOAD_METHODS,
-  SAND_DESCRIBE_METHOD,
   SAND_SCORPION_STATES,
+  SCORPION_SAND_TOUCH_METHODS,
 } from "./classes.ts";
 import { isConditional } from "./exits.ts";
 import {
@@ -41,7 +41,7 @@ import {
  *   hatchery   creatures appear after a while: eggs, snake basket, "something behind the
  *              wall" (HATCHING_LOAD_METHODS)
  *   bomb       its explosion lets robots appear
- *   scorpions  sand heaps (sand states 6, 7) hiding scorpions
+ *   scorpions  sand heaps (sand states 6, 7) hiding scorpions, not in episode IV
  *   spawner    record type 5: robots appear while the hero is near (0x435650)
  *   creature   record type 7: a friendly native (kind 0x107) appears on entering
  *   travelling record type 8: an actor (recordActorKind), in the originals the dealer
@@ -167,7 +167,7 @@ export function cellActorSource(cell: number, classes: EpisodeClasses): ActorSou
   if (ACTOR_LOAD_METHODS.has(cls.loadMethod)) return "tile";
   if (HATCHING_LOAD_METHODS.has(cls.loadMethod)) return "hatchery";
   if (cls.loadMethod === BOMB_LOAD_METHOD) return "bomb";
-  if (cls.describeMethod === SAND_DESCRIBE_METHOD && SAND_SCORPION_STATES.has(cell >> 8)) {
+  if (SCORPION_SAND_TOUCH_METHODS.has(cls.touchMethod) && SAND_SCORPION_STATES.has(cell >> 8)) {
     return "scorpions";
   }
   return undefined;
@@ -293,7 +293,13 @@ export interface RandomPlacement {
   existing: number;
   /** Robots and androids go into one of PLACEMENT_AREAS, other objects anywhere. */
   awayFromHero: boolean;
-  /** Empty cells (no object, no actor): the only ones RandObj places on. */
+  /**
+   * Empty cells, the only ones RandObj places on (0x433230 gives 0): no actor stands
+   * there and the top of the cell is 0 in the game's map, class 0 in state 0. That is
+   * also a tile type of class 0 (unused types) and a logic cell whose record shows such
+   * a cell; the object then goes into the record's cell (0x4331a0). The hero's arrival
+   * cell is not known here.
+   */
   free: number;
 }
 
@@ -337,9 +343,12 @@ export function randomPlacement(
     const overlay = room.overlay[cell] ?? 0;
     const top =
       (overlay & 0xff) === LOGIC_CELL || overlay === 0 ? resolveCell(room, base) : overlay;
-    const at = standing.has(cell) ? standing.get(cell) : classes.classes.get(top & 0xff)?.id;
+    const topClass = classes.classes.get(top & 0xff)?.id;
+    const at = standing.has(cell) ? standing.get(cell) : topClass;
     if (id !== undefined && at === id) existing++;
-    if (base === 0 && overlay === 0) free++;
+    // 0x43a5f0: a type without a class object becomes 0, state and all
+    const empty = topClass === undefined || (topClass === 0 && top >> 8 === 0);
+    if (empty && !standing.has(cell)) free++;
   }
   const awayFromHero = id !== undefined && AWAY_FROM_HERO_CLASSES.includes(id);
   return { type, existing, awayFromHero, free };

@@ -5,6 +5,7 @@ import { test } from "vitest";
 import {
   EMPTY_CLASS_OBJECT,
   FrameMethod,
+  SCORPION_SAND_TOUCH_METHODS,
   freeTileTypes,
   readClassTable,
   readEpisodeClasses,
@@ -29,6 +30,7 @@ test("episode 1 classes read from the exe", () => {
   assert.deepEqual(ep.classes.get(6), {
     id: 6,
     frameMethod: FrameMethod.WALL,
+    touchMethod: 0x420e60,
     describeMethod: 0x41b160,
     loadMethod: 0x43ec50,
   });
@@ -37,6 +39,15 @@ test("episode 1 classes read from the exe", () => {
   assert.deepEqual(ep.underlays[0], [0x27, 0]);
   assert.equal(ep.terrainPatterns.length, 16);
   assert.equal(ep.maskedPatterns.length, 32);
+});
+
+test("sand heaps hide scorpions in every episode but IV (verified in the game)", () => {
+  const scorpions = [0, 1, 2, 3, 4].map((episode) => {
+    const sand = readEpisodeClasses(image, episode).classes.get(episode === 0 ? 0x27 : 0x31);
+    assert.equal(sand?.id, 39);
+    return SCORPION_SAND_TOUCH_METHODS.has(sand.touchMethod);
+  });
+  assert.deepEqual(scorpions, [true, true, true, true, false]);
 });
 
 test("episode 0 has no underlay table; unknown episodes are rejected", () => {

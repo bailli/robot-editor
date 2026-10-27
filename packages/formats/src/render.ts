@@ -393,11 +393,10 @@ const BACKDROP_MARKS = [ROOM_WIDTH, 2 * ROOM_WIDTH - 1];
  * The room the game draws behind a room, e.g. the town around a house's interior, or
  * undefined. A room has one if its cell (0, 1) or (39, 1) is of class 99 (episode
  * vtable +0x00: 0x409d30, IV 0x40d4a0); it is room id mod 100 (Junior to III) or id - 100
- * (IV). Drawing the room (0x401af0, 0x401ba0) loads that room's map from the scene and
- * draws its cell wherever the room's own cell is of class 99, so the backdrop's actors
- * (cells until a room is entered; robots draw nothing as tiles) do not move there. The
- * originals' class 99 cells have no overlay; whether one would hide the backdrop is not
- * traced (the game's map is one layer, see STATUS), shownCells assumes it does.
+ * (IV). Drawing the room (0x401ba0) loads that room's map from the scene and draws its
+ * cell wherever the room's own cell is of class 99, so the backdrop's actors (cells until
+ * a room is entered; robots draw nothing as tiles) do not move there. Both look at the
+ * game's one-layer map word, which must be exactly class 99 in state 0 (showsBackdrop).
  */
 export function backdropRoom(
   episode: number,
@@ -405,17 +404,30 @@ export function backdropRoom(
   rooms: readonly Room[],
   classes: EpisodeClasses,
 ): Room | undefined {
-  const marked = BACKDROP_MARKS.some(
-    (i) => classes.classes.get(resolveCell(room, room.base[i] ?? 0) & 0xff)?.id === BACKDROP_CLASS,
-  );
-  if (!marked) return undefined;
+  if (!BACKDROP_MARKS.some((i) => showsBackdrop(room, i, classes))) return undefined;
   const id = episode === 4 ? room.id - 100 : room.id % 100;
   return rooms.find((r) => r.id === id);
 }
 
 /**
+ * Whether the game's map word at `index` is class 99 in state 0 (0x0063), the only value
+ * that marks a backdrop (0x409d30) and shows it (0x401ba0): not in another state, not a
+ * logic cell, and without an overlay object, which the game turns into a type 1 record
+ * on loading the room. Its own drawing then shows instead: class 99 under the object.
+ */
+export function showsBackdrop(room: Room, index: number, classes: EpisodeClasses): boolean {
+  const cell = room.base[index] ?? 0;
+  const overlay = room.overlay[index] ?? 0;
+  return (
+    cell >> 8 === 0 &&
+    classes.classes.get(cell)?.id === BACKDROP_CLASS &&
+    (overlay === 0 || (overlay & 0xff) === LOGIC_CELL)
+  );
+}
+
+/**
  * The cells drawn at map position `index`: [base, overlay] of the room, logic cells
- * resolved, or of `backdrop` (backdropRoom) where the room's cell is of class 99. A
+ * resolved, or of `backdrop` (backdropRoom) where the room's cell shows it (showsBackdrop). A
  * circuit node shows its bulb as the overlay (nodeBulb; not under an overlay object,
  * which the game would draw on top of it), lit as byte 7 is or as `lit` says. A
  * teleporter with a condition adds its backing (Backing; a forbidden GATE piece then
@@ -431,7 +443,7 @@ export function shownCells(
   const cell = room.base[index] ?? 0;
   const base = resolveCell(room, cell);
   const overlay = resolveCell(room, room.overlay[index] ?? 0);
-  if (backdrop && overlay === 0 && classes?.classes.get(base & 0xff)?.id === BACKDROP_CLASS) {
+  if (backdrop && classes && showsBackdrop(room, index, classes)) {
     return [
       resolveCell(backdrop, backdrop.base[index] ?? 0),
       resolveCell(backdrop, backdrop.overlay[index] ?? 0),

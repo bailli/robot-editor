@@ -10,15 +10,19 @@ import {
   type EventChange,
   Game,
   LOGIC_CELL,
+  type LogicRecord,
   type Mod,
   type ModChanges,
   NO_CHANGES,
   ROOM_CELLS,
   ROOM_WIDTH,
+  type Room,
   STAIRS_CLASS,
   applyMod,
+  backdropRoom,
   emptyMod,
   readEpisodeStart,
+  renderRoom,
   robotSprite,
   robotSpriteCount,
   roomActors,
@@ -31,6 +35,7 @@ import { Driver, type HeroState, type Key } from "../src/driver.ts";
 import { ROOT, loadGame } from "../src/game.ts";
 import { calmRoom } from "../src/patch.ts";
 import { readIndexedPng } from "../src/png.ts";
+import { differingCells } from "../src/shots.ts";
 
 /**
  * Runs the real game under Wine through the proxy DLL (see driver.ts). Opt-in, as it
@@ -269,6 +274,48 @@ async function actorList(d: Driver): Promise<string[]> {
   return list;
 }
 
+/**
+ * Episode II's room 115 (drawn over room 15) as the start room, the hero at (21, 9) in
+ * the house, with `edit` applied to its cells; the cells where the game's frame differs
+ * from our render, and those where our render differs from the unedited room's.
+ */
+async function backdropCells(
+  game: Game,
+  edit: (base: Uint16Array, overlay: Uint16Array) => LogicRecord[],
+): Promise<{ game: number[]; edited: number[] }> {
+  const ep = game.episode(2);
+  const room = calmRoom(game.room(2, 115), ep.classes);
+  const base = room.base.slice();
+  const overlay = room.overlay.slice();
+  // without its script, which lays eggs in the house's corners on the first visit
+  const tags = room.tags.filter((t) => t.kind !== 6);
+  const records = [...room.records, ...edit(base, overlay)];
+  const edited = { ...room, base, overlay, records, tags };
+  const render = (r: Room) =>
+    renderRoom(r, ep.objects, ep.classes, backdropRoom(2, r, ep.rooms, ep.classes));
+  const cells = (pairs: [number, number][]) => pairs.map(([x, y]) => x + y * ROOM_WIDTH);
+  const mod: Mod = {
+    ...emptyMod(game.image.data),
+    changes: {
+      ...NO_CHANGES,
+      rooms: [{ episode: 2, id: 115, room: edited }],
+      start: [{ episode: 2, room: 115, x: 21, y: 9 }],
+    },
+  };
+  const frame = await withModExe(game, mod, (exe) =>
+    withGame(exe, async (d) => {
+      await d.startEpisode(2);
+      await d.run(20);
+      return d.frame();
+    }),
+  );
+  const ours = render(edited);
+  return {
+    game: cells(differingCells(frame.indices, ours)),
+    edited: cells(differingCells(render(room), ours)),
+  };
+}
+
 describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () => {
   const game = loadGame();
 
@@ -456,5 +503,58 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     );
     assert.equal(expected.length, 2 * row.length + 1 + 2);
     assert.deepEqual(seen, expected);
+  }, 60_000);
+
+  for (const episode of [0, 1, 2, 3, 4]) {
+    const scorpions = episode !== 4;
+    test(`episode ${String(episode)}: a sand heap ${scorpions ? "lets a scorpion out" : "does nothing"}`, async () => {
+      const start = readEpisodeStart(game.image, episode);
+      const [x, y] = [start.x + 1, start.y];
+      const heap = (episode === 0 ? 0x27 : 0x31) | 0x600;
+      const area = { x0: x, x1: x, y0: y, y1: y };
+      const mod = startRoomMod(game, episode, {}, area, start, (set) => {
+        set(x, y, heap);
+      });
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(episode);
+          await d.hold("right", 20); // onto the heap
+          await d.run(30);
+          const map = await d.peek(MAP + 2 * (x + y * ROOM_WIDTH), 2);
+          return {
+            cell: new DataView(map.buffer, map.byteOffset).getUint16(0, true),
+            actors: (await actorList(d)).length,
+          };
+        }),
+      );
+      // the class of sand is 0x27 in every episode
+      assert.deepEqual(seen, scorpions ? { cell: 0x27, actors: 1 } : { cell: 0x627, actors: 0 });
+    }, 60_000);
+  }
+
+  const at = (x: number, y: number) => x + y * ROOM_WIDTH;
+  const HERO = at(21, 9);
+
+  test("episode II: class 99 under an object, in another state or a logic cell shows no backdrop", async () => {
+    const [KEY, BURIED] = [0x15, 3];
+    const probes = [at(16, 5), at(18, 5), at(16, 7)];
+    const seen = await backdropCells(game, (base, overlay) => {
+      const wall = base[at(17, 6)] ?? 0; // class 99, state 0: room 15's wall shows there
+      overlay[at(16, 5)] = KEY;
+      base[at(18, 5)] = wall | 0x1000; // still frame 0 (state & 0xf)
+      base[at(16, 7)] = LOGIC_CELL; // slot 0: room 115 has no records
+      return [{ slot: 0, data: Uint8Array.of(BURIED, 0, wall, 0, KEY, 0, 0, 0, 0, 0) }];
+    });
+    assert.deepEqual(seen.edited, probes, "our render no longer shows room 15 there");
+    assert.deepEqual(seen.game, [HERO], "the game draws as we do");
+  }, 60_000);
+
+  test("episode II: marks in another state give no backdrop", async () => {
+    const seen = await backdropCells(game, (base) => {
+      for (const mark of [at(0, 1), at(39, 1)]) base[mark] = (base[mark] ?? 0) | 0x1000;
+      return [];
+    });
+    assert.ok(seen.edited.length > 100, "our render shows no room 15");
+    assert.deepEqual(seen.game, [HERO], "the game draws as we do");
   }, 60_000);
 });

@@ -31,7 +31,6 @@ exports[`actors in every episode 1`] = `
   {
     "bomb": 7,
     "hatchery": 126,
-    "scorpions": 1,
     "spawner": 446,
     "tile": 192,
   },

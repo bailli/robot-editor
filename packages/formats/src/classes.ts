@@ -41,6 +41,11 @@ export interface ObjectClass {
   /** Class id (vtable +0x00 returns a constant), undefined if it does not. */
   id: number | undefined;
   frameMethod: number;
+  /**
+   * vtable +0x0c: what happens when an actor steps on the cell (0x44c6f0); the classes'
+   * methods mostly pick a handler from a table by the actor's kind (0x100 + n: entry n).
+   */
+  touchMethod: number;
   /** vtable +0x54: picks the description variant (see describe.ts). */
   describeMethod: number;
   /** vtable +0x28: called for each cell when a room is entered (0x42b6f0). */
@@ -67,11 +72,17 @@ export const BOMB_LOAD_METHOD = 0x421f80;
  */
 /**
  * Sand (describe method 0x413430, every episode): states 6 and 7 are small heaps hiding
- * scorpions ("Unter diesen kleinen Häufchen verbergen sich stachelige, giftige Gesellen")
- * that come out when disturbed.
+ * scorpions ("Unter diesen kleinen Häufchen verbergen sich stachelige, giftige Gesellen").
+ * Each episode has its own sand class object; in Junior and I (vtable 0x46bd00, touch
+ * table 0x48011c) and II and III (0x467c70, table 0x47bcd4) the hero (in II and III also
+ * a native) stepping on such a heap turns it into plain sand and lets a scorpion out
+ * (0x41f9d0: a robot with the scorpion flag, 0x44dcf0); robots may not step on it. Episode IV's sand (0x469e70,
+ * table 0x47df58) only lets the hero walk on: its states 6 and 7 are "Noch mehr Sand".
  */
 export const SAND_DESCRIBE_METHOD = 0x413430;
 export const SAND_SCORPION_STATES: ReadonlySet<number> = new Set([6, 7]);
+/** The touch methods (vtable +0x0c) of the sand classes that hide scorpions. */
+export const SCORPION_SAND_TOUCH_METHODS: ReadonlySet<number> = new Set([0x423de0, 0x4134c0]);
 
 export const HATCHING_LOAD_METHODS: ReadonlySet<number> = new Set([0x426330, 0x4237e0, 0x41b030]);
 
@@ -239,6 +250,7 @@ export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasse
     classes.set(type, {
       id,
       frameMethod: u32(exe, vtable + 8),
+      touchMethod: u32(exe, vtable + 0x0c),
       describeMethod: u32(exe, vtable + 0x54),
       loadMethod: u32(exe, vtable + 0x28),
     });

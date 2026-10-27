@@ -411,6 +411,18 @@ Files in `packages/formats/src`:
   sits in the town around it; the backdrop's actors stay cells (robots draw nothing as
   tiles). 22 rooms in episodes II–IV, e.g. II 115 over 15, III 147 over 47, IV 441 over
   341 (marked at (39, 1) only). The name rule (`SAME_NAME_CLASS`) looks at (0, 1) alone.
+  Marks and cells are the game's one-layer map word, compared with 0x0063 exactly
+  (`showsBackdrop`): class 99 in state 0 and no logic cell. An overlay object turns its
+  cell into a type 1 record on loading, so it, like class 99 in any other state, shows
+  class 99's own drawing (white, the object on it) instead of the backdrop, and marks so
+  give no backdrop at all. Entering a room draws with the map word (0x401ba0, the
+  backdrop map passed in); only a redraw after a display option is toggled (0x401af0,
+  from 0x404064) takes the effective value (0x433110), where a logic cell whose record
+  shows class 99 in state 0 would show the backdrop. **Verified under Wine**
+  (`pnpm test:game`, II 115 without its script): a key on a class 99 cell, class 99 in
+  state 0x10 and a buried record showing class 99 show no backdrop, as our render draws
+  them, and marks in state 0x10 leave the room without one. The originals have one class
+  99 cell in another state (IV 453 at (17, 28), state 8) and none under an object.
   Nothing ties an interior to the outline of a building: III 149 is the land under the
   lake of 49, drawn over its shore. Class 99 cells block the hero (**verified under
   Wine** in 149: walking from (17, 3) east or north into them does not move him, west
@@ -737,6 +749,20 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   turtles, boars, snakes and a native, rows 0, 3 and 5, stacked robots): the game's actor
   list (class +0x16, sprite +0x28) is the order and the sprites `roomActors` and
   `robotSprite` give; the robots' colours were their sprites' own.
+- **Scorpion sand** (sand, class 39, states 6 and 7: "Unter diesen kleinen Häufchen
+  verbergen sich stachelige, giftige Gesellen"). An actor stepping on a cell calls its
+  class's vtable +0x0c (0x44c6f0 → 0x44c98d; `touchMethod`), which for sand picks a
+  handler from a table by the actor's kind (0x100 + n: entry n). Each episode group has
+  its own sand class object: Junior and I vtable 0x46bd00 (table 0x48011c), II and III
+  0x467c70 (0x47bcd4), IV 0x469e70 (0x47df58). In the first two the hero's entry (and in
+  II and III a native's) is 0x41f9d0: the heap becomes plain sand and a scorpion comes
+  out (0x44dcf0: a robot with the scorpion flag, at the cell stepped on); robots may not
+  step on it. In IV every kind gets 0x41eca0 or 0x446f10, so its heaps are only sand
+  ("Noch mehr Sand", text 49 there). **Verified under Wine** (`pnpm test:game`, a heap
+  next to each episode's start): in Junior to III the hero stepping on it leaves class
+  0x27 there and one actor in the room's list, in IV the heap stays and no actor
+  appears (first seen playing IV). `cellActorSource` and `calmRoom` follow
+  it; IV's one heap (state 6) is no longer an actor source.
 - **The dealer's goods** (code only): both constructors (record 0x448ad5, `SetMan`
   0x448c8b) take the goods table from the episode (vtable +0x10: address, entry count,
   most goods shown) and then build the offer once (0x448440, the only caller): a count
@@ -1206,7 +1232,9 @@ Roughly by value for the editor.
    (offset 4) as a sprite unless word 0 bits 14–15 are set, type 5 class 0x34 in state
    byte 7 − 1 while byte 7 is set, type 8 depends on byte 8 (0x103: class 0x2c, the
    dealer). Not traced further. A teleporter with byte 1 bits 6–7 (a level) and no
-   condition is not drawn there (no original has one).
+   condition is not drawn there (no original has one). A state whose frame the shape
+   lacks: we draw frame 0, the game reads past the shape's frames (class 99, one frame,
+   in state 1: specks in the game, seen with the driver; IV 453's state 8 cell).
 7. **Description extras:** key colours (strings 0x9c50/0x9c51 from the exe's string
    table), messages 200/201 added by two classes, codes formatted by 0x41d2c0/0x40ff80, and
    four describe methods that depend on game flags/options.
@@ -1217,12 +1245,19 @@ Roughly by value for the editor.
    exes); a moved resource leaves zeroed space behind.
 10. **The game's map in memory is one layer** (0x5197f8 + 0xc, 40×29 words, followed by
     the actor grid at + 0x91c), while scenes store base and overlay: on loading, each
-    overlay object becomes a type 1 record on its base cell (see logic records). "Empty
-    cell" (RandObj, the free-cell check 0x433230) is approximated as base and overlay
-    both 0; how the free-cell check treats such records is not traced. Likewise whether
-    an overlay object on a class 99 cell hides the backdrop there (0x401af0 checks the
-    cell's effective value, 0x433110; 0x401ba0 the raw word): the originals have none,
-    `shownCells` assumes it does.
+    overlay object becomes a type 1 record on its base cell (0x432cd0: lower cell at +2,
+    the object at +4; an overlay logic cell makes none and is dropped), see logic
+    records. A cell's **effective value** (0x433110) follows logic cells down to a plain
+    word: a type 1 record's +4, any other record's +2. Setting the top (0x4331a0) writes
+    there, so an object put on another record's cell replaces the cell the record shows
+    (the record stays); taking the object of a type 1 record frees the record and its
+    lower cell comes back. **RandObj's empty cell** (0x433230 gives 0): no actor on the
+    cell (one whose byte 8 is 0 is ignored, not seen) and an effective value of exactly
+    0, class 0 in state 0; that includes tile types without a class of their own (the
+    shared empty class) and logic cells whose record shows such a cell, i.e. records on
+    floor (`randomPlacement`; actors aside, 7–111 cells per episode more than "base and
+    overlay 0"; the hero's arrival cell is not known there). From the code;
+    not tried in the game. Overlay objects on class 99 cells: see backdrops (verified).
 11. **Two edge-exit code paths:** 0x427a9b (arrival only) and 0x44c5a0 (also sets the
     RandObj reference point; with game flag bit 10 of [0x51bb18]+8 clear, the arrival
     moves one cell further in). Which one runs when is not known.
@@ -1232,9 +1267,10 @@ Roughly by value for the editor.
     redirected back by its script from every upper room). With the colour-7 key from
     room 16 (next door) the door to the stairs' corridor opens on the first visit, so the
     points gate can be skipped. From code and data, not played through.
-13. **Scorpion sand** (sand states 6/7) is confirmed by the texts in episodes II and III
-    only; in episode IV those states read "Noch mehr Sand" (one cell in the game, still
-    treated as scorpions by `cellActorSource`).
+13. **Scorpions after coming out** (see scorpion sand; seen with the driver, not
+    traced): about 2 s after a scorpion came out, with the hero standing still on the
+    cell, it was gone from the actor list and the cell was a heap again (state 6 or 7).
+    What it did in between (sting the hero?) is not known.
 14. **Notes and packages in the game** (see Descriptions above, decoded from code and
     data only): to try a note with state bit 7 (read on stepping onto it, 800 + state &
     0x7f), one without (picked up; no vowels without the dictionary, IV: recorder
@@ -1301,6 +1337,8 @@ Roughly by value for the editor.
 | 0x44c6f0, 0x42bd40           | may an actor step on a cell (teleporter conditions); count a class carried     |
 | 0x42b6f0                     | room load: records 7/8 spawn actors                                            |
 | 0x432fd0, 0x433110           | logic record lookup; a cell's effective value                                  |
+| 0x433230, 0x4331a0           | a cell's top with actors (RandObj: 0 = empty); set the top of a cell           |
+| 0x44c98d, 0x41f9d0, 0x44dcf0 | class vtable +0x0c on stepping; sand heap → scorpion; create a scorpion        |
 | 0x401af0, 0x409d30           | draw a room over its backdrop (class 99 cells); which room (IV 0x40d4a0)       |
 | 0x406ae0, 0x438850           | describe a cell; fetch a text variant                                          |
 | 0x43c0b0, 0x43bfd0           | a room's name; cut a text down to one line                                     |
