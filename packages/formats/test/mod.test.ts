@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { expect, test } from "vitest";
 
 import { readClassTable } from "../src/classes.ts";
+import { readEventTable, withEventEntries } from "../src/events.ts";
 import { Game } from "../src/game.ts";
 import {
   type Mod,
@@ -50,6 +51,13 @@ const changes: ModChanges = {
       ],
     },
   ],
+  // IV's unused entries 197 and 198 become oracle events 263 and 266; the GATE's first
+  // take that tileTypes copied gives 250 points instead of 100
+  events: [
+    { episode: 4, entry: 198, id: 266, points: 3500 },
+    { episode: 4, entry: 197, id: 263, points: 3500 },
+    { episode: 3, entry: 0x59, id: 76, points: 250 },
+  ],
   code: [],
   // the oracles' hints and death message for Junior, from episode II's texts
   copyTexts: [
@@ -95,6 +103,12 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   const modded = new Game(applyMod(game.image, mod(changes)));
   // what the same edits make when done by hand
   let direct = new Game(game.withTileTypes(3, 1, new Map(changes.tileTypes[0]?.types)));
+  direct = new Game(withEventEntries(direct.image, 3, new Map([[0x59, { id: 76, points: 250 }]])));
+  const oracleEvents = new Map([
+    [197, { id: 263, points: 3500 }],
+    [198, { id: 266, points: 3500 }],
+  ]);
+  direct = new Game(withEventEntries(direct.image, 4, oracleEvents));
   let text = direct.textSource(1310) ?? "";
   text = withTextEntry(withTextEntry(text, 0x59, ["Ein Gatter."]), 0x5b, undefined);
   direct = new Game(direct.withText(1310, text));
@@ -118,6 +132,8 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   sameContent(modded.image, direct.image);
 
   expect(modded.episode(3).classes.typeOfClass.get(76)).toBe(0x59);
+  expect(readEventTable(modded.image, 3)[0x59]).toEqual({ id: 76, points: 250 });
+  expect(readEventTable(modded.image, 4).slice(197, 199)).toEqual([...oracleEvents.values()]);
   expect(modded.episodeTexts(3)?.entries.get(0x59)).toEqual(["Ein Gatter."]);
   for (const entry of [331, 334, 945]) {
     expect(game.episodeTexts(0)?.entries.has(entry)).toBe(false);
@@ -142,6 +158,7 @@ test("compiled: byte writes in the tables and the start method, whole resources"
     const tables = [
       [0x477ca0, 8 * 128], // III's class table
       [0x4780d8, 12 * 187], // III's event table
+      [0x479068, 12 * 201], // IV's event table
       [0x40b460, 23], // III's start method
     ] as const;
     assert.ok(
@@ -178,6 +195,7 @@ test("the file: saving again gives the same file, in key order", () => {
   const shuffled = mod({
     ...changes,
     tileTypes: changes.tileTypes.map((c) => ({ ...c, types: c.types.toReversed() })),
+    events: changes.events.toReversed(),
     copyTexts: changes.copyTexts.map((c) => ({ ...c, entries: c.entries.toReversed() })),
     texts: changes.texts.toReversed(),
     rooms: changes.rooms.toReversed(),
@@ -215,6 +233,12 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { rooms: [{ episode: 5, id: 41, room: null }] },
     { tileTypes: [{ episode: 3, from: 3, types: [[0x40, 0x40]] }] },
     { start: [{ episode: 3, room: 41, x: 40, y: 0 }] },
+    // no entry 201 in IV; from 128 on ids are 0 or 256-391; IV's entry 128 has id 256
+    { events: [{ episode: 4, entry: 201, id: 0, points: 0 }] },
+    { events: [{ episode: 4, entry: 197, id: 100, points: 0 }] },
+    { events: [{ episode: 4, entry: 197, id: 392, points: 0 }] },
+    { events: [{ episode: 4, entry: 197, id: 256, points: 0 }] },
+    { events: [{ episode: 4, entry: 197, id: 263, points: 2 ** 31 }] },
     // an entry copied and written, a missing source entry or resource, a self copy
     {
       copyTexts: [{ resource: 1010, from: 1210, entries: [[331, 331]] }],

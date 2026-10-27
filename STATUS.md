@@ -931,7 +931,10 @@ stands, decided 2026-10-27; details in the sections named.
   need 2 types (tangram, oracle; I has 0x50 and 0x51 free), their texts (`copyTexts`;
   Junior, I and IV have nothing at 331, 334, 945) and, for their 3500 points, events
   262–271: Junior, I, II and III have them, **IV not** (no points there, seen in the
-  game). A mod cannot add event entries beyond the tile types yet. Their code checks
+  game; with `events` giving IV's entries 197 and 198 ids 263 and 266, and II's texts
+  1935 and 1938 copied to 1997 and 1998, the oracles give 3500 points and their bonus
+  box, **verified**; the box comes before the oracle sends the hero). Junior and I have
+  no texts for those events (no box, the points still count). Their code checks
   the episode only for the flags 0x4000/0x8000 (0x412ae0). After the east hint the
   hero stands on the oracle's cell (in II it vanishes; elsewhere it stays under him).
 - **Next, in order:** (1) the editor's use of the mod format (see below; `mod.ts` is
@@ -957,9 +960,16 @@ editor's use of it and the proxy loader.
   one (a text change beats the description `tileTypes` copied). Within a kind the
   changes apply in key order, the file's, so the result does not depend on the order
   they were made in (new text entries, sound lines and shapes are appended). Later
-  kinds as needed: event entries (`withEventEntries`), shapes of the mod's own.
+  kinds as needed: sound table lines of events, shapes of the mod's own.
   1. `tileTypes` (key: episode, target type): `{ episode, from, types: [[to, of], …] }`
-     → `Game.withTileTypes`.
+     → `Game.withTileTypes`. `events` (key: episode, entry): `{ episode, entry, id,
+points }` → `withEventEntries`, after the tile types (it may override a copied
+     first take). From entry 128 on the id is 0 or 256–391: the constructor maps id →
+     entry in 0x4c70e0 (0x43b4bf, shared with class → type below 256, 0x188 long, no
+     bounds check); applying refuses two entries with one id. The tables are full
+     (Junior and I: entry 190 free, nothing else), so a new event takes over an entry
+     the episode never uses: IV's 197–200 (ids 388–391, no note, text or points; IV's
+     scripts award 180–196, no code raises those ids). III has no such spare entry.
   2. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
      if the exe holds `expect` there (e.g. the oracle flags in Junior). Later.
   3. `texts` (key: resource id, entry): `{ resource, entry, variants | null }` →

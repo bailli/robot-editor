@@ -233,7 +233,14 @@ export {
   recordCellOffsets,
   teleporterCondition,
 } from "./records.ts";
-export { EVENT_TEXT, readEventTable, withEventEntries } from "./events.ts";
+export {
+  EVENT_IDS_END,
+  EVENT_TEXT,
+  FIRST_EVENT_ID,
+  eventTableLength,
+  readEventTable,
+  withEventEntries,
+} from "./events.ts";
 export type { GameEvent } from "./events.ts";
 export type { RecordInfo, RecordKind, TeleporterCondition } from "./records.ts";
 export {
@@ -293,6 +300,7 @@ export {
 export type {
   CodeChange,
   CopyTextsChange,
+  EventChange,
   Mod,
   ModChanges,
   ModPatch,

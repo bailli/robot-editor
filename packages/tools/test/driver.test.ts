@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, test } from "vitest";
 
 import {
+  type EventChange,
   Game,
   LOGIC_CELL,
   type Mod,
@@ -190,9 +191,16 @@ function circuitsMod(
  * Episode II's tangram and oracle at free tile types of `episode`, its hint and death
  * texts (copyTexts), and two oracles with their symbols found in the start room: north
  * of the hero's start (4, 16) one that sends him to (10, 16), at (12, 16) one that shows
- * hint 331 when walked into eastwards.
+ * hint 331 when walked into eastwards. `events` and `eventTexts` ([to, of] from II's
+ * texts) add what the episode's event table lacks.
  */
-function oraclesMod(game: Game, episode: number, [tangram, oracle]: [number, number]): Mod {
+function oraclesMod(
+  game: Game,
+  episode: number,
+  [tangram, oracle]: readonly [number, number],
+  events: readonly EventChange[] = [],
+  eventTexts: readonly (readonly [number, number])[] = [],
+): Mod {
   const room = readEpisodeStart(game.image, episode).room;
   const target = room | (10 << 10);
   const copyTexts =
@@ -202,7 +210,7 @@ function oraclesMod(game: Game, episode: number, [tangram, oracle]: [number, num
           {
             resource: textsId(episode),
             from: textsId(2),
-            entries: [331, 334, 945].map((n) => [n, n] as const),
+            entries: [...[331, 334, 945].map((n) => [n, n] as const), ...eventTexts],
           },
         ];
   const tileTypes = [
@@ -218,7 +226,7 @@ function oraclesMod(game: Game, episode: number, [tangram, oracle]: [number, num
   return startRoomMod(
     game,
     episode,
-    { tileTypes, copyTexts },
+    { tileTypes, copyTexts, events },
     { x0: 2, x1: 12, y0: 12, y1: 18 },
     { x: 4, y: 16 },
     (_, record) => {
@@ -338,20 +346,38 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     }, 60_000);
   }
 
-  // IV's event table has no oracle events (262-271): no points there
   const ORACLES = [
-    { episode: 0, types: [0x50, 0x51], points: 3500 },
-    { episode: 1, types: [0x50, 0x51], points: 3500 },
-    { episode: 4, types: [0x70, 0x71], points: 0 },
+    { episode: 0, types: [0x50, 0x51] },
+    { episode: 1, types: [0x50, 0x51] },
+    // IV's table has no oracle events: its unused entries 197 and 198 become those of
+    // the two oracles (262 + symbol), with II's texts for them
+    {
+      episode: 4,
+      types: [0x70, 0x71],
+      events: [
+        { episode: 4, entry: 197, id: 263, points: 3500 },
+        { episode: 4, entry: 198, id: 266, points: 3500 },
+      ],
+      eventTexts: [
+        [1997, 1935],
+        [1998, 1938],
+      ],
+    },
   ] as const;
-  for (const { episode, types, points } of ORACLES) {
+  for (const { episode, types, ...more } of ORACLES) {
+    const points = 3500;
     test(`episode ${String(episode)} with episode II's oracles: north sends, east hints`, async () => {
-      const mod = oraclesMod(game, episode, [...types]);
+      const events = "events" in more ? more.events : [];
+      const eventTexts = "eventTexts" in more ? more.eventTexts : [];
+      const mod = oraclesMod(game, episode, types, events, eventTexts);
       const seen = await withModExe(game, mod, (exe) =>
         withGame(exe, async (d) => {
           const room = (await d.startEpisode(episode)).room;
           await d.hold("up", 40); // into the oracle north of the start
           await d.run(200);
+          // the bonus box with the event's text, where the mod brings one: the oracle
+          // sends the hero once it is closed
+          if (eventTexts.length > 0) await d.press("return", 200);
           const sent = await d.hero();
           const afterNorth = await d.score();
           await walk(d, "right", (h) => h.x >= 11);

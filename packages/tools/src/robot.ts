@@ -238,9 +238,10 @@ switch (command) {
     try {
       const mod = parseMod(readFileSync(source, "utf8"));
       writeFileSync(out, applyMod(game().image, mod));
-      const { tileTypes, code, copyTexts, texts, rooms, start } = mod.changes;
+      const { tileTypes, events, code, copyTexts, texts, rooms, start } = mod.changes;
       console.log(
-        `${out}: ${tileTypes.length} tile type changes, ${code.length} code, ` +
+        `${out}: ${tileTypes.length} tile type changes, ${events.length} events, ` +
+          `${code.length} code, ` +
           `${copyTexts.length} text copies, ${texts.length} texts, ` +
           `${rooms.length} rooms, ${start.length} starts`,
       );

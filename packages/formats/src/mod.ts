@@ -4,13 +4,15 @@
  * A mod is a set of keyed changes, each key at most once, applied in a fixed order of
  * kinds (a later kind wins over an earlier one):
  *   1. tileTypes  (episode, target type)  tile types from another episode (withTileTypes)
- *   2. code       (address)               bytes written where the exe holds `expect`
- *   3. copyTexts  (resource, entry)       a text entry copied from another one of the exe
+ *   2. events     (episode, entry)        an event table entry's id and points
+ *   3. code       (address)               bytes written where the exe holds `expect`
+ *   4. copyTexts  (resource, entry)       a text entry copied from another one of the exe
  *      texts      (resource, entry)       a text entry set or removed (withTextEntry)
- *   4. rooms      (episode, room id)      a room replaced, added or removed (withScene)
- *   5. start      (episode)               where the episode starts (withEpisodeStart)
+ *   5. rooms      (episode, room id)      a room replaced, added or removed (withScene)
+ *   6. start      (episode)               where the episode starts (withEpisodeStart)
  * copyTexts and texts share their keys: an entry is either copied or written. Copies read
- * the exe as kinds 1 and 2 left it, so the mod carries no text of the game's own.
+ * the exe as kinds 1-3 left it, so the mod carries no text of the game's own. The event
+ * tables are full: a new event takes over an entry the episode never uses.
  * Applying first compiles the mod against the pristine exe (checked by its sha256) into a
  * patch: byte writes outside the resources and whole replaced resources. The exe writer
  * (applyPatch) and, later, the proxy as an in-memory loader apply only that patch.
@@ -18,6 +20,13 @@
  * The file is JSON: format, name, author, description, base { sha256 }, changes with one
  * array per kind; code as hex strings, rooms as base64 of serializeRoom (null removes).
  */
+import {
+  EVENT_IDS_END,
+  FIRST_EVENT_ID,
+  eventTableLength,
+  readEventTable,
+  withEventEntries,
+} from "./events.ts";
 import { EPISODES, Game } from "./game.ts";
 import { DIRECTORY_RESOURCE, type PeImage, parsePe, readVa } from "./pe.ts";
 import { findResource, readResources, replaceResource } from "./resources.ts";
@@ -36,6 +45,15 @@ export interface TileTypesChange {
   from: number;
   /** [target type, source type] pairs. */
   types: readonly (readonly [to: number, of: number])[];
+}
+
+export interface EventChange {
+  episode: number;
+  /** The entry: a tile type below 128 (its first take), an event from 128 on. */
+  entry: number;
+  /** From entry 128 on 0 (none) or FIRST_EVENT_ID to EVENT_IDS_END - 1, once per table. */
+  id: number;
+  points: number;
 }
 
 export interface CodeChange {
@@ -75,6 +93,7 @@ export interface StartChange extends EpisodeStart {
 
 export interface ModChanges {
   tileTypes: readonly TileTypesChange[];
+  events: readonly EventChange[];
   code: readonly CodeChange[];
   copyTexts: readonly CopyTextsChange[];
   texts: readonly TextChange[];
@@ -115,6 +134,7 @@ export class ModError extends Error {
 
 export const NO_CHANGES: ModChanges = {
   tileTypes: [],
+  events: [],
   code: [],
   copyTexts: [],
   texts: [],
@@ -142,7 +162,7 @@ function episodeOk(episode: number, where: string): void {
 /** Throws a ModError naming the change if any change is invalid or a key repeats. */
 export function checkMod(mod: Mod): void {
   need(/^[0-9a-f]{64}$/.test(mod.base), "base", "not a sha256 (64 lowercase hex digits)");
-  const { tileTypes, code, copyTexts, texts, rooms, start } = mod.changes;
+  const { tileTypes, events, code, copyTexts, texts, rooms, start } = mod.changes;
   const keys = new Set<string>();
   const once = (key: string, where: string) => {
     need(!keys.has(key), where, "changed twice");
@@ -158,6 +178,18 @@ export function checkMod(mod: Mod): void {
       need(isInt(to, 0, TYPES - 1) && isInt(of, 0, TYPES - 1), where, `types ${to}, ${of}`);
       once(`type ${c.episode} ${to}`, `${where} (type ${to})`);
     }
+  });
+  events.forEach((c, i) => {
+    const where = `events[${i}] (episode ${c.episode}, entry ${c.entry})`;
+    episodeOk(c.episode, where);
+    need(isInt(c.entry, 0, eventTableLength(c.episode) - 1), where, "no such entry");
+    const ids =
+      c.entry < TYPES
+        ? isInt(c.id, 0, EVENT_IDS_END - 1)
+        : c.id === 0 || isInt(c.id, FIRST_EVENT_ID, EVENT_IDS_END - 1);
+    need(ids, where, `id ${c.id} (from entry 128 on 0 or ${FIRST_EVENT_ID}-${EVENT_IDS_END - 1})`);
+    need(isInt(c.points, -0x80000000, 0x7fffffff), where, `points ${c.points}`);
+    once(`event ${c.episode} ${c.entry}`, where);
   });
   const ranges: [number, number, string][] = [];
   code.forEach((c, i) => {
@@ -236,6 +268,12 @@ function canonical(changes: ModChanges): ModChanges {
           (c) => c.types[0]?.[0] ?? 0,
         ),
       ),
+    events: changes.events.toSorted(
+      byKeys(
+        (c) => c.episode,
+        (c) => c.entry,
+      ),
+    ),
     code: changes.code.toSorted(byKeys((c) => c.va)),
     copyTexts: changes.copyTexts
       .map((c) => ({ ...c, entries: c.entries.toSorted(byKeys(([to]) => to)) }))
@@ -266,6 +304,24 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
   let game = new Game(image.data);
   for (const c of changes.tileTypes) {
     game = new Game(game.withTileTypes(c.episode, c.from, new Map(c.types)));
+  }
+  for (const episode of new Set(changes.events.map((c) => c.episode))) {
+    const entries = changes.events.filter((c) => c.episode === episode);
+    game = new Game(
+      withEventEntries(game.image, episode, new Map(entries.map((c) => [c.entry, c]))),
+    );
+    // an id maps to one entry (the constructor's last one would win)
+    const seen = new Map<number, number>();
+    readEventTable(game.image, episode).forEach(({ id }, n) => {
+      if (n < TYPES || id === 0) return;
+      const other = seen.get(id);
+      need(
+        other === undefined,
+        `events (episode ${episode})`,
+        `entries ${other} and ${n} both have id ${id}`,
+      );
+      seen.set(id, n);
+    });
   }
   if (changes.code.length > 0) {
     const out = game.image.data.slice();
@@ -415,7 +471,7 @@ function fromHex(text: string, where: string): Uint8Array {
 /** The mod as its JSON file; changes in key order, so saving again gives the same file. */
 export function modJson(mod: Mod): string {
   checkMod(mod);
-  const { tileTypes, code, copyTexts, texts, rooms, start } = canonical(mod.changes);
+  const { tileTypes, events, code, copyTexts, texts, rooms, start } = canonical(mod.changes);
   const file: Json = {
     format: MOD_FORMAT,
     name: mod.name,
@@ -427,6 +483,12 @@ export function modJson(mod: Mod): string {
         episode: c.episode,
         from: c.from,
         types: c.types.map(([to, of]) => [to, of]),
+      })),
+      events: events.map((c) => ({
+        episode: c.episode,
+        entry: c.entry,
+        id: c.id,
+        points: c.points,
       })),
       code: code.map((c) => ({
         va: `0x${c.va.toString(16)}`,
@@ -513,6 +575,12 @@ export function parseMod(text: string): Mod {
         episode: int(o["episode"], `${w}.episode`),
         from: int(o["from"], `${w}.from`),
         types: pairs(o["types"], `${w}.types`),
+      })),
+      events: list("events", (o, w) => ({
+        episode: int(o["episode"], `${w}.episode`),
+        entry: int(o["entry"], `${w}.entry`),
+        id: int(o["id"], `${w}.id`),
+        points: int(o["points"], `${w}.points`),
       })),
       code: list("code", (o, w) => {
         const va = string(o["va"], `${w}.va`);

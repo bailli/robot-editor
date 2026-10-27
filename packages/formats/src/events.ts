@@ -33,6 +33,18 @@ function eventTable(episode: number): readonly [address: number, entries: number
   return table;
 }
 
+/** The number of entries in the episode's event table (fixed by its constructor). */
+export function eventTableLength(episode: number): number {
+  return eventTable(episode)[1];
+}
+
+/**
+ * Ids of entries from 128 on: the episode constructor maps id -> entry in 0x4c70e0
+ * (0x43b4bf, no bounds check), shared with class -> type below 256 and 0x188 long.
+ */
+export const FIRST_EVENT_ID = 256;
+export const EVENT_IDS_END = 0x188;
+
 export function readEventTable(image: PeImage, episode: number): GameEvent[] {
   const [address, count] = eventTable(episode);
   const bytes = readVa(image, address, count * ENTRY_SIZE);
