@@ -1,3 +1,4 @@
+import { backdropRoomId } from "./backdrop.ts";
 import { CIRCUIT_NODE_RECORD, GATE_CLASS, nodeBulb } from "./circuits.ts";
 import { type EpisodeClasses, FrameMethod, type ObjectClass } from "./classes.ts";
 import { TELEPORTER_RECORD } from "./exits.ts";
@@ -213,6 +214,7 @@ function letter(shape: Shape, font: Uint8Array, state: number): Uint8Array {
 
 const NO_CLASSES: EpisodeClasses = {
   actorKinds: [],
+  backdropRule: "mod100",
   classes: new Map(),
   typeOfClass: new Map(),
   underlays: [],
@@ -393,19 +395,18 @@ const BACKDROP_MARKS = [ROOM_WIDTH, 2 * ROOM_WIDTH - 1];
  * The room the game draws behind a room, e.g. the town around a house's interior, or
  * undefined. A room has one if its cell (0, 1) or (39, 1) is of class 99 (episode
  * vtable +0x00: 0x409d30, IV 0x40d4a0); it is room id mod 100 (Junior to III) or id - 100
- * (IV). Drawing the room (0x401ba0) loads that room's map from the scene and draws its
+ * (IV), as the exe says (classes.backdropRule, backdrop.ts). Drawing the room (0x401ba0) loads that room's map from the scene and draws its
  * cell wherever the room's own cell is of class 99, so the backdrop's actors (cells until
  * a room is entered; robots draw nothing as tiles) do not move there. Both look at the
  * game's one-layer map word, which must be exactly class 99 in state 0 (showsBackdrop).
  */
 export function backdropRoom(
-  episode: number,
   room: Room,
   rooms: readonly Room[],
   classes: EpisodeClasses,
 ): Room | undefined {
   if (!BACKDROP_MARKS.some((i) => showsBackdrop(room, i, classes))) return undefined;
-  const id = episode === 4 ? room.id - 100 : room.id % 100;
+  const id = backdropRoomId(classes.backdropRule, room.id);
   return rooms.find((r) => r.id === id);
 }
 

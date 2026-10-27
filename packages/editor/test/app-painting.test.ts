@@ -89,7 +89,7 @@ test("a house's interior shows the town around it dimmed, until its marks are pa
   app.showEpisode(2, 115);
   const ep = game.episode(2);
   const room = game.room(2, 115);
-  expect(backdropRoom(2, room, ep.rooms, ep.classes)?.id).toBe(15);
+  expect(backdropRoom(room, ep.rooms, ep.classes)?.id).toBe(15);
   const plain = toRgba(renderRoom(room, ep.objects, ep.classes), ep.palette);
   expect(firstDifference(app.view.pixels(), drawnWithBackdrop(2, 115))).toBe(-1);
   expect(firstDifference(app.view.pixels(), plain)).not.toBe(-1);

@@ -108,7 +108,7 @@ export function renderShot(
 ): Uint8Array {
   const ep = game.episode(shot.episode);
   const room = shotRoom(game, shot);
-  const backdrop = backdropRoom(shot.episode, room, ep.rooms, ep.classes);
+  const backdrop = backdropRoom(room, ep.rooms, ep.classes);
   return renderRoom(
     room,
     ep.objects,

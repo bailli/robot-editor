@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, test } from "vitest";
 
 import {
+  type BackdropRule,
   type EventChange,
   Game,
   LOGIC_CELL,
@@ -33,6 +34,7 @@ import {
   roomCircuit,
   textsId,
   withExitMode,
+  withRoomScript,
 } from "@robot/formats";
 
 import { Driver, type HeroState, type Key } from "../src/driver.ts";
@@ -296,7 +298,7 @@ async function backdropCells(
   const records = [...room.records, ...edit(base, overlay)];
   const edited = { ...room, base, overlay, records, tags };
   const render = (r: Room) =>
-    renderRoom(r, ep.objects, ep.classes, backdropRoom(2, r, ep.rooms, ep.classes));
+    renderRoom(r, ep.objects, ep.classes, backdropRoom(r, ep.rooms, ep.classes));
   const cells = (pairs: [number, number][]) => pairs.map(([x, y]) => x + y * ROOM_WIDTH);
   const mod: Mod = {
     ...emptyMod(game.image.data),
@@ -651,6 +653,129 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
       assert.equal(hero?.room, noKey ? 115 : 15);
     }, 60_000);
   }
+
+  for (const cleared of [true, false]) {
+    test(`episode I: the Teleport() point is ${cleared ? "cleared on entering a room (flag 0x2000)" : "kept without flag 0x2000"}`, async () => {
+      const ep = game.episode(1);
+      const options = { constants: game.scriptConstants(1), keywords: game.scriptKeywords() };
+      const room43 = withRoomScript(
+        withExitMode(calmRoom(game.room(1, 43), ep.classes), "west", "neighbour"),
+        "Teleport(44, 5, 6);",
+        options,
+      );
+      const flags = readEpisodeFlags(game.image, 1) & ~(cleared ? 0 : 0x2000);
+      const mod: Mod = {
+        ...emptyMod(game.image.data),
+        changes: {
+          ...NO_CHANGES,
+          rooms: [{ episode: 1, id: 43, room: room43 }],
+          flags: [{ episode: 1, flags: flags >>> 0 }],
+        },
+      };
+      // the point: room (word), x, y at 0x4fe358
+      const point = async (d: Driver) => [...(await d.peek(0x4fe358, 4))];
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(1);
+          const set = await point(d);
+          // around the inner wall west of the start, as in the test above
+          await walk(d, "right", (h) => h.x >= 8);
+          await walk(d, "up", (h) => h.y <= 8);
+          await walk(d, "left", (h) => h.x <= 2);
+          await walk(d, "down", (h) => h.y >= 15);
+          const arrived = await walk(d, "left", (h) => h.room !== 43);
+          return { set, arrived: arrived.room, after: await point(d) };
+        }),
+      );
+      assert.deepEqual(seen, {
+        set: [44, 0, 5, 6],
+        arrived: 42,
+        // cleared: room 0, teleporters go to their own target again (x and y stay)
+        after: cleared ? [0, 0, 5, 6] : [44, 0, 5, 6],
+      });
+    }, 60_000);
+  }
+
+  // a house cell in state 10 east of the hero, floor behind it
+  for (const [id, flag, blocks] of [
+    [114, true, true],
+    [114, false, false],
+    [41, true, false],
+  ] as const) {
+    test(`episode III room ${String(id)}: a house cell in state 10 ${blocks ? "blocks" : "lets the hero on"} ${flag ? "with" : "without"} flag 0x40000`, async () => {
+      const ep = game.episode(3);
+      const room = calmRoom(game.room(3, id), ep.classes);
+      const base = room.base.slice();
+      const overlay = room.overlay.slice();
+      const [x, y] = [14, 22];
+      for (let k = 0; k < 6; k++) base[at(x + k, y)] = overlay[at(x + k, y)] = 0;
+      base[at(x + 2, y)] = 0x53 | (10 << 8); // class 98, state 10
+      const flags = readEpisodeFlags(game.image, 3) & ~(flag ? 0 : 0x40000);
+      const mod: Mod = {
+        ...emptyMod(game.image.data),
+        changes: {
+          ...NO_CHANGES,
+          rooms: [{ episode: 3, id, room: { ...room, base, overlay } }],
+          start: [{ episode: 3, room: id, x: x + 1, y }],
+          flags: [{ episode: 3, flags: flags >>> 0 }],
+        },
+      };
+      const hero = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(3);
+          await d.hold("right", 30);
+          await d.run(30);
+          return d.hero();
+        }),
+      );
+      assert.equal((hero?.x ?? 0) > x + 1, !blocks);
+    }, 60_000);
+  }
+
+  test("episode II with the backdrop rule of IV: room 244 shows 144 behind it", async () => {
+    const ep = game.episode(2);
+    const house = calmRoom(game.room(2, 115), ep.classes);
+    // without its script, which lays eggs in the house's corners on the first visit
+    const room = { ...house, id: 244, tags: house.tags.filter((t) => t.kind !== 6) };
+    const mod: Mod = {
+      ...emptyMod(game.image.data),
+      changes: {
+        ...NO_CHANGES,
+        rooms: [{ episode: 2, id: 244, room }],
+        start: [{ episode: 2, room: 244, x: 21, y: 9 }],
+        backdrop: [{ episode: 2, rule: "minus100" }],
+      },
+    };
+    const rooms = [...ep.rooms, room];
+    const render = (rule: BackdropRule) => {
+      const classes = { ...ep.classes, backdropRule: rule };
+      return renderRoom(room, ep.objects, classes, backdropRoom(room, rooms, classes));
+    };
+    assert.ok(
+      differingCells(render("mod100"), render("minus100")).length > 100,
+      "44 and 144 differ",
+    );
+    const frame = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(2);
+        await d.run(20);
+        return d.frame();
+      }),
+    );
+    // not in our render: the hero at (21, 9) and 144's type 0x4d (frame method 0x4127a0,
+    // a renderer gap, see the open items)
+    const behind = game.room(2, 144);
+    const gaps = [[21, 9]];
+    for (let i = 0; i < ROOM_CELLS; i++) {
+      if ((behind.base[i] ?? 0) % 0x100 === 0x4d && room.base[i] === 0x54)
+        gaps.push([i % ROOM_WIDTH, Math.floor(i / ROOM_WIDTH)]);
+    }
+    const seen = differingCells(frame.indices, render("minus100"));
+    assert.deepEqual(
+      seen.toSorted((a, b) => a[1] - b[1] || a[0] - b[0]),
+      gaps.toSorted((a, b) => a[1] - b[1] || a[0] - b[0]),
+    );
+  }, 60_000);
 
   test("episode III: the rucksack holds a weight below its capacity", async () => {
     // shovel, hammer, axe, bucket, sextant: weight 2 each (their shapes' frame word)

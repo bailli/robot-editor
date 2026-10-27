@@ -24,7 +24,6 @@ import {
   START_ROOMS,
   actorKindClass,
   actorKindName,
-  backdropRoom,
   cellGood,
   compileScript,
   cryptScene,
@@ -42,6 +41,7 @@ import {
   parseMod,
   parseScene,
   randomPlacement,
+  readBackdropRule,
   readDealer,
   readEpisodeFlags,
   readEpisodeStart,
@@ -538,6 +538,11 @@ export class App {
     },
     flags: (flags) => {
       this.editEpisode(() => this.need().setEpisodeFlags(this.episode, this.roomId, flags));
+    },
+    backdrop: (rule) => {
+      this.editEpisode(() => this.need().setBackdropRule(this.episode, this.roomId, rule));
+      // the room and the map draw another room behind
+      this.showRoom(this.roomId);
     },
   });
   readonly tileTypesView = new TileTypesView({
@@ -2239,6 +2244,8 @@ export class App {
       originalRucksack: readRucksack(image, this.episode),
       flags: editor.episodeFlags(this.episode),
       originalFlags: readEpisodeFlags(image, this.episode),
+      backdrop: editor.backdropRule(this.episode),
+      originalBackdrop: readBackdropRule(image, this.episode),
       room: this.roomId,
       label: (room) => `Go to ${this.roomLabel(this.episode, room)}`,
     });
@@ -2256,7 +2263,9 @@ export class App {
     const dealer = editor.dealer(this.episode);
     const dealerEdited = editor.isDealerEdited(this.episode);
     const settingsEdited =
-      editor.isRucksackEdited(this.episode) || editor.isFlagsEdited(this.episode);
+      editor.isRucksackEdited(this.episode) ||
+      editor.isFlagsEdited(this.episode) ||
+      editor.isBackdropEdited(this.episode);
     const edited = dealerEdited || settingsEdited || editor.isStartEdited(this.episode);
     this.dealerView.show({
       episode: EPISODE_NAMES[this.episode] ?? `episode ${this.episode}`,
@@ -2337,7 +2346,8 @@ export class App {
       edit.dealer ||
       edit.start ||
       edit.rucksack ||
-      edit.flags
+      edit.flags ||
+      edit.backdrop
     ) {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);
@@ -2680,9 +2690,7 @@ export class App {
 
   /** The room the game draws in a room's class 99 cells (e.g. the town around a house). */
   private backdrop(room: Room): Room | undefined {
-    const editor = this.need();
-    const classes = editor.game.episode(this.episode).classes;
-    return backdropRoom(this.episode, room, editor.rooms(this.episode), classes);
+    return this.need().backdropOf(this.episode, room);
   }
 
   /** Redraws cells of the shown room after an edit. */

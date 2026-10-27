@@ -67,7 +67,7 @@ export async function clickCell(index: number, button: "left" | "right" = "left"
 export function drawnWithBackdrop(episode: number, id: number): Uint8ClampedArray {
   const ep = game.episode(episode);
   const room = game.room(episode, id);
-  const backdrop = backdropRoom(episode, room, ep.rooms, ep.classes);
+  const backdrop = backdropRoom(room, ep.rooms, ep.classes);
   const rgba = toRgba(renderRoom(room, ep.objects, ep.classes, backdrop), ep.palette);
   for (let i = 0; i < ROOM_WIDTH * ROOM_HEIGHT; i++) {
     if (!shownCells(room, i, ep.classes, backdrop)[2]) continue;

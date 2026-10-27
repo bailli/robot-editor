@@ -1,3 +1,4 @@
+import { type BackdropRule, readBackdropRule } from "./backdrop.ts";
 import { type PeImage, readVa } from "./pe.ts";
 
 /**
@@ -107,6 +108,8 @@ export interface EpisodeClasses {
    * dword): logic records name an actor by an index into it (see recordActorKind).
    */
   actorKinds: readonly number[];
+  /** Which room the episode draws behind a room with a backdrop (backdrop.ts). */
+  backdropRule: BackdropRule;
 }
 
 const CLASS_TABLES: readonly number[] = [0x479ad8, 0x475838, 0x476e00, 0x477ca0, 0x478c40];
@@ -272,6 +275,7 @@ export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasse
     maskedPatterns: u16s(readVa(exe, MASKED_PATTERNS, 64)),
     font: readVa(exe, FONT, 128 * 8).slice(),
     actorKinds: actorKinds(exe, episode),
+    backdropRule: readBackdropRule(exe, episode),
   };
 }
 

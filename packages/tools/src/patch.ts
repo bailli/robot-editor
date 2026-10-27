@@ -63,7 +63,7 @@ export function patchedExe(game: Game, episode: number, roomId: number): Uint8Ar
     return { ...target, tags: target.tags.filter((t) => !isScript(t.kind, t.value)) };
   };
   const target = game.room(episode, roomId);
-  const backdrop = backdropRoom(episode, target, ep.rooms, ep.classes);
+  const backdrop = backdropRoom(target, ep.rooms, ep.classes);
   const keep = ep.rooms.filter((r) => r.id === 1 || r.id === 2);
   if (backdrop) {
     const rooms = [

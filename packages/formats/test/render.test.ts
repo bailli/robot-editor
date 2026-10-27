@@ -61,7 +61,7 @@ test("the room behind a room: id mod 100 in Junior to III, id - 100 in IV", () =
     return (id: number) => {
       const room = rooms.find((r) => r.id === id);
       assert.ok(room);
-      return backdropRoom(episode, room, rooms, classes)?.id;
+      return backdropRoom(room, rooms, classes)?.id;
     };
   };
   const ii = behind(2);

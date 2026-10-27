@@ -1,5 +1,6 @@
 import {
   BACKDROP_CLASS,
+  type BackdropRule,
   DIRECTIONS,
   DOOR_IN_CLASS,
   DOOR_OUT_CLASS,
@@ -43,6 +44,7 @@ import {
   nameRoom,
   parsePe,
   parseTexts,
+  readBackdropRule,
   readDealer,
   readEpisodeFlags,
   readEpisodeStart,
@@ -60,6 +62,7 @@ import {
   sameDealer,
   sha256,
   textChanges,
+  withBackdropRule,
   withDealer,
   withEpisodeFlags,
   withEpisodeStart,
@@ -127,6 +130,8 @@ export interface Edit {
   rucksack?: { before: number; after: number };
   /** The episode's flags before and after. */
   flags?: { before: number; after: number };
+  /** The episode's backdrop rule before and after. */
+  backdrop?: { before: BackdropRule; after: BackdropRule };
   /** The tile types copied from other episodes, and the edited texts, before and after. */
   tileTypes?: {
     before: readonly TileTypeCopy[];
@@ -296,6 +301,7 @@ export class Editor {
   private readonly starts = new Map<number, EpisodeStart>();
   private readonly rucksacks = new Map<number, number>();
   private readonly flagWords = new Map<number, number>();
+  private readonly backdropRules = new Map<number, BackdropRule>();
   private readonly undoStack: Edit[] = [];
   private readonly redoStack: Edit[] = [];
   private stroke: Edit | undefined;
@@ -318,8 +324,8 @@ export class Editor {
       this.mod = { name: "", author: "", description: "", changes: NO_CHANGES };
       return;
     }
-    const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer, rucksack, flags } =
-      mod.changes;
+    const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
+    const { rucksack, flags, backdrop } = mod.changes;
     if (mod.base !== this.pristineHash) throw new ModError("base: the mod is for another exe");
     const kept: ModChanges = { ...NO_CHANGES, events, code, copyTexts };
     this.mod = { ...mod, changes: kept };
@@ -349,6 +355,7 @@ export class Editor {
     }
     for (const { episode, capacity } of rucksack) this.rucksacks.set(episode, capacity);
     for (const c of flags) this.flagWords.set(c.episode, c.flags);
+    for (const c of backdrop) this.backdropRules.set(c.episode, c.rule);
   }
 
   /** The exe the edits apply to: the loaded one, or with a mod its base (see above). */
@@ -673,8 +680,35 @@ export class Editor {
     return flags !== undefined && flags !== readEpisodeFlags(this.game.image, episode);
   }
 
+  /** Which room the episode draws behind a room with a backdrop, as edited (backdrop.ts). */
+  backdropRule(episode: number): BackdropRule {
+    return this.backdropRules.get(episode) ?? readBackdropRule(this.game.image, episode);
+  }
+
+  /** Sets the episode's backdrop rule; one undo step (shown in room `room`). */
+  setBackdropRule(episode: number, room: number, rule: BackdropRule): Edit | undefined {
+    this.endStroke();
+    const before = this.backdropRule(episode);
+    if (before === rule) return undefined;
+    return this.commitEpisode({ episode, room, backdrop: { before, after: rule } });
+  }
+
+  isBackdropEdited(episode: number): boolean {
+    const rule = this.backdropRules.get(episode);
+    return rule !== undefined && rule !== readBackdropRule(this.game.image, episode);
+  }
+
+  /** The room drawn behind a room of the episode (backdropRoom, by the edited rule). */
+  backdropOf(episode: number, room: Room): Room | undefined {
+    const classes = this.game.episode(episode).classes;
+    const rule = this.backdropRule(episode);
+    return backdropRoom(room, this.rooms(episode), { ...classes, backdropRule: rule });
+  }
+
   /** Applies a change of the episode's settings as one undo step. */
-  private commitEpisode(edit: Pick<Edit, "episode" | "room" | "rucksack" | "flags">): Edit {
+  private commitEpisode(
+    edit: Pick<Edit, "episode" | "room" | "rucksack" | "flags" | "backdrop">,
+  ): Edit {
     const step: Edit = { ...edit, layer: "base", changes: [] };
     this.apply(step, after);
     this.push(step);
@@ -842,7 +876,7 @@ export class Editor {
     };
     return {
       above: above.id,
-      backdrop: backdropRoom(episode, room, rooms, classes)?.id,
+      backdrop: this.backdropOf(episode, room)?.id,
       doors: passages.filter((p) => p.kind === "door").length,
       stairs: passages.filter((p) => p.kind === "stairs").length,
     };
@@ -1406,6 +1440,9 @@ export class Editor {
     const flags = [...this.flagWords]
       .filter(([episode]) => this.isFlagsEdited(episode))
       .map(([episode, word]) => ({ episode, flags: word }));
+    const backdrop = [...this.backdropRules]
+      .filter(([episode]) => this.isBackdropEdited(episode))
+      .map(([episode, rule]) => ({ episode, rule }));
     const mod: Mod = {
       ...this.mod,
       base: this.pristineHash,
@@ -1419,6 +1456,7 @@ export class Editor {
         start,
         rucksack,
         flags,
+        backdrop,
       },
     };
     checkMod(mod);
@@ -1464,6 +1502,9 @@ export class Editor {
     }
     for (const [episode, flags] of this.flagWords) {
       if (this.isFlagsEdited(episode)) exe = withEpisodeFlags(parsePe(exe), episode, flags);
+    }
+    for (const [episode, rule] of this.backdropRules) {
+      if (this.isBackdropEdited(episode)) exe = withBackdropRule(parsePe(exe), episode, rule);
     }
     return exe;
   }
@@ -1515,6 +1556,11 @@ export class Editor {
     }
     if (edit.flags) {
       this.flagWords.set(edit.episode, value === before ? edit.flags.before : edit.flags.after);
+      return;
+    }
+    if (edit.backdrop) {
+      const { before: old, after: now } = edit.backdrop;
+      this.backdropRules.set(edit.episode, value === before ? old : now);
       return;
     }
     const present = value === after ? edit.added : edit.removed;

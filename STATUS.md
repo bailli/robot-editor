@@ -83,6 +83,7 @@ Files in `packages/formats/src`:
 | `music.ts`                   | MUSIC resources: the names of their pieces                                                    |
 | `start.ts`                   | the room and cell an episode starts in, the rucksack's capacity, and patching them            |
 | `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them         |
+| `backdrop.ts`                | which room an episode draws behind a room with a backdrop (mod 100, − 100), and patching it   |
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants      |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                        |
 | `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on              |
@@ -351,13 +352,17 @@ Files in `packages/formats/src`:
   colours (only III; else the constructor 0x445bd0 rolls three distinct colours 8–14
   into actor +0x30), 0x400 the arrival at an edge (see open item 5), 0x2000 the
   Teleport() point is cleared on entering a room (all but III), 0x4000 and 0x8000
-  oracles vanish after north and after east (only II), 0x40000 something about door
-  cells in states from 9 on in rooms from 100 on (0x413d45, not traced), 0x80000 doors
-  into buildings need no key (only III). The others are not traced. **Verified under
+  oracles vanish after north and after east (only II), 0x40000 house cells (class 98,
+  tile 0x53) in states from 9 on block in rooms from 100 on (only III, whose caves
+  have the void around them in state 10; the step-on handler 0x413d30 lets the hero on
+  such cells otherwise), 0x80000 doors into buildings need no key (only III). The others are not traced. **Verified under
   Wine** (`pnpm test:game`): the oracle bits in Junior (see the oracles); with 0x20
   Junior's robots have their sprites' colours, without it three distinct ones from
   8–14; with 0x80000 the hero walks through episode II room 15's door into 115 without
-  the key, without it he stays in 15.
+  the key, without it he stays in 15; with 0x2000 (episode I) the Teleport() point a
+  room's script set is room 0 after walking into the next room (x and y stay), without
+  it it stays; with 0x40000 the hero stops in front of a state 10 house cell in III
+  room 114, without it he walks over it, and in room 41 he walks over it with it.
 
 ### Room connections (`exits.ts`)
 
@@ -452,7 +457,12 @@ Files in `packages/formats/src`:
 - **Backdrops** (`backdropRoom`, `shownCells`): a room whose cell (0, 1) or (39, 1) is
   of class 99 (tile 0x54; episode vtable +0x00: 0x409d30, IV 0x40d4a0) is drawn over
   another room: room id mod 100 in Junior to III (242 shows 42, not 142), id − 100 in
-  IV. Drawing the room (0x401af0, 0x401ba0) loads that room's map from the scene and
+  IV. The rule is the episode vtable's +0x00 (which room, for drawing, 0x401af0) and
+  +0x04 (loading the room with it, 0x432820: 0x439130, IV 0x40d780) together
+  (`backdrop.ts`, `readBackdropRule`, `withBackdropRule`; `classes.backdropRule`, which
+  `backdropRoom` follows). **Verified under Wine** (`pnpm test:game`): II with both
+  pointers switched to IV's draws a room 244 (a copy of 115) over 144, as our render
+  does but for 144's type 0x4d (a renderer gap); with only +0x00 switched it still drew 44. Drawing the room (0x401af0, 0x401ba0) loads that room's map from the scene and
   draws its cell wherever the room's own cell is of class 99, so the house's interior
   sits in the town around it; the backdrop's actors stay cells (robots draw nothing as
   tiles). 22 rooms in episodes II–IV, e.g. II 115 over 15, III 147 over 47, IV 441 over
@@ -1067,10 +1077,12 @@ Supported:
   the game** (by hand): Junior's book copied to IV and placed next to the start, taken:
   its first-take box came and its points were added
 - the episode's settings (tab Episode, `episode-view.ts`): the rucksack's capacity
-  (1–250) and the rules, episode flags as checkboxes: oracles vanish after north, after
+  (1–250); the rules, episode flags as checkboxes: oracles vanish after north, after
   east (0x4000, 0x8000), doors into buildings open without the key (0x80000), robots
-  keep their sprite's colours (0x20); one undo step each, saved into the exe and the
-  mod (`rucksack`, `flags`)
+  keep their sprite's colours (0x20), Teleport() points last only in their room
+  (0x2000), house cells in states 9+ block from room 100 on (0x40000); the backdrop
+  rule (room id mod 100 or − 100; the room and the map draw by it at once); one undo
+  step each, saved into the exe and the mod (`rucksack`, `flags`, `backdrop`)
 - the episode's start (tab Episode, `episode-view.ts`): the room and the hero's cell
   there; "Start here" sets the shown room and the picked cell (Select tool, one cell,
   or Inspect; else the start's cell), "Original start" goes back to the exe's; one undo
@@ -1218,9 +1230,11 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   7. `rucksack` (key: episode): `{ episode, capacity }` → `withRucksack` (1–250).
   8. `flags` (key: episode): `{ episode, flags }` (the whole word, hex in the file) →
      `withEpisodeFlags`.
+  9. `backdrop` (key: episode): `{ episode, rule }` ("mod100", "minus100") →
+     `withBackdropRule`.
 - **File:** one JSON file (`*.robotmod.json`) with `format` (1), `name`, `author`,
   `description`, `base` (`{ sha256 }`) and `changes` (`tileTypes`, `events`, `code`,
-  `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`: arrays of the
+  `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`, `backdrop`: arrays of the
   changes above; a kind left out is empty). `base` is the sha256 of the whole
   pristine exe (the Windows version 2018, `reference/GameOfRobot.exe`); applying
   refuses any other exe. A changed room carries the original content it keeps (a fan
@@ -1250,11 +1264,11 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   `robot mod apply MOD OUT.exe`, later `robot mod compile MOD OUT.patch` for the proxy.
 - **The editor** works on two images: the **base** (pristine + kinds 1–2: the tile types,
   which it edits by making a new base, and events and code, which it does not edit) and
-  the **edited** state on top (kinds 3–8: the dealers, rooms, texts, the start, the
-  rucksack and the flags). Opening takes an exe and, optionally, a mod; "Save mod"
-  writes the tile types as edited, events and code as loaded plus kinds 3–8 as the
-  difference between the edited state and the base (dealers, starts, rucksacks and
-  flags that differ, rooms that
+  the **edited** state on top (kinds 3–9: the dealers, rooms, texts, the start, the
+  rucksack, the flags and the backdrop rule). Opening takes an exe and, optionally, a
+  mod; "Save mod" writes the tile types as edited, events and code as loaded plus kinds
+  3–9 as the difference between the edited state and the base (dealers, starts,
+  rucksacks, flags and backdrop rules that differ, rooms that
   differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
   written in the editor replaces its copy in `copyTexts`. "Save exe" and "Test in
   game" stay, built from the base and the edits. Undo/redo, dirty state (either save
@@ -1409,7 +1423,7 @@ Roughly by value for the editor.
 | 0x432fd0, 0x433110           | logic record lookup; a cell's effective value                                  |
 | 0x433230, 0x4331a0           | a cell's top with actors (RandObj: 0 = empty); set the top of a cell           |
 | 0x44c98d, 0x41f9d0, 0x44dcf0 | class vtable +0x0c on stepping; sand heap → scorpion; create a scorpion        |
-| 0x401af0, 0x409d30           | draw a room over its backdrop (class 99 cells); which room (IV 0x40d4a0)       |
+| 0x401af0, 0x409d30, 0x439130 | draw a room over its backdrop; which room; load it (IV 0x40d4a0, 0x40d780)     |
 | 0x406ae0, 0x438850           | describe a cell; fetch a text variant                                          |
 | 0x43c0b0, 0x43bfd0           | a room's name; cut a text down to one line                                     |
 | 0x43b2e0, 0x43b46a           | episode constructor; class tables 0x4c6ce0 (objects) / 0x4c70e0 (class → type) |

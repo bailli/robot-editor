@@ -13,6 +13,7 @@
  *   7. start      (episode)               where the episode starts (withEpisodeStart)
  *   8. rucksack   (episode)               the rucksack's capacity (withRucksack)
  *   9. flags      (episode)               the episode's flags (withEpisodeFlags)
+ *  10. backdrop   (episode)               the room drawn behind (withBackdropRule)
  * copyTexts and texts share their keys: an entry is either copied or written. Copies read
  * the exe as kinds 1-3 left it, so the mod carries no text of the game's own. The event
  * tables are full: a new event takes over an entry the episode never uses.
@@ -24,6 +25,7 @@
  * array per kind; code and flags as hex strings, the dealer's goods as [class, state, price], rooms
  * as base64 of serializeRoom (null removes).
  */
+import { BACKDROP_RULES, type BackdropRule, withBackdropRule } from "./backdrop.ts";
 import { type Dealer, dealerProblem, withDealer } from "./dealer.ts";
 import { withEpisodeFlags } from "./episode-flags.ts";
 import {
@@ -113,6 +115,11 @@ export interface FlagsChange {
   flags: number;
 }
 
+export interface BackdropChange {
+  episode: number;
+  rule: BackdropRule;
+}
+
 export interface ModChanges {
   tileTypes: readonly TileTypesChange[];
   events: readonly EventChange[];
@@ -124,6 +131,7 @@ export interface ModChanges {
   start: readonly StartChange[];
   rucksack: readonly RucksackChange[];
   flags: readonly FlagsChange[];
+  backdrop: readonly BackdropChange[];
 }
 
 export interface Mod {
@@ -168,6 +176,7 @@ export const NO_CHANGES: ModChanges = {
   start: [],
   rucksack: [],
   flags: [],
+  backdrop: [],
 };
 
 /** A mod without changes for the given exe. */
@@ -190,8 +199,19 @@ function episodeOk(episode: number, where: string): void {
 /** Throws a ModError naming the change if any change is invalid or a key repeats. */
 export function checkMod(mod: Mod): void {
   need(/^[0-9a-f]{64}$/.test(mod.base), "base", "not a sha256 (64 lowercase hex digits)");
-  const { tileTypes, events, code, dealer, copyTexts, texts, rooms, start, rucksack, flags } =
-    mod.changes;
+  const {
+    tileTypes,
+    events,
+    code,
+    dealer,
+    copyTexts,
+    texts,
+    rooms,
+    start,
+    rucksack,
+    flags,
+    backdrop,
+  } = mod.changes;
   const keys = new Set<string>();
   const once = (key: string, where: string) => {
     need(!keys.has(key), where, "changed twice");
@@ -286,6 +306,12 @@ export function checkMod(mod: Mod): void {
     need(isInt(c.flags, 0, 0xffffffff), where, `flags ${c.flags} (32 bits)`);
     once(`flags ${c.episode}`, where);
   });
+  backdrop.forEach((c, i) => {
+    const where = `backdrop[${i}] (episode ${c.episode})`;
+    episodeOk(c.episode, where);
+    need((BACKDROP_RULES as readonly string[]).includes(c.rule), where, `rule ${c.rule}`);
+    once(`backdrop ${c.episode}`, where);
+  });
 }
 
 // --- applying -----------------------------------------------------------------------
@@ -348,6 +374,7 @@ function canonical(changes: ModChanges): ModChanges {
     start: changes.start.toSorted(byKeys((c) => c.episode)),
     rucksack: changes.rucksack.toSorted(byKeys((c) => c.episode)),
     flags: changes.flags.toSorted(byKeys((c) => c.episode)),
+    backdrop: changes.backdrop.toSorted(byKeys((c) => c.episode)),
   };
 }
 
@@ -434,6 +461,9 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
   }
   for (const { episode, flags } of changes.flags) {
     data = withEpisodeFlags(parsePe(data), episode, flags);
+  }
+  for (const { episode, rule } of changes.backdrop) {
+    data = withBackdropRule(parsePe(data), episode, rule);
   }
   return data;
 }
@@ -585,8 +615,19 @@ function fromHex(text: string, where: string): Uint8Array {
 /** The mod as its JSON file; changes in key order, so saving again gives the same file. */
 export function modJson(mod: Mod): string {
   checkMod(mod);
-  const { tileTypes, events, code, dealer, copyTexts, texts, rooms, start, rucksack, flags } =
-    canonical(mod.changes);
+  const {
+    tileTypes,
+    events,
+    code,
+    dealer,
+    copyTexts,
+    texts,
+    rooms,
+    start,
+    rucksack,
+    flags,
+    backdrop,
+  } = canonical(mod.changes);
   const file: Json = {
     format: MOD_FORMAT,
     name: mod.name,
@@ -633,6 +674,7 @@ export function modJson(mod: Mod): string {
       start: start.map((c) => ({ episode: c.episode, room: c.room, x: c.x, y: c.y })),
       rucksack: rucksack.map((c) => ({ episode: c.episode, capacity: c.capacity })),
       flags: flags.map((c) => ({ episode: c.episode, flags: `0x${c.flags.toString(16)}` })),
+      backdrop: backdrop.map((c) => ({ episode: c.episode, rule: c.rule })),
     },
   };
   // arrays of numbers (the pairs) on one line each; strings hold no line breaks
@@ -765,6 +807,10 @@ export function parseMod(text: string): Mod {
         need(/^0x[0-9a-f]{1,8}$/i.test(flags), `${w}.flags`, "not a hex word (0x…)");
         return { episode: int(o["episode"], `${w}.episode`), flags: parseInt(flags, 16) };
       }),
+      backdrop: list("backdrop", (o, w) => ({
+        episode: int(o["episode"], `${w}.episode`),
+        rule: string(o["rule"], `${w}.rule`) as BackdropRule,
+      })),
     },
   };
   checkMod(mod);

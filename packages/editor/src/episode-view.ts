@@ -1,10 +1,13 @@
 import {
+  type BackdropRule,
   DOORS_NEED_NO_KEY,
   type EpisodeStart,
+  HOUSE_EDGES_BLOCK_INSIDE,
   MAX_RUCKSACK,
   ORACLE_VANISHES_EAST,
   ORACLE_VANISHES_NORTH,
   ROBOTS_KEEP_COLOURS,
+  TELEPORT_POINT_CLEARED,
 } from "@robot/formats";
 
 import { patchChildren } from "./patch.ts";
@@ -19,6 +22,8 @@ export interface EpisodeViewEvents {
   rucksack(capacity: number): void;
   /** New flags for the episode (Editor.setEpisodeFlags). */
   flags(flags: number): void;
+  /** Another backdrop rule (Editor.setBackdropRule). */
+  backdrop(rule: BackdropRule): void;
 }
 
 /** What the view shows of the episode: its start, rucksack and flags. */
@@ -31,6 +36,8 @@ export interface EpisodeContext {
   originalRucksack: number;
   flags: number;
   originalFlags: number;
+  backdrop: BackdropRule;
+  originalBackdrop: BackdropRule;
   /** The shown room. */
   room: number;
   /** "Go to room 43 – DER START" */
@@ -81,6 +88,16 @@ const FLAGS = [
     "Robots keep their sprite's colours",
     "Only episode III's do; elsewhere each robot gets three random colours.",
   ],
+  [
+    TELEPORT_POINT_CLEARED,
+    "Teleport() points last only in their room",
+    "All but episode III: entering a room sends teleporters a script redirected (Teleport(), record flag 0x02) to their own target again.",
+  ],
+  [
+    HOUSE_EDGES_BLOCK_INSIDE,
+    "House cells in states 9+ block from room 100 on",
+    "Only episode III: there tile 0x53 in state 10 is the void around the caves. Without it the hero walks onto such cells, as he does below room 100.",
+  ],
 ] as const;
 
 /**
@@ -94,6 +111,7 @@ export class EpisodeView {
   private readonly start = element("section", "start-view record-view");
   private readonly rucksack = element("section", "start-view record-view");
   private readonly flags = element("section", "start-view record-view");
+  private readonly backdrop = element("section", "start-view record-view");
   private readonly events: EpisodeViewEvents;
   private context: EpisodeContext | undefined;
 
@@ -102,7 +120,8 @@ export class EpisodeView {
     this.start.setAttribute("aria-label", "Start");
     this.rucksack.setAttribute("aria-label", "Rucksack");
     this.flags.setAttribute("aria-label", "Flags");
-    this.element.append(this.start, this.rucksack, this.flags);
+    this.backdrop.setAttribute("aria-label", "Backdrop");
+    this.element.append(this.start, this.rucksack, this.flags, this.backdrop);
   }
 
   show(context: EpisodeContext): void {
@@ -110,6 +129,7 @@ export class EpisodeView {
     patchChildren(this.start, this.renderStart(context));
     patchChildren(this.rucksack, this.renderRucksack(context));
     patchChildren(this.flags, this.renderFlags(context));
+    patchChildren(this.backdrop, this.renderBackdrop(context));
   }
 
   private renderStart(context: EpisodeContext): Node[] {
@@ -186,6 +206,37 @@ export class EpisodeView {
     ];
   }
 
+  private renderBackdrop(context: EpisodeContext): Node[] {
+    const rules: [BackdropRule, string][] = [
+      ["mod100", "Room id mod 100 (242 shows 42)"],
+      ["minus100", "Room id − 100 (242 shows 142)"],
+    ];
+    const field = element("select", "record-field");
+    field.setAttribute("aria-label", "Backdrop room");
+    for (const [rule, label] of rules) {
+      const option = element("option", undefined, label);
+      option.value = rule;
+      field.append(option);
+    }
+    field.value = context.backdrop;
+    field.addEventListener("change", () => {
+      this.events.backdrop(field.value as BackdropRule);
+    });
+    const row = element("label", "record-row");
+    row.dataset["key"] = "rule";
+    const edited = context.backdrop !== context.originalBackdrop;
+    row.append(element("span", "record-label", `Drawn behind${edited ? " (edited)" : ""}`), field);
+    return [
+      element("h3", undefined, "Backdrop"),
+      row,
+      element(
+        "p",
+        "hint",
+        "The room a room with a backdrop (class 99 at (0, 1) or (39, 1)) shows in its class 99 cells, e.g. the town around a house. Junior to III take the id mod 100, so every floor of a house shows the town; IV takes the id − 100, so a floor shows the one below.",
+      ),
+    ];
+  }
+
   private renderFlags(context: EpisodeContext): Node[] {
     const rows = FLAGS.map(([flag, label, title]) => {
       const box = element("input");
@@ -209,7 +260,7 @@ export class EpisodeView {
       element(
         "p",
         "hint",
-        "Flags the episode’s constructor sets. Only II’s oracles vanish once used; oracles that stay can be used again and again, to be sent or hear the hint once more, before the hero turns one into its object (west). Only III’s doors open without the key and only III’s robots keep their colours.",
+        "Flags the episode’s constructor sets. Only II’s oracles vanish once used; oracles that stay can be used again and again, to be sent or hear the hint once more, before the hero turns one into its object (west). Only III’s doors open without the key, its robots keep their colours, its caves’ void blocks and its Teleport() points last beyond their room.",
       ),
     ];
   }

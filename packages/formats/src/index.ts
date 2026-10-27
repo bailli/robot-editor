@@ -221,10 +221,19 @@ export {
 } from "./start.ts";
 export type { EpisodeStart } from "./start.ts";
 export {
+  BACKDROP_RULES,
+  type BackdropRule,
+  backdropRoomId,
+  readBackdropRule,
+  withBackdropRule,
+} from "./backdrop.ts";
+export {
   DOORS_NEED_NO_KEY,
+  HOUSE_EDGES_BLOCK_INSIDE,
   ORACLE_VANISHES_EAST,
   ORACLE_VANISHES_NORTH,
   ROBOTS_KEEP_COLOURS,
+  TELEPORT_POINT_CLEARED,
   readEpisodeFlags,
   withEpisodeFlags,
 } from "./episode-flags.ts";

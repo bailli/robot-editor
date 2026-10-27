@@ -15,6 +15,7 @@ import {
   modJson,
   parseMod,
   parsePe,
+  readBackdropRule,
   readDealer,
   readEpisodeFlags,
   readEpisodeStart,
@@ -795,6 +796,23 @@ describe("Editor and the episode's settings", () => {
     expect(editor.rucksack(3)).toBe(200);
     expect(editor.saveMod().changes).toMatchObject({ rucksack: [], flags: [] });
     expect(() => editor.setRucksack(3, 41, 0)).toThrow(RangeError);
+  });
+
+  test("the backdrop rule changes as one step; what is drawn behind follows", () => {
+    const editor = new Editor(game);
+    editor.addRoom(2, 244, { copy: 115 });
+    expect(editor.backdropOf(2, editor.room(2, 244))?.id).toBe(44);
+    editor.setBackdropRule(2, 244, "minus100");
+    expect(editor.backdropOf(2, editor.room(2, 244))?.id).toBe(144);
+    expect(editor.backdropRule(2)).toBe("minus100");
+    expect(readBackdropRule(parsePe(editor.save()), 2)).toBe("minus100");
+    const mod = editor.saveMod();
+    expect(mod.changes.backdrop).toEqual([{ episode: 2, rule: "minus100" }]);
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    expect(new Editor(game, mod).backdropRule(2)).toBe("minus100");
+    editor.undo();
+    expect(editor.backdropOf(2, editor.room(2, 244))?.id).toBe(44);
+    expect(editor.saveMod().changes.backdrop).toEqual([]);
     expect(() => editor.setRucksack(3, 41, 251)).toThrow(RangeError);
   });
 });

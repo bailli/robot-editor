@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { expect, test } from "vitest";
 
+import { readBackdropRule, withBackdropRule } from "../src/backdrop.ts";
 import { readClassTable } from "../src/classes.ts";
 import { type Dealer, readDealer, withDealer } from "../src/dealer.ts";
 import {
@@ -99,6 +100,8 @@ const changes: ModChanges = {
   rucksack: [{ episode: 3, capacity: 150 }],
   // Junior's oracles vanish as II's do
   flags: [{ episode: 0, flags: 0x48012946 | ORACLE_VANISHES_NORTH | ORACLE_VANISHES_EAST }],
+  // III draws 242 over 142, as IV does
+  backdrop: [{ episode: 3, rule: "minus100" }],
 };
 
 /** Same resources (by type, name, language) and same bytes outside them. */
@@ -149,6 +152,7 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   direct = new Game(withEpisodeStart(direct.image, 3, start));
   direct = new Game(withRucksack(direct.image, 3, 150));
   direct = new Game(withEpisodeFlags(direct.image, 0, 0x4801e946));
+  direct = new Game(withBackdropRule(direct.image, 3, "minus100"));
   sameContent(modded.image, direct.image);
 
   expect(modded.episode(3).classes.typeOfClass.get(76)).toBe(0x59);
@@ -167,6 +171,7 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   expect(readEpisodeStart(modded.image, 3)).toEqual(start);
   expect(readRucksack(modded.image, 3)).toBe(150);
   expect(readEpisodeFlags(modded.image, 0)).toBe(0x4801e946);
+  expect(readBackdropRule(modded.image, 3)).toBe("minus100");
   expect(readDealer(modded.image, 1)).toEqual(dealer1);
   for (const e of [0, 1, 2, 4]) {
     expect(modded.episode(e).rooms).toEqual(game.episode(e).rooms);
@@ -184,6 +189,7 @@ test("compiled: byte writes in the tables and the start method, whole resources"
       [0x479068, 12 * 201], // IV's event table
       [0x40b460, 32], // III's start method
       [0x40e042, 4], // Junior's flags
+      [0x466b08, 8], // III's vtable: the backdrop methods
       [0x408de0, 0x1a], // I's goods method
       [0x475730, 4 * 27], // I's goods
     ] as const;
@@ -264,6 +270,7 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { rucksack: [{ episode: 3, capacity: 0 }] },
     { rucksack: [{ episode: 3, capacity: 251 }] },
     { flags: [{ episode: 3, flags: 2 ** 32 }] },
+    { backdrop: [{ episode: 3, rule: "plus100" as "mod100" }] },
     // no entry 201 in IV; from 128 on ids are 0 or 256-391; IV's entry 128 has id 256
     { events: [{ episode: 4, entry: 201, id: 0, points: 0 }] },
     { events: [{ episode: 4, entry: 197, id: 100, points: 0 }] },
