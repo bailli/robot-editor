@@ -777,6 +777,26 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     );
   }, 60_000);
 
+  for (const diagonal of [false, true]) {
+    test(`Junior: the hero ${diagonal ? "walks diagonally with III's step method" : "does not walk diagonally"}`, async () => {
+      const hero = { x: 5, y: 15 };
+      const area = { x0: 2, x1: 10, y0: 12, y1: 19 };
+      const changes = { moves: diagonal ? [{ episode: 0, diagonal }] : [] };
+      const mod = startRoomMod(game, 0, changes, area, hero, () => undefined);
+      const after = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(0);
+          await d.key(34, true); // PgDn: down and right (DOS key 0x151)
+          await d.run(20);
+          await d.key(34, false);
+          await d.run(30);
+          return d.hero();
+        }),
+      );
+      assert.deepEqual(after, diagonal ? { room: 43, x: 7, y: 17 } : { room: 43, ...hero });
+    }, 60_000);
+  }
+
   test("episode III: the rucksack holds a weight below its capacity", async () => {
     // shovel, hammer, axe, bucket, sextant: weight 2 each (their shapes' frame word)
     const items = [0x69, 0x62, 0x61, 0x67, 0x23];

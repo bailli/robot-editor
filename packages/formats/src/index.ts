@@ -225,8 +225,10 @@ export {
   type BackdropRule,
   backdropRoomId,
   readBackdropRule,
+  readDiagonalMoves,
   withBackdropRule,
-} from "./backdrop.ts";
+  withDiagonalMoves,
+} from "./episode-methods.ts";
 export {
   DOORS_NEED_NO_KEY,
   HOUSE_EDGES_BLOCK_INSIDE,

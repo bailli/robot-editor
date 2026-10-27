@@ -46,6 +46,7 @@ import {
   parseTexts,
   readBackdropRule,
   readDealer,
+  readDiagonalMoves,
   readEpisodeFlags,
   readEpisodeStart,
   readRucksack,
@@ -64,6 +65,7 @@ import {
   textChanges,
   withBackdropRule,
   withDealer,
+  withDiagonalMoves,
   withEpisodeFlags,
   withEpisodeStart,
   withExitMode,
@@ -132,6 +134,8 @@ export interface Edit {
   flags?: { before: number; after: number };
   /** The episode's backdrop rule before and after. */
   backdrop?: { before: BackdropRule; after: BackdropRule };
+  /** Whether the hero walks diagonally, before and after. */
+  diagonal?: { before: boolean; after: boolean };
   /** The tile types copied from other episodes, and the edited texts, before and after. */
   tileTypes?: {
     before: readonly TileTypeCopy[];
@@ -302,6 +306,7 @@ export class Editor {
   private readonly rucksacks = new Map<number, number>();
   private readonly flagWords = new Map<number, number>();
   private readonly backdropRules = new Map<number, BackdropRule>();
+  private readonly diagonals = new Map<number, boolean>();
   private readonly undoStack: Edit[] = [];
   private readonly redoStack: Edit[] = [];
   private stroke: Edit | undefined;
@@ -325,7 +330,7 @@ export class Editor {
       return;
     }
     const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
-    const { rucksack, flags, backdrop } = mod.changes;
+    const { rucksack, flags, backdrop, moves } = mod.changes;
     if (mod.base !== this.pristineHash) throw new ModError("base: the mod is for another exe");
     const kept: ModChanges = { ...NO_CHANGES, events, code, copyTexts };
     this.mod = { ...mod, changes: kept };
@@ -356,6 +361,7 @@ export class Editor {
     for (const { episode, capacity } of rucksack) this.rucksacks.set(episode, capacity);
     for (const c of flags) this.flagWords.set(c.episode, c.flags);
     for (const c of backdrop) this.backdropRules.set(c.episode, c.rule);
+    for (const c of moves) this.diagonals.set(c.episode, c.diagonal);
   }
 
   /** The exe the edits apply to: the loaded one, or with a mod its base (see above). */
@@ -698,6 +704,24 @@ export class Editor {
     return rule !== undefined && rule !== readBackdropRule(this.game.image, episode);
   }
 
+  /** Whether the hero walks diagonally in the episode, as edited (episode-methods.ts). */
+  diagonalMoves(episode: number): boolean {
+    return this.diagonals.get(episode) ?? readDiagonalMoves(this.game.image, episode);
+  }
+
+  /** Lets the hero walk diagonally or not; one undo step (shown in room `room`). */
+  setDiagonalMoves(episode: number, room: number, diagonal: boolean): Edit | undefined {
+    this.endStroke();
+    const before = this.diagonalMoves(episode);
+    if (before === diagonal) return undefined;
+    return this.commitEpisode({ episode, room, diagonal: { before, after: diagonal } });
+  }
+
+  isDiagonalEdited(episode: number): boolean {
+    const diagonal = this.diagonals.get(episode);
+    return diagonal !== undefined && diagonal !== readDiagonalMoves(this.game.image, episode);
+  }
+
   /** The room drawn behind a room of the episode (backdropRoom, by the edited rule). */
   backdropOf(episode: number, room: Room): Room | undefined {
     const classes = this.game.episode(episode).classes;
@@ -707,7 +731,7 @@ export class Editor {
 
   /** Applies a change of the episode's settings as one undo step. */
   private commitEpisode(
-    edit: Pick<Edit, "episode" | "room" | "rucksack" | "flags" | "backdrop">,
+    edit: Pick<Edit, "episode" | "room" | "rucksack" | "flags" | "backdrop" | "diagonal">,
   ): Edit {
     const step: Edit = { ...edit, layer: "base", changes: [] };
     this.apply(step, after);
@@ -1443,6 +1467,9 @@ export class Editor {
     const backdrop = [...this.backdropRules]
       .filter(([episode]) => this.isBackdropEdited(episode))
       .map(([episode, rule]) => ({ episode, rule }));
+    const moves = [...this.diagonals]
+      .filter(([episode]) => this.isDiagonalEdited(episode))
+      .map(([episode, diagonal]) => ({ episode, diagonal }));
     const mod: Mod = {
       ...this.mod,
       base: this.pristineHash,
@@ -1457,6 +1484,7 @@ export class Editor {
         rucksack,
         flags,
         backdrop,
+        moves,
       },
     };
     checkMod(mod);
@@ -1505,6 +1533,9 @@ export class Editor {
     }
     for (const [episode, rule] of this.backdropRules) {
       if (this.isBackdropEdited(episode)) exe = withBackdropRule(parsePe(exe), episode, rule);
+    }
+    for (const [episode, diagonal] of this.diagonals) {
+      if (this.isDiagonalEdited(episode)) exe = withDiagonalMoves(parsePe(exe), episode, diagonal);
     }
     return exe;
   }
@@ -1556,6 +1587,11 @@ export class Editor {
     }
     if (edit.flags) {
       this.flagWords.set(edit.episode, value === before ? edit.flags.before : edit.flags.after);
+      return;
+    }
+    if (edit.diagonal) {
+      const { before: old, after: now } = edit.diagonal;
+      this.diagonals.set(edit.episode, value === before ? old : now);
       return;
     }
     if (edit.backdrop) {

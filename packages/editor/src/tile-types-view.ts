@@ -47,7 +47,7 @@ function button(text: string, title: string, click: () => void): HTMLButtonEleme
 }
 
 function select(label: string, options: readonly [string, string][], value: string) {
-  const s = element("select", "record-field");
+  const s = element("select", "record-field tile-type-field");
   s.setAttribute("aria-label", label);
   for (const [v, text] of options) {
     const o = element("option", undefined, text);
@@ -70,7 +70,7 @@ const hex = (type: number) => `0x${type.toString(16).padStart(2, "0")}`;
  * place (patchChildren); the form's choices stay while the episode does.
  */
 export class TileTypesView {
-  readonly element = element("section", "start-view record-view");
+  readonly element = element("section", "start-view record-view tile-types-view");
   private readonly events: TileTypesViewEvents;
   private context: TileTypesContext | undefined;
   /** The form's choices: source episode, source type, target type. */

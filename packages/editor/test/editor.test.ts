@@ -17,6 +17,7 @@ import {
   parsePe,
   readBackdropRule,
   readDealer,
+  readDiagonalMoves,
   readEpisodeFlags,
   readEpisodeStart,
   readRucksack,
@@ -796,6 +797,24 @@ describe("Editor and the episode's settings", () => {
     expect(editor.rucksack(3)).toBe(200);
     expect(editor.saveMod().changes).toMatchObject({ rucksack: [], flags: [] });
     expect(() => editor.setRucksack(3, 41, 0)).toThrow(RangeError);
+  });
+
+  test("diagonal moves change as one step, saved into exe and mod", () => {
+    const editor = new Editor(game);
+    expect([0, 1, 2, 3, 4].map((e) => editor.diagonalMoves(e))).toEqual([
+      false,
+      false,
+      false,
+      true,
+      true,
+    ]);
+    editor.setDiagonalMoves(0, 43, true);
+    expect(readDiagonalMoves(parsePe(editor.save()), 0)).toBe(true);
+    const mod = editor.saveMod();
+    expect(mod.changes.moves).toEqual([{ episode: 0, diagonal: true }]);
+    expect(new Editor(game, mod).diagonalMoves(0)).toBe(true);
+    editor.undo();
+    expect(editor.saveMod().changes.moves).toEqual([]);
   });
 
   test("the backdrop rule changes as one step; what is drawn behind follows", () => {

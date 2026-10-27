@@ -688,6 +688,17 @@ h2 {
   width: 8ch;
 }
 
+/* the tile type copy form: short labels, episode names and type names in full */
+.tile-types-view .record-label {
+  flex-basis: 4.5em;
+}
+
+.record-field.tile-type-field {
+  width: auto;
+  min-width: 8ch;
+  max-width: 100%;
+}
+
 .record-bytes {
   flex: 1;
   min-width: 0;

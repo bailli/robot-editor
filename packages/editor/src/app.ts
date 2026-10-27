@@ -43,6 +43,7 @@ import {
   randomPlacement,
   readBackdropRule,
   readDealer,
+  readDiagonalMoves,
   readEpisodeFlags,
   readEpisodeStart,
   readEventTable,
@@ -538,6 +539,9 @@ export class App {
     },
     flags: (flags) => {
       this.editEpisode(() => this.need().setEpisodeFlags(this.episode, this.roomId, flags));
+    },
+    diagonal: (diagonal) => {
+      this.editEpisode(() => this.need().setDiagonalMoves(this.episode, this.roomId, diagonal));
     },
     backdrop: (rule) => {
       this.editEpisode(() => this.need().setBackdropRule(this.episode, this.roomId, rule));
@@ -2245,6 +2249,8 @@ export class App {
       flags: editor.episodeFlags(this.episode),
       originalFlags: readEpisodeFlags(image, this.episode),
       backdrop: editor.backdropRule(this.episode),
+      diagonal: editor.diagonalMoves(this.episode),
+      originalDiagonal: readDiagonalMoves(image, this.episode),
       originalBackdrop: readBackdropRule(image, this.episode),
       room: this.roomId,
       label: (room) => `Go to ${this.roomLabel(this.episode, room)}`,
@@ -2265,7 +2271,8 @@ export class App {
     const settingsEdited =
       editor.isRucksackEdited(this.episode) ||
       editor.isFlagsEdited(this.episode) ||
-      editor.isBackdropEdited(this.episode);
+      editor.isBackdropEdited(this.episode) ||
+      editor.isDiagonalEdited(this.episode);
     const edited = dealerEdited || settingsEdited || editor.isStartEdited(this.episode);
     this.dealerView.show({
       episode: EPISODE_NAMES[this.episode] ?? `episode ${this.episode}`,
@@ -2347,7 +2354,8 @@ export class App {
       edit.start ||
       edit.rucksack ||
       edit.flags ||
-      edit.backdrop
+      edit.backdrop ||
+      edit.diagonal
     ) {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);

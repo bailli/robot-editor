@@ -83,7 +83,7 @@ Files in `packages/formats/src`:
 | `music.ts`                   | MUSIC resources: the names of their pieces                                                    |
 | `start.ts`                   | the room and cell an episode starts in, the rucksack's capacity, and patching them            |
 | `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them         |
-| `backdrop.ts`                | which room an episode draws behind a room with a backdrop (mod 100, − 100), and patching it   |
+| `episode-methods.ts`         | rules by the episode vtable's methods: the backdrop room (mod 100, − 100), diagonal moves     |
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants      |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                        |
 | `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on              |
@@ -207,6 +207,18 @@ Files in `packages/formats/src`:
 - **The hero** is the actor object at 0x53e9ac (vtable 0x46d8d8; cell x at +9, y at
   +0xa); 0x53e9a8 is the first actor of the room. 0x51a114 holds a pointer per cell (40
   per row) to the actor standing there. The player's name is at 0x4fe311.
+- **Walking:** the held key (0x51bb1c, DOS codes: arrows 0x148/0x14b/0x14d/0x150, Home
+  0x147, PgUp 0x149, End 0x14f, PgDn 0x151) gives the hero's step (0x4478e0, jump
+  table 0x447b14); a diagonal one is checked by the episode vtable +0x1c (with the
+  hero, both steps and a diagonal mark): Junior, I and II have 0x408d20, which drops
+  one of the two, III and IV 0x40be60, which allows it (`readDiagonalMoves`,
+  `withDiagonalMoves`). The episode flags play no part: Junior with III's whole flags
+  word still does not walk diagonally. Flag 0x20000000 (III, IV) does the same for
+  steering while a current carries the hero (the task 0x46cb20, 0x4274fc), and flag
+  0x1000000 (II, III) gives that drift larger steps (both from the code only). **Verified under Wine**
+  (`pnpm test:game`): PgDn moves Junior's hero 2 cells down and right with III's step
+  method, without it not at all; in III Home, End and PgDn move him diagonally, in IV
+  PgDn.
 - **The driver** (`driver.ts`, the proxy `tools/wine/proxy/proxy.c`, started by
   `harness.py serve`): the proxy replaces the system ddraw.dll next to the exe
   (`WINEDLLOVERRIDES=ddraw=n,b`; it forwards every export, as Wine's DxDiag, the game's
@@ -459,7 +471,7 @@ Files in `packages/formats/src`:
   another room: room id mod 100 in Junior to III (242 shows 42, not 142), id − 100 in
   IV. The rule is the episode vtable's +0x00 (which room, for drawing, 0x401af0) and
   +0x04 (loading the room with it, 0x432820: 0x439130, IV 0x40d780) together
-  (`backdrop.ts`, `readBackdropRule`, `withBackdropRule`; `classes.backdropRule`, which
+  (`episode-methods.ts`, `readBackdropRule`, `withBackdropRule`; `classes.backdropRule`, which
   `backdropRoom` follows). **Verified under Wine** (`pnpm test:game`): II with both
   pointers switched to IV's draws a room 244 (a copy of 115) over 144, as our render
   does but for 144's type 0x4d (a renderer gap); with only +0x00 switched it still drew 44. Drawing the room (0x401af0, 0x401ba0) loads that room's map from the scene and
@@ -1080,9 +1092,10 @@ Supported:
   (1–250); the rules, episode flags as checkboxes: oracles vanish after north, after
   east (0x4000, 0x8000), doors into buildings open without the key (0x80000), robots
   keep their sprite's colours (0x20), Teleport() points last only in their room
-  (0x2000), house cells in states 9+ block from room 100 on (0x40000); the backdrop
-  rule (room id mod 100 or − 100; the room and the map draw by it at once); one undo
-  step each, saved into the exe and the mod (`rucksack`, `flags`, `backdrop`)
+  (0x2000), house cells in states 9+ block from room 100 on (0x40000); diagonal moves;
+  backdrops show the room 100 below (else id mod 100; the room and the map draw by it
+  at once); one undo step each, saved into the exe and the mod (`rucksack`, `flags`,
+  `backdrop`, `moves`)
 - the episode's start (tab Episode, `episode-view.ts`): the room and the hero's cell
   there; "Start here" sets the shown room and the picked cell (Select tool, one cell,
   or Inspect; else the start's cell), "Original start" goes back to the exe's; one undo
@@ -1231,10 +1244,11 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   8. `flags` (key: episode): `{ episode, flags }` (the whole word, hex in the file) →
      `withEpisodeFlags`.
   9. `backdrop` (key: episode): `{ episode, rule }` ("mod100", "minus100") →
-     `withBackdropRule`.
+     `withBackdropRule`. `moves` (key: episode): `{ episode, diagonal }` →
+     `withDiagonalMoves`.
 - **File:** one JSON file (`*.robotmod.json`) with `format` (1), `name`, `author`,
   `description`, `base` (`{ sha256 }`) and `changes` (`tileTypes`, `events`, `code`,
-  `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`, `backdrop`: arrays of the
+  `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`, `backdrop`, `moves`: arrays of the
   changes above; a kind left out is empty). `base` is the sha256 of the whole
   pristine exe (the Windows version 2018, `reference/GameOfRobot.exe`); applying
   refuses any other exe. A changed room carries the original content it keeps (a fan
@@ -1265,10 +1279,10 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
 - **The editor** works on two images: the **base** (pristine + kinds 1–2: the tile types,
   which it edits by making a new base, and events and code, which it does not edit) and
   the **edited** state on top (kinds 3–9: the dealers, rooms, texts, the start, the
-  rucksack, the flags and the backdrop rule). Opening takes an exe and, optionally, a
+  rucksack, the flags, the backdrop rule and diagonal moves). Opening takes an exe and, optionally, a
   mod; "Save mod" writes the tile types as edited, events and code as loaded plus kinds
   3–9 as the difference between the edited state and the base (dealers, starts,
-  rucksacks, flags and backdrop rules that differ, rooms that
+  rucksacks, flags, backdrop rules and moves that differ, rooms that
   differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
   written in the editor replaces its copy in `copyTexts`. "Save exe" and "Test in
   game" stay, built from the base and the edits. Undo/redo, dirty state (either save

@@ -1,7 +1,13 @@
 import { expect, test } from "vitest";
 
-import { backdropRoomId, readBackdropRule, withBackdropRule } from "../src/backdrop.ts";
 import { readEpisodeClasses } from "../src/classes.ts";
+import {
+  backdropRoomId,
+  readBackdropRule,
+  readDiagonalMoves,
+  withBackdropRule,
+  withDiagonalMoves,
+} from "../src/episode-methods.ts";
 import { EPISODES, Game } from "../src/game.ts";
 import { parsePe } from "../src/pe.ts";
 import { backdropRoom } from "../src/render.ts";
@@ -31,4 +37,19 @@ test("the rule changes in the vtable only; the renderer follows the exe", () => 
   const rooms = game.episode(2).rooms;
   expect(backdropRoom(room, rooms, game.episode(2).classes)?.id).toBe(44);
   expect(backdropRoom(room, rooms, readEpisodeClasses(patched, 2))?.id).toBe(144);
+});
+
+test("diagonal moves: only III and IV; switched in the vtable", () => {
+  expect(EPISODES.map((e) => readDiagonalMoves(game.image, e))).toEqual([
+    false,
+    false,
+    false,
+    true,
+    true,
+  ]);
+  const patched = parsePe(withDiagonalMoves(game.image, 0, true));
+  expect(readDiagonalMoves(patched, 0)).toBe(true);
+  expect(readDiagonalMoves(parsePe(withDiagonalMoves(patched, 0, false)), 0)).toBe(false);
+  const changed = patched.data.reduce((n, b, i) => n + Number(b !== game.image.data[i]), 0);
+  expect(changed).toBeLessThanOrEqual(4);
 });

@@ -1,6 +1,6 @@
-import { backdropRoomId } from "./backdrop.ts";
 import { CIRCUIT_NODE_RECORD, GATE_CLASS, nodeBulb } from "./circuits.ts";
 import { type EpisodeClasses, FrameMethod, type ObjectClass } from "./classes.ts";
+import { backdropRoomId } from "./episode-methods.ts";
 import { TELEPORTER_RECORD } from "./exits.ts";
 import type { Rgb } from "./palette.ts";
 import { type TeleporterCondition, teleporterCondition } from "./records.ts";

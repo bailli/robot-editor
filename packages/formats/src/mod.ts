@@ -14,6 +14,7 @@
  *   8. rucksack   (episode)               the rucksack's capacity (withRucksack)
  *   9. flags      (episode)               the episode's flags (withEpisodeFlags)
  *  10. backdrop   (episode)               the room drawn behind (withBackdropRule)
+ *  11. moves      (episode)               diagonal moves or not (withDiagonalMoves)
  * copyTexts and texts share their keys: an entry is either copied or written. Copies read
  * the exe as kinds 1-3 left it, so the mod carries no text of the game's own. The event
  * tables are full: a new event takes over an entry the episode never uses.
@@ -25,9 +26,14 @@
  * array per kind; code and flags as hex strings, the dealer's goods as [class, state, price], rooms
  * as base64 of serializeRoom (null removes).
  */
-import { BACKDROP_RULES, type BackdropRule, withBackdropRule } from "./backdrop.ts";
 import { type Dealer, dealerProblem, withDealer } from "./dealer.ts";
 import { withEpisodeFlags } from "./episode-flags.ts";
+import {
+  BACKDROP_RULES,
+  type BackdropRule,
+  withBackdropRule,
+  withDiagonalMoves,
+} from "./episode-methods.ts";
 import {
   EVENT_IDS_END,
   FIRST_EVENT_ID,
@@ -120,6 +126,12 @@ export interface BackdropChange {
   rule: BackdropRule;
 }
 
+export interface MovesChange {
+  episode: number;
+  /** Whether the hero walks diagonally (Home, PgUp, End, PgDn). */
+  diagonal: boolean;
+}
+
 export interface ModChanges {
   tileTypes: readonly TileTypesChange[];
   events: readonly EventChange[];
@@ -132,6 +144,7 @@ export interface ModChanges {
   rucksack: readonly RucksackChange[];
   flags: readonly FlagsChange[];
   backdrop: readonly BackdropChange[];
+  moves: readonly MovesChange[];
 }
 
 export interface Mod {
@@ -177,6 +190,7 @@ export const NO_CHANGES: ModChanges = {
   rucksack: [],
   flags: [],
   backdrop: [],
+  moves: [],
 };
 
 /** A mod without changes for the given exe. */
@@ -211,6 +225,7 @@ export function checkMod(mod: Mod): void {
     rucksack,
     flags,
     backdrop,
+    moves,
   } = mod.changes;
   const keys = new Set<string>();
   const once = (key: string, where: string) => {
@@ -312,6 +327,12 @@ export function checkMod(mod: Mod): void {
     need((BACKDROP_RULES as readonly string[]).includes(c.rule), where, `rule ${c.rule}`);
     once(`backdrop ${c.episode}`, where);
   });
+  moves.forEach((c, i) => {
+    const where = `moves[${i}] (episode ${c.episode})`;
+    episodeOk(c.episode, where);
+    need(typeof c.diagonal === "boolean", where, "diagonal is not true or false");
+    once(`moves ${c.episode}`, where);
+  });
 }
 
 // --- applying -----------------------------------------------------------------------
@@ -375,6 +396,7 @@ function canonical(changes: ModChanges): ModChanges {
     rucksack: changes.rucksack.toSorted(byKeys((c) => c.episode)),
     flags: changes.flags.toSorted(byKeys((c) => c.episode)),
     backdrop: changes.backdrop.toSorted(byKeys((c) => c.episode)),
+    moves: changes.moves.toSorted(byKeys((c) => c.episode)),
   };
 }
 
@@ -464,6 +486,9 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
   }
   for (const { episode, rule } of changes.backdrop) {
     data = withBackdropRule(parsePe(data), episode, rule);
+  }
+  for (const { episode, diagonal } of changes.moves) {
+    data = withDiagonalMoves(parsePe(data), episode, diagonal);
   }
   return data;
 }
@@ -627,6 +652,7 @@ export function modJson(mod: Mod): string {
     rucksack,
     flags,
     backdrop,
+    moves,
   } = canonical(mod.changes);
   const file: Json = {
     format: MOD_FORMAT,
@@ -675,6 +701,7 @@ export function modJson(mod: Mod): string {
       rucksack: rucksack.map((c) => ({ episode: c.episode, capacity: c.capacity })),
       flags: flags.map((c) => ({ episode: c.episode, flags: `0x${c.flags.toString(16)}` })),
       backdrop: backdrop.map((c) => ({ episode: c.episode, rule: c.rule })),
+      moves: moves.map((c) => ({ episode: c.episode, diagonal: c.diagonal })),
     },
   };
   // arrays of numbers (the pairs) on one line each; strings hold no line breaks
@@ -811,6 +838,10 @@ export function parseMod(text: string): Mod {
         episode: int(o["episode"], `${w}.episode`),
         rule: string(o["rule"], `${w}.rule`) as BackdropRule,
       })),
+      moves: list("moves", (o, w) => {
+        need(typeof o["diagonal"] === "boolean", `${w}.diagonal`, "not true or false");
+        return { episode: int(o["episode"], `${w}.episode`), diagonal: o["diagonal"] };
+      }),
     },
   };
   checkMod(mod);

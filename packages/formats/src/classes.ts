@@ -1,4 +1,4 @@
-import { type BackdropRule, readBackdropRule } from "./backdrop.ts";
+import { type BackdropRule, readBackdropRule } from "./episode-methods.ts";
 import { type PeImage, readVa } from "./pe.ts";
 
 /**

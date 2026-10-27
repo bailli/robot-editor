@@ -24,6 +24,8 @@ export interface EpisodeViewEvents {
   flags(flags: number): void;
   /** Another backdrop rule (Editor.setBackdropRule). */
   backdrop(rule: BackdropRule): void;
+  /** Diagonal moves on or off (Editor.setDiagonalMoves). */
+  diagonal(diagonal: boolean): void;
 }
 
 /** What the view shows of the episode: its start, rucksack and flags. */
@@ -38,6 +40,8 @@ export interface EpisodeContext {
   originalFlags: number;
   backdrop: BackdropRule;
   originalBackdrop: BackdropRule;
+  diagonal: boolean;
+  originalDiagonal: boolean;
   /** The shown room. */
   room: number;
   /** "Go to room 43 – DER START" */
@@ -66,6 +70,27 @@ function button(text: string, title: string, click: () => void): HTMLButtonEleme
 const cell = (start: EpisodeStart) => `(${start.x}, ${start.y})`;
 
 /** The oracle flags the view offers, with their labels. */
+/** A rule's checkbox: [now, as the exe has it]; `change` gets the new state. */
+function ruleRow(
+  key: string,
+  label: string,
+  title: string,
+  [checked, original]: readonly [boolean, boolean],
+  change: (on: boolean) => void,
+): HTMLElement {
+  const box = element("input");
+  box.type = "checkbox";
+  box.checked = checked;
+  box.addEventListener("change", () => {
+    change(box.checked);
+  });
+  const row = element("label", "record-row");
+  row.dataset["key"] = key;
+  row.title = title;
+  row.append(box, element("span", undefined, `${label}${checked !== original ? " (edited)" : ""}`));
+  return row;
+}
+
 /** The episode flags the view offers: the bit, its label and what it does. */
 const FLAGS = [
   [
@@ -111,7 +136,6 @@ export class EpisodeView {
   private readonly start = element("section", "start-view record-view");
   private readonly rucksack = element("section", "start-view record-view");
   private readonly flags = element("section", "start-view record-view");
-  private readonly backdrop = element("section", "start-view record-view");
   private readonly events: EpisodeViewEvents;
   private context: EpisodeContext | undefined;
 
@@ -120,8 +144,7 @@ export class EpisodeView {
     this.start.setAttribute("aria-label", "Start");
     this.rucksack.setAttribute("aria-label", "Rucksack");
     this.flags.setAttribute("aria-label", "Flags");
-    this.backdrop.setAttribute("aria-label", "Backdrop");
-    this.element.append(this.start, this.rucksack, this.flags, this.backdrop);
+    this.element.append(this.start, this.rucksack, this.flags);
   }
 
   show(context: EpisodeContext): void {
@@ -129,7 +152,6 @@ export class EpisodeView {
     patchChildren(this.start, this.renderStart(context));
     patchChildren(this.rucksack, this.renderRucksack(context));
     patchChildren(this.flags, this.renderFlags(context));
-    patchChildren(this.backdrop, this.renderBackdrop(context));
   }
 
   private renderStart(context: EpisodeContext): Node[] {
@@ -206,61 +228,47 @@ export class EpisodeView {
     ];
   }
 
-  private renderBackdrop(context: EpisodeContext): Node[] {
-    const rules: [BackdropRule, string][] = [
-      ["mod100", "Room id mod 100 (242 shows 42)"],
-      ["minus100", "Room id − 100 (242 shows 142)"],
-    ];
-    const field = element("select", "record-field");
-    field.setAttribute("aria-label", "Backdrop room");
-    for (const [rule, label] of rules) {
-      const option = element("option", undefined, label);
-      option.value = rule;
-      field.append(option);
-    }
-    field.value = context.backdrop;
-    field.addEventListener("change", () => {
-      this.events.backdrop(field.value as BackdropRule);
-    });
-    const row = element("label", "record-row");
-    row.dataset["key"] = "rule";
-    const edited = context.backdrop !== context.originalBackdrop;
-    row.append(element("span", "record-label", `Drawn behind${edited ? " (edited)" : ""}`), field);
-    return [
-      element("h3", undefined, "Backdrop"),
-      row,
-      element(
-        "p",
-        "hint",
-        "The room a room with a backdrop (class 99 at (0, 1) or (39, 1)) shows in its class 99 cells, e.g. the town around a house. Junior to III take the id mod 100, so every floor of a house shows the town; IV takes the id − 100, so a floor shows the one below.",
-      ),
-    ];
-  }
-
   private renderFlags(context: EpisodeContext): Node[] {
-    const rows = FLAGS.map(([flag, label, title]) => {
-      const box = element("input");
-      box.type = "checkbox";
-      box.checked = (context.flags & flag) !== 0;
-      box.addEventListener("change", () => {
-        const flags = this.context?.flags;
-        if (flags === undefined) return;
-        this.events.flags(box.checked ? (flags | flag) >>> 0 : (flags & ~flag) >>> 0);
-      });
-      const row = element("label", "record-row");
-      row.dataset["key"] = String(flag);
-      row.title = `${title} (flag 0x${flag.toString(16)})`;
-      const edited = ((context.flags ^ context.originalFlags) & flag) !== 0;
-      row.append(box, element("span", undefined, `${label}${edited ? " (edited)" : ""}`));
-      return row;
-    });
+    const rows = FLAGS.map(([flag, label, title]) =>
+      ruleRow(
+        String(flag),
+        label,
+        `${title} (flag 0x${flag.toString(16)})`,
+        [(context.flags & flag) !== 0, (context.originalFlags & flag) !== 0],
+        (on) => {
+          const flags = this.context?.flags;
+          if (flags !== undefined)
+            this.events.flags(on ? (flags | flag) >>> 0 : (flags & ~flag) >>> 0);
+        },
+      ),
+    );
+    const diagonal = ruleRow(
+      "diagonal",
+      "Diagonal moves",
+      "Only episodes III and IV: Home, PgUp, End and PgDn move the hero diagonally (episode vtable +0x1c: 0x40be60, else 0x408d20)",
+      [context.diagonal, context.originalDiagonal],
+      (on) => {
+        this.events.diagonal(on);
+      },
+    );
+    const backdrop = ruleRow(
+      "backdrop",
+      "Backdrops show the room 100 below",
+      "Only episode IV: a room with a backdrop (class 99 at (0, 1) or (39, 1)) shows room id − 100 in its class 99 cells, so a floor shows the one below (242 shows 142); else id mod 100, the town around every floor (242 shows 42)",
+      [context.backdrop === "minus100", context.originalBackdrop === "minus100"],
+      (on) => {
+        this.events.backdrop(on ? "minus100" : "mod100");
+      },
+    );
     return [
       element("h3", undefined, "Rules"),
+      diagonal,
+      backdrop,
       ...rows,
       element(
         "p",
         "hint",
-        "Flags the episode’s constructor sets. Only II’s oracles vanish once used; oracles that stay can be used again and again, to be sent or hear the hint once more, before the hero turns one into its object (west). Only III’s doors open without the key, its robots keep their colours, its caves’ void blocks and its Teleport() points last beyond their room.",
+        "What the episode’s code sets (its constructor’s flags, the methods it points to; each box’s tooltip says more). Only III and IV walk diagonally, only IV’s backdrops show the room 100 below. Only II’s oracles vanish once used; oracles that stay can be used again and again, to be sent or hear the hint once more, before the hero turns one into its object (west). Only III’s doors open without the key, its robots keep their colours, its caves’ void blocks and its Teleport() points last beyond their room.",
       ),
     ];
   }

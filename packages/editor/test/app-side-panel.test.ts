@@ -351,8 +351,10 @@ test("the Episode tab sets the rucksack and the oracles' flags, undoably; the mo
   await expect
     .element(oracles.getByRole("checkbox", { name: /block from room 100/ }))
     .not.toBeChecked();
-  const backdrop = page.getByRole("region", { name: "Backdrop" });
-  await userEvent.selectOptions(backdrop.getByLabelText("Backdrop room"), "minus100");
+  await oracles.getByRole("checkbox", { name: /Diagonal moves/ }).click();
+  expect(app.editor?.diagonalMoves(0)).toBe(true);
+  app.undo();
+  await oracles.getByRole("checkbox", { name: /room 100 below/ }).click();
   expect(app.editor?.backdropRule(0)).toBe("minus100");
   app.undo();
   expect(tab("episode")).toMatchObject({ badge: "●" });
