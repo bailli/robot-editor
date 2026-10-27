@@ -113,6 +113,11 @@ test("entries can be set, added and removed; shared texts stay with the others",
     "1.0\n1:\none;\n\n2:\n3:2\nshared|\nby two;\n\n4:\nvier;\n",
   );
   expect(withTextEntry(text, 7, ["sieben"])).toBe(`${text}\n7:\nsieben;\n`);
+  // a header without text at the end does not take the new entry's
+  const open = `${text}\n9:\n`;
+  expect(parseTexts(withTextEntry(open, 10, ["zehn"])).entries).toEqual(
+    new Map([...parseTexts(open).entries, [10, ["zehn"]]]),
+  );
   expect(textEntryProblem("a;b")).toBeDefined();
   expect(textEntryProblem("ok\n12: no")).toBeDefined();
   expect(textEntryProblem("Raum 12 ist hier")).toBeUndefined();

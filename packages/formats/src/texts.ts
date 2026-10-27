@@ -133,7 +133,7 @@ export function textEntryProblem(variant: string): string | undefined {
 /**
  * A text resource (as decoded, see parseTexts) with entry `id` set to `variants`, or
  * removed (undefined). Headers sharing the entry's text keep it: the one before gets a
- * copy. A new entry is added at the end.
+ * copy. A new entry is added at the end, before headers without text there.
  */
 export function withTextEntry(
   text: string,
@@ -155,7 +155,15 @@ export function withTextEntry(
   const entry =
     variants && `${id}:${variants.length > 1 ? variants.length : ""}\n${variants.join("|\n")};`;
   const at = headers.findIndex((h) => Number(h[1]) === id);
-  if (at < 0) return entry ? `${text.trimEnd()}\n\n${entry}\n` : text;
+  if (at < 0) {
+    if (!entry) return text;
+    // headers without text at the end share no text: the new entry goes before them
+    let tail = headers.length;
+    while (tail > 0 && body(tail - 1).trim() === "") tail--;
+    const before = headers.at(tail)?.index ?? text.length;
+    const rest = text.slice(before);
+    return `${text.slice(0, before).trimEnd()}\n\n${entry}\n${rest ? `\n${rest}` : ""}`;
+  }
 
   const { header, end } = bounds(at);
   const own = body(at);
