@@ -267,8 +267,17 @@ export class Editor {
       this.mod = { name: "", author: "", description: "", changes: NO_CHANGES };
       return;
     }
-    const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
-    const kept: ModChanges = { ...NO_CHANGES, tileTypes, events, code, copyTexts };
+    const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer, rucksack, flags } =
+      mod.changes;
+    const kept: ModChanges = {
+      ...NO_CHANGES,
+      tileTypes,
+      events,
+      code,
+      copyTexts,
+      rucksack,
+      flags,
+    };
     this.game = new Game(applyMod(game.image, { ...mod, changes: kept }));
     this.mod = { ...mod, changes: kept };
     for (const episode of new Set(rooms.map((c) => c.episode))) {

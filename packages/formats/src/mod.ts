@@ -11,6 +11,8 @@
  *      texts      (resource, entry)       a text entry set or removed (withTextEntry)
  *   6. rooms      (episode, room id)      a room replaced, added or removed (withScene)
  *   7. start      (episode)               where the episode starts (withEpisodeStart)
+ *   8. rucksack   (episode)               the rucksack's capacity (withRucksack)
+ *   9. flags      (episode)               the episode's flags (withEpisodeFlags)
  * copyTexts and texts share their keys: an entry is either copied or written. Copies read
  * the exe as kinds 1-3 left it, so the mod carries no text of the game's own. The event
  * tables are full: a new event takes over an entry the episode never uses.
@@ -19,10 +21,11 @@
  * (applyPatch) and, later, the proxy as an in-memory loader apply only that patch.
  *
  * The file is JSON: format, name, author, description, base { sha256 }, changes with one
- * array per kind; code as hex strings, the dealer's goods as [class, state, price], rooms
+ * array per kind; code and flags as hex strings, the dealer's goods as [class, state, price], rooms
  * as base64 of serializeRoom (null removes).
  */
 import { type Dealer, dealerProblem, withDealer } from "./dealer.ts";
+import { withEpisodeFlags } from "./episode-flags.ts";
 import {
   EVENT_IDS_END,
   FIRST_EVENT_ID,
@@ -35,7 +38,7 @@ import { DIRECTORY_RESOURCE, type PeImage, parsePe, readVa } from "./pe.ts";
 import { findResource, readResources, replaceResource } from "./resources.ts";
 import { ROOM_HEIGHT, ROOM_WIDTH, type Room, parseRoom, serializeRoom } from "./scene.ts";
 import { sha256 } from "./sha256.ts";
-import { type EpisodeStart, withEpisodeStart } from "./start.ts";
+import { type EpisodeStart, MAX_RUCKSACK, withEpisodeStart, withRucksack } from "./start.ts";
 import { parseTexts, textEntryProblem, withTextEntry } from "./texts.ts";
 
 export const MOD_FORMAT = 1;
@@ -98,6 +101,18 @@ export interface StartChange extends EpisodeStart {
   episode: number;
 }
 
+export interface RucksackChange {
+  episode: number;
+  /** Its slots; the weight it holds stays below (1 to MAX_RUCKSACK). */
+  capacity: number;
+}
+
+export interface FlagsChange {
+  episode: number;
+  /** The whole word the constructor sets (episode-flags.ts). */
+  flags: number;
+}
+
 export interface ModChanges {
   tileTypes: readonly TileTypesChange[];
   events: readonly EventChange[];
@@ -107,6 +122,8 @@ export interface ModChanges {
   texts: readonly TextChange[];
   rooms: readonly RoomChange[];
   start: readonly StartChange[];
+  rucksack: readonly RucksackChange[];
+  flags: readonly FlagsChange[];
 }
 
 export interface Mod {
@@ -149,6 +166,8 @@ export const NO_CHANGES: ModChanges = {
   texts: [],
   rooms: [],
   start: [],
+  rucksack: [],
+  flags: [],
 };
 
 /** A mod without changes for the given exe. */
@@ -171,7 +190,8 @@ function episodeOk(episode: number, where: string): void {
 /** Throws a ModError naming the change if any change is invalid or a key repeats. */
 export function checkMod(mod: Mod): void {
   need(/^[0-9a-f]{64}$/.test(mod.base), "base", "not a sha256 (64 lowercase hex digits)");
-  const { tileTypes, events, code, dealer, copyTexts, texts, rooms, start } = mod.changes;
+  const { tileTypes, events, code, dealer, copyTexts, texts, rooms, start, rucksack, flags } =
+    mod.changes;
   const keys = new Set<string>();
   const once = (key: string, where: string) => {
     need(!keys.has(key), where, "changed twice");
@@ -254,6 +274,18 @@ export function checkMod(mod: Mod): void {
     need(isInt(c.x, 0, ROOM_WIDTH - 1) && isInt(c.y, 0, ROOM_HEIGHT - 1), where, "cell");
     once(`start ${c.episode}`, where);
   });
+  rucksack.forEach((c, i) => {
+    const where = `rucksack[${i}] (episode ${c.episode})`;
+    episodeOk(c.episode, where);
+    need(isInt(c.capacity, 1, MAX_RUCKSACK), where, `capacity ${c.capacity} (1-${MAX_RUCKSACK})`);
+    once(`rucksack ${c.episode}`, where);
+  });
+  flags.forEach((c, i) => {
+    const where = `flags[${i}] (episode ${c.episode})`;
+    episodeOk(c.episode, where);
+    need(isInt(c.flags, 0, 0xffffffff), where, `flags ${c.flags} (32 bits)`);
+    once(`flags ${c.episode}`, where);
+  });
 }
 
 // --- applying -----------------------------------------------------------------------
@@ -314,6 +346,8 @@ function canonical(changes: ModChanges): ModChanges {
       ),
     ),
     start: changes.start.toSorted(byKeys((c) => c.episode)),
+    rucksack: changes.rucksack.toSorted(byKeys((c) => c.episode)),
+    flags: changes.flags.toSorted(byKeys((c) => c.episode)),
   };
 }
 
@@ -394,6 +428,12 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
   let data = game.image.data;
   for (const { episode, ...start } of changes.start) {
     data = withEpisodeStart(parsePe(data), episode, start);
+  }
+  for (const { episode, capacity } of changes.rucksack) {
+    data = withRucksack(parsePe(data), episode, capacity);
+  }
+  for (const { episode, flags } of changes.flags) {
+    data = withEpisodeFlags(parsePe(data), episode, flags);
   }
   return data;
 }
@@ -545,9 +585,8 @@ function fromHex(text: string, where: string): Uint8Array {
 /** The mod as its JSON file; changes in key order, so saving again gives the same file. */
 export function modJson(mod: Mod): string {
   checkMod(mod);
-  const { tileTypes, events, code, dealer, copyTexts, texts, rooms, start } = canonical(
-    mod.changes,
-  );
+  const { tileTypes, events, code, dealer, copyTexts, texts, rooms, start, rucksack, flags } =
+    canonical(mod.changes);
   const file: Json = {
     format: MOD_FORMAT,
     name: mod.name,
@@ -592,6 +631,8 @@ export function modJson(mod: Mod): string {
         scene: c.room && toBase64(serializeRoom(c.room)),
       })),
       start: start.map((c) => ({ episode: c.episode, room: c.room, x: c.x, y: c.y })),
+      rucksack: rucksack.map((c) => ({ episode: c.episode, capacity: c.capacity })),
+      flags: flags.map((c) => ({ episode: c.episode, flags: `0x${c.flags.toString(16)}` })),
     },
   };
   // arrays of numbers (the pairs) on one line each; strings hold no line breaks
@@ -715,6 +756,15 @@ export function parseMod(text: string): Mod {
         x: int(o["x"], `${w}.x`),
         y: int(o["y"], `${w}.y`),
       })),
+      rucksack: list("rucksack", (o, w) => ({
+        episode: int(o["episode"], `${w}.episode`),
+        capacity: int(o["capacity"], `${w}.capacity`),
+      })),
+      flags: list("flags", (o, w) => {
+        const flags = string(o["flags"], `${w}.flags`);
+        need(/^0x[0-9a-f]{1,8}$/i.test(flags), `${w}.flags`, "not a hex word (0x…)");
+        return { episode: int(o["episode"], `${w}.episode`), flags: parseInt(flags, 16) };
+      }),
     },
   };
   checkMod(mod);

@@ -14,6 +14,8 @@ import {
   type Mod,
   type ModChanges,
   NO_CHANGES,
+  ORACLE_VANISHES_EAST,
+  ORACLE_VANISHES_NORTH,
   ROOM_CELLS,
   ROOM_WIDTH,
   type Room,
@@ -21,6 +23,8 @@ import {
   applyMod,
   backdropRoom,
   emptyMod,
+  eventTextsId,
+  readEpisodeFlags,
   readEpisodeStart,
   renderRoom,
   robotSprite,
@@ -534,6 +538,78 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
 
   const at = (x: number, y: number) => x + y * ROOM_WIDTH;
   const HERO = at(21, 9);
+
+  for (const vanish of [false, true]) {
+    test(`Junior's oracles ${vanish ? "vanish with II's flags" : "stay"} after north and east`, async () => {
+      const oracles = ORACLE_VANISHES_NORTH | ORACLE_VANISHES_EAST;
+      const mod = oraclesMod(game, 0, [0x50, 0x51]);
+      const flags = readEpisodeFlags(game.image, 0) | (vanish ? oracles : 0);
+      const cells = [at(4, 15), at(12, 16)];
+      const seen = await withModExe(
+        game,
+        { ...mod, changes: { ...mod.changes, flags: [{ episode: 0, flags }] } },
+        (exe) =>
+          withGame(exe, async (d) => {
+            await d.startEpisode(0);
+            await d.hold("up", 40); // into the oracle north of the start: sent to (10, 16)
+            await d.run(200);
+            await walk(d, "right", (h) => h.x >= 11);
+            await d.hold("right", 40); // into the oracle at (12, 16): its hint
+            await d.run(60);
+            await d.press("return", 100); // the hint's box
+            // away from it, to see what lies there: the record shows an empty cell (0x4331a0
+            // sets the cell a logic cell shows) or still the oracle
+            await walk(d, "left", (h) => h.x <= 9);
+            const frame = await d.frame();
+            const pixels = (cell: number) => {
+              const [x, y] = [(cell % ROOM_WIDTH) * 16, Math.floor(cell / ROOM_WIDTH) * 12];
+              const row = (r: number) => (y + r) * frame.width + x;
+              return Array.from({ length: 12 }, (_, r) =>
+                frame.indices.subarray(row(r), row(r) + 16).join(","),
+              ).join(";");
+            };
+            const floor = pixels(at(6, 13));
+            const gone = cells.map((cell) => pixels(cell) === floor);
+            // the north oracle once more: it sends again, or the hero walks on
+            await walk(d, "left", (h) => h.x <= 4);
+            await d.hold("up", 40);
+            await d.run(200);
+            return { gone, again: await d.hero() };
+          }),
+      );
+      assert.deepEqual(seen.gone, [vanish, vanish], "the oracles drawn as empty floor");
+      assert.deepEqual(seen.again, vanish ? { room: 43, x: 4, y: 12 } : { room: 43, x: 10, y: 16 });
+    }, 60_000);
+  }
+
+  test("episode III: the rucksack holds a weight below its capacity", async () => {
+    // shovel, hammer, axe, bucket, sextant: weight 2 each (their shapes' frame word)
+    const items = [0x69, 0x62, 0x61, 0x67, 0x23];
+    const start = readEpisodeStart(game.image, 3);
+    const area = { x0: start.x + 1, x1: start.x + 8, y0: start.y, y1: start.y };
+    const changes = {
+      rucksack: [{ episode: 3, capacity: 6 }],
+      // no first-take boxes
+      texts: items.map((n) => ({ resource: eventTextsId(3), entry: 1800 + n, variants: null })),
+    };
+    const mod = startRoomMod(game, 3, changes, area, start, (set) => {
+      items.forEach((item, k) => {
+        set(start.x + 1 + k, start.y, item);
+      });
+    });
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(3);
+        await d.hold("right", 120);
+        await d.run(30);
+        const slots = await d.peek(0x4fe0c0, 2 + 2 * 6);
+        return Array.from({ length: 7 }, (_, k) => slots[2 * k] | (slots[2 * k + 1] << 8));
+      }),
+    );
+    // capacity 6 and the slots (class | state << 8): two items, 2 + 2 + 2 would reach 6;
+    // with the original 200 the hero takes all five
+    assert.deepEqual(seen, [6, 0x78, 0xb4, 0, 0, 0, 0]);
+  }, 60_000);
 
   test("episode II: class 99 under an object, in another state or a logic cell shows no backdrop", async () => {
     const [KEY, BURIED] = [0x15, 3];

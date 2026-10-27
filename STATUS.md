@@ -81,7 +81,8 @@ Files in `packages/formats/src`:
 | `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                      |
 | `room-tags.ts`               | a room's darkness, points for the first visit, music and episode III flags; changing them     |
 | `music.ts`                   | MUSIC resources: the names of their pieces                                                    |
-| `start.ts`                   | the room and cell an episode starts in, and patching them                                     |
+| `start.ts`                   | the room and cell an episode starts in, the rucksack's capacity, and patching them            |
+| `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them         |
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants      |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                        |
 | `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on              |
@@ -320,12 +321,34 @@ Files in `packages/formats/src`:
 - **The start room and the hero's start** are fixed per episode in the episode code
   (vtable +0x54: Junior 0x40e1a0 room 43 (2, 14), I 0x408da0 43 (5, 14), II 0x409fa0
   43 (6, 23), III 0x40b460 41 (8, 15), IV 0x40d680 53 (13, 16)): three `mov`s set the
-  arrival cell (0x4fe309/0x4fe30a) and NxtRoom (0x4fe2f6), then a word at 0x4fe0c0
-  (50, 38, 60, 200, 120; probably the number of inventory slots, see open item 4). `start.ts` reads and patches them (`robot start`,
+  arrival cell (0x4fe309/0x4fe30a) and NxtRoom (0x4fe2f6), then the rucksack's capacity
+  at 0x4fe0c0 (below). `start.ts` reads and patches them (`robot start`,
   the editor's "Test in game"; **verified under Wine** for episode I: a copied room 250
   and another start cell). The hero tile (type 1) in the map is cleared, not used. In
   a `robot patch` exe the hero lands at the episode's position in whatever room was put
   into the start slot (possibly in a wall or water).
+- **The rucksack's capacity** is the word at 0x4fe0c0 (Junior 38, I 50, II 60, III 200,
+  IV 120), set by the start method's fourth `mov` (`readRucksack`, `withRucksack`). It
+  is both the number of slots (words class | state << 8 from 0x4fe0c2; the letters'
+  count 0x4fe2b6 follows, so at most 250) and a weight limit: taking an item (0x42c010)
+  needs a free slot and the weights carried plus the item's to stay **below** it, else
+  the hero cannot step onto the item. An item's weight is the word of its shape's frame
+  for its state (`Frame.word`, read through 0x43a990; 0 counts as 4); with the second
+  argument set 0x42c010 skips the weight. Junior's, I's, II's and IV's items weigh 1
+  (ammunition 2 or 3 in its fuller states, Junior's magnet in state 1: 2); III's up to
+  10 (tools 2, the ladder 3, chests 4, wood 5, the tree and the magic pipes 10), so only
+  there the weight matters. **Verified under Wine:** in III with capacity 6 the hero
+  takes two of five tools of weight 2 and cannot step onto the third
+  (`pnpm test:game`); with 200 he takes all five; in I with capacity 4 three of five
+  items of weight 1, with 50 all five.
+- **Episode flags** are the word at +8 of the episode object ([0x51bb18]+8): the base
+  constructor 0x43b2e0 clears it, each episode's constructor ORs in a constant (Junior
+  0x48012946 at 0x40e042, I 0x48012b46 at 0x408ca2, II 0x4901ed46 at 0x409ec2, III
+  0x75ce0533 at 0x40b0f6, IV 0x22312ccd at 0x40d473; `readEpisodeFlags`,
+  `withEpisodeFlags`). Bits the code is known to read: 0x20 robots keep their sprite's
+  colours (only III), 0x400 the arrival at an edge (see open item 5), 0x4000 and 0x8000
+  oracles vanish after north and after east (only II; **verified** for Junior),
+  0x80000 doors into buildings need no key (only III). The others are not traced.
 
 ### Room connections (`exits.ts`)
 
@@ -708,8 +731,11 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   record by the step-on handler; **verified under Wine:** with the bit preset the oracle
   works without any pieces laid out); the rest from the code only: n from 10 on reads past the 10 symbols (pointers, no
   pieces match). Only episode II's oracles vanish after north and east (episode flags
-  0x4000 and 0x8000, only II's constructor sets them; III's stay; **verified under
-  Wine** in II room 43 for north). Every use is event 262 + n (0x42bef0: 3500 points
+  0x4000 and 0x8000, see "Episode flags"; III's stay; **verified under Wine** in II
+  room 43 for north). Vanishing sets the cell the logic cell shows to 0 (0x4332a0 →
+  0x4331a0): the record stays, showing an empty cell, which the hero walks onto.
+  Oracles that stay can be used again and again (sent once more, the hint again)
+  before the hero turns one into its object, which changes how an episode plays. Every use is event 262 + n (0x42bef0: 3500 points
   once per game; **verified:** a use gives 3500 points). Byte 7 is never read (III's hold 0,
   6, 7); byte 1 only for what every record type has: bits 6–7 a level (the step-on
   check's default case 0x44c8d2), bit 5 dissolves the record into its cell when the
@@ -1108,9 +1134,12 @@ stands, decided 2026-10-27; details in the sections named.
   no texts for those events (no box, the points still count). Their code checks
   the episode only for the flags 0x4000/0x8000 (0x412ae0). After the east hint the
   hero stands on the oracle's cell (in II it vanishes; elsewhere it stays under him).
-- **Next:** if wanted, oracles that vanish after north and east in Junior too, a code
-  patch (episode flags 0x4000/0x8000, only II's constructor sets them); the proxy as
-  an in-memory loader; editing the mod's other kinds in the editor.
+- **Oracles that vanish** elsewhere than in II: the mod kind `flags` with 0x4000/0x8000
+  set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
+  are drawn as empty floor after north and east and walking north into the first
+  again goes on north; without them it sends the hero once more.
+- **Next:** the proxy as an in-memory loader; editing the mod's other kinds in the
+  editor.
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
@@ -1158,9 +1187,13 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
      the room. Others keep their place; once a room is added or removed, the episode's
      rooms are sorted by id, as the editor keeps them → `withScene`.
   6. `start` (key: episode): `{ episode, room, x, y }` → `withEpisodeStart`.
+  7. `rucksack` (key: episode): `{ episode, capacity }` → `withRucksack` (1–250).
+  8. `flags` (key: episode): `{ episode, flags }` (the whole word, hex in the file) →
+     `withEpisodeFlags`.
 - **File:** one JSON file (`*.robotmod.json`) with `format` (1), `name`, `author`,
   `description`, `base` (`{ sha256 }`) and `changes` (`tileTypes`, `events`, `code`,
-  `dealer`, `copyTexts`, `texts`, `rooms`, `start`: arrays of the changes above). `base` is the sha256 of the whole
+  `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`: arrays of the
+  changes above; a kind left out is empty). `base` is the sha256 of the whole
   pristine exe (the Windows version 2018, `reference/GameOfRobot.exe`); applying
   refuses any other exe. A changed room carries the original content it keeps (a fan
   episode's rooms are mostly new; cell diffs only if that matters).
@@ -1253,9 +1286,7 @@ Roughly by value for the editor.
 4. **Room tags** (see room tags above): bit 0 of kind 3 not tried in the game (the
    labyrinth: entering room 144 from 146 generates a new maze of teleporters, 0x40c910;
    the booklet confirms the labyrinth "changes its size and its paths"; a test starting
-   in 146 could not reach its teleporters, which lie in the cave wall). The word
-   0x4fe0c0 each episode's start method sets is probably the number of inventory slots
-   (50, 38, 60, 200, 120; compared by the debug tracer 0x439170).
+   in 146 could not reach its teleporters, which lie in the cave wall).
 5. **Rooms and connections:** not tried in the game: the old mechanism raising 149 into
    49 (needs a licensee and a matching number in the harness's prefix), the wizard's
    door. Episode II's jump to room 600 at 0x40a820 is not understood. Two edge-exit
@@ -1377,7 +1408,9 @@ Roughly by value for the editor.
 | 0x42fdc0, 0x4302f0           | ShiftArea's shift; turn a punch card's square                                  |
 | 0x4130b0, 0x41f730, 0x448440 | dig (shovel); level tiles and bridges; the dealer's offer (goods)              |
 | 0x4487d0, episode +0x10      | the dealer's trade keys (Esc pays); the episode's goods table                  |
-| 0x408da0 (per episode)       | episode start: arrival cell, start room (vtable +0x54, see `start.ts`)         |
+| 0x408da0 (per episode)       | episode start: arrival cell, start room, rucksack (vtable +0x54, `start.ts`)   |
+| 0x4fe0c0, 0x4fe0c2, 0x42c010 | the rucksack's capacity; its slots; take an item (slot and weight)             |
+| 0x408ca0 (per episode)       | the constructor's flags ([0x51bb18]+8, `episode-flags.ts`)                     |
 | 0x481170                     | 8×8 font                                                                       |
 | 0x4750d8                     | script keywords (functions and variables)                                      |
 | 0x406da0, 0x4080e0, 0x407fa4 | link a compiled script; run it; clear a room's handlers                        |

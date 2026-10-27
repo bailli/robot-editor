@@ -211,8 +211,21 @@ export {
   textPieces,
   withTextEntry,
 } from "./texts.ts";
-export { EPISODE_VTABLES, readEpisodeStart, withEpisodeStart } from "./start.ts";
+export {
+  EPISODE_VTABLES,
+  MAX_RUCKSACK,
+  readEpisodeStart,
+  readRucksack,
+  withEpisodeStart,
+  withRucksack,
+} from "./start.ts";
 export type { EpisodeStart } from "./start.ts";
+export {
+  ORACLE_VANISHES_EAST,
+  ORACLE_VANISHES_NORTH,
+  readEpisodeFlags,
+  withEpisodeFlags,
+} from "./episode-flags.ts";
 export type { TextPiece, Texts } from "./texts.ts";
 export {
   DIARY_PAGE_CLASS,

@@ -4,6 +4,12 @@ import { expect, test } from "vitest";
 
 import { readClassTable } from "../src/classes.ts";
 import { type Dealer, readDealer, withDealer } from "../src/dealer.ts";
+import {
+  ORACLE_VANISHES_EAST,
+  ORACLE_VANISHES_NORTH,
+  readEpisodeFlags,
+  withEpisodeFlags,
+} from "../src/episode-flags.ts";
 import { readEventTable, withEventEntries } from "../src/events.ts";
 import { Game } from "../src/game.ts";
 import {
@@ -20,7 +26,7 @@ import {
 import { type PeImage, readVa } from "../src/pe.ts";
 import { readResources } from "../src/resources.ts";
 import { ROOM_WIDTH, type Room } from "../src/scene.ts";
-import { readEpisodeStart, withEpisodeStart } from "../src/start.ts";
+import { readEpisodeStart, readRucksack, withEpisodeStart, withRucksack } from "../src/start.ts";
 import { withTextEntry } from "../src/texts.ts";
 import { exe } from "./data.ts";
 
@@ -90,6 +96,9 @@ const changes: ModChanges = {
     { episode: 3, id: 3, room: null },
   ],
   start: [{ episode: 3, room: 41, x: 2, y: 16 }],
+  rucksack: [{ episode: 3, capacity: 150 }],
+  // Junior's oracles vanish as II's do
+  flags: [{ episode: 0, flags: 0x48012946 | ORACLE_VANISHES_NORTH | ORACLE_VANISHES_EAST }],
 };
 
 /** Same resources (by type, name, language) and same bytes outside them. */
@@ -138,6 +147,8 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   );
   const start = { room: 41, x: 2, y: 16 };
   direct = new Game(withEpisodeStart(direct.image, 3, start));
+  direct = new Game(withRucksack(direct.image, 3, 150));
+  direct = new Game(withEpisodeFlags(direct.image, 0, 0x4801e946));
   sameContent(modded.image, direct.image);
 
   expect(modded.episode(3).classes.typeOfClass.get(76)).toBe(0x59);
@@ -154,6 +165,8 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   expect(modded.room(3, 300)).toEqual(room300);
   expect(modded.episode(3).rooms.some((r) => r.id === 3)).toBe(false);
   expect(readEpisodeStart(modded.image, 3)).toEqual(start);
+  expect(readRucksack(modded.image, 3)).toBe(150);
+  expect(readEpisodeFlags(modded.image, 0)).toBe(0x4801e946);
   expect(readDealer(modded.image, 1)).toEqual(dealer1);
   for (const e of [0, 1, 2, 4]) {
     expect(modded.episode(e).rooms).toEqual(game.episode(e).rooms);
@@ -169,7 +182,8 @@ test("compiled: byte writes in the tables and the start method, whole resources"
       [0x477ca0, 8 * 128], // III's class table
       [0x4780d8, 12 * 187], // III's event table
       [0x479068, 12 * 201], // IV's event table
-      [0x40b460, 23], // III's start method
+      [0x40b460, 32], // III's start method
+      [0x40e042, 4], // Junior's flags
       [0x408de0, 0x1a], // I's goods method
       [0x475730, 4 * 27], // I's goods
     ] as const;
@@ -224,6 +238,7 @@ test("the file: saving again gives the same file, in key order", () => {
   expect(json).toContain("[64, 37]");
   expect(json).toContain("[945, 945]");
   expect(json).toContain("[32, 0, 99]");
+  expect(json).toContain('"flags": "0x4801e946"');
   // the mod carries no text of the game's own
   expect(json).not.toContain(game.texts(1210)?.entries.get(945)?.[0]?.slice(0, 20));
   // texts keep their brackets and spaces
@@ -246,6 +261,9 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { rooms: [{ episode: 5, id: 41, room: null }] },
     { tileTypes: [{ episode: 3, from: 3, types: [[0x40, 0x40]] }] },
     { start: [{ episode: 3, room: 41, x: 40, y: 0 }] },
+    { rucksack: [{ episode: 3, capacity: 0 }] },
+    { rucksack: [{ episode: 3, capacity: 251 }] },
+    { flags: [{ episode: 3, flags: 2 ** 32 }] },
     // no entry 201 in IV; from 128 on ids are 0 or 256-391; IV's entry 128 has id 256
     { events: [{ episode: 4, entry: 201, id: 0, points: 0 }] },
     { events: [{ episode: 4, entry: 197, id: 100, points: 0 }] },
