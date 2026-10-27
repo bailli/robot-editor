@@ -644,7 +644,8 @@ describe("Editor and mods", () => {
     expect(editor.isEdited(3, 42)).toBe(false);
     expect(editor.roomName(1, 42)?.name).toBe("DER ANFANG");
     expect(editor.roomName(1, 44)?.name).toBe(game.roomName(2, 43)?.name);
-    expect(readEpisodeStart(editor.game.image, 3)).toEqual({ room: 41, x: 2, y: 16 });
+    expect(editor.start(3)).toEqual({ room: 41, x: 2, y: 16 });
+    expect(editor.isStartEdited(3)).toBe(true);
     expect(modJson(editor.saveMod())).toBe(modJson(mod));
     sameContent(new Game(editor.save()), new Game(applyMod(game.image, mod)));
   });
@@ -661,6 +662,46 @@ describe("Editor and mods", () => {
     const editor = new Editor(game);
     paint(editor, free, 0x0105);
     expect(() => new Editor(new Game(editor.save()), aMod())).toThrow(/for another exe/);
+  });
+});
+
+describe("Editor and the start", () => {
+  test("the start changes as one step, saved into the exe and the mod, and undone", () => {
+    const editor = new Editor(game);
+    expect(editor.start(1)).toEqual({ room: 43, x: 5, y: 14 });
+    const edit = editor.setStart(1, { room: 44, x: 10, y: 12 });
+    expect(edit?.room).toBe(44);
+    expect(editor.isStartEdited(1)).toBe(true);
+    expect(editor.setStart(1, { room: 44, x: 10, y: 12 })).toBeUndefined();
+    expect(readEpisodeStart(parsePe(editor.save()), 1)).toEqual({ room: 44, x: 10, y: 12 });
+    // the test exe starts in the shown room at the new start's cell
+    expect(readEpisodeStart(parsePe(editor.testExe(1, 42)), 1)).toEqual({ room: 42, x: 10, y: 12 });
+    // the start room cannot be deleted, the old one now can
+    expect(() => editor.removeRoom(1, 44)).toThrow(/starts in room 44/);
+    editor.undo();
+    expect(editor.start(1)).toEqual({ room: 43, x: 5, y: 14 });
+    expect(editor.isStartEdited(1)).toBe(false);
+    expect(editor.saveMod().changes.start).toEqual([]);
+    editor.redo();
+    const mod = editor.saveMod();
+    expect(mod.changes.start).toEqual([{ episode: 1, room: 44, x: 10, y: 12 }]);
+    const fromMod = applyMod(game.image, parseMod(modJson(mod)));
+    expect(firstDifference(fromMod, editor.save())).toBe(-1);
+    const opened = new Editor(game, mod);
+    expect(opened.start(1)).toEqual({ room: 44, x: 10, y: 12 });
+    expect(readEpisodeStart(opened.game.image, 1)).toEqual({ room: 43, x: 5, y: 14 });
+    expect(modJson(opened.saveMod())).toBe(modJson(mod));
+  });
+
+  test("a start in a new room; none outside the rooms, the title or the room", () => {
+    const editor = new Editor(game);
+    editor.addRoom(3, 250, { copy: 41 });
+    editor.setStart(3, { room: 250, x: 2, y: 16 });
+    expect(readEpisodeStart(parsePe(editor.save()), 3)).toEqual({ room: 250, x: 2, y: 16 });
+    expect(editor.startProblem(3, { room: 251, x: 2, y: 16 })).toMatch(/no room 251/);
+    expect(() => editor.setStart(3, { room: 1, x: 2, y: 16 })).toThrow(/title screen/);
+    expect(() => editor.setStart(3, { room: 41, x: 40, y: 16 })).toThrow(RangeError);
+    expect(() => editor.setStart(3, { room: 41, x: 2, y: 0 })).toThrow(/status line/);
   });
 });
 

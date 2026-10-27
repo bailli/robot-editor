@@ -113,6 +113,8 @@ export interface Edit {
   text?: { id: number; before: string; after: string };
   /** The episode's dealer before and after (its goods). */
   dealer?: { before: Dealer; after: Dealer };
+  /** Where the episode starts, before and after. */
+  start?: { before: EpisodeStart; after: EpisodeStart };
   /** Steps done and undone together, in this order (the edit's own fields: the first's). */
   parts?: Edit[];
 }
@@ -232,9 +234,9 @@ const inRoom = (index: number) => Number.isInteger(index) && index >= 0 && index
  * are added, changed and removed with the record operations, each one undo step.
  *
  * With a mod (mod.ts), the editor works on its base: the pristine exe with the changes
- * it does not edit (tile types, events, code, text copies, the start) applied. The
- * mod's rooms, texts and dealers are where editing starts; saveMod gives them back with
- * the edits, as the differences to the base.
+ * it does not edit (tile types, events, code, text copies) applied. The mod's rooms,
+ * texts, dealers and starts are where editing starts; saveMod gives them back with the
+ * edits, as the differences to the base.
  */
 export class Editor {
   private readonly edited = new Map<number, Room[]>();
@@ -243,6 +245,8 @@ export class Editor {
   private readonly parsed = new Map<number, { source: string; texts: Texts }>();
   /** Edited dealers by episode. */
   private readonly dealers = new Map<number, Dealer>();
+  /** Edited starts by episode. */
+  private readonly starts = new Map<number, EpisodeStart>();
   private readonly undoStack: Edit[] = [];
   private readonly redoStack: Edit[] = [];
   private stroke: Edit | undefined;
@@ -264,7 +268,7 @@ export class Editor {
       return;
     }
     const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
-    const kept: ModChanges = { ...NO_CHANGES, tileTypes, events, code, copyTexts, start };
+    const kept: ModChanges = { ...NO_CHANGES, tileTypes, events, code, copyTexts };
     this.game = new Game(applyMod(game.image, { ...mod, changes: kept }));
     this.mod = { ...mod, changes: kept };
     for (const episode of new Set(rooms.map((c) => c.episode))) {
@@ -281,6 +285,11 @@ export class Editor {
       const problem = this.dealerProblem(episode, { goods, most });
       if (problem) throw new RangeError(`episode ${episode}'s dealer: ${problem}`);
       this.dealers.set(episode, { goods, most });
+    }
+    for (const { episode, ...at } of start) {
+      const problem = this.startProblem(episode, at);
+      if (problem) throw new RangeError(`episode ${episode}'s start: ${problem}`);
+      this.starts.set(episode, at);
     }
   }
 
@@ -372,6 +381,50 @@ export class Editor {
   isDealerEdited(episode: number): boolean {
     const dealer = this.dealers.get(episode);
     return dealer !== undefined && !sameDealer(dealer, readDealer(this.game.image, episode));
+  }
+
+  /** Where the episode starts as edited: the room and the hero's cell. */
+  start(episode: number): EpisodeStart {
+    return this.starts.get(episode) ?? readEpisodeStart(this.game.image, episode);
+  }
+
+  /** Why the episode cannot start at `start`, undefined if it can. */
+  startProblem(episode: number, start: EpisodeStart): string | undefined {
+    const { room, x, y } = start;
+    if (!this.hasRoom(episode, room)) return `there is no room ${room}`;
+    if (room === TITLE_ROOM) return "room 1 is the title screen";
+    if (![x, y].every(Number.isInteger) || x < 0 || y < 1 || x >= ROOM_WIDTH || y >= ROOM_HEIGHT)
+      return `the cell (${x}, ${y}) lies outside the room or under the status line`;
+    return undefined;
+  }
+
+  /**
+   * Lets the episode start in room `start.room` with the hero at (x, y); one undo step
+   * (shown in that room). Throws a RangeError where it cannot start (startProblem).
+   */
+  setStart(episode: number, start: EpisodeStart): Edit | undefined {
+    this.endStroke();
+    const problem = this.startProblem(episode, start);
+    if (problem) throw new RangeError(problem);
+    const old = this.start(episode);
+    if (sameStart(old, start)) return undefined;
+    const { room, x, y } = start;
+    const step: Edit = {
+      episode,
+      room,
+      layer: "base",
+      changes: [],
+      start: { before: old, after: { room, x, y } },
+    };
+    this.apply(step, after);
+    this.push(step);
+    return step;
+  }
+
+  /** Whether the episode's start differs from the base's. */
+  isStartEdited(episode: number): boolean {
+    const start = this.starts.get(episode);
+    return start !== undefined && !sameStart(start, readEpisodeStart(this.game.image, episode));
   }
 
   /** The name the game shows for a room, with the edited names. */
@@ -724,7 +777,7 @@ export class Editor {
     this.endStroke();
     const room = this.room(episode, id);
     if (id === TITLE_ROOM) throw new RangeError("room 1 is the title screen");
-    if (id === readEpisodeStart(this.game.image, episode).room) {
+    if (id === this.start(episode).room) {
       throw new RangeError(`the episode starts in room ${id}`);
     }
     const step: Edit = { episode, room: id, layer: "base", changes: [], removed: room };
@@ -1090,10 +1143,13 @@ export class Editor {
     const dealer = [...this.dealers]
       .filter(([episode]) => this.isDealerEdited(episode))
       .map(([episode, { goods, most }]) => ({ episode, goods, most }));
+    const start = [...this.starts]
+      .filter(([episode]) => this.isStartEdited(episode))
+      .map(([episode, at]) => ({ episode, ...at }));
     const mod: Mod = {
       ...this.mod,
       base: sha256(this.pristine.image.data),
-      changes: { ...this.mod.changes, dealer, copyTexts, texts, rooms },
+      changes: { ...this.mod.changes, dealer, copyTexts, texts, rooms, start },
     };
     checkMod(mod);
     this.saved = this.undoStack.at(-1);
@@ -1108,12 +1164,13 @@ export class Editor {
   }
 
   /**
-   * The edited exe in which `episode` starts in room `room`, the hero at `at` (else
-   * where the episode puts it), to try the room out in the game.
+   * The edited exe in which `episode` starts in room `room`, the hero at `at` (else at
+   * the episode's start cell), to try the room out in the game.
    */
   testExe(episode: number, room: number, at?: { x: number; y: number }): Uint8Array {
     this.room(episode, room);
-    const start: EpisodeStart = { ...(at ?? readEpisodeStart(this.game.image, episode)), room };
+    const { x, y } = at ?? this.start(episode);
+    const start: EpisodeStart = { room, x, y };
     return withEpisodeStart(parsePe(this.build()), episode, start);
   }
 
@@ -1128,6 +1185,9 @@ export class Editor {
     }
     for (const [episode, dealer] of this.dealers) {
       if (this.isDealerEdited(episode)) exe = withDealer(parsePe(exe), episode, dealer);
+    }
+    for (const [episode, start] of this.starts) {
+      if (this.isStartEdited(episode)) exe = withEpisodeStart(parsePe(exe), episode, start);
     }
     return exe;
   }
@@ -1157,6 +1217,10 @@ export class Editor {
     }
     if (edit.dealer) {
       this.dealers.set(edit.episode, value === before ? edit.dealer.before : edit.dealer.after);
+      return;
+    }
+    if (edit.start) {
+      this.starts.set(edit.episode, value === before ? edit.start.before : edit.start.after);
       return;
     }
     const present = value === after ? edit.added : edit.removed;
@@ -1307,6 +1371,10 @@ export function fillRegion(room: Room, layer: Layer, index: number, within?: Are
 
 /** The cell a record shows (what its logic cell looks like). */
 export const shownCell = recordCell;
+
+function sameStart(a: EpisodeStart, b: EpisodeStart): boolean {
+  return a.room === b.room && a.x === b.x && a.y === b.y;
+}
 
 function sameRecords(a: readonly LogicRecord[], b: readonly LogicRecord[]): boolean {
   return (

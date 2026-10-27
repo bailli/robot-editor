@@ -962,7 +962,7 @@ Supported:
   rooms whose exits, passages, records or scripts lead there, which then lead nowhere;
   the name stays in the texts); undoable
 - "Test in game": the edited exe with the episode starting in the shown room, the hero
-  at the picked cell (Select tool, one cell, or Inspect) or the episode's start cell; `pnpm editor` runs it under Wine
+  at the picked cell (Select tool, one cell, or Inspect) or the episode's (edited) start cell; `pnpm editor` runs it under Wine
   (`/play` on the dev server, only for requests from the editor's own page;
   `harness.py play`, the game window on this display; the episode is chosen by hand;
   when the harness refuses, e.g. without DISPLAY, the editor says why and downloads the
@@ -1019,6 +1019,12 @@ Supported:
   browser's
 - save: downloads the exe with all edited episodes and texts (warns about unsaved changes
   on leave)
+- the episode's start (tab Episode, `start-view.ts`): the room and the hero's cell
+  there; "Start here" sets the shown room and the picked cell (Select tool, one cell,
+  or Inspect; else the start's cell), "Original start" goes back to the exe's; one undo
+  step each; not room 1, nor a cell under the status line (row 0); the cell is marked
+  with a green S in the room, the hover line says so; opening an episode shows its
+  start room; saved into the exe and the mod (`start`); the start room cannot be deleted
 - the episode's dealer (tab Episode, `dealer-view.ts`): the goods every dealer of the
   episode sells, with picture and name (the tile the game makes of the class,
   `goodTile`; a picked tile becomes its class, `cellGood`, tiles without one are
@@ -1183,9 +1189,9 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   `robot mod apply MOD OUT.exe`, later `robot mod compile MOD OUT.patch` for the proxy.
 - **The editor** works on two images: the **base** (pristine + kinds 1–2, the parts the
   editor does not edit) and the **edited** state on top (kinds 3–6, what it edits
-  today: the dealers, rooms, texts; later the start). Opening takes an exe and,
+  today: the dealers, rooms, texts and the start). Opening takes an exe and,
   optionally, a mod; "Save mod" writes kinds 1–2 as loaded plus kinds 3–6 as the
-  difference between the edited state and the base (dealers that differ, rooms that
+  difference between the edited state and the base (dealers and starts that differ, rooms that
   differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
   written in the editor replaces its copy in `copyTexts`. "Save exe" and "Test in
   game" stay, built from the base and the edits. Undo/redo, dirty state (either save
@@ -1198,8 +1204,9 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
 - **Out of scope:** a sixth episode (the episode list and factories are code: a mod
   builds a fan episode in the slot of one of the five), mods on top of mods, other exe
   versions.
-- **Decided 2026-10-27:** whole rooms (no cell diffs); no editor UI for `tileTypes`,
-  code and the start at first (the file and the command line); English texts later.
+- **Decided 2026-10-27:** whole rooms (no cell diffs); no editor UI for `tileTypes`
+  and code at first (the file and the command line); English texts later. The start
+  got its UI the same day (Episode tab).
   Open: the patch file's format for the proxy (only when the loader is built).
 
 ## Trying edits in the game

@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 
-import { LOGIC_CELL, ROOM_WIDTH, parseMod, readDealer, roomActors } from "@robot/formats";
+import {
+  LOGIC_CELL,
+  ROOM_WIDTH,
+  SCREEN_WIDTH,
+  TILE_HEIGHT,
+  TILE_WIDTH,
+  parseMod,
+  readDealer,
+  roomActors,
+} from "@robot/formats";
 
 import { app, bytes, clickCell, game, useApp } from "./app-setup.ts";
 import { defined } from "./game.ts";
@@ -36,7 +45,11 @@ test("the tabs tell what the room has without opening them", () => {
   expect(tab("script")).toMatchObject({ badge: "●", empty: false });
   expect(tab("script").title).toMatch(/^A script of \d+ lines$/);
   expect(tab("circuit")).toMatchObject({ badge: undefined, empty: true });
-  expect(tab("episode")).toMatchObject({ badge: undefined, empty: false });
+  expect(tab("episode")).toMatchObject({
+    badge: undefined,
+    empty: false,
+    title: "Starts in room 43 at (5, 14); the dealer sells 27 goods",
+  });
   // seven circuit nodes, none on
   app.showRoom(128);
   expect(tab("circuit")).toMatchObject({ badge: "0/7", empty: false, title: "0 of 7 nodes on" });
@@ -45,7 +58,10 @@ test("the tabs tell what the room has without opening them", () => {
   expect(tab("actors").title).toMatch(/^\d+ actors, 3 RandObj calls$/);
   // episode III: no dealer
   app.showEpisode(3, 41);
-  expect(tab("episode")).toMatchObject({ empty: true, title: "No dealer in this episode" });
+  expect(tab("episode")).toMatchObject({
+    empty: false,
+    title: "Starts in room 41 at (8, 15); no dealer",
+  });
 });
 
 test("the Record tab counts the room's records, lists them and names the selected one", async () => {
@@ -230,7 +246,10 @@ test("the Episode tab edits the dealer's goods, undoably; the mod keeps them", a
   await userEvent.keyboard("{Tab}");
   expect(app.editor?.dealer(1)?.goods[0]).toEqual({ classId: 0x20, state: 0, price: 99 });
   expect(price(1).element()).toBe(field);
-  expect(tab("episode")).toMatchObject({ badge: "●", title: "The dealer sells 27 goods (edited)" });
+  expect(tab("episode")).toMatchObject({
+    badge: "●",
+    title: "Starts in room 43 at (5, 14); the dealer sells 27 goods (edited)",
+  });
 
   // the last good goes; the current tile replaces the first one; fewer shown
   const rows = () => document.querySelectorAll(".dealer-good");
@@ -258,4 +277,51 @@ test("the Episode tab edits the dealer's goods, undoably; the mod keeps them", a
   expect(app.editor?.dealer(1)).toEqual(original);
   expect(tab("episode").badge).toBeUndefined();
   await expect.element(dealer().getByRole("button", { name: "Original goods" })).toBeDisabled();
+});
+
+test("the Episode tab sets the start to the shown room and the picked cell, undoably", async () => {
+  const start = () => page.getByRole("region", { name: "Start" });
+  app.showEpisode(1, 44);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  await expect
+    .element(start().getByText("Robot I starts in room", { exact: false }))
+    .toHaveTextContent("Robot I starts in room 43, the hero at (5, 14).");
+  // no cell picked: the start's cell, in the shown room
+  await start().getByRole("button", { name: "Start here" }).click();
+  expect(app.editor?.start(1)).toEqual({ room: 44, x: 5, y: 14 });
+  expect(status()).toBe("The episode now starts in room 44 at (5, 14)");
+  // a cell picked with Select
+  app.setArea({ x: 20, y: 10, w: 1, h: 1 });
+  await start().getByRole("button", { name: "Start here" }).click();
+  expect(app.editor?.start(1)).toEqual({ room: 44, x: 20, y: 10 });
+  expect(tab("episode")).toMatchObject({
+    badge: "●",
+    title: "Starts in room 44 at (20, 10) (edited); the dealer sells 27 goods",
+  });
+  expect(document.querySelector(".start-line")?.textContent).toBe(
+    "Robot I starts in room 44, the hero at (20, 10) (edited).",
+  );
+  // the start cell is marked: its frame's left edge in green
+  const marked = (x: number, y: number) => {
+    const zoom = app.view.zoom;
+    const at =
+      (y * TILE_HEIGHT + TILE_HEIGHT / 2) * zoom * SCREEN_WIDTH * zoom + x * TILE_WIDTH * zoom + 1;
+    return [...app.view.pixelsOfMarks().slice(at * 4, at * 4 + 4)];
+  };
+  app.setArea(undefined);
+  expect(marked(20, 10)).toEqual([0, 170, 60, 255]);
+  const saved = parseMod(app.saveMod() ?? "");
+  expect(saved.changes.start).toEqual([{ episode: 1, room: 44, x: 20, y: 10 }]);
+  // back to the exe's start, then undone step by step
+  await start().getByRole("button", { name: "Original start" }).click();
+  expect(app.editor?.start(1)).toEqual({ room: 43, x: 5, y: 14 });
+  expect(app.roomId).toBe(43);
+  expect(marked(5, 14)).toEqual([0, 170, 60, 255]);
+  app.undo();
+  expect(app.editor?.start(1)).toEqual({ room: 44, x: 20, y: 10 });
+  app.undo();
+  app.undo();
+  expect(app.editor?.start(1)).toEqual({ room: 43, x: 5, y: 14 });
+  expect(tab("episode").badge).toBeUndefined();
+  await expect.element(start().getByRole("button", { name: "Original start" })).toBeDisabled();
 });

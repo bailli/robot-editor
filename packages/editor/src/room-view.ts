@@ -130,6 +130,8 @@ export class RoomView {
   private backdrop: Room | undefined;
   private hover: number | undefined;
   private selected: number | undefined;
+  /** The hero's start cell, if the episode starts in the shown room. */
+  private start: number | undefined;
   private grid = false;
   private actors: readonly RoomActor[] = [];
   private areas: readonly PlacementArea[] = [];
@@ -186,6 +188,13 @@ export class RoomView {
 
   setSelected(index: number | undefined): void {
     this.selected = index;
+    this.drawMarks();
+  }
+
+  /** Marks the cell the hero starts on (undefined: the episode starts elsewhere). */
+  setStart(index: number | undefined): void {
+    if (index === this.start) return;
+    this.start = index;
     this.drawMarks();
   }
 
@@ -370,6 +379,17 @@ export class RoomView {
       g.strokeRect(area.x * w + 1.5, area.y * h + 1.5, area.w * w - 3, area.h * h - 3);
     }
     if (this.circuit) drawCircuit(g, this.circuit, w, h);
+    if (this.start !== undefined) {
+      const [x, y] = [(this.start % ROOM_WIDTH) * w, Math.floor(this.start / ROOM_WIDTH) * h];
+      g.strokeStyle = START;
+      g.lineWidth = 3;
+      g.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+      g.fillStyle = START;
+      g.font = `bold ${Math.round(h * 0.7)}px system-ui, sans-serif`;
+      g.textAlign = "center";
+      g.fillText("S", x + w / 2, y + h * 0.75);
+      g.textAlign = "left";
+    }
     if (this.floating) {
       const { x, y, image } = this.floating;
       const [fw, fh] = [(image.width / TILE_WIDTH) * w, (image.height / TILE_HEIGHT) * h];
@@ -417,6 +437,8 @@ export class RoomView {
 }
 
 const ACTOR = "rgb(230 30 30)";
+/** The hero's start cell. */
+const START = "rgb(0 170 60)";
 
 /** Circuit colours: a signal that is on, off, or none (the trace failed). */
 const SIGNAL = { on: "rgb(255 180 0)", off: "rgb(40 110 255)", none: "rgb(140 140 140)" };

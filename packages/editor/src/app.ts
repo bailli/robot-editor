@@ -6,6 +6,7 @@ import {
   EPISODES,
   EPISODE_NAMES,
   EVENT_TEXT,
+  type EpisodeStart,
   type ExitMode,
   GATE_CLASS,
   Game,
@@ -42,6 +43,7 @@ import {
   parseScene,
   randomPlacement,
   readDealer,
+  readEpisodeStart,
   readEventTable,
   readOracleSymbols,
   recordActorKind,
@@ -100,6 +102,7 @@ import {
 import { type ScriptName, ScriptView } from "./script-view.ts";
 import { type SettingsContext, SettingsView } from "./settings-view.ts";
 import { SidePanel } from "./side-panel.ts";
+import { StartView } from "./start-view.ts";
 import { TileNames } from "./tile-info.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
@@ -513,6 +516,22 @@ export class App {
       this.refreshButtons();
     },
   });
+  readonly startView = new StartView({
+    here: () => {
+      const index = this.pickedCell();
+      const { x, y } =
+        index === undefined
+          ? this.need().start(this.episode)
+          : { x: index % ROOM_WIDTH, y: Math.floor(index / ROOM_WIDTH) };
+      this.setStart({ room: this.roomId, x, y });
+    },
+    reset: () => {
+      this.setStart(readEpisodeStart(this.need().game.image, this.episode));
+    },
+    go: (room) => {
+      if (this.need().hasRoom(this.episode, room)) this.showRoom(room);
+    },
+  });
   readonly dealerView = new DealerView({
     change: (dealer) => {
       try {
@@ -520,7 +539,7 @@ export class App {
       } catch (error) {
         this.setStatus(`Cannot change the dealer: ${message(error)}`, true);
       }
-      this.refreshDealer();
+      this.refreshEpisodeTab();
       this.refreshButtons();
     },
     preview: (value) => this.cellPreview(value),
@@ -545,7 +564,7 @@ export class App {
   private roomMusic: Set<string> | undefined;
   /**
    * The column right of the room: tiles, the selected record, the actors, the script,
-   * the room's settings, the episode's (the dealer).
+   * the room's settings, the episode's (the start, the dealer).
    */
   readonly sidePanel: SidePanel = new SidePanel(
     [
@@ -555,7 +574,11 @@ export class App {
       { name: "circuit", label: "Circuit", content: this.circuitView.element },
       { name: "script", label: "Script", content: this.scriptView.element },
       { name: "room", label: "Room", content: this.settingsView.element },
-      { name: "episode", label: "Episode", content: this.dealerView.element },
+      {
+        name: "episode",
+        label: "Episode",
+        content: h("div", {}, this.startView.element, this.dealerView.element),
+      },
     ],
     (width) => {
       this.workspace.style.setProperty("--side-width", `${width}px`);
@@ -822,7 +845,7 @@ export class App {
     this.episode = episode;
     this.episodeSelect.value = String(episode);
     const rooms = editor.rooms(episode);
-    const id = roomId ?? START_ROOMS[episode] ?? rooms.at(0)?.id ?? 1;
+    const id = roomId ?? editor.start(episode).room;
     this.roomList.replaceChildren(
       ...rooms.map((r) =>
         h(
@@ -864,7 +887,7 @@ export class App {
     this.showSettings(room);
     this.refreshActors();
     this.refreshCircuit();
-    this.refreshDealer();
+    this.refreshEpisodeTab();
     this.refreshRoomList();
     const shown = `${this.episode} ${id}`;
     if (this.lastRoom !== shown) {
@@ -2106,11 +2129,38 @@ export class App {
     });
   }
 
-  /** The Episode tab: the episode's dealer, the rooms he appears in. */
-  private refreshDealer(): void {
+  /** Lets the episode start at `start` (Editor.setStart), shown in the start room. */
+  private setStart(start: EpisodeStart): void {
     const editor = this.need();
+    try {
+      if (!editor.setStart(this.episode, start)) {
+        this.setStatus(`The episode starts in room ${start.room} at (${start.x}, ${start.y})`);
+        return;
+      }
+    } catch (error) {
+      this.setStatus(`Cannot start there: ${message(error)}`, true);
+      return;
+    }
+    this.showRoom(start.room);
+    this.refreshButtons();
+    this.setStatus(`The episode now starts in room ${start.room} at (${start.x}, ${start.y})`);
+  }
+
+  /** The Episode tab: where the episode starts, its dealer and the rooms he appears in. */
+  private refreshEpisodeTab(): void {
+    const editor = this.need();
+    const start = editor.start(this.episode);
+    this.view.setStart(start.room === this.roomId ? start.y * ROOM_WIDTH + start.x : undefined);
+    this.startView.show({
+      episode: EPISODE_NAMES[this.episode] ?? `episode ${this.episode}`,
+      start,
+      original: readEpisodeStart(editor.game.image, this.episode),
+      room: this.roomId,
+      label: (room) => `Go to ${this.roomLabel(this.episode, room)}`,
+    });
     const dealer = editor.dealer(this.episode);
-    const edited = editor.isDealerEdited(this.episode);
+    const dealerEdited = editor.isDealerEdited(this.episode);
+    const edited = dealerEdited || editor.isStartEdited(this.episode);
     this.dealerView.show({
       episode: EPISODE_NAMES[this.episode] ?? `episode ${this.episode}`,
       dealer,
@@ -2120,11 +2170,13 @@ export class App {
     });
     this.sidePanel.setState("episode", {
       ...(edited ? { badge: "●" } : {}),
-      empty: dealer === undefined,
       note: edited,
-      title: dealer
-        ? `The dealer sells ${plural(dealer.goods.length, "good")}${edited ? " (edited)" : ""}`
-        : "No dealer in this episode",
+      title: [
+        `Starts in room ${start.room} at (${start.x}, ${start.y})${editor.isStartEdited(this.episode) ? " (edited)" : ""}`,
+        dealer
+          ? `the dealer sells ${plural(dealer.goods.length, "good")}${dealerEdited ? " (edited)" : ""}`
+          : "no dealer",
+      ].join("; "),
     });
   }
 
@@ -2177,7 +2229,7 @@ export class App {
       this.showEpisode(edit.episode, this.lastSeen(edit.episode, edit.room));
     } else if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
     else if (edit.room !== this.roomId) this.showRoom(edit.room);
-    else if (edit.records || edit.tags || edit.text || edit.dealer) {
+    else if (edit.records || edit.tags || edit.text || edit.dealer || edit.start) {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);
       if (this.selected) this.select(this.selected.index);
@@ -2346,6 +2398,9 @@ export class App {
     // actors from a record: the record's summary above says what they do
     const actor = this.actors.find((a) => a.cell === index && !a.record);
     if (actor) this.cellInfo.textContent += `  · actor: ${actorOrigin(actor)}`;
+    const start = this.editor.start(this.episode);
+    if (start.room === this.roomId && start.x === x && start.y === y)
+      this.cellInfo.textContent += "  · the hero starts here";
     // what the hero would see: the overlay object if there is one
     const nodes = this.names().summaryNodes(overlay & 0xff ? overlay : base, room, (v) =>
       cellCanvas(this.cache(), v),

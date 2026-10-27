@@ -1389,13 +1389,16 @@ canvas.cell.text-tile {
   color: var(--muted);
 }
 
-/* the Episode tab: the dealer's goods */
+/* the Episode tab: the start, the dealer's goods */
+.start-view,
 .dealer-view {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+.start-view h3,
+.start-view p,
 .dealer-view h3,
 .dealer-view p {
   margin: 0;
@@ -1433,12 +1436,14 @@ canvas.cell.text-tile {
   padding: 1px 6px;
 }
 
+.start-bar,
 .dealer-bar {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
+.start-bar button:last-child,
 .dealer-bar button:last-child {
   margin-left: auto;
 }
