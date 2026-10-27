@@ -34,7 +34,7 @@ leaves the browser).
 by itself; otherwise open or drop an exe (it never leaves the browser). Pick an episode
 and a room, then paint the base or overlay layer: left button paints, right button picks
 the tile under the cursor, Ctrl+Z / Ctrl+Y undo and redo, G shows the grid (? or the
-"Keys" button lists all keys). The Fill
+"Shortcuts" button lists all keys). The Fill
 tool fills connected cells; with the Select tool an area is copied (Ctrl+C), cut
 (Ctrl+X), cleared (Delete) and pasted (Ctrl+V, then click), logic records included. The
 Room tab sets the description shown under the room's name on entering, the darkness, the

@@ -629,7 +629,7 @@ export class App {
         h("label", { title: "Where actors appear (A)" }, this.actorsToggle, " Actors"),
         this.mapButton,
         this.status,
-        h("button", { title: "Keyboard and mouse (?)", click: showHelp }, "Keys"),
+        h("button", { title: "Keyboard and mouse (?)", click: showHelp }, "Shortcuts"),
       ),
       this.welcome,
       this.workspace,

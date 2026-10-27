@@ -757,7 +757,7 @@ Supported:
   settings (always visible) and tabs (Tiles, Record, Actors, Circuit, Script, Room) that
   scroll on their own, its width can be dragged (remembered in the browser); clicking a
   logic cell opens the Record tab
-- help (button "Keys", key ?): a dialog listing the keys and mouse buttons
+- help (button "Shortcuts", key ?): a dialog listing the keys and mouse buttons
   (`help-dialog.ts`); keys typed in a dialog do not reach the room
 - exits: N/S/W/E targets incl. script changes; arrow keys follow fixed exits; per
   direction the exits byte's setting (neighbour / outside / none) can be changed,

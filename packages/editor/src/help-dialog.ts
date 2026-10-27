@@ -56,11 +56,11 @@ export function showHelp(): void {
   if (document.querySelector("dialog.help-dialog")) return;
   const dialog = document.createElement("dialog");
   dialog.className = "help-dialog";
-  dialog.setAttribute("aria-label", "Keys");
+  dialog.setAttribute("aria-label", "Shortcuts");
   const form = document.createElement("form");
   form.method = "dialog";
   const heading = document.createElement("h2");
-  heading.textContent = "Keys and mouse";
+  heading.textContent = "Shortcuts";
   form.append(heading);
   for (const group of HELP) {
     const table = document.createElement("table");

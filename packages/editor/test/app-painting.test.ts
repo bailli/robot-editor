@@ -50,8 +50,8 @@ test("the Dark toggle draws rooms as dark as the game on entering them", async (
   expect(firstDifference(app.view.pixels(), drawn(42, 0))).toBe(-1);
 });
 
-test("? and the Keys button show the help; keys in it leave the room alone", async () => {
-  const help = page.getByRole("dialog", { name: "Keys" });
+test("? and the Shortcuts button show the help; keys in it leave the room alone", async () => {
+  const help = page.getByRole("dialog", { name: "Shortcuts" });
   await userEvent.keyboard("?");
   await expect.element(help).toBeVisible();
   expect(help.element().textContent).toMatch(/Ctrl\+V.*Paste/);
@@ -65,7 +65,7 @@ test("? and the Keys button show the help; keys in it leave the room alone", asy
   expect(grid.checked).toBe(before);
   await userEvent.keyboard("{Escape}");
   await expect.element(help).not.toBeInTheDocument();
-  await page.getByRole("button", { name: "Keys" }).click();
+  await page.getByRole("button", { name: "Shortcuts" }).click();
   await help.getByRole("button", { name: "Close" }).click();
   await expect.element(help).not.toBeInTheDocument();
 });
