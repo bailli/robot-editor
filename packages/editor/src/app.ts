@@ -84,7 +84,6 @@ import {
   clipArea,
   fillRegion,
   recordCapacity,
-  tilesOf,
   wrapsRow,
 } from "./editor.ts";
 import { EpisodeView } from "./episode-view.ts";
@@ -2465,7 +2464,7 @@ export class App {
   private showTiles(): void {
     if (!this.editor) return;
     this.showRecent();
-    const tiles = tilesOf(this.editor.game.episode(this.episode).rooms, this.layer);
+    const tiles = this.editor.tiles(this.episode, this.layer);
     this.tileGrid.replaceChildren(
       ...tiles.map((value) =>
         h(

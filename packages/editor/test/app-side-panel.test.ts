@@ -374,6 +374,13 @@ test("the Episode tab copies tile types of other episodes, undoably; the mod kee
     game.episode(2).classes.classes.get(0x51)?.id,
   );
   expect(document.querySelectorAll(".side-episode .dealer-good").length).toBeGreaterThan(0);
+  // the copy is in the tile list, in each state its shape draws (the oracle: 10)
+  const listed = [...document.querySelectorAll<HTMLElement>(".tile-grid button")].map((b) =>
+    Number(b.dataset["tile"]),
+  );
+  expect(listed.filter((t) => (t & 0xff) === 0x51)).toEqual(
+    Array.from({ length: 10 }, (_, k) => 0x51 | (k << 8)),
+  );
   const saved = parseMod(app.saveMod() ?? "");
   expect(saved.changes.tileTypes).toEqual([{ episode: 0, from: 2, types: [[0x51, 0x51]] }]);
   // removed with ×, back with undo, gone with another
@@ -384,4 +391,5 @@ test("the Episode tab copies tile types of other episodes, undoably; the mod kee
   app.undo();
   expect(app.editor?.tileTypeCopies(0)).toEqual([]);
   expect(app.editor?.game).toBe(app.editor?.pristine);
+  expect(document.querySelector('.tile-grid [data-tile="81"]')).toBeNull();
 });

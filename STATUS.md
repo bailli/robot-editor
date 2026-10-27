@@ -904,7 +904,8 @@ Supported:
   slightly dimmed in its class 99 cells, in the view and on the map; painting over its
   marks at (0, 1) and (39, 1) removes it
 - painting base or overlay with a tile from the episode's tiles (those its rooms use in
-  that layer; the base layer's also those only logic records hold, e.g. IV 185's
+  that layer, and the tile types copied from other episodes in each state their shape
+  has a frame for; the base layer's also those only logic records hold, e.g. IV 185's
   teleporter wall 0xd044; robots, which draw
   nothing as tiles, show their first sprite; other invisible tiles a hatching; a filter
   by name, text or hex value) or any hex value; right click picks; dragging fills lines;

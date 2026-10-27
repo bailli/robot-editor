@@ -407,6 +407,18 @@ export class Editor {
       .sort((a, b) => a - b);
   }
 
+  /**
+   * The tiles to paint with in a layer: those of the base's rooms (tilesOf) and the
+   * tile types copied from other episodes, in every state their shape has a frame for.
+   */
+  tiles(episode: number, layer: Layer): number[] {
+    const { rooms, objects } = this.game.episode(episode);
+    const copied = this.tileTypeCopies(episode).flatMap(({ to }) =>
+      Array.from({ length: Math.max(1, objects[to]?.frames.length ?? 0) }, (_, k) => to | (k << 8)),
+    );
+    return [...new Set([...tilesOf(rooms, layer), ...copied])].sort(byTile);
+  }
+
   /** Why `copy` cannot be made, undefined if it can. */
   tileTypeProblem(copy: TileTypeCopy): string | undefined {
     const { episode, to, from, of } = copy;
@@ -1700,5 +1712,8 @@ export function tilesOf(rooms: readonly Room[], layer: Layer): number[] {
       }
     }
   }
-  return [...values].sort((a, b) => (a & 0xff) - (b & 0xff) || a - b);
+  return [...values].sort(byTile);
 }
+
+/** Tiles by type, then state. */
+const byTile = (a: number, b: number) => (a & 0xff) - (b & 0xff) || a - b;
