@@ -75,38 +75,53 @@ test("the script explains itself and can be edited", async () => {
     ["Apply", "primary"],
   ]);
   const area = scriptView().getByRole("textbox", { name: "Script source" });
+  // fill selects all, then types; under load CodeMirror may not have taken the selection
+  // yet and the text is appended: retry until the editor holds exactly what was asked
+  const fillSource = (text: string) =>
+    expect
+      .poll(async () => {
+        await userEvent.fill(area, text);
+        return [...area.element().querySelectorAll(".cm-line")]
+          .map((line) => line.textContent)
+          .join("\n");
+      })
+      .toBe(text);
   // keys typed there are text, not the editor's shortcuts (m: map, g: grid)
-  await userEvent.fill(area, "");
+  await fillSource("");
   await userEvent.keyboard("gm");
   expect(area.element().textContent).toBe("gm");
   expect(app.mapView.element.hidden).toBe(true);
   await expect.element(page.getByRole("checkbox", { name: "Grid" })).not.toBeChecked();
   // completion: the function with its arguments as fields (Tab to the next)
-  await userEvent.fill(area, "");
+  await fillSource("");
   await userEvent.keyboard("Mess");
   // picked by click: CodeMirror ignores Enter right after the list opens (interactionDelay)
   await page.getByRole("option", { name: /^Message/ }).click();
   await userEvent.keyboard("700{Tab}0");
   expect(area.element().textContent).toBe("Message(700, 0)");
-  await userEvent.fill(area, "RoomWest = 42;\nMesage(1, 0);");
-  expect(document.querySelector(".script-verdict")?.textContent).toMatch(/unknown function Mesage/);
+  await fillSource("RoomWest = 42;\nMesage(1, 0);");
+  await expect
+    .poll(() => document.querySelector(".script-verdict")?.textContent)
+    .toMatch(/unknown function Mesage/);
   await expect.element(scriptView().getByRole("button", { name: "Apply" })).toBeDisabled();
   // a syntax error is marked where it is
-  await userEvent.fill(area, "RoomWest = 42;\nRoomEast = ;");
-  expect(document.querySelector(".script-verdict")?.textContent).toMatch(/at line 2, column 12/);
-  expect(document.querySelector(".script-edit .script-error")?.textContent).toBe(";");
+  await fillSource("RoomWest = 42;\nRoomEast = ;");
+  await expect
+    .poll(() => document.querySelector(".script-verdict")?.textContent)
+    .toMatch(/at line 2, column 12/);
+  await expect
+    .poll(() => document.querySelector(".script-edit .script-error")?.textContent)
+    .toBe(";");
   // handlers: a line above saying what they wait for, a warning where they run on
-  await userEvent.fill(
-    area,
+  await fillSource(
     "if (Event(EV_TAKE | EV_ROOM))\n   Message(1, 0);\nif (E_Area(1))\n   {\n   return;\n   }",
   );
-  expect(document.querySelector(".script-verdict")?.textContent).toBe("Compiles.");
+  await expect.poll(() => document.querySelector(".script-verdict")?.textContent).toBe("Compiles.");
   const notes = (selector: string) =>
     [...document.querySelectorAll(`.script-edit ${selector}`)].map((e) => e.textContent);
-  expect(notes(".script-handler-label")).toEqual([
-    "▸ on take · entering the room",
-    "▸ on walk area 1",
-  ]);
+  await expect
+    .poll(() => notes(".script-handler-label"))
+    .toEqual(["▸ on take · entering the room", "▸ on walk area 1"]);
   expect(notes(".script-handler-warning")).toEqual(["⚠ no return: registers line 3 again"]);
   expect(document.querySelector(".script-handler-warning")?.getAttribute("title")).toMatch(
     /^No return: after this handler the script runs on at line 3, and each time it registers the handler in line 3 once more/,
@@ -116,8 +131,8 @@ test("the script explains itself and can be edited", async () => {
     (e) => e.textContent === "EV_ROOM",
   );
   expect(constant?.getAttribute("title")).toMatch(/^EV_ROOM = 8, event for Event\(mask\)/);
-  await userEvent.fill(area, "RoomWest = 42;");
-  expect(document.querySelector(".script-verdict")?.textContent).toBe("Compiles.");
+  await fillSource("RoomWest = 42;");
+  await expect.poll(() => document.querySelector(".script-verdict")?.textContent).toBe("Compiles.");
   await scriptView().getByRole("button", { name: "Apply" }).click();
   expect(roomScript(defined(app.editor).room(1, 43))).toBe("RoomWest = 42;");
   // the exits follow the script; undo brings the old script back
