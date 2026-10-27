@@ -29,8 +29,10 @@ import {
   displayText,
   eventTextsId,
   exitMode,
+  modJson,
   nodeBulb,
   parseCompiledScript,
+  parseMod,
   parseScene,
   randomPlacement,
   readEventTable,
@@ -173,6 +175,8 @@ export class App {
   readonly view = new RoomView(2);
   private readonly caches = new Map<string, CellCache>();
   private fileName = "GameOfRobot.exe";
+  /** The mod being edited (its file name), once one was opened or saved. */
+  private modFile: string | undefined;
   private painting = false;
   private lastRoom: string | undefined;
   private lastPainted: number | undefined;
@@ -185,6 +189,24 @@ export class App {
 
   private readonly fileInput = h("input", { type: "file", accept: ".exe", hidden: true });
   private readonly saveButton = h("button", { disabled: true }, "Save exe");
+  private readonly modInput = h("input", { type: "file", accept: ".json", hidden: true });
+  private readonly openModButton = h(
+    "button",
+    {
+      disabled: true,
+      title:
+        "Open a mod (.robotmod.json): the changes it makes to the exe, which saving the mod writes back with the edits",
+    },
+    "Open mod…",
+  );
+  private readonly saveModButton = h(
+    "button",
+    {
+      disabled: true,
+      title: "Save the edits, and the opened mod's changes, as a mod for this exe",
+    },
+    "Save mod",
+  );
   private readonly testButton = h(
     "button",
     {
@@ -505,6 +527,7 @@ export class App {
       { class: "welcome" },
       h("p", {}, "Open ", h("code", {}, "GameOfRobot.exe"), " or drop it here."),
       h("p", { class: "hint" }, "The file is read in your browser and never uploaded."),
+      h("p", { class: "hint" }, "A mod (.robotmod.json) can be opened once the exe is."),
     );
     this.workspace = h(
       "div",
@@ -587,6 +610,9 @@ export class App {
         ),
         this.fileInput,
         this.saveButton,
+        this.openModButton,
+        this.modInput,
+        this.saveModButton,
         this.testButton,
         this.undoButton,
         this.redoButton,
@@ -623,15 +649,56 @@ export class App {
 
   /** Loads an exe; throws (and shows) what went wrong if it is not the game. */
   load(bytes: Uint8Array, name = "GameOfRobot.exe"): void {
+    let editor: Editor;
     try {
       const game = new Game(bytes);
       game.episode(this.episode);
-      this.editor = new Editor(game);
+      editor = new Editor(game);
     } catch (error) {
       this.setStatus(`Cannot read ${name}: ${String(error)}`, true);
       throw error;
     }
     this.fileName = name;
+    this.modFile = undefined;
+    this.use(editor, `${name} loaded`);
+  }
+
+  /**
+   * Opens a mod (its JSON file, see mod.ts) for the loaded exe: editing starts from its
+   * rooms and texts. Throws (and shows) what is wrong with it.
+   */
+  loadMod(text: string, name = "mod.robotmod.json"): void {
+    let editor: Editor;
+    try {
+      editor = new Editor(this.need().pristine, parseMod(text));
+    } catch (error) {
+      this.setStatus(`Cannot open ${name}: ${message(error)}`, true);
+      throw error;
+    }
+    this.modFile = name;
+    this.use(editor, `${name} opened`);
+  }
+
+  /** Saves the edits as a mod (downloaded as JSON) and returns its text. */
+  saveMod(): string | undefined {
+    const editor = this.need();
+    try {
+      const text = modJson(editor.saveMod());
+      const name = this.modFile ?? this.fileName.replace(/(\.exe)?$/i, ".robotmod.json");
+      download(new TextEncoder().encode(text), name, "application/json");
+      this.modFile = name;
+      this.setStatus(`Saved ${name}`);
+      this.refreshButtons();
+      return text;
+    } catch (error) {
+      this.setStatus(`Saving the mod failed: ${message(error)}`, true);
+      return undefined;
+    }
+  }
+
+  /** Shows the editor's state: a newly loaded exe or mod. */
+  private use(editor: Editor, status: string): void {
+    this.editor = editor;
     this.caches.clear();
     this.stopPasting();
     this.clip = undefined;
@@ -646,6 +713,8 @@ export class App {
     this.welcome.hidden = true;
     this.workspace.hidden = false;
     this.testButton.disabled = false;
+    this.openModButton.disabled = false;
+    this.saveModButton.disabled = false;
     const linked = roomInAddress();
     if (linked && this.editor.hasRoom(linked.episode, linked.room)) {
       this.episode = linked.episode;
@@ -658,8 +727,13 @@ export class App {
         this.historyIndex = state.index;
       }
     }
-    this.showEpisode(this.episode, this.roomId);
-    this.setStatus(`${name} loaded`);
+    // a mod may have removed the room shown before
+    this.showEpisode(
+      this.episode,
+      editor.hasRoom(this.episode, this.roomId) ? this.roomId : undefined,
+    );
+    this.refreshButtons();
+    this.setStatus(status);
   }
 
   showEpisode(episode: number, roomId?: number): void {
@@ -1360,6 +1434,15 @@ export class App {
       this.fileInput.value = "";
     });
     this.saveButton.addEventListener("click", () => this.save());
+    this.openModButton.addEventListener("click", () => {
+      this.modInput.click();
+    });
+    this.modInput.addEventListener("change", () => {
+      const file = this.modInput.files?.[0];
+      if (file) void this.loadFile(file);
+      this.modInput.value = "";
+    });
+    this.saveModButton.addEventListener("click", () => this.saveMod());
     this.testButton.addEventListener("click", () => {
       void this.testInGame();
     });
@@ -1620,15 +1703,22 @@ export class App {
     this.refreshAreaButtons();
   }
 
+  /** Opens an exe, or a mod (.json) for the loaded exe. */
   private async loadFile(file: File): Promise<void> {
-    const question = "Open another exe and discard the unsaved changes?";
+    const isMod = file.name.toLowerCase().endsWith(".json");
+    if (isMod && !this.editor) {
+      this.setStatus("Open the exe first, then the mod", true);
+      return;
+    }
+    const question = `Open ${isMod ? "a mod" : "another exe"} and discard the unsaved changes?`;
     if (
       this.editor?.dirty &&
       !(await confirmDialog(question, { action: "Discard changes", danger: true }))
     )
       return;
     try {
-      this.load(new Uint8Array(await file.arrayBuffer()), file.name);
+      if (isMod) this.loadMod(await file.text(), file.name);
+      else this.load(new Uint8Array(await file.arrayBuffer()), file.name);
     } catch {
       // shown in the status line
     }
@@ -1955,9 +2045,11 @@ export class App {
     const editor = this.need();
     this.undoButton.disabled = !editor.canUndo;
     this.redoButton.disabled = !editor.canRedo;
-    this.saveButton.disabled = !editor.dirty;
-    // unsaved changes: saving is the thing to do
-    this.saveButton.classList.toggle("primary", editor.dirty);
+    // with a mod, the exe is made from it at any time
+    this.saveButton.disabled = !editor.dirty && this.modFile === undefined;
+    // unsaved changes: saving is the thing to do, the mod once there is one
+    this.saveButton.classList.toggle("primary", editor.dirty && this.modFile === undefined);
+    this.saveModButton.classList.toggle("primary", editor.dirty && this.modFile !== undefined);
   }
 
   /**
@@ -2163,10 +2255,12 @@ function loadHistory(): { episode: number; room: number }[] {
 }
 
 /** Offers bytes as a file download. */
-function download(bytes: Uint8Array, name: string): void {
-  const url = URL.createObjectURL(
-    new Blob([bytes as BlobPart], { type: "application/vnd.microsoft.portable-executable" }),
-  );
+function download(
+  bytes: Uint8Array,
+  name: string,
+  type = "application/vnd.microsoft.portable-executable",
+): void {
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
   h("a", { href: url, download: name }).click();
   setTimeout(() => {
     URL.revokeObjectURL(url);

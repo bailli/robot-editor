@@ -3,13 +3,22 @@ import { describe, expect, test } from "vitest";
 import {
   Game,
   LOGIC_CELL,
+  type Mod,
+  NO_CHANGES,
   ROOM_CELLS,
+  applyMod,
   compileScript,
+  emptyMod,
+  findResource,
+  modJson,
+  parseMod,
   parsePe,
   readEpisodeStart,
   roomCompiledScript,
   roomScript,
   roomSettings,
+  serializeRoom,
+  sha256,
 } from "@robot/formats";
 
 import {
@@ -543,5 +552,113 @@ describe("Editor room deletion", () => {
     expect(() => editor.removeRoom(3, 41)).toThrow(RangeError);
     expect(() => editor.removeRoom(3, 1)).toThrow(RangeError);
     expect(() => editor.removeRoom(3, 250)).toThrow();
+  });
+});
+
+describe("Editor and mods", () => {
+  /** The rooms, text entries, other resources and code of two exes are the same. */
+  function sameContent(a: Game, b: Game): void {
+    for (const episode of [0, 1, 2, 3, 4]) {
+      const ids = (g: Game) => g.episode(episode).rooms.map((r) => r.id);
+      expect(ids(a)).toEqual(ids(b));
+      for (const room of a.episode(episode).rooms) {
+        expect(serializeRoom(room)).toEqual(serializeRoom(b.room(episode, room.id)));
+      }
+    }
+    const resources = (g: Game) => g.resources.filter((r) => r.type !== "SCENE");
+    for (const r of resources(a)) {
+      if (r.type === "CRUNCHED") {
+        expect(a.texts(Number(r.name))?.entries, `texts ${String(r.name)}`).toEqual(
+          b.texts(Number(r.name))?.entries,
+        );
+      } else {
+        const other = findResource(b.resources, r.type, r.name, r.language)?.data ?? [];
+        const key = `${String(r.type)}/${String(r.name)}/${r.language}`;
+        expect(firstDifference(r.data, other), key).toBe(-1);
+      }
+    }
+    for (const s of a.image.sections.filter((s) => s.name !== ".rsrc")) {
+      const bytes = (g: Game) => g.image.data.subarray(s.rawOffset, s.rawOffset + s.rawSize);
+      expect(firstDifference(bytes(a), bytes(b)), s.name).toBe(-1);
+    }
+  }
+
+  test("the exe a saved mod makes holds what the editor saves", () => {
+    const editor = new Editor(game);
+    paint(editor, free, 0x0105);
+    editor.setRoomName(1, 43, "NEUER START");
+    editor.setRoomDescription(3, 11, "Ein Haus.");
+    editor.addRoom(1, 999, { copy: 43 });
+    editor.removeRoom(1, 44);
+    const mod = editor.saveMod();
+    expect(editor.dirty).toBe(false);
+    expect(mod.base).toBe(sha256(game.image.data));
+    expect(mod.changes.rooms.map((c) => [c.episode, c.id, c.room === null])).toEqual([
+      [1, 43, false],
+      [1, 44, true],
+      [1, 999, false],
+    ]);
+    expect(mod.changes.texts.map((c) => [c.resource, c.entry])).toEqual([
+      [1110, 1043],
+      [1320, 1011],
+    ]);
+    sameContent(new Game(applyMod(game.image, parseMod(modJson(mod)))), new Game(editor.save()));
+  });
+
+  /** Episode I's circuit pieces in III, II's oracle hint in I, room 41 changed, a start. */
+  function aMod(): Mod {
+    const room41 = game.room(3, 41);
+    const base = room41.base.slice();
+    base[2 + 16 * 40] = 0x0a59;
+    return {
+      ...emptyMod(game.image.data, "test"),
+      author: "someone",
+      changes: {
+        ...NO_CHANGES,
+        tileTypes: [{ episode: 3, from: 1, types: [[0x59, 0x42]] }],
+        copyTexts: [
+          {
+            resource: 1110,
+            from: 1210,
+            entries: [
+              [331, 331],
+              [1044, 1043],
+            ],
+          },
+        ],
+        texts: [{ resource: 1110, entry: 1042, variants: ["DER ANFANG"] }],
+        rooms: [{ episode: 3, id: 41, room: { ...room41, base } }],
+        start: [{ episode: 3, room: 41, x: 2, y: 16 }],
+      },
+    };
+  }
+
+  test("a mod is where editing starts; unchanged, it saves as it came", () => {
+    const mod = aMod();
+    const editor = new Editor(game, mod);
+    expect(editor.dirty).toBe(false);
+    expect(editor.game.episode(3).classes.typeOfClass.get(76)).toBe(0x59);
+    expect(editor.room(3, 41).base[2 + 16 * 40]).toBe(0x0a59);
+    expect(editor.isEdited(3, 41)).toBe(true);
+    expect(editor.isEdited(3, 42)).toBe(false);
+    expect(editor.roomName(1, 42)?.name).toBe("DER ANFANG");
+    expect(editor.roomName(1, 44)?.name).toBe(game.roomName(2, 43)?.name);
+    expect(readEpisodeStart(editor.game.image, 3)).toEqual({ room: 41, x: 2, y: 16 });
+    expect(modJson(editor.saveMod())).toBe(modJson(mod));
+    sameContent(new Game(editor.save()), new Game(applyMod(game.image, mod)));
+  });
+
+  test("a text entry written in the editor replaces its copy", () => {
+    const editor = new Editor(game, aMod());
+    editor.setRoomName(1, 44, "DER GANG");
+    const { copyTexts, texts } = editor.saveMod().changes;
+    expect(copyTexts).toEqual([{ resource: 1110, from: 1210, entries: [[331, 331]] }]);
+    expect(texts.map((c) => c.entry)).toEqual([1042, 1044]);
+  });
+
+  test("a mod for another exe is refused", () => {
+    const editor = new Editor(game);
+    paint(editor, free, 0x0105);
+    expect(() => new Editor(new Game(editor.save()), aMod())).toThrow(/for another exe/);
   });
 });

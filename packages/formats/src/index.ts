@@ -296,6 +296,10 @@ export {
   emptyMod,
   modJson,
   parseMod,
+  roomChanges,
+  textChanges,
+  withRoomChanges,
+  withTextChanges,
 } from "./mod.ts";
 export type {
   CodeChange,

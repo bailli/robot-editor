@@ -13,7 +13,10 @@ import {
   LOGIC_CELL,
   type LogicRecord,
   MAX_ROOMS,
+  type Mod,
+  type ModChanges,
   NAMED_ROOMS,
+  NO_CHANGES,
   OPPOSITE,
   ROOM_CELLS,
   ROOM_HEIGHT,
@@ -26,7 +29,9 @@ import {
   type RoomTag,
   STAIRS_CLASS,
   type Texts,
+  applyMod,
   backdropRoom,
+  checkMod,
   encodeCp437,
   exitMode,
   nameRoom,
@@ -35,6 +40,7 @@ import {
   readEpisodeStart,
   recordCell,
   recordCellOffsets,
+  roomChanges,
   roomDescriptionText,
   roomName,
   roomNameText,
@@ -42,10 +48,14 @@ import {
   roomScript,
   roomSettings,
   roomTextLength,
+  sha256,
+  textChanges,
   withEpisodeStart,
   withExitMode,
+  withRoomChanges,
   withRoomScript,
   withRoomSettings,
+  withTextChanges,
   withTextEntry,
 } from "@robot/formats";
 
@@ -213,6 +223,11 @@ const inRoom = (index: number) => Number.isInteger(index) && index >= 0 && index
  *
  * Logic cells (type 0x7f) point to the room's logic records: painting skips them; records
  * are added, changed and removed with the record operations, each one undo step.
+ *
+ * With a mod (mod.ts), the editor works on its base: the pristine exe with the changes
+ * it does not edit (tile types, events, code, text copies, the start) applied. The
+ * mod's rooms and texts are where editing starts; saveMod gives them back with the
+ * edits, as the differences to the base.
  */
 export class Editor {
   private readonly edited = new Map<number, Room[]>();
@@ -225,10 +240,34 @@ export class Editor {
   /** The last stroke applied when saved (state identity: strokes are unique). */
   private saved: Edit | undefined;
 
+  /** The exe as edited: the loaded one, or with a mod its base (see above). */
   readonly game: Game;
+  /** The exe as loaded, which mods apply to. */
+  readonly pristine: Game;
+  /** The loaded mod's name, author, description and the changes the editor keeps. */
+  private readonly mod: Omit<Mod, "base">;
 
-  constructor(game: Game) {
-    this.game = game;
+  constructor(game: Game, mod?: Mod) {
+    this.pristine = game;
+    if (!mod) {
+      this.game = game;
+      this.mod = { name: "", author: "", description: "", changes: NO_CHANGES };
+      return;
+    }
+    const { tileTypes, events, code, copyTexts, start, rooms, texts } = mod.changes;
+    const kept: ModChanges = { ...NO_CHANGES, tileTypes, events, code, copyTexts, start };
+    this.game = new Game(applyMod(game.image, { ...mod, changes: kept }));
+    this.mod = { ...mod, changes: kept };
+    for (const episode of new Set(rooms.map((c) => c.episode))) {
+      const set = rooms.filter((c) => c.episode === episode);
+      this.edited.set(episode, withRoomChanges(this.game.episode(episode).rooms, set));
+    }
+    for (const resource of new Set(texts.map((c) => c.resource))) {
+      const source = this.game.textSource(resource);
+      if (source === undefined) throw new RangeError(`the exe has no text resource ${resource}`);
+      const set = texts.filter((c) => c.resource === resource);
+      this.texts.set(resource, withTextChanges(source, set));
+    }
   }
 
   rooms(episode: number): readonly Room[] {
@@ -955,6 +994,35 @@ export class Editor {
     this.apply(edit, after);
     this.undoStack.push(edit);
     return edit;
+  }
+
+  /**
+   * The mod: the loaded one's changes the editor does not edit, and the rooms and text
+   * entries that differ from the base. A text entry written here replaces its copy.
+   */
+  saveMod(): Mod {
+    this.endStroke();
+    const rooms = [...this.edited].flatMap(([episode, list]) =>
+      roomChanges(episode, this.game.episode(episode).rooms, list),
+    );
+    const texts = [...this.texts].flatMap(([id, source]) =>
+      textChanges(id, this.game.textSource(id) ?? "", source),
+    );
+    const written = new Set(texts.map((t) => `${t.resource} ${t.entry}`));
+    const copyTexts = this.mod.changes.copyTexts
+      .map((c) => ({
+        ...c,
+        entries: c.entries.filter(([to]) => !written.has(`${c.resource} ${to}`)),
+      }))
+      .filter((c) => c.entries.length > 0);
+    const mod: Mod = {
+      ...this.mod,
+      base: sha256(this.pristine.image.data),
+      changes: { ...this.mod.changes, copyTexts, texts, rooms },
+    };
+    checkMod(mod);
+    this.saved = this.undoStack.at(-1);
+    return mod;
   }
 
   /** The loaded exe with every edited episode's scene and text replaced. */

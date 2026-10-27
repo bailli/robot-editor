@@ -861,10 +861,14 @@ Supported:
   registers again)
 - buttons: in every dialog and editor Cancel comes first, the confirming action last and
   filled (Create, Apply, Delete room); actions that remove something are red; "Save
-  exe" is filled while there are unsaved changes; questions (deleting a room,
-  discarding changes) use the editor's own dialog, not the browser's
+  exe" (once a mod is in use "Save mod") is filled while there are unsaved changes;
+  questions (deleting a room, discarding changes) use the editor's own dialog, not the
+  browser's
 - save: downloads the exe with all edited episodes and texts (warns about unsaved changes
   on leave)
+- mods (see "The mod format"): "Open mod…" (or dropping a `.json`) opens a mod for the
+  loaded exe, "Save mod" downloads the edits as one (named after the opened mod, else
+  the exe); with a mod "Save exe" makes the exe from it at any time
 
 Not supported (yet):
 
@@ -937,10 +941,9 @@ stands, decided 2026-10-27; details in the sections named.
   no texts for those events (no box, the points still count). Their code checks
   the episode only for the flags 0x4000/0x8000 (0x412ae0). After the east hint the
   hero stands on the oracle's cell (in II it vanishes; elsewhere it stays under him).
-- **Next, in order:** (1) the editor's use of the mod format (see below; `mod.ts` is
-  done); (2) if wanted, oracles that
-  vanish after north and east in Junior too, a code patch (episode flags
-  0x4000/0x8000, only II's constructor sets them).
+- **Next:** if wanted, oracles that vanish after north and east in Junior too, a code
+  patch (episode flags 0x4000/0x8000, only II's constructor sets them); the proxy as
+  an in-memory loader; editing the mod's other kinds in the editor.
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
@@ -950,8 +953,8 @@ stands, decided 2026-10-27; details in the sections named.
 
 Drafted 2026-10-27 from the two pilots and the editor as it is. **Implemented** in
 `mod.ts` (all kinds, the file, compiling and applying; tested, and the circuits pilot's
-game test now runs an exe made from a mod) and `robot mod apply`; **not yet** the
-editor's use of it and the proxy loader.
+game test now runs an exe made from a mod), `robot mod apply` and the editor (`Editor`
+with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
 
 - **A mod is a set of keyed changes, not a log.** Each change has a key (below) and
   appears once; changing the same thing again replaces it. Applying a mod replays the
@@ -1019,12 +1022,14 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   today: rooms, texts; later the start). Opening takes an exe and, optionally, a mod;
   "Save mod" writes kinds 1–2 as loaded plus kinds 3–5 as the difference between the
   edited state and the base (rooms that differ byte for byte, text entries that
-  differ), so text copied by `tileTypes` never shows up as an edit. "Save exe" and
-  "Test in game" stay, built from the mod. Undo/redo, dirty state and the room list
-  work as now.
+  differ), so text copied by `tileTypes` never shows up as an edit; a text entry
+  written in the editor replaces its copy in `copyTexts`. "Save exe" and "Test in
+  game" stay, built from the base and the edits. Undo/redo, dirty state (either save
+  clears it) and the room list work as now; rooms the mod changes show as edited.
 - **Invariants for tests:** for any editor state, applying `saveMod()` to the pristine
-  exe gives the exe the editor saves today, byte for byte; a mod saved and loaded again
-  saves the same file; later, the game state through the proxy loader equals the one
+  exe gives the exe the editor saves: the same rooms byte for byte, the same text
+  entries (their order in a resource may differ), all else byte for byte; a mod opened
+  and saved unchanged gives the same file; later, the game state through the proxy loader equals the one
   from the written exe (the driver can read both).
 - **Out of scope:** a sixth episode (the episode list and factories are code: a mod
   builds a fan episode in the slot of one of the five), mods on top of mods, other exe

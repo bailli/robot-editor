@@ -33,7 +33,7 @@ import { findResource, readResources, replaceResource } from "./resources.ts";
 import { ROOM_HEIGHT, ROOM_WIDTH, type Room, parseRoom, serializeRoom } from "./scene.ts";
 import { sha256 } from "./sha256.ts";
 import { type EpisodeStart, withEpisodeStart } from "./start.ts";
-import { textEntryProblem, withTextEntry } from "./texts.ts";
+import { parseTexts, textEntryProblem, withTextEntry } from "./texts.ts";
 
 export const MOD_FORMAT = 1;
 /** Room ids have 10 bits (records and exits hold them so). */
@@ -356,38 +356,86 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
     ),
   );
   for (const resource of new Set(texts.map((c) => c.resource))) {
-    let text = game.textSource(resource);
+    const text = game.textSource(resource);
     need(text !== undefined, `texts (${resource})`, "no such text resource");
-    for (const c of texts.filter((t) => t.resource === resource)) {
-      text = withTextEntry(text, c.entry, c.variants ?? undefined);
-    }
-    game = new Game(game.withText(resource, text));
+    const set = texts.filter((t) => t.resource === resource);
+    game = new Game(game.withText(resource, withTextChanges(text, set)));
   }
   for (const episode of new Set(changes.rooms.map((c) => c.episode))) {
-    const rooms = [...game.episode(episode).rooms];
-    let reordered = false;
-    for (const c of changes.rooms.filter((r) => r.episode === episode)) {
-      const at = rooms.findIndex((r) => r.id === c.id);
-      if (c.room === null) {
-        need(at >= 0, `rooms (episode ${episode}, room ${c.id})`, "removes a missing room");
-        rooms.splice(at, 1);
-        reordered = true;
-      } else if (at >= 0) {
-        rooms[at] = c.room;
-      } else {
-        rooms.push(c.room);
-        reordered = true;
-      }
-    }
-    // as the editor keeps them once a room is added or removed
-    if (reordered) rooms.sort((a, b) => a.id - b.id);
-    game = new Game(game.withScene(episode, rooms));
+    const set = changes.rooms.filter((r) => r.episode === episode);
+    game = new Game(game.withScene(episode, withRoomChanges(game.episode(episode).rooms, set)));
   }
   let data = game.image.data;
   for (const { episode, ...start } of changes.start) {
     data = withEpisodeStart(parsePe(data), episode, start);
   }
   return data;
+}
+
+/** A text resource (as decoded) with the changes' entries set or removed, in their order. */
+export function withTextChanges(text: string, changes: readonly TextChange[]): string {
+  return changes.reduce((t, c) => withTextEntry(t, c.entry, c.variants ?? undefined), text);
+}
+
+/**
+ * An episode's rooms with the changes made: rooms replaced in place; once a room is
+ * added or removed, sorted by id, as the editor keeps them.
+ */
+export function withRoomChanges(rooms: readonly Room[], changes: readonly RoomChange[]): Room[] {
+  const out = [...rooms];
+  let reordered = false;
+  for (const c of changes) {
+    const at = out.findIndex((r) => r.id === c.id);
+    if (c.room === null) {
+      need(at >= 0, `rooms (episode ${c.episode}, room ${c.id})`, "removes a missing room");
+      out.splice(at, 1);
+      reordered = true;
+    } else if (at >= 0) {
+      out[at] = c.room;
+    } else {
+      out.push(c.room);
+      reordered = true;
+    }
+  }
+  if (reordered) out.sort((a, b) => a.id - b.id);
+  return out;
+}
+
+/** What turns the rooms `base` into `rooms`: rooms that differ byte for byte, added, removed. */
+export function roomChanges(
+  episode: number,
+  base: readonly Room[],
+  rooms: readonly Room[],
+): RoomChange[] {
+  const before = new Map(base.map((r) => [r.id, r]));
+  const changed = rooms.flatMap((room) => {
+    const old = before.get(room.id);
+    return old && (old === room || sameBytes(serializeRoom(old), serializeRoom(room)))
+      ? []
+      : [{ episode, id: room.id, room }];
+  });
+  const ids = new Set(rooms.map((r) => r.id));
+  const removed = base.flatMap((r) => (ids.has(r.id) ? [] : [{ episode, id: r.id, room: null }]));
+  return [...changed, ...removed].sort(byKeys((c) => c.id));
+}
+
+/** What turns the text resource `base` into `text`: entries set, added or removed. */
+export function textChanges(resource: number, base: string, text: string): TextChange[] {
+  const [before, after] = [parseTexts(base).entries, parseTexts(text).entries];
+  const same = (a: readonly string[] | undefined, b: readonly string[] | undefined) =>
+    a?.length === b?.length && (a ?? []).every((v, i) => v === b?.[i]);
+  return [...new Set([...before.keys(), ...after.keys()])]
+    .sort((a, b) => a - b)
+    .flatMap((entry) => {
+      const variants = after.get(entry);
+      return same(before.get(entry), variants)
+        ? []
+        : [{ resource, entry, variants: variants ?? null }];
+    });
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
 /** The section holding the resources (the last one; replaceResource grows it). */
@@ -423,7 +471,7 @@ export function compileMod(image: PeImage, mod: Mod): ModPatch {
   const pristine = readResources(image);
   const resources = readResources(built).flatMap(({ type, name, language, data }) => {
     const old = findResource(pristine, type, name, language);
-    return old && hex(old.data) === hex(data) ? [] : [{ type, name, language, data }];
+    return old && sameBytes(old.data, data) ? [] : [{ type, name, language, data }];
   });
   return { writes, resources };
 }
