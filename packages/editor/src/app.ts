@@ -27,6 +27,7 @@ import {
   describeRecord,
   disassemble,
   displayText,
+  eventTextsId,
   exitMode,
   nodeBulb,
   parseCompiledScript,
@@ -2029,7 +2030,7 @@ export class App {
     if (kind === "enigma") {
       const entry = readEventTable(game.image, this.episode).at(value);
       if (!entry || value < 0) return `entry ${value} (missing)`;
-      const text = game.episodeTexts(this.episode)?.entries.get(EVENT_TEXT + value)?.[0];
+      const text = game.texts(eventTextsId(this.episode))?.entries.get(EVENT_TEXT + value)?.[0];
       const shown = text === undefined ? "" : `, text ${EVENT_TEXT + value}:\n${displayText(text)}`;
       return `entry ${value}: ${entry.points} points${shown}`;
     }

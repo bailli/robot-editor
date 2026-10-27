@@ -3,7 +3,9 @@ import { type Passage, STAIRS_CLASS } from "./exits.ts";
 import { LOGIC_CELL, ROOM_CELLS, ROOM_WIDTH, type Room, resolveCell } from "./scene.ts";
 
 /**
- * Logic circuits (episodes I and II, GameOfRobot.exe 0x40f700, 0x40f9a0).
+ * Logic circuits (episodes I and II, GameOfRobot.exe 0x40f700, 0x40f9a0). The code
+ * works by class, so any episode whose class table maps the three classes has them
+ * (Game.withTileTypes; tried in episode III).
  *
  * A circuit is nothing but cells: LETTER cells (class 59) with the state '1' or '0' are
  * the sources, GATE cells (class 76; pieces the hero carries, takes and puts down) the

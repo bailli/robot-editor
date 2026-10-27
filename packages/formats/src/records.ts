@@ -56,7 +56,8 @@ import type { LogicRecord } from "./scene.ts";
  *       room's nodes are lit, itself included (episode I room 128: the stairs to room
  *       228; byte 1 bit 1 remembers it); a lit node casts a light (byte 8 holds it at
  *       run time). See circuits.ts. Tried: a 1 directly, through a wire, through AND with
- *       1 and 1 lit their nodes, AND with 1 and 0 did not
+ *       1 and 1 lit their nodes, AND with 1 and 0 did not; in episode III with episode I's
+ *       pieces (Game.withTileTypes) AND and NOT XOR of 1 and 1 lit, NAND did not
  *   12  oracle (episodes II, III, tile 0x51): it only works once its symbol lies in the
  *       room, a 2×2 block of tangram pieces (tile 0x50) whose states are pattern n of
  *       readOracleSymbols (n: low 4 bits of the oracle's state, offset 2; 0x412860, which

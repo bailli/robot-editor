@@ -18,7 +18,7 @@ const TABLES: readonly (readonly [address: number, entries: number])[] = [
   [0x479068, 201],
 ];
 const ENTRY_SIZE = 12;
-/** Texts of the entries: 1800 + n (episode vtable +0x38, 0x409d80). */
+/** Texts of the entries: 1800 + n (episode vtable +0x38, 0x409d80; eventTextsId). */
 export const EVENT_TEXT = 1800;
 
 export interface GameEvent {
@@ -27,14 +27,44 @@ export interface GameEvent {
   points: number;
 }
 
+function eventTable(episode: number): readonly [address: number, entries: number] {
+  const table = Number.isInteger(episode) && episode >= 0 ? TABLES.at(episode) : undefined;
+  if (!table) throw new RangeError(`no episode ${episode}`);
+  return table;
+}
+
 export function readEventTable(image: PeImage, episode: number): GameEvent[] {
-  const table = TABLES.at(episode);
-  if (episode < 0 || !table) throw new RangeError(`no episode ${episode}`);
-  const [address, count] = table;
+  const [address, count] = eventTable(episode);
   const bytes = readVa(image, address, count * ENTRY_SIZE);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   return Array.from({ length: count }, (_, n) => ({
     id: view.getInt32(n * ENTRY_SIZE, true),
     points: view.getInt32(n * ENTRY_SIZE + 4, true),
   }));
+}
+
+/**
+ * A copy of the exe whose event table for `episode` holds `entries` at the given entry
+ * numbers (the sound stays as the game fills it in, from the sound table).
+ */
+export function withEventEntries(
+  image: PeImage,
+  episode: number,
+  entries: ReadonlyMap<number, GameEvent>,
+): Uint8Array {
+  const [address, count] = eventTable(episode);
+  const out = image.data.slice();
+  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  const at = readVa(image, address, count * ENTRY_SIZE).byteOffset - image.data.byteOffset;
+  for (const [n, { id, points }] of entries) {
+    if (!Number.isInteger(n) || n < 0 || n >= count) throw new RangeError(`no entry ${n}`);
+    for (const value of [id, points]) {
+      if (!Number.isInteger(value) || value < -0x80000000 || value > 0x7fffffff) {
+        throw new RangeError(`${value} is no 32-bit value`);
+      }
+    }
+    view.setInt32(at + n * ENTRY_SIZE, id, true);
+    view.setInt32(at + n * ENTRY_SIZE + 4, points, true);
+  }
+  return out;
 }

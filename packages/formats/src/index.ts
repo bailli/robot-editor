@@ -58,6 +58,7 @@ export {
   EPISODE_NAMES,
   EPISODES,
   Game,
+  eventTextsId,
   roomNamesId,
   START_ROOMS,
   sceneId,
@@ -230,7 +231,7 @@ export {
   recordCellOffsets,
   teleporterCondition,
 } from "./records.ts";
-export { EVENT_TEXT, readEventTable } from "./events.ts";
+export { EVENT_TEXT, readEventTable, withEventEntries } from "./events.ts";
 export type { GameEvent } from "./events.ts";
 export type { RecordInfo, RecordKind, TeleporterCondition } from "./records.ts";
 export {

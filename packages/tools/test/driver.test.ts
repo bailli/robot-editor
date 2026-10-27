@@ -6,7 +6,18 @@ import { fileURLToPath } from "node:url";
 
 import { describe, test } from "vitest";
 
-import { readEpisodeStart, withExitMode } from "@robot/formats";
+import {
+  Game,
+  LOGIC_CELL,
+  ROOM_CELLS,
+  ROOM_WIDTH,
+  type Room,
+  STAIRS_CLASS,
+  readEpisodeStart,
+  roomCircuit,
+  withEpisodeStart,
+  withExitMode,
+} from "@robot/formats";
 
 import { Driver, type HeroState, type Key } from "../src/driver.ts";
 import { ROOT, loadGame } from "../src/game.ts";
@@ -57,6 +68,65 @@ async function walk(d: Driver, key: Key, done: (hero: HeroState) => boolean): Pr
   const hero = await d.hero();
   assert.ok(hero);
   return hero;
+}
+
+/** The game's map in memory: a word per cell, class | state << 8. */
+const MAP = 0x5197f8 + 0xc;
+
+/**
+ * Episode III with episode I's circuit pieces (LETTER, GATE, BULB at III's free types
+ * 0x40, 0x59, 0x43) and three circuits in room 41, west of a spare piece the hero takes:
+ * AND, XOR then NOT, NAND, each of 1 and 1, the node's stairs east of it. Returns the
+ * exe and the stairs rows (the nodes' rows) that the circuit lights.
+ */
+function circuitsInEpisodeIII(game: Game): { exe: Uint8Array; lit: number[] } {
+  const [LETTER, GATE] = [0x40, 0x59];
+  const types = new Map([
+    [LETTER, 0x25],
+    [GATE, 0x42],
+    [0x43, 0x43],
+  ]);
+  const patched = new Game(game.withTileTypes(3, 1, types));
+  const ep = patched.episode(3);
+  const room = calmRoom(patched.room(3, 41), ep.classes);
+  const base = room.base.slice();
+  const overlay = room.overlay.slice();
+  const at = (x: number, y: number) => x + y * ROOM_WIDTH;
+  for (let y = 11; y <= 24; y++) {
+    for (let x = 1; x <= 14; x++) base[at(x, y)] = overlay[at(x, y)] = 0;
+  }
+  const one = LETTER | (0x31 << 8);
+  const piece = (state: number) => GATE | (state << 8);
+  const records = room.records.slice();
+  const used = new Set(records.map((r) => r.slot));
+  /** A gate west of a node at row y: A and B from 1s, the pieces from x = 9 on. */
+  const circuit = (y: number, pieces: number[]) => {
+    base[at(7, y - 1)] = base[at(7, y + 1)] = one;
+    base[at(8, y - 1)] = piece(0x0c);
+    base[at(8, y + 1)] = piece(0x0d);
+    base[at(8, y)] = piece(0x0e);
+    pieces.forEach((state, k) => (base[at(9 + k, y)] = piece(state)));
+    let slot = 0;
+    while (used.has(slot)) slot++;
+    used.add(slot);
+    const data = new Uint8Array(10);
+    data.set([11, 0, 0, 0, 12, y]); // stairs down at (12, y)
+    records.push({ slot, data });
+    base[at(9 + pieces.length, y)] = LOGIC_CELL | (slot << 8);
+  };
+  const [AND, NAND, XOR, NOT, ACROSS] = [1, 3, 4, 9, 0x0a];
+  circuit(14, [AND]);
+  circuit(18, [XOR, NOT]);
+  circuit(22, [NAND]);
+  base[at(4, 16)] = piece(ACROSS);
+  const edited: Room = { ...room, base, overlay, records };
+  const rooms = ep.rooms.map((r) => (r.id === 41 ? edited : r));
+  const scene = new Game(patched.withScene(3, rooms));
+  const lit = roomCircuit(edited, ep.classes).nodes.flatMap((n) =>
+    n.signal === 1 ? [Math.floor(n.cell / ROOM_WIDTH)] : [],
+  );
+  const start = { ...readEpisodeStart(scene.image, 3), x: 2, y: 16 };
+  return { exe: withEpisodeStart(scene.image, 3, start), lit };
 }
 
 describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () => {
@@ -124,6 +194,32 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
         return walk(d, "left", (h) => h.room !== 43);
       });
       assert.deepEqual(arrived, { room: 42, x: 38, y: 15 });
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  }, 60_000);
+
+  test("episode III with episode I's circuit pieces: taking one lights the nodes", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "robot-driver-"));
+    try {
+      const exe = join(dir, "GameOfRobot.exe");
+      const { exe: data, lit } = circuitsInEpisodeIII(game);
+      assert.deepEqual(lit, [14, 18], "AND and NOT XOR give 1, NAND 0");
+      writeFileSync(exe, data);
+      const stairs = await withGame(exe, async (d) => {
+        await d.startEpisode(3);
+        const cells = async () => {
+          const map = await d.peek(MAP, 2 * ROOM_CELLS);
+          const view = new DataView(map.buffer, map.byteOffset);
+          return [14, 18, 22].filter(
+            (y) => view.getUint16(2 * (12 + y * ROOM_WIDTH), true) === STAIRS_CLASS,
+          );
+        };
+        assert.deepEqual(await cells(), [], "no stairs before");
+        await walk(d, "right", (h) => h.x >= 4); // takes the spare piece
+        return cells();
+      });
+      assert.deepEqual(stairs, lit);
     } finally {
       rmSync(dir, { recursive: true });
     }

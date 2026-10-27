@@ -1,6 +1,12 @@
-import { type EpisodeClasses, readEpisodeClasses } from "./classes.ts";
+import {
+  type EpisodeClasses,
+  readClassTable,
+  readEpisodeClasses,
+  withClassEntries,
+} from "./classes.ts";
 import { decodeCp437, encodeCp437 } from "./cp437.ts";
 import { crunch, uncrunch } from "./crunched.ts";
+import { EVENT_TEXT, readEventTable, withEventEntries } from "./events.ts";
 import { musicPieces } from "./music.ts";
 import { type Rgb, episodePalette } from "./palette.ts";
 import { type PeImage, parsePe } from "./pe.ts";
@@ -9,8 +15,8 @@ import { type RoomName, roomName } from "./room-names.ts";
 import { cryptScene } from "./scene-crypt.ts";
 import { type Room, parseScene, serializeScene } from "./scene.ts";
 import { type ScriptKeyword, readScriptKeywords, scriptConstants } from "./script.ts";
-import { type ShapeTable, parseShapes } from "./shapes.ts";
-import { type Texts, parseObjectNames, parseTexts } from "./texts.ts";
+import { type ShapeTable, parseShapes, withShapes } from "./shapes.ts";
+import { type Texts, parseObjectNames, parseTexts, withTextEntry } from "./texts.ts";
 
 export const EPISODES = [0, 1, 2, 3, 4] as const;
 export const EPISODE_NAMES = ["Robot Junior", "Robot I", "Robot II", "Robot III", "Robot IV"];
@@ -38,6 +44,12 @@ export const textsId = (episode: number, language: Language = "de") =>
 /** Room names: the episode's texts, except episode III's own resource 1320 (vtable +0x44). */
 export const roomNamesId = (episode: number, language: Language = "de") =>
   episode === 3 ? 1320 + (language === "de" ? 0 : 1) : textsId(episode, language);
+
+/**
+ * Texts of first takes and events (1800 + n, see events.ts): as room names, episode III
+ * keeps them in its own resource 1320 (vtable +0x38, 0x40b310).
+ */
+export const eventTextsId = roomNamesId;
 
 export type Language = "de" | "en";
 
@@ -188,4 +200,62 @@ export class Game {
       cryptScene(serializeScene(rooms)),
     );
   }
+
+  /**
+   * A copy of the exe in which tile types of `episode` become those of episode `from`
+   * (`types`: target type -> source type), as far as the data goes: the class table
+   * entry, the _Rob_object shape, the description (text entry n), the line of the sound
+   * table (its sound only where `episode` has that piece, else the target's stays) and
+   * the first take (event table entry n and its text 1800 + n, eventTextsId). Other texts a class
+   * shows (messages, hints) and code that checks the episode are the caller's.
+   */
+  withTileTypes(episode: number, from: number, types: ReadonlyMap<number, number>): Uint8Array {
+    const source = this.episode(from);
+    const table = readClassTable(this.image, from);
+    const events = readEventTable(this.image, from);
+    const sourceTexts = this.episodeTexts(from)?.entries;
+    const sourceEventTexts = this.texts(eventTextsId(from))?.entries;
+    const sourceSounds = this.decode(this.resource("CRUNCHED", soundsId(from)).data);
+    const pieces = new Set(this.musicPieces(episode));
+    const pairs = [...types];
+    let game = new Game(
+      withClassEntries(this.image, episode, new Map(pairs.map(([to, of]) => [to, table[of]]))),
+    );
+    game = new Game(
+      withEventEntries(game.image, episode, new Map(pairs.map(([to, of]) => [to, events[of]]))),
+    );
+    const shapes = game.resource("SHAPES", shapesId(episode));
+    const objects = new Map(pairs.map(([to, of]) => [to, source.objects[of] ?? null]));
+    game = new Game(
+      replaceResource(game.image, shapes, withShapes(shapes.data, "_Rob_object", objects)),
+    );
+    let text = game.textSource(textsId(episode)) ?? "";
+    for (const [to, of] of pairs) text = withTextEntry(text, to, sourceTexts?.get(of));
+    game = new Game(game.withText(textsId(episode), text));
+    text = game.textSource(eventTextsId(episode)) ?? "";
+    for (const [to, of] of pairs) {
+      text = withTextEntry(text, EVENT_TEXT + to, sourceEventTexts?.get(EVENT_TEXT + of));
+    }
+    game = new Game(game.withText(eventTextsId(episode), text));
+    let sounds = game.textSource(soundsId(episode)) ?? "";
+    for (const [to, of] of pairs) {
+      const [, sound, note] = soundLine(sourceSounds, of);
+      const [found, own] = soundLine(sounds, to);
+      const kept = pieces.has(sound.replace(/^!/, "")) ? sound : own;
+      const line = `${to}:${kept}${note ? ` ;${note}` : ""}`;
+      // the game reads the lines by number (0x4389b0), in any order
+      sounds = found
+        ? sounds.replace(new RegExp(`^${to}:.*$`, "m"), line)
+        : `${sounds.trimEnd()}\n${line}\n`;
+    }
+    return game.withText(soundsId(episode), sounds);
+  }
+}
+
+/** Line n of a sound table: [line, sound, note] (empty where missing). */
+function soundLine(text: string, n: number): [string, string, string] {
+  const match = new RegExp(String.raw`^${n}:[ \t]*([^;\s]*)[^;\n]*(?:;[ \t]*(.*))?$`, "m").exec(
+    text,
+  );
+  return [match?.[0] ?? "", match?.[1] ?? "", match?.[2]?.trim() ?? ""];
 }

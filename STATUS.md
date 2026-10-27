@@ -66,30 +66,30 @@ for episodes I–IV.
 
 Files in `packages/formats/src`:
 
-| File                         | What it covers                                                                                 |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- |
-| `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc`   |
-| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression (decoder and encoder), CP437                                         |
-| `texts.ts`                   | text resources: tile descriptions, messages, object names; setting an entry                    |
-| `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                     |
-| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects: reader and writer), shape tables and frames              |
-| `palette.ts`                 | the 16-colour palettes per episode                                                             |
-| `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font      |
-| `render.ts`                  | drawing cells and rooms like the game                                                          |
-| `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                  |
-| `describe.ts`                | the description the game shows for a cell                                                      |
-| `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                       |
-| `room-tags.ts`               | a room's darkness, points for the first visit, music and episode III flags; changing them      |
-| `music.ts`                   | MUSIC resources: the names of their pieces                                                     |
-| `start.ts`                   | the room and cell an episode starts in, and patching them                                      |
-| `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants       |
-| `script-docs.ts`             | what the script functions and variables do, how scripts and events run                         |
-| `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on               |
-| `records.ts`                 | what logic records do                                                                          |
-| `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                 |
-| `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`)                    |
-| `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts)  |
-| `game.ts`                    | `Game`: loads an exe, episodes lazily, saves edited scenes and texts (`withScene`, `withText`) |
+| File                         | What it covers                                                                                |
+| ---------------------------- | --------------------------------------------------------------------------------------------- |
+| `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc`  |
+| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression (decoder and encoder), CP437                                        |
+| `texts.ts`                   | text resources: tile descriptions, messages, object names; setting an entry                   |
+| `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                    |
+| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects: reader and writer), shape tables and frames             |
+| `palette.ts`                 | the 16-colour palettes per episode                                                            |
+| `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font     |
+| `render.ts`                  | drawing cells and rooms like the game                                                         |
+| `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                 |
+| `describe.ts`                | the description the game shows for a cell                                                     |
+| `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                      |
+| `room-tags.ts`               | a room's darkness, points for the first visit, music and episode III flags; changing them     |
+| `music.ts`                   | MUSIC resources: the names of their pieces                                                    |
+| `start.ts`                   | the room and cell an episode starts in, and patching them                                     |
+| `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants      |
+| `script-docs.ts`             | what the script functions and variables do, how scripts and events run                        |
+| `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on              |
+| `records.ts`                 | what logic records do                                                                         |
+| `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                |
+| `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`); patching them    |
+| `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
+| `game.ts`                    | `Game`: loads an exe, episodes lazily, saves scenes, texts, tile types from other episodes    |
 
 ## What is decoded and verified
 
@@ -127,8 +127,10 @@ Files in `packages/formats/src`:
   the hover line and the tile text, tooltips name them (`[Sickle]`).
 - **Room names** (`room-names.ts`, 0x43c0b0): text entry 1000 + id (episode vtable
   +0x44); episode III keeps them in its own resource `1320` (name, then a description,
-  marked by a leading `!`). A room from 100 on whose base cell (0, 1) has class 99 (tile
-  0x54) shows the name of room id − 100 (caves, cellars). The text is cut to one line
+  marked by a leading `!`), as its diary pages and the texts of first takes and events
+  (1800 + n: vtable +0x38 is 0x40b310 there, 0x409d80 elsewhere; `eventTextsId`). A
+  room from 100 on whose base cell (0, 1) has class 99 (tile 0x54) shows the name of
+  room id − 100 (caves, cellars). The text is cut to one line
   (0x43bfd0: underlines dropped, an empty line ends it; 0x438850 fetches texts without
   line breaks and with `_` as a hard space). Rooms without a name show "Szene <id>"
   (rooms 1 and 99, episode II's 600s, a few others). The game shows the whole text in
@@ -153,7 +155,12 @@ Files in `packages/formats/src`:
   effects alike: 26, 48, 72, 55, 64 pieces), then the music data (not decoded). Every
   room's music names a piece of its episode, but for `HUMBA`.
 - **Sound tables** (`1E06`): `N:SOUND ;note`; the notes name objects by tile type
-  (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names.
+  (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names. The game reads
+  them line by line by number (0x4389b0: `;` ends the line, the number before `:` must
+  be positive and is not checked against the table's length; the order does not
+  matter): the sound (a MUSIC piece of the episode; a leading `!` sets bit 7) goes into
+  event table entry N +8 (see events). Every name is a piece of its episode's MUSIC
+  (IV: one odd line).
 - **Where resources come from** (opener 0x430d20, used by all resource reads; read from
   the code, not tried in the game): first a loose file, then the exe, then
   `WorldOfRobot.DLL`. Loose files only for CRUNCHED texts: if the registry value
@@ -502,7 +509,8 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   RoomTime counts seconds (147 ticks each); Val1…Val8 are free variables kept across
   rooms. Decoded in detail (0x407aa0…): `Enigma(n)` awards entry n of the episode's
   **event table** (`events.ts`, episode +0x1cc: per tile type the first take, then game
-  events; points, a sound, text 1800 + n with the bonus text 516) once per game, the same
+  events; points, a sound, text 1800 + n with the bonus text 516; a class's first take
+  is the entry of the type its class maps to, 0x43a710) once per game, the same
   mechanism as the first take of an object (the key's 500 points; **verified:**
   `Enigma(112)` twice in episode II gives 5000 points once and returns 0 the second
   time); `Phone(text, delay, n)` rings from `delay` seconds on, walking into the phone
@@ -601,10 +609,10 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   and episode III's old mechanism (above). The other uses of 0x42f910 are the room
   change check itself and its dialog (0x42f4f0, 0x42f660 resume the blocked room change);
   the episodes' code only keeps the number in savegames.
-- **Circuits** (`circuits.ts`, episodes I and II): nothing but cells. LETTER cells
-  (class 59) `1`/`0` are the sources, GATE cells (class 76, items the hero carries) the
-  wiring by state (0–8 a gate's operator: OR, AND, NOR, NAND, XOR and the four with an
-  inverted input; 9 NOT; 0x0a ─, 0x0b │; 0x0c ┐ and 0x0d ┘, turning west; 0x0e a
+- **Circuits** (`circuits.ts`, episodes I and II; in III too with I's classes, see fan
+  episodes): nothing but cells. LETTER cells (class 59) `1`/`0` are the sources, GATE
+  cells (class 76, items the hero carries) the wiring by state (0–8 a gate's operator:
+  OR, AND, NOR, NAND, XOR and the four with an inverted input; 9 NOT; 0x0a ─, 0x0b │; 0x0c ┐ and 0x0d ┘, turning west; 0x0e a
   gate's inputs half, west of its operator, A from above it, B from below), circuit
   nodes (logic records of type 11) the outputs. Taking or putting down a GATE piece
   (0x40fdf0, 0x40fc50; not letters, not entering the room) makes the game evaluate every
@@ -890,16 +898,32 @@ stands, decided 2026-10-27; details in the sections named.
 - **Done:** the driver (proxy DLL, `driver.ts`, `pnpm test:game`) to verify edits in the
   game; the OMF writer and `withShapes`; `withClassEntries`; the **pilot: oracles in
   Junior**, working and visible (see "A class table entry" under Limits): class table
-  entries, texts and shapes copied from episode II.
+  entries, texts and shapes copied from episode II. The **pilot: circuits in episode
+  III**, **verified under Wine** (`pnpm test:game`): `Game.withTileTypes(3, 1, …)`
+  makes III's free types 0x40, 0x59, 0x43 episode I's LETTER, GATE and BULB (0x25,
+  0x42, 0x43); in room 41 three circuits of 1 and 1 (AND; XOR then NOT; NAND) lit
+  the first two nodes, which placed their stairs, once the hero took a spare piece; the
+  frames before and after equal our render (bulbs lit or not, stairs, the piece gone),
+  and the first take showed I's text with its 100 points. The circuit code works by
+  class (the map holds class | state << 8), none of it checks the episode.
+- **`Game.withTileTypes(episode, from, types)`** copies what belongs to a tile type:
+  the class table entry, the `_Rob_object` shape, the description (entry n), the sound
+  table line (I's sound only where the episode has that MUSIC piece, else its own:
+  III has no FANFA2, so its GATE takes nothing) and the first take (event table entry
+  n, its text 1800 + n, in III in resource 1320). Not covered: other texts a class
+  shows (the oracle's hints and messages), English texts, code that checks the
+  episode.
 - **Cross-episode classes in general:** free tile types per episode (no class): Junior
   69 (0x39–0x7d), I 47, II **none**, III 18, IV 15. II would need a type that none of
   its rooms uses (not checked). Copied shapes keep their colour indices, and palettes
-  differ per episode (remap if it matters). Some class code checks the episode number
-  (e.g. describe method 0x4145b0): every class needs a try in its new episode.
-- **Next, in order:** (1) circuits in episode III as the next pilot (many classes:
-  letters, wires, gates, nodes); (2) the mod format and the editor's use of it; (3) if
-  wanted, oracles that vanish after north and east in Junior too, a code patch (episode
-  flags 0x4000/0x8000, only II's constructor sets them).
+  differ per episode (I's BULB uses colours 1 and 6, which differ in III: the game draws
+  them with III's colours, as we do; remap if it matters). Some class code checks the
+  episode number (e.g. describe method 0x4145b0): every class needs a try in its new
+  episode.
+- **Next, in order:** (1) the mod format and the editor's use of it (tile types from
+  other episodes as one kind of change, `withTileTypes`); (2) if wanted, oracles that
+  vanish after north and east in Junior too, a code patch (episode flags
+  0x4000/0x8000, only II's constructor sets them).
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
@@ -911,9 +935,9 @@ Roughly by value for the editor.
 
 1. **Logic records in play.** All types are decoded byte by byte and most are tried in
    the game (see logic records above). Open: the thief (not tried), following a leaving
-   actor through its wall opening, circuits with the other gates and NOT (only AND
-   tried; the code and the GATE texts agree on all of them), a final node waiting for
-   itself (from the code), records in rooms whose objects and records exceed the table. **How to test
+   actor through its wall opening, circuits with OR, NOR and the inverted-input gates
+   (AND, NAND, XOR and NOT tried; the code and the GATE texts agree on all of them), a
+   final node waiting for itself (from the code), records in rooms whose objects and records exceed the table. **How to test
    an edit in the game:** build the exe (`Game.withScene`, or the editor's "Save exe"),
    put the change next to the hero's start (see "The hero's start" above) and run
    `python3 -I tools/wine/harness.py shot E OUT.png --exe EXE --keys Right:0.1 wait:2`
@@ -1111,6 +1135,7 @@ Roughly by value for the editor.
 | 0x4314b0, 0x438710, 0x431300 | CRUNCHED: next character; load a text resource; parse an entry header          |
 | 0x432560, 0x4327c4, 0x432e06 | room load: convert records; overlay objects → type 1 records; allocate one     |
 | 0x42bef0, 0x407aa0           | an event's first time (sound, points, text 1800 + n); script Enigma            |
+| 0x4389b0, 0x43a710           | read the sound table into the event table; a class's event table entry         |
 | 0x4393d8, 0x4393e8, 0x439537 | entering a room: episode III kind 3 bit 0; background music; kind 3 bit 1      |
 | 0x40f700, 0x40f9a0           | circuits: evaluate the nodes (after taking or putting down a piece); trace     |
 | 0x4328f0, 0x432c90           | draw a map cell (classes; logic cells by record type); its jump table          |

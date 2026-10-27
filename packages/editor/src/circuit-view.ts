@@ -22,7 +22,7 @@ export interface CircuitContext {
   room: number;
   /** The episode's room ids. */
   ids: ReadonlySet<number>;
-  /** The tile types of LETTER and GATE in this episode (none outside episodes I, II). */
+  /** The tile types of LETTER and GATE in this episode (originally only in I and II). */
   letter?: number;
   gate?: number;
   /** A node's bulb, not lit (nodeBulb; state 1 lit). */
@@ -188,7 +188,11 @@ export class CircuitView {
     const { letter, gate } = context;
     if (letter === undefined || gate === undefined) {
       return [
-        element("p", "hint", "This episode has no circuit pieces (only episodes I and II do)."),
+        element(
+          "p",
+          "hint",
+          "This episode has no circuit pieces (originally only episodes I and II have them).",
+        ),
       ];
     }
     const grid = element("div", "circuit-pieces");
