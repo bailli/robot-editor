@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { OmfFormatError, parseOmf } from "../src/omf.ts";
+import { OmfFormatError, parseOmf, writeOmf } from "../src/omf.ts";
 import { parseShapes, planeBit } from "../src/shapes.ts";
 import { fixup, fixupp, ledata, lnames, omf, pubdef, record, segdef } from "./omf-builder.ts";
 
@@ -79,4 +79,50 @@ test("rejects THREAD subrecords and LEDATA outside its segment", () => {
   assert.throws(() => parseOmf(thread), OmfFormatError);
   const outside = omf(lnames("_TEXT"), segdef(2, 1), ledata(1, 1, [0, 0]));
   assert.throws(() => parseOmf(outside), OmfFormatError);
+});
+
+/** The records of an OMF file: type and whether its bytes sum to 0 (the checksum). */
+function records(data: Uint8Array): { type: number; summed: boolean }[] {
+  const out = [];
+  for (let pos = 0; pos < data.length;) {
+    const length = (data[pos + 1] ?? 0) | ((data[pos + 2] ?? 0) << 8);
+    const sum = data.subarray(pos, pos + 3 + length).reduce((a, b) => a + b, 0);
+    out.push({ type: data[pos] ?? 0, summed: (sum & 0xff) === 0 });
+    pos += 3 + length;
+  }
+  return out;
+}
+
+test("written modules read back the same, with checksums", () => {
+  const big = omf(
+    lnames("_BIG", "_ABS"),
+    segdef(0, 1, [0x62]),
+    segdef(16, 2, [0x00, 0x34, 0x12, 0x00]),
+    ledata(2, 4, [1, 2, 3]),
+  );
+  for (const data of [shapeModule(2), shapeModule(0), big]) {
+    const module = parseOmf(data);
+    const written = writeOmf(module);
+    const again = parseOmf(written);
+    // the builder writes a zero displacement explicitly, the writer leaves it out
+    assert.deepEqual(again, module);
+    assert.ok(records(written).every((r) => r.summed));
+  }
+  // a displacement other than 0 is written; LEDATA, then its FIXUPP
+  const types = records(writeOmf(parseOmf(shapeModule(2)))).map((r) => r.type);
+  assert.deepEqual(types, [0x80, 0x96, 0x98, 0x98, 0x90, 0xa0, 0xa0, 0x9c, 0x8a]);
+});
+
+test("the writer refuses fixups outside the data and overlong blocks", () => {
+  const module = parseOmf(shapeModule(2));
+  const lost = { ...module, blocks: module.blocks.slice(0, 1) }; // the FIXUPP's block is gone
+  assert.throws(() => writeOmf(lost), OmfFormatError);
+  const text = module.segments[1];
+  assert.ok(text);
+  const long = {
+    ...module,
+    segments: [undefined, { ...text, data: new Uint8Array(2000) }, ...module.segments.slice(2)],
+    blocks: [{ segment: 1, offset: 0, length: 2000 }, ...module.blocks.slice(1)],
+  };
+  assert.throws(() => writeOmf(long), OmfFormatError);
 });

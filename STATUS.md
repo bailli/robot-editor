@@ -72,7 +72,7 @@ Files in `packages/formats/src`:
 | `crunched.ts`, `cp437.ts`    | CRUNCHED text compression (decoder and encoder), CP437                                         |
 | `texts.ts`                   | text resources: tile descriptions, messages, object names; setting an entry                    |
 | `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                     |
-| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects), shape tables and frames                                 |
+| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects: reader and writer), shape tables and frames              |
 | `palette.ts`                 | the 16-colour palettes per episode                                                             |
 | `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font      |
 | `render.ts`                  | drawing cells and rooms like the game                                                          |
@@ -249,7 +249,13 @@ Files in `packages/formats/src`:
 
 - **Shapes:** OMF objects with shape tables; descriptors of 12 bytes, frames of four 1-bit
   planes; pixel = 15 XOR the plane colours. `_Rob_object` is indexed by tile type,
-  `_Aliens` holds the robots.
+  `_Aliens` holds the robots. The files are as SED93 wrote them: THEADR, one COMENT
+  ("TOM Productions Shape editor SED93"), LNAMES, SEGDEFs `_TEXT` (frames), `_DATA`
+  (descriptors, tables), `_BSS`, GRPDEF DGROUP, one PUBDEF per table, then per shape an
+  LEDATA of frames, one of descriptors and a FIXUPP (descriptors → frames: far
+  pointers, frame = target), the tables last (near offsets in DGROUP), MODEND; no
+  displacements, every checksum set. `writeOmf` writes a parsed module back: **all 12
+  SHAPES resources come out byte for byte** (test).
 - **Palettes** per episode (16 colours, `palette.ts`). The game expands them into 14
   blocks of 16 (0x4023d0; its screenshots carry them all): 0 the palette, 1 brighter
   (+64), 2 grey, 3–11 darker and greyer (`darkPalette`), 12 black, 13 a grey ramp.
@@ -1000,7 +1006,8 @@ Roughly by value for the editor.
   (only II's constructor sets the flags 0x4000/0x8000). Both stay invisible: Junior's
   `_Rob_object` has 57 entries (types 0–0x38), II's 127 (0x50: 5 frames, 0x51: 10), and
   the game draws nothing past the end. Making them visible needs the shapes added to
-  Junior's SHAPES, i.e. writing OMF (the table holds pointers, so with fixups).
+  Junior's SHAPES: a longer table and new blocks with their fixups, written with
+  `writeOmf` (not done yet).
 
 ## Useful addresses
 

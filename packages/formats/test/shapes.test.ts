@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
+import { parseOmf, writeOmf } from "../src/omf.ts";
 import { type Shape, TRANSPARENT, parseShapes, shapePixels } from "../src/shapes.ts";
 import { resources, snapshot } from "./data.ts";
 
@@ -16,6 +17,14 @@ for (const { id, data } of all) {
     const tables = Object.fromEntries(parseShapes(data));
     assert.ok(Object.keys(tables).length > 0);
     snapshot(id, tables);
+  });
+
+  test(`SHAPES ${id} is written back byte for byte`, () => {
+    const written = writeOmf(parseOmf(data));
+    assert.ok(
+      Buffer.from(written).equals(data),
+      `${written.length} bytes written, ${data.length} read`,
+    );
   });
 }
 

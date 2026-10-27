@@ -72,7 +72,7 @@ export {
   uncrunch,
 } from "./crunched.ts";
 export type { Crunched } from "./crunched.ts";
-export { OmfFormatError, parseOmf } from "./omf.ts";
+export { OmfFormatError, parseOmf, writeOmf } from "./omf.ts";
 export type { OmfFixup, OmfModule, OmfPublic, OmfSegment } from "./omf.ts";
 export { PALETTE_SIZE, darkPalette, darknessBlock, episodePalette } from "./palette.ts";
 export type { Rgb } from "./palette.ts";
