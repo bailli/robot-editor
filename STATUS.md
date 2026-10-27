@@ -99,6 +99,10 @@ Files in `packages/formats/src`:
   comparison). Resource ids per episode E (0–4): `1E02` shapes, `1E04` scene, `1E05` music,
   `1E06` sound table, `1E10` German texts, `1E11` English texts (Junior and I only);
   `9900`/`9901` episode list.
+- **Text language:** the episode constructor (0x43b317) loads `1E10` and `1E11` into
+  episode +0x18 and +0x1c; without `1E11` both hold the German texts. Lookups pick the
+  table by the index at 0x4c5d84 (e.g. 0x408e22); 20 reads, no direct write found, so
+  where the language is set is open.
 - **CRUNCHED** texts decode completely (all 15) and are encoded again (`crunch`): the 90
   most frequent characters in the table (the originals' order of equally frequent ones is
   not reproduced, the code lengths and sizes are). The game reads bytes until the
@@ -892,12 +896,14 @@ stands, decided 2026-10-27; details in the sections named.
   its rooms uses (not checked). Copied shapes keep their colour indices, and palettes
   differ per episode (remap if it matters). Some class code checks the episode number
   (e.g. describe method 0x4145b0): every class needs a try in its new episode.
-- **Next, in order:** (1) the English texts for the oracles in Junior (only German
-  ones were copied; class table entries are done: `withClassEntries`); (2) circuits
-  in episode III as the next pilot (many classes: letters, wires, gates, nodes);
-  (3) the mod format and the editor's use of it; (4) if wanted, oracles that vanish
-  after north and east in Junior too, a code patch (episode flags 0x4000/0x8000, only
-  II's constructor sets them).
+- **Next, in order:** (1) circuits in episode III as the next pilot (many classes:
+  letters, wires, gates, nodes); (2) the mod format and the editor's use of it; (3) if
+  wanted, oracles that vanish after north and east in Junior too, a code patch (episode
+  flags 0x4000/0x8000, only II's constructor sets them).
+- **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
+  English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
+  English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
+  945), better carried by the mod format.
 
 ## Open items and leads
 
