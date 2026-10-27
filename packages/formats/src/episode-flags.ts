@@ -8,18 +8,25 @@
  *   III    0x40b0f5  0d imm32      or eax, 0x75ce0533
  *   IV     0x40d472  0d imm32      or eax, 0x22312ccd
  *
- * Bits the code is known to read: 0x20 robots keep their sprite's colours (STATUS,
- * actors), 0x400 the arrival at an edge stays on the edge cell (0x44c5a0), 0x4000 an
+ * Bits the code is known to read: 0x20 robots keep their sprite's colours (only III's),
+ * 0x400 the arrival at an edge stays on the edge cell (0x44c5a0), 0x2000 the
+ * Teleport() point is cleared on entering a room (0x439426; all but III), 0x4000 an
  * oracle vanishes after sending the hero (north), 0x8000 after its hint (east; both
- * 0x412ae0, only II's), 0x80000 doors in need no key (0x413d30, only III's).
+ * 0x412ae0, only II's), 0x40000 changes what a door cell in a state from 9 on does in
+ * rooms from 100 on (0x413d45, not traced), 0x80000 doors in need no key (0x413daa,
+ * only III's).
  * withEpisodeFlags changes the constant.
  */
 import { type PeImage, parsePe, readVa } from "./pe.ts";
 
+/** Robots keep their `_Aliens` sprite's colours instead of three random ones (0x445c4b). */
+export const ROBOTS_KEEP_COLOURS = 0x20;
 /** An oracle walked into northwards vanishes once it has sent the hero. */
 export const ORACLE_VANISHES_NORTH = 0x4000;
 /** An oracle walked into eastwards vanishes once it has shown its hint. */
 export const ORACLE_VANISHES_EAST = 0x8000;
+/** Doors into buildings take the hero without the key 0x0f15 (0x413daa). */
+export const DOORS_NEED_NO_KEY = 0x80000;
 
 /** Per episode (0 = Junior): the OR instruction and its opcode bytes before the imm32. */
 const FLAGS_CODE: readonly (readonly [va: number, opcode: readonly number[]])[] = [

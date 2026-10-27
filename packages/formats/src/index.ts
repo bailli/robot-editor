@@ -221,8 +221,10 @@ export {
 } from "./start.ts";
 export type { EpisodeStart } from "./start.ts";
 export {
+  DOORS_NEED_NO_KEY,
   ORACLE_VANISHES_EAST,
   ORACLE_VANISHES_NORTH,
+  ROBOTS_KEEP_COLOURS,
   readEpisodeFlags,
   withEpisodeFlags,
 } from "./episode-flags.ts";

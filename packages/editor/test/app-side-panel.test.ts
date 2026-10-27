@@ -330,7 +330,7 @@ test("the Episode tab sets the rucksack and the oracles' flags, undoably; the mo
   app.showEpisode(0, 43);
   await page.getByRole("tab", { name: "Episode" }).click();
   const rucksack = page.getByRole("region", { name: "Rucksack" });
-  const oracles = page.getByRole("region", { name: "Oracles" });
+  const oracles = page.getByRole("region", { name: "Flags" });
   await expect.element(rucksack.getByLabelText("Capacity")).toHaveValue(38);
   await userEvent.fill(rucksack.getByLabelText("Capacity"), "12");
   await userEvent.keyboard("{Enter}");
@@ -343,12 +343,17 @@ test("the Episode tab sets the rucksack and the oracles' flags, undoably; the mo
   await oracles.getByRole("checkbox", { name: /sending the hero/ }).click();
   await oracles.getByRole("checkbox", { name: /their hint/ }).click();
   expect(app.editor?.episodeFlags(0)).toBe(0x4801e946);
+  await oracles.getByRole("checkbox", { name: /without the key/ }).click();
+  await oracles.getByRole("checkbox", { name: /sprite's colours/ }).click();
+  expect(app.editor?.episodeFlags(0)).toBe(0x4809e966);
   expect(tab("episode")).toMatchObject({ badge: "●" });
   expect(tab("episode").title).toMatch(/a rucksack of 12, settings edited/);
   const saved = parseMod(app.saveMod() ?? "");
   expect(saved.changes.rucksack).toEqual([{ episode: 0, capacity: 12 }]);
-  expect(saved.changes.flags).toEqual([{ episode: 0, flags: 0x4801e946 }]);
-  for (let i = 0; i < 3; i++) app.undo();
+  expect(saved.changes.flags).toEqual([{ episode: 0, flags: 0x4809e966 }]);
+  await oracles.getByRole("checkbox", { name: /without the key/ }).click();
+  await oracles.getByRole("checkbox", { name: /sprite's colours/ }).click();
+  for (let i = 0; i < 7; i++) app.undo();
   expect(app.editor?.rucksack(0)).toBe(38);
   expect(app.editor?.episodeFlags(0)).toBe(0x48012946);
   await expect

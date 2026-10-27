@@ -348,9 +348,16 @@ Files in `packages/formats/src`:
   0x48012946 at 0x40e042, I 0x48012b46 at 0x408ca2, II 0x4901ed46 at 0x409ec2, III
   0x75ce0533 at 0x40b0f6, IV 0x22312ccd at 0x40d473; `readEpisodeFlags`,
   `withEpisodeFlags`). Bits the code is known to read: 0x20 robots keep their sprite's
-  colours (only III), 0x400 the arrival at an edge (see open item 5), 0x4000 and 0x8000
-  oracles vanish after north and after east (only II; **verified** for Junior),
-  0x80000 doors into buildings need no key (only III). The others are not traced.
+  colours (only III; else the constructor 0x445bd0 rolls three distinct colours 8–14
+  into actor +0x30), 0x400 the arrival at an edge (see open item 5), 0x2000 the
+  Teleport() point is cleared on entering a room (all but III), 0x4000 and 0x8000
+  oracles vanish after north and after east (only II), 0x40000 something about door
+  cells in states from 9 on in rooms from 100 on (0x413d45, not traced), 0x80000 doors
+  into buildings need no key (only III). The others are not traced. **Verified under
+  Wine** (`pnpm test:game`): the oracle bits in Junior (see the oracles); with 0x20
+  Junior's robots have their sprites' colours, without it three distinct ones from
+  8–14; with 0x80000 the hero walks through episode II room 15's door into 115 without
+  the key, without it he stays in 15.
 
 ### Room connections (`exits.ts`)
 
@@ -1056,11 +1063,14 @@ Supported:
   copy already, which it then replaces); "Copy". Each one undo step, which makes a new
   base (`Editor.setTileType`): text entries edited before stay as they are, the copied
   description comes along; refused: a copy of a copy, a type without a class, a type
-  an edited dealer then lacks. The tiles, names and drawings follow at once
+  an edited dealer then lacks. The tiles, names and drawings follow at once. **Tried in
+  the game** (by hand): Junior's book copied to IV and placed next to the start, taken:
+  its first-take box came and its points were added
 - the episode's settings (tab Episode, `episode-view.ts`): the rucksack's capacity
-  (1–250) and whether oracles vanish after north and after east (the episode flags
-  0x4000, 0x8000), one undo step each, saved into the exe and the mod (`rucksack`,
-  `flags`)
+  (1–250) and the rules, episode flags as checkboxes: oracles vanish after north, after
+  east (0x4000, 0x8000), doors into buildings open without the key (0x80000), robots
+  keep their sprite's colours (0x20); one undo step each, saved into the exe and the
+  mod (`rucksack`, `flags`)
 - the episode's start (tab Episode, `episode-view.ts`): the room and the hero's cell
   there; "Start here" sets the shown room and the picked cell (Select tool, one cell,
   or Inspect; else the start's cell), "Original start" goes back to the exe's; one undo

@@ -582,6 +582,76 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     }, 60_000);
   }
 
+  for (const own of [false, true]) {
+    test(`Junior's robots ${own ? "keep their sprite's colours with flag 0x20" : "roll colours"}`, async () => {
+      const start = readEpisodeStart(game.image, 0);
+      const area = { x0: 10, x1: 20, y0: 5, y1: 5 };
+      const flags = readEpisodeFlags(game.image, 0) | (own ? 0x20 : 0);
+      const mod = startRoomMod(game, 0, { flags: [{ episode: 0, flags }] }, area, start, (set) => {
+        for (const x of [10, 13, 16, 19]) set(x, 5, 0x02);
+      });
+      const robots = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(0);
+          // the actors (0x53e9a8, linked by +4): robots (class 2) with their sprite (+0x28)
+          // and colours (+0x30, rolled by the constructor 0x445bd0)
+          const found: { sprite: number; colours: number[] }[] = [];
+          for (let p = await d.u32(0x53e9a8); p !== 0 && found.length < 50;) {
+            const bytes = await d.peek(p, 0x34);
+            const view = new DataView(bytes.buffer, bytes.byteOffset);
+            if (view.getUint16(0x16, true) === 2) {
+              found.push({
+                sprite: view.getUint32(0x28, true),
+                colours: [...bytes.subarray(0x30, 0x33)],
+              });
+            }
+            p = view.getUint32(4, true);
+          }
+          return found;
+        }),
+      );
+      assert.equal(robots.length, 4);
+      const aliens = game.aliens(0);
+      for (const { sprite, colours } of robots) {
+        if (own) assert.deepEqual(colours, aliens[sprite]?.colours);
+        else {
+          assert.equal(new Set(colours).size, 3, "three distinct colours");
+          assert.ok(
+            colours.every((c) => c >= 8 && c <= 14),
+            `${String(colours)} in 8-14`,
+          );
+        }
+      }
+    }, 60_000);
+  }
+
+  for (const noKey of [false, true]) {
+    test(`episode II: a door in ${noKey ? "takes the hero without the key with flag 0x80000" : "wants the key"}`, async () => {
+      const ep = game.episode(2);
+      const room = calmRoom(game.room(2, 15), ep.classes);
+      const flags = readEpisodeFlags(game.image, 2) | (noKey ? 0x80000 : 0);
+      const mod: Mod = {
+        ...emptyMod(game.image.data),
+        changes: {
+          ...NO_CHANGES,
+          rooms: [{ episode: 2, id: 15, room }],
+          // north of the house's door (26, 8), state 7: entered walking south
+          start: [{ episode: 2, room: 15, x: 26, y: 7 }],
+          flags: [{ episode: 2, flags }],
+        },
+      };
+      const hero = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(2);
+          await d.hold("down", 40);
+          await d.run(100);
+          return d.hero();
+        }),
+      );
+      assert.equal(hero?.room, noKey ? 115 : 15);
+    }, 60_000);
+  }
+
   test("episode III: the rucksack holds a weight below its capacity", async () => {
     // shovel, hammer, axe, bucket, sextant: weight 2 each (their shapes' frame word)
     const items = [0x69, 0x62, 0x61, 0x67, 0x23];

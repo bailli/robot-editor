@@ -1,8 +1,10 @@
 import {
+  DOORS_NEED_NO_KEY,
   type EpisodeStart,
   MAX_RUCKSACK,
   ORACLE_VANISHES_EAST,
   ORACLE_VANISHES_NORTH,
+  ROBOTS_KEEP_COLOURS,
 } from "@robot/formats";
 
 import { patchChildren } from "./patch.ts";
@@ -57,21 +59,41 @@ function button(text: string, title: string, click: () => void): HTMLButtonEleme
 const cell = (start: EpisodeStart) => `(${start.x}, ${start.y})`;
 
 /** The oracle flags the view offers, with their labels. */
-const ORACLE_FLAGS = [
-  [ORACLE_VANISHES_NORTH, "Vanish after sending the hero (north)"],
-  [ORACLE_VANISHES_EAST, "Vanish after their hint (east)"],
+/** The episode flags the view offers: the bit, its label and what it does. */
+const FLAGS = [
+  [
+    ORACLE_VANISHES_NORTH,
+    "Oracles vanish after sending the hero (north)",
+    "Only episode II's do. Oracles that stay can send the hero again and again.",
+  ],
+  [
+    ORACLE_VANISHES_EAST,
+    "Oracles vanish after their hint (east)",
+    "Only episode II's do. Oracles that stay give their hint again and again.",
+  ],
+  [
+    DOORS_NEED_NO_KEY,
+    "Doors into buildings open without the key",
+    "Only episode III's do; elsewhere the hero needs the key (0x0f15) to go in.",
+  ],
+  [
+    ROBOTS_KEEP_COLOURS,
+    "Robots keep their sprite's colours",
+    "Only episode III's do; elsewhere each robot gets three random colours.",
+  ],
 ] as const;
 
 /**
  * The Episode tab's settings: the room the episode starts in and the hero's cell there
- * (set to the shown room and the picked cell), the rucksack's capacity and whether
- * oracles vanish. Patched in place (patchChildren), so focus stays.
+ * (set to the shown room and the picked cell), the rucksack's capacity and the episode
+ * flags (oracles that vanish, doors without the key, robots' colours). Patched in place
+ * (patchChildren), so focus stays.
  */
 export class EpisodeView {
   readonly element = element("div", "episode-view");
   private readonly start = element("section", "start-view record-view");
   private readonly rucksack = element("section", "start-view record-view");
-  private readonly oracles = element("section", "start-view record-view");
+  private readonly flags = element("section", "start-view record-view");
   private readonly events: EpisodeViewEvents;
   private context: EpisodeContext | undefined;
 
@@ -79,15 +101,15 @@ export class EpisodeView {
     this.events = events;
     this.start.setAttribute("aria-label", "Start");
     this.rucksack.setAttribute("aria-label", "Rucksack");
-    this.oracles.setAttribute("aria-label", "Oracles");
-    this.element.append(this.start, this.rucksack, this.oracles);
+    this.flags.setAttribute("aria-label", "Flags");
+    this.element.append(this.start, this.rucksack, this.flags);
   }
 
   show(context: EpisodeContext): void {
     this.context = context;
     patchChildren(this.start, this.renderStart(context));
     patchChildren(this.rucksack, this.renderRucksack(context));
-    patchChildren(this.oracles, this.renderOracles(context));
+    patchChildren(this.flags, this.renderFlags(context));
   }
 
   private renderStart(context: EpisodeContext): Node[] {
@@ -164,8 +186,8 @@ export class EpisodeView {
     ];
   }
 
-  private renderOracles(context: EpisodeContext): Node[] {
-    const rows = ORACLE_FLAGS.map(([flag, label]) => {
+  private renderFlags(context: EpisodeContext): Node[] {
+    const rows = FLAGS.map(([flag, label, title]) => {
       const box = element("input");
       box.type = "checkbox";
       box.checked = (context.flags & flag) !== 0;
@@ -176,17 +198,18 @@ export class EpisodeView {
       });
       const row = element("label", "record-row");
       row.dataset["key"] = String(flag);
+      row.title = `${title} (flag 0x${flag.toString(16)})`;
       const edited = ((context.flags ^ context.originalFlags) & flag) !== 0;
       row.append(box, element("span", undefined, `${label}${edited ? " (edited)" : ""}`));
       return row;
     });
     return [
-      element("h3", undefined, "Oracles"),
+      element("h3", undefined, "Rules"),
       ...rows,
       element(
         "p",
         "hint",
-        "Only episode II’s oracles vanish once used (episode flags 0x4000 and 0x8000). Oracles that stay can be used again and again, to be sent or hear the hint once more, before the hero turns one into its object (west).",
+        "Flags the episode’s constructor sets. Only II’s oracles vanish once used; oracles that stay can be used again and again, to be sent or hear the hint once more, before the hero turns one into its object (west). Only III’s doors open without the key and only III’s robots keep their colours.",
       ),
     ];
   }
