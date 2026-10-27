@@ -1,5 +1,7 @@
 import { CIRCUIT_PIECES, type CircuitNode, ROOM_WIDTH, type RoomCircuit } from "@robot/formats";
 
+import { patchChildren } from "./patch.ts";
+
 export interface CircuitViewEvents {
   /** Selects a cell. */
   select(cell: number): void;
@@ -61,6 +63,8 @@ export class CircuitView {
   readonly element = element("section", "circuit-view");
   private readonly events: CircuitViewEvents;
   private readonly toggle = element("input");
+  /** Kept with its checkbox, which keeps the focus across refreshes. */
+  private readonly toggleLabel = element("label", "circuit-toggle");
 
   constructor(events: CircuitViewEvents) {
     this.events = events;
@@ -70,6 +74,7 @@ export class CircuitView {
     this.toggle.addEventListener("change", () => {
       this.events.signals(this.toggle.checked);
     });
+    this.toggleLabel.append(this.toggle, " Show the signals in the room");
   }
 
   /** Whether the signals are to be shown in the room. */
@@ -97,10 +102,8 @@ export class CircuitView {
         ),
       );
     } else {
-      const toggle = element("label", "circuit-toggle");
-      toggle.append(this.toggle, " Show the signals in the room");
       parts.push(
-        toggle,
+        this.toggleLabel,
         element(
           "p",
           "hint",
@@ -128,6 +131,7 @@ export class CircuitView {
       for (const problem of circuit.problems) {
         const item = element("li", problem.severity);
         const go = element("button", undefined, where(problem.cell));
+        go.dataset["key"] = String(problem.cell); // its listener selects it (patchChildren)
         go.title = "Select the cell";
         go.addEventListener("click", () => {
           this.events.select(problem.cell);
@@ -138,7 +142,8 @@ export class CircuitView {
       parts.push(list);
     }
     parts.push(...this.palette(context));
-    this.element.replaceChildren(...parts);
+    // patched: buttons and the checkbox keep the focus when the circuit is evaluated again
+    patchChildren(this.element, parts);
   }
 
   private nodeRow(node: CircuitNode, context: CircuitContext): HTMLElement {
@@ -156,6 +161,7 @@ export class CircuitView {
       undefined,
       `${node.final ? "Final node" : "Node"} ${node.slot} ${where(node.cell)}`,
     );
+    go.dataset["key"] = String(node.cell);
     go.title = "Select the node and open its record";
     go.addEventListener("click", () => {
       this.events.open(node.cell);
@@ -193,6 +199,7 @@ export class CircuitView {
     ];
     for (const piece of pieces) {
       const button = element("button", "circuit-piece");
+      button.dataset["key"] = String(piece.value);
       button.title = `${piece.name}: ${piece.text}. Click to paint with it`;
       button.append(this.events.preview(piece.value), element("span", undefined, piece.name));
       button.addEventListener("click", () => {

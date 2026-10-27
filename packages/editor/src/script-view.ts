@@ -387,6 +387,8 @@ export class ScriptView {
    */
   show(source: string, room: string): void {
     const same = room === this.room;
+    // the same script stays as it is shown (scrolled, the info line)
+    if (same && !this.editing && source === this.source && this.code) return;
     this.source = source;
     this.room = room;
     if (same && this.editing) {

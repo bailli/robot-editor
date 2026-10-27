@@ -661,7 +661,9 @@ describe("circuits", () => {
     );
     // its bulb is lit in the room while the signals are shown, as the game will light it
     const lit = app.view.pixels();
-    await circuit().getByRole("checkbox", { name: "Show the signals in the room" }).click();
+    const signals = circuit().getByRole("checkbox", { name: "Show the signals in the room" });
+    await signals.click();
+    expect(document.activeElement).toBe(signals.element()); // Space toggles it again
     const at = firstDifference(lit, app.view.pixels()) / 4;
     expect([Math.floor((at % 640) / 16), Math.floor(at / 640 / 12)]).toEqual([4, 3]);
     await circuit().getByRole("checkbox", { name: "Show the signals in the room" }).click();
@@ -837,6 +839,10 @@ test("the script explains itself and can be edited", async () => {
   expect(number?.getAttribute("title")).toBe(
     `3 pages, one after another:\n${pages.map((p, i) => `[${i + 1}/3] ${p}`).join("\n\n")}`,
   );
+  // other edits of the room leave the script as it is shown (scrolled, the info line)
+  app.setDark(true);
+  expect(document.querySelector(".script-source")).toBe(source);
+  app.setDark(false);
   await scriptView().getByRole("button", { name: "Bytecode" }).click();
   expect(document.querySelector(".script-code")?.textContent).toMatch(/call Message/);
 
