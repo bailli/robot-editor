@@ -187,6 +187,8 @@ export {
   ROOM_HEIGHT,
   ROOM_WIDTH,
   SceneFormatError,
+  parseRoom,
+  serializeRoom,
   serializeScene,
 } from "./scene.ts";
 export type { LogicRecord, Room, RoomTag } from "./scene.ts";
@@ -276,3 +278,28 @@ export type {
   RoomCircuit,
   Signal,
 } from "./circuits.ts";
+export {
+  MOD_FORMAT,
+  ModError,
+  NO_CHANGES,
+  applyMod,
+  applyPatch,
+  checkMod,
+  compileMod,
+  emptyMod,
+  modJson,
+  parseMod,
+} from "./mod.ts";
+export type {
+  CodeChange,
+  Mod,
+  ModChanges,
+  ModPatch,
+  PatchResource,
+  PatchWrite,
+  RoomChange,
+  StartChange,
+  TextChange,
+  TileTypesChange,
+} from "./mod.ts";
+export { sha256 } from "./sha256.ts";

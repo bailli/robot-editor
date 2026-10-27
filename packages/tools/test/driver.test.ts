@@ -9,13 +9,16 @@ import { describe, test } from "vitest";
 import {
   Game,
   LOGIC_CELL,
+  type Mod,
+  NO_CHANGES,
   ROOM_CELLS,
   ROOM_WIDTH,
   type Room,
   STAIRS_CLASS,
+  applyMod,
+  emptyMod,
   readEpisodeStart,
   roomCircuit,
-  withEpisodeStart,
   withExitMode,
 } from "@robot/formats";
 
@@ -76,17 +79,23 @@ const MAP = 0x5197f8 + 0xc;
 /**
  * Episode III with episode I's circuit pieces (LETTER, GATE, BULB at III's free types
  * 0x40, 0x59, 0x43) and three circuits in room 41, west of a spare piece the hero takes:
- * AND, XOR then NOT, NAND, each of 1 and 1, the node's stairs east of it. Returns the
- * exe and the stairs rows (the nodes' rows) that the circuit lights.
+ * AND, XOR then NOT, NAND, each of 1 and 1, the node's stairs east of it; the hero
+ * starts west of the piece. Made as a mod; returns the exe and the stairs rows (the
+ * nodes' rows) that the circuit lights.
  */
 function circuitsInEpisodeIII(game: Game): { exe: Uint8Array; lit: number[] } {
   const [LETTER, GATE] = [0x40, 0x59];
-  const types = new Map([
-    [LETTER, 0x25],
-    [GATE, 0x42],
-    [0x43, 0x43],
-  ]);
-  const patched = new Game(game.withTileTypes(3, 1, types));
+  const tileTypes = {
+    episode: 3,
+    from: 1,
+    types: [
+      [LETTER, 0x25],
+      [0x43, 0x43],
+      [GATE, 0x42],
+    ] as const,
+  };
+  // the room is made with the classes the mod gives episode III
+  const patched = new Game(game.withTileTypes(3, 1, new Map(tileTypes.types)));
   const ep = patched.episode(3);
   const room = calmRoom(patched.room(3, 41), ep.classes);
   const base = room.base.slice();
@@ -120,13 +129,19 @@ function circuitsInEpisodeIII(game: Game): { exe: Uint8Array; lit: number[] } {
   circuit(22, [NAND]);
   base[at(4, 16)] = piece(ACROSS);
   const edited: Room = { ...room, base, overlay, records };
-  const rooms = ep.rooms.map((r) => (r.id === 41 ? edited : r));
-  const scene = new Game(patched.withScene(3, rooms));
   const lit = roomCircuit(edited, ep.classes).nodes.flatMap((n) =>
     n.signal === 1 ? [Math.floor(n.cell / ROOM_WIDTH)] : [],
   );
-  const start = { ...readEpisodeStart(scene.image, 3), x: 2, y: 16 };
-  return { exe: withEpisodeStart(scene.image, 3, start), lit };
+  const mod: Mod = {
+    ...emptyMod(game.image.data, "circuits in episode III"),
+    changes: {
+      ...NO_CHANGES,
+      tileTypes: [tileTypes],
+      rooms: [{ episode: 3, id: 41, room: edited }],
+      start: [{ episode: 3, room: 41, x: 2, y: 16 }],
+    },
+  };
+  return { exe: applyMod(game.image, mod), lit };
 }
 
 describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () => {

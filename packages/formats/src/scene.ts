@@ -304,6 +304,21 @@ export function serializeScene(rooms: readonly Room[]): Uint8Array {
   return w.result();
 }
 
+/** One room as a scene holds it (id, tags, map), without the scene's signature. */
+export function serializeRoom(room: Room): Uint8Array {
+  return serializeScene([room]).slice(HEADER_SIZE);
+}
+
+/** The room serializeRoom wrote. */
+export function parseRoom(data: Uint8Array): Room {
+  const scene = new Uint8Array(HEADER_SIZE + data.length);
+  scene.set(SIGNATURE);
+  scene.set(data, HEADER_SIZE);
+  const rooms = parseScene(scene);
+  if (rooms.length !== 1) throw new SceneFormatError(`${rooms.length} rooms instead of one`);
+  return rooms[0];
+}
+
 /** Record type whose cell is at data offset 4 (the others: offset 2). */
 const CELL_AT_4 = 1;
 

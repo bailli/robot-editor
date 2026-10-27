@@ -88,6 +88,7 @@ Files in `packages/formats/src`:
 | `records.ts`                 | what logic records do                                                                         |
 | `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                |
 | `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`); patching them    |
+| `mod.ts`, `sha256.ts`        | mods: keyed changes to the pristine exe, their JSON file, compiled to a patch and applied     |
 | `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
 | `game.ts`                    | `Game`: loads an exe, episodes lazily, saves scenes, texts, tile types from other episodes    |
 
@@ -919,8 +920,8 @@ stands, decided 2026-10-27; details in the sections named.
   them with III's colours, as we do; remap if it matters). Some class code checks the
   episode number (e.g. describe method 0x4145b0): every class needs a try in its new
   episode.
-- **Next, in order:** (1) the mod format and the editor's use of it (tile types from
-  other episodes as one kind of change, `withTileTypes`); (2) if wanted, oracles that
+- **Next, in order:** (1) the editor's use of the mod format (see below; `mod.ts` is
+  done); (2) if wanted, oracles that
   vanish after north and east in Junior too, a code patch (episode flags
   0x4000/0x8000, only II's constructor sets them).
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
@@ -928,16 +929,21 @@ stands, decided 2026-10-27; details in the sections named.
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
   945), better carried by the mod format.
 
-### The mod format (design, not implemented)
+### The mod format
 
-Drafted 2026-10-27 from the two pilots and the editor as it is; open points at the end.
+Drafted 2026-10-27 from the two pilots and the editor as it is. **Implemented** in
+`mod.ts` (all kinds, the file, compiling and applying; tested, and the circuits pilot's
+game test now runs an exe made from a mod) and `robot mod apply`; **not yet** the
+editor's use of it and the proxy loader.
 
 - **A mod is a set of keyed changes, not a log.** Each change has a key (below) and
   appears once; changing the same thing again replaces it. Applying a mod replays the
   changes through the functions the editor and the pilots already use, in a **fixed
   order of kinds**, so the file needs no ordering and a later kind wins over an earlier
-  one (a text change beats the description `tileTypes` copied). Later kinds as needed:
-  event entries (`withEventEntries`), shapes of the mod's own.
+  one (a text change beats the description `tileTypes` copied). Within a kind the
+  changes apply in key order, the file's, so the result does not depend on the order
+  they were made in (new text entries, sound lines and shapes are appended). Later
+  kinds as needed: event entries (`withEventEntries`), shapes of the mod's own.
   1. `tileTypes` (key: episode, target type): `{ episode, from, types: [[to, of], …] }`
      → `Game.withTileTypes`.
   2. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
@@ -948,7 +954,8 @@ Drafted 2026-10-27 from the two pilots and the editor as it is; open points at t
      resource compose.
   4. `rooms` (key: episode, room id): the room as its SCNV3 bytes (id, tags with the
      script, map, records; as `serializeScene` writes one room), base64; `null` removes
-     the room. Others keep their place, new ones are appended in id order → `withScene`.
+     the room. Others keep their place; once a room is added or removed, the episode's
+     rooms are sorted by id, as the editor keeps them → `withScene`.
   5. `start` (key: episode): `{ episode, room, x, y }` → `withEpisodeStart`.
 - **File:** one JSON file (`*.robotmod.json`) with `format` (1), `name`, `author`,
   `description`, `base` (`{ sha256 }`) and `changes` (`tileTypes`, `code`, `texts`,
@@ -968,10 +975,16 @@ Drafted 2026-10-27 from the two pilots and the editor as it is; open points at t
   `SizeofResource`, `LoadResource` and `LockResource` (imported; every resource read
   goes through the opener 0x430d20) to serve the replaced resources. The compiled patch
   holds whole original resources, so it stays on the user's machine; only the mod is
-  shared. Not checked yet: whether anything reads the exe file itself.
-- **Code:** `packages/formats/src/mod.ts`: the types, `parseMod` (validation:
-  `textEntryProblem`, room sizes, value ranges, with the change's key in the message),
-  `compileMod(image, mod)` and `applyPatch(image, patch)`; on the command line
+  shared. The game reads its own file only for its date (0x4058c0, `GetFileTime`, for
+  system info) and version info (0x428b20, `GetFileVersionInfoA`), neither of which a
+  mod changes; its other `CreateFileA` calls open loose resource files, savegames and
+  screenshots by name.
+- **Code:** `mod.ts`: the types, `checkMod` (value ranges, `textEntryProblem`, keys
+  changed twice; messages name the change), `parseMod` and `modJson` (the file; arrays of
+  numbers on one line), `compileMod(image, mod)` (checks the base, applies the changes
+  through the editing functions, then diffs: writes outside `.rsrc`, changed resources),
+  `applyPatch` and `applyMod`; `sha256.ts` (synchronous, for the browser too);
+  `serializeRoom`/`parseRoom` in `scene.ts`. On the command line
   `robot mod apply MOD OUT.exe`, later `robot mod compile MOD OUT.patch` for the proxy.
 - **The editor** works on two images: the **base** (pristine + kinds 1–2, the parts the
   editor does not edit) and the **edited** state on top (kinds 3–5, what it edits

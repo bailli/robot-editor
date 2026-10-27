@@ -62,6 +62,7 @@ makes a static build in `packages/editor/dist/`.
     pnpm robot script EPISODE ROOM SOURCE OUT.exe           exe whose ROOM runs the script in SOURCE
     pnpm robot start EPISODE ROOM OUT.exe [--at X,Y]        exe whose episode starts in ROOM
     pnpm robot play EPISODE ROOM [--at X,Y] [--mute]        play the episode from ROOM (needs Wine)
+    pnpm robot mod apply MOD OUT.exe                        the exe a mod (JSON, see STATUS) makes
 
 ## Reference screenshots from the real game
 

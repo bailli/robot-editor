@@ -14,6 +14,7 @@
  *   robot script EPISODE ROOM SOURCE OUT.exe         exe whose ROOM runs the script in SOURCE
  *   robot start EPISODE ROOM OUT.exe [--at X,Y]      exe whose episode starts in ROOM (the hero at X, Y)
  *   robot play EPISODE ROOM [--at X,Y] [--mute]      play the episode from ROOM in the game (Wine)
+ *   robot mod apply MOD OUT.exe                      the exe a mod (JSON, see mod.ts) makes
  *
  * Options: --exe PATH (default reference/GameOfRobot.exe).
  */
@@ -23,8 +24,11 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import {
+  ModError,
+  applyMod,
   disassemble,
   parseCompiledScript,
+  parseMod,
   readEpisodeStart,
   roomCompiledScript,
   roomScript,
@@ -65,7 +69,7 @@ const game = () => loadGame(values.exe);
 
 function usage(): never {
   console.error(
-    "usage: robot render|compare|eval|patch|shots|script|start|play ... (see src/robot.ts)",
+    "usage: robot render|compare|eval|patch|shots|script|start|play|mod ... (see src/robot.ts)",
   );
   process.exit(2);
 }
@@ -226,6 +230,24 @@ switch (command) {
       stdio: "inherit",
     });
     process.exitCode = result.status ?? 1;
+    break;
+  }
+  case "mod": {
+    if (str(0) !== "apply") usage();
+    const [source, out] = [str(1), str(2)];
+    try {
+      const mod = parseMod(readFileSync(source, "utf8"));
+      writeFileSync(out, applyMod(game().image, mod));
+      const { tileTypes, code, texts, rooms, start } = mod.changes;
+      console.log(
+        `${out}: ${tileTypes.length} tile type changes, ${code.length} code, ` +
+          `${texts.length} texts, ${rooms.length} rooms, ${start.length} starts`,
+      );
+    } catch (error) {
+      if (!(error instanceof ModError)) throw error;
+      console.error(`${source}: ${error.message}`);
+      process.exitCode = 1;
+    }
     break;
   }
   default:
