@@ -238,7 +238,8 @@ Files in `packages/formats/src`:
   40,950), kind 5 = the **background music** (8 characters, +0x1c: a piece of the
   episode's MUSIC resource 1E05, started looping on entering, 0x4393e8; a piece already
   playing goes on, no tag or an unknown name (episode III's title room 1: `HUMBA`) is
-  silence; Junior and I have none), kind 6 = length-prefixed payload (value 2 = compiled script, the only
+  silence; Junior and I have none; **verified by playing:** Junior's start room given
+  `INTRO` played it at the start and again on coming back into the room), kind 6 = length-prefixed payload (value 2 = compiled script, the only
   one read; 1 = script source, 3 = a Unix time 1993–2008 in every room, probably when the
   original editor saved it). Kind 3 (+0x16) holds two **episode III flags** (rooms
   136, 143–146, 154, 155; the other episodes ignore it): bit 0 (only room 144) builds the
@@ -1207,11 +1208,10 @@ Roughly by value for the editor.
    RIGHT and the wand words. Possibly worth adding to the compiler: `while`,
    `break`, compound assignments (they compile to existing operations).
 4. **Room tags:** all kinds decoded (see room tags above) and editable. Not tried in the
-   game: room music in Junior and I (their MUSIC resources have pieces, their rooms none), bit 0 of
+   game: bit 0 of
    kind 3 (the labyrinth: entering room 144 from 146 generates a new maze of teleporters,
    0x40c910; the booklet confirms the labyrinth "changes its size and its paths"; a test
-   starting in 146 could not reach its teleporters, which lie in the cave wall), the
-   music (the harness is silent; listen with `robot play`). The word 0x4fe0c0 each episode's start method sets is probably the
+   starting in 146 could not reach its teleporters, which lie in the cave wall). The word 0x4fe0c0 each episode's start method sets is probably the
    number of inventory slots (50, 38, 60, 200, 120; compared by the debug tracer
    0x439170).
 5. **Rooms not reached** by any connection the reachability analysis models: only
