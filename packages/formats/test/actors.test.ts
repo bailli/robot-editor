@@ -6,6 +6,7 @@ import {
   ACTOR_CLASS_NAMES,
   type ScriptActors,
   cellActorSource,
+  leavingRobots,
   randomPlacement,
   randomRobotColours,
   recordActorKind,
@@ -18,6 +19,7 @@ import {
 import { ROBOTS_KEEP_COLOURS, readEpisodeFlags } from "../src/episode-flags.ts";
 import { roomScript } from "../src/exits.ts";
 import { EPISODES, Game } from "../src/game.ts";
+import { renderCell, shownCells } from "../src/render.ts";
 import { ROOM_WIDTH, type Room } from "../src/scene.ts";
 import { exe } from "./data.ts";
 
@@ -163,6 +165,26 @@ test("robots take random colours in Junior, I and II, their sprite's in III and 
   // three distinct ones from 8–14, drawn again while one repeats
   const draws = [9, 9, 14, 9, 8];
   expect(randomRobotColours(() => draws.shift() ?? 0)).toEqual([9, 14, 8]);
+});
+
+test("robots that leave the map on entering are not drawn: IV's tile is a ?", () => {
+  const ep = game.episode(4);
+  const room = game.room(4, 215);
+  const index = 6 * ROOM_WIDTH + 15;
+  expect(room.base[index]).toBe(0x0002);
+  expect(shownCells(room, index, ep.classes)).toEqual([0, 0, false]);
+  // the tile itself still draws its "?" (e.g. in texts)
+  expect(renderCell(0x0002, 0, ep.objects, ep.classes)).not.toEqual(
+    renderCell(0, 0, ep.objects, ep.classes),
+  );
+  // robots the game leaves in the map stay: row 0, under a robot in the same state
+  const kept = edited(4, 215, [
+    [3, 0, 0x0002],
+    [15, 6, 0x0002, "overlay"],
+  ]);
+  expect(leavingRobots(kept, 3, ep.classes)).toEqual({ base: false, overlay: false });
+  expect(leavingRobots(kept, index, ep.classes)).toEqual({ base: false, overlay: true });
+  expect(shownCells(kept, index, ep.classes)).toEqual([0x0002, 0, false]);
 });
 
 test("episode IV's cylinders only blink: no actors appear from them", () => {

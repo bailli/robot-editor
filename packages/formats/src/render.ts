@@ -1,3 +1,4 @@
+import { leavingRobots } from "./actors.ts";
 import { CIRCUIT_NODE_RECORD, GATE_CLASS, nodeBulb } from "./circuits.ts";
 import { type EpisodeClasses, FrameMethod, type ObjectClass } from "./classes.ts";
 import { backdropRoomId } from "./episode-methods.ts";
@@ -428,7 +429,9 @@ export function showsBackdrop(room: Room, index: number, classes: EpisodeClasses
 
 /**
  * The cells drawn at map position `index`: [base, overlay] of the room, logic cells
- * resolved, or of `backdrop` (backdropRoom) where the room's cell shows it (showsBackdrop). A
+ * resolved and without the robots that leave the map on entering (leavingRobots; the
+ * backdrop room is never entered, so its robots stay), or of `backdrop` (backdropRoom)
+ * where the room's cell shows it (showsBackdrop). A
  * circuit node shows its bulb as the overlay (nodeBulb; not under an overlay object,
  * which the game would draw on top of it), lit as byte 7 is or as `lit` says. A
  * teleporter with a condition adds its backing (Backing; a forbidden GATE piece then
@@ -442,8 +445,13 @@ export function shownCells(
   lit?: (index: number) => boolean | undefined,
 ): [base: number, overlay: number, fromBackdrop: boolean, backing?: Backing] {
   const cell = room.base[index] ?? 0;
-  const base = resolveCell(room, cell);
-  const overlay = resolveCell(room, room.overlay[index] ?? 0);
+  let base = resolveCell(room, cell);
+  let overlay = resolveCell(room, room.overlay[index] ?? 0);
+  if (classes) {
+    const leaving = leavingRobots(room, index, classes);
+    if (leaving.base) base = 0;
+    if (leaving.overlay) overlay = 0;
+  }
   if (backdrop && classes && showsBackdrop(room, index, classes)) {
     return [
       resolveCell(backdrop, backdrop.base[index] ?? 0),
@@ -472,7 +480,9 @@ export function shownCells(
  * Base cells are drawn as tiles on colour 15, overlay cells as sprites on top, each as
  * its object class does (cellPixels; pass the episode's classes from
  * readEpisodeClasses, without them every cell uses the cellFrame rule). Not drawn:
- * actors. Logic cells show the cell their record holds (resolveCell). Class 99 cells
+ * actors; with the classes, robots that leave the map (shownCells), whose tiles draw
+ * nothing but episode IV's "?". Other actors show their tile, as the game draws them.
+ * Logic cells show the cell their record holds (resolveCell). Class 99 cells
  * show `backdrop` (backdropRoom), if given.
  */
 export function renderRoom(

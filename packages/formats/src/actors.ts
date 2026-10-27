@@ -234,26 +234,64 @@ export function roomActors(room: Room, classes: EpisodeClasses): RoomActor[] {
       // actors leave theirs in the map, 0x42b7fc)
       shown = resolveCell(room, base);
     }
-    const overlay = room.overlay[cell] ?? 0;
-    const tiles = [
-      ...((overlay & 0xff) === LOGIC_CELL || overlay === 0 ? [] : [["overlay", overlay] as const]),
-      ["base", shown] as const,
-    ];
-    // the cell as the game holds it: class | state << 8
-    const held = (value: number) => (classes.classes.get(value & 0xff)?.id ?? 0) | (value & 0xff00);
-    for (const [i, [layer, value]] of tiles.entries()) {
-      const source = cellActorSource(value, classes);
-      if (!source) break;
-      if (i > 0 && held(tiles[i - 1][1]) === held(value)) break;
-      const type = value & 0xff;
-      if (source !== "tile") {
-        actors.push({ source, cell, layer, type });
-        break;
-      }
-      actors.push({ source, cell, layer, type, order: order++ });
+    for (const actor of tileActors(room, cell, shown, classes)) {
+      actors.push(
+        actor.source === "tile" ? { ...actor, cell, order: order++ } : { ...actor, cell },
+      );
     }
   }
   return actors;
+}
+
+/**
+ * What the tiles of map position `cell` become on entering the room, from the top down
+ * (see roomActors); `shown` is the base as the game holds it (logic cells resolved).
+ */
+function tileActors(
+  room: Room,
+  cell: number,
+  shown: number,
+  classes: EpisodeClasses,
+): { source: ActorSource; layer: "base" | "overlay"; type: number }[] {
+  const overlay = room.overlay[cell] ?? 0;
+  const tiles = [
+    ...((overlay & 0xff) === LOGIC_CELL || overlay === 0 ? [] : [["overlay", overlay] as const]),
+    ["base", shown] as const,
+  ];
+  // the cell as the game holds it: class | state << 8
+  const held = (value: number) => (classes.classes.get(value & 0xff)?.id ?? 0) | (value & 0xff00);
+  const found: { source: ActorSource; layer: "base" | "overlay"; type: number }[] = [];
+  for (const [i, [layer, value]] of tiles.entries()) {
+    const source = cellActorSource(value, classes);
+    if (!source) break;
+    if (i > 0 && held(tiles[i - 1][1]) === held(value)) break;
+    found.push({ source, layer, type: value & 0xff });
+    if (source !== "tile") break;
+  }
+  return found;
+}
+
+/**
+ * The layers of map position `index` whose robot leaves the map on entering the room (it
+ * becomes an actor, roomActors), so the game no longer draws its tile there. Robots the
+ * game leaves in the map (row 0, under an object that stays, under a robot in the same
+ * state) are not among them. Only episode IV's robot tile draws something (a "?").
+ */
+export function leavingRobots(
+  room: Room,
+  index: number,
+  classes: EpisodeClasses,
+): { base: boolean; overlay: boolean } {
+  const leaving = { base: false, overlay: false };
+  if (index < ROOM_WIDTH || index >= ROOM_CELLS) return leaving;
+  const shown = resolveCell(room, room.base[index] ?? 0);
+  for (const actor of tileActors(room, index, shown, classes)) {
+    const id = classes.classes.get(actor.type)?.id;
+    if (actor.source === "tile" && id !== undefined && ROBOT_CLASSES.includes(id)) {
+      leaving[actor.layer] = true;
+    }
+  }
+  return leaving;
 }
 
 export interface ScriptActors {

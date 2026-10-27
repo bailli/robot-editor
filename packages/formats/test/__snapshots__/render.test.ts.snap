@@ -500,7 +500,7 @@ exports[`episode 3: renders of every room > episode 3 room 196 1`] = `"sha256:fc
 
 exports[`episode 4: renders of every room > episode 4 room 1 1`] = `"sha256:b1f11ea1620dd3809e9acfe958d06c9e2a0b847d1a09994c6daa6862718bb5bb"`;
 
-exports[`episode 4: renders of every room > episode 4 room 2 1`] = `"sha256:768b975f4df55df20ca2d2c7c90ca53d1daaa0786f592d6b6732c13610be2366"`;
+exports[`episode 4: renders of every room > episode 4 room 2 1`] = `"sha256:ae5b77bcb4a18003c9d73e9e2797ce43def2f312708cb10cf96ec566235200f6"`;
 
 exports[`episode 4: renders of every room > episode 4 room 43 1`] = `"sha256:a6b9eca12e05afa5826123eb417811d517604d8a3f0ae037e63c8c8b1c7541a1"`;
 
@@ -542,7 +542,7 @@ exports[`episode 4: renders of every room > episode 4 room 125 1`] = `"sha256:00
 
 exports[`episode 4: renders of every room > episode 4 room 134 1`] = `"sha256:28fdc1327a4f31f7f8539eb61310f8f5bec39d62467f834fc9e60bfe9a954d34"`;
 
-exports[`episode 4: renders of every room > episode 4 room 135 1`] = `"sha256:0f9bc0447fd3dcdc1374e5904d945596d35bbd2ba3ab4f37088a88c4a19da7c5"`;
+exports[`episode 4: renders of every room > episode 4 room 135 1`] = `"sha256:c10d7330fcc2ae23dcda9fe3fb195b5c4cc13395884a5bd229a334c7d318485c"`;
 
 exports[`episode 4: renders of every room > episode 4 room 143 1`] = `"sha256:c949e4b8b9b850318a30d92f4736312ca9eec419493718a7990685f6ccdb8398"`;
 
@@ -552,23 +552,23 @@ exports[`episode 4: renders of every room > episode 4 room 145 1`] = `"sha256:58
 
 exports[`episode 4: renders of every room > episode 4 room 151 1`] = `"sha256:3b5b52e41a417b39d265bf11814fbc62537400c2e7e049e7d75c439bf01d7358"`;
 
-exports[`episode 4: renders of every room > episode 4 room 152 1`] = `"sha256:5d5e8163f3be7acd7511b91775895cc85a8d2f58d88e7e42bdd29edd51701e73"`;
+exports[`episode 4: renders of every room > episode 4 room 152 1`] = `"sha256:44838f40b2b6e18e7f41d2276b03026c8183cb8e1231ef82574acd4db125c2a5"`;
 
 exports[`episode 4: renders of every room > episode 4 room 153 1`] = `"sha256:5b0ed19731796bd404449a82a210a072802889e444b83ceb572ae45a2610eefa"`;
 
-exports[`episode 4: renders of every room > episode 4 room 154 1`] = `"sha256:0abedfeb3ffeb06553503118849ae03b5663e72633135ec2b2c65c0c30b913e2"`;
+exports[`episode 4: renders of every room > episode 4 room 154 1`] = `"sha256:5844c6beecf61589e2a0c4cbed886b5643a3ce931c9babe668e7b90f5c7e06e4"`;
 
 exports[`episode 4: renders of every room > episode 4 room 155 1`] = `"sha256:9ddf6617496cb35d5009959046a7a5e7a97e720f8aa8da1b39c654d2008ddf1a"`;
 
-exports[`episode 4: renders of every room > episode 4 room 156 1`] = `"sha256:49796965de9ce9b78c95d92bad9062575a03813e76d01b5f3f49d18cc214aced"`;
+exports[`episode 4: renders of every room > episode 4 room 156 1`] = `"sha256:803c918df02b8f3e04e216f0d5ef1ff7ca6a5ccc754b3110bd776919f29f2dd4"`;
 
 exports[`episode 4: renders of every room > episode 4 room 157 1`] = `"sha256:964ae64b22d36184328b98dc170d2506deaebb976d3d52cf4c0bafc089c7e7ba"`;
 
-exports[`episode 4: renders of every room > episode 4 room 161 1`] = `"sha256:c7b4d04fa9e04a2bcb83482ced979523ded8c07e82f9267946ded50854b9ff95"`;
+exports[`episode 4: renders of every room > episode 4 room 161 1`] = `"sha256:9527b213c75b4435ff7e390b7dfa98264363e5aa0ea6e00202af8544c2df3dda"`;
 
-exports[`episode 4: renders of every room > episode 4 room 162 1`] = `"sha256:892959e6c044f365d6c4b676051110b20a7532a07602837e6b1b80f2c111f0a1"`;
+exports[`episode 4: renders of every room > episode 4 room 162 1`] = `"sha256:f6d057412ee5e1d5f54a27ba06733e5ac7a27cd5aca8c5cfc35a5a552aa9ac9d"`;
 
-exports[`episode 4: renders of every room > episode 4 room 163 1`] = `"sha256:629e1ce85e5ee25b262c690c38e220eb87253be75ad350d8e9ba59e5ff979f9e"`;
+exports[`episode 4: renders of every room > episode 4 room 163 1`] = `"sha256:de4438e784e4eaccfa44db343c5eeb36798422fa18181b59d086408b5a447e89"`;
 
 exports[`episode 4: renders of every room > episode 4 room 164 1`] = `"sha256:52583f7830b3a025d08cee07247eca31245de4352bd6b58eddda4682b55cdaa5"`;
 
@@ -576,9 +576,9 @@ exports[`episode 4: renders of every room > episode 4 room 165 1`] = `"sha256:1a
 
 exports[`episode 4: renders of every room > episode 4 room 166 1`] = `"sha256:9311fd7b313132e9a7b9c915644cdeec684f6406b13f6024f52f863a9ccc6712"`;
 
-exports[`episode 4: renders of every room > episode 4 room 167 1`] = `"sha256:14fbe8139d82c32bd247fd2eaa2cbcbaad15bcd65c1a1b1c0000561793af3bdc"`;
+exports[`episode 4: renders of every room > episode 4 room 167 1`] = `"sha256:e15b36e6c0f721ed0fd7b87eefb38dc19fac8c3c305a905d30f5cfa10a9573e8"`;
 
-exports[`episode 4: renders of every room > episode 4 room 171 1`] = `"sha256:fab184b1e9ce2158bc388989a6c9c1ff51ddbf4f850f79e0244142a202b9da9d"`;
+exports[`episode 4: renders of every room > episode 4 room 171 1`] = `"sha256:8d9dd747d35f35dc415e2884b8b313323ec6ce21e4fe8961ffc208aea0710033"`;
 
 exports[`episode 4: renders of every room > episode 4 room 172 1`] = `"sha256:cf9640d3651177f3cb9851ee8b513b65c6c73aa7b0e33661223f8e76907847a8"`;
 
@@ -590,7 +590,7 @@ exports[`episode 4: renders of every room > episode 4 room 175 1`] = `"sha256:02
 
 exports[`episode 4: renders of every room > episode 4 room 176 1`] = `"sha256:f5ea304b6e11a2641bd8b0281a3305c4811506250f356741ac8e347eea73c9d3"`;
 
-exports[`episode 4: renders of every room > episode 4 room 177 1`] = `"sha256:8e1e28ed2b21c0b5eb1f875767570813808031a8d460c839c0399a2acb189a64"`;
+exports[`episode 4: renders of every room > episode 4 room 177 1`] = `"sha256:a88a5cb47ca5177fe90fbaf4af3ebb7c0c2c042093a24bed00a207c95e77e098"`;
 
 exports[`episode 4: renders of every room > episode 4 room 182 1`] = `"sha256:ed6fcf4ecfc5f5d1d2e24fe86466efe145864f9b26efd2697000a5ff130fc6fe"`;
 
@@ -600,13 +600,13 @@ exports[`episode 4: renders of every room > episode 4 room 184 1`] = `"sha256:ca
 
 exports[`episode 4: renders of every room > episode 4 room 185 1`] = `"sha256:aaff8b6dfde9141afaa9116f7c39da5a98d512ba6423e257d07f79dd615d9179"`;
 
-exports[`episode 4: renders of every room > episode 4 room 186 1`] = `"sha256:534fe586fcc6158a9827f8ddf0c631e5f53ee7248a95292696939cf189d07f95"`;
+exports[`episode 4: renders of every room > episode 4 room 186 1`] = `"sha256:b4a6caba64e50573eef1ddfb9a3ca0cf38a97954df03492ba641a665e76db6d6"`;
 
 exports[`episode 4: renders of every room > episode 4 room 192 1`] = `"sha256:0723afa1d78dcde37a73e181811ca8a66745b1a32209a7311047dea834acd943"`;
 
 exports[`episode 4: renders of every room > episode 4 room 193 1`] = `"sha256:ab0db8f6798f42d0738badf679619687a8d87cfeab6ee42061d19b3f5b8cbde7"`;
 
-exports[`episode 4: renders of every room > episode 4 room 194 1`] = `"sha256:6393e0af45836c2a6ece9678af038f9ec803e1d91f4b623523ad94fd8c72563f"`;
+exports[`episode 4: renders of every room > episode 4 room 194 1`] = `"sha256:c3302d0f9e130f367f00c75e05948bb95e258e01037f7feb504a25f4882668aa"`;
 
 exports[`episode 4: renders of every room > episode 4 room 195 1`] = `"sha256:9f31297aadb77750eb7f185ea3075b2e39289af4f11779d4fec1985517bd5ec7"`;
 
@@ -614,15 +614,15 @@ exports[`episode 4: renders of every room > episode 4 room 204 1`] = `"sha256:ae
 
 exports[`episode 4: renders of every room > episode 4 room 205 1`] = `"sha256:38237a43d6db41afcea31422c9d6c89c0f71e004012fa9b88671e8398a13bc7f"`;
 
-exports[`episode 4: renders of every room > episode 4 room 215 1`] = `"sha256:00093f1ba298543ca0c29618be369a2ed7d690c53d614663c929cd78e2fb634a"`;
+exports[`episode 4: renders of every room > episode 4 room 215 1`] = `"sha256:f6d048ca117b5e7d6215fb53f8c016becf5cc94f9eae442f63309748228cf329"`;
 
-exports[`episode 4: renders of every room > episode 4 room 216 1`] = `"sha256:8aff1d195092af8e6d3e80eaef9d525a57e5b675b659f9f666db4d6da723c7a6"`;
+exports[`episode 4: renders of every room > episode 4 room 216 1`] = `"sha256:222db8fb1c03f4d2216eaeafa638cff66202edeb0bf61ea722a268c04802af36"`;
 
-exports[`episode 4: renders of every room > episode 4 room 224 1`] = `"sha256:9b60ca85641b0926505edbfd7c6c002223302729fbc1f4af8aa7918360ce0c0f"`;
+exports[`episode 4: renders of every room > episode 4 room 224 1`] = `"sha256:fa7e2b9d5b50c00699302bbfd26d52f6f3c746405613a67a9e08e833ddf21981"`;
 
 exports[`episode 4: renders of every room > episode 4 room 225 1`] = `"sha256:c991cdf3a95b6d7344ad597f0b69657ee8c65887d78cd3ce2dbe6cb3da759197"`;
 
-exports[`episode 4: renders of every room > episode 4 room 226 1`] = `"sha256:4f8465e1e79f13c7de4a2baefb1547855efd921a2a633db003dffa8859aae224"`;
+exports[`episode 4: renders of every room > episode 4 room 226 1`] = `"sha256:ca89ae55c8ddf930856b6adf3a1e489130fa71744945fdeba19445bd7ca7e3d2"`;
 
 exports[`episode 4: renders of every room > episode 4 room 227 1`] = `"sha256:f42a9682c69e6e87f4e079d4aac6e792b6d8e6f321c7f675c11d87acf63d6100"`;
 
@@ -632,15 +632,15 @@ exports[`episode 4: renders of every room > episode 4 room 235 1`] = `"sha256:38
 
 exports[`episode 4: renders of every room > episode 4 room 236 1`] = `"sha256:828b8edaef1a3579d4eb3a68db48b9f1633be309159ecb5a16e6a9ecd7c27a9d"`;
 
-exports[`episode 4: renders of every room > episode 4 room 245 1`] = `"sha256:f0c89e446b2f3837e35b9f58618a2e528fa16a17a703933d1f51ca0bd5307f9d"`;
+exports[`episode 4: renders of every room > episode 4 room 245 1`] = `"sha256:a612da92fd319ff86617cb293fb6fd22e7aaa465103ccc721312eb85caad8401"`;
 
-exports[`episode 4: renders of every room > episode 4 room 246 1`] = `"sha256:a6e76ab7201a8399faf1e461acbb1e577c1ee8d27f80b51e6117128e1e7ec8c3"`;
+exports[`episode 4: renders of every room > episode 4 room 246 1`] = `"sha256:62f97c40ffa1260629f6cbb1e9edf34fad22dfc1e97fe859100bee0412c654a9"`;
 
 exports[`episode 4: renders of every room > episode 4 room 251 1`] = `"sha256:521a43d737f3ebf6fca0251ff8436b47dad6c7f7106ca7319492aaa57de8abe7"`;
 
 exports[`episode 4: renders of every room > episode 4 room 252 1`] = `"sha256:29ebda647cab3b090aa584d81e2944a182fe2aa2118465c9357098cb39d1f4be"`;
 
-exports[`episode 4: renders of every room > episode 4 room 255 1`] = `"sha256:d2901cc8296d62518c8300cc24212007d7fba24214eb29826154709b65e138fa"`;
+exports[`episode 4: renders of every room > episode 4 room 255 1`] = `"sha256:eecc3ea25f6e0cc132e3b0bcde4522d4163357355eea8a1f771e633ff7f3d7fa"`;
 
 exports[`episode 4: renders of every room > episode 4 room 256 1`] = `"sha256:74c04d21fbb53b805dfb334aa7c3011fdc5a048349019abbeb0fd744feef1d86"`;
 
@@ -652,7 +652,7 @@ exports[`episode 4: renders of every room > episode 4 room 282 1`] = `"sha256:8a
 
 exports[`episode 4: renders of every room > episode 4 room 285 1`] = `"sha256:ac66639cd947bc4ebec3a2f2f803fd22fd0ad74f9852c2a99448fe41b344ca2d"`;
 
-exports[`episode 4: renders of every room > episode 4 room 292 1`] = `"sha256:06b1d44e63257d05675a5e0b9988c2489e97f529b3792d06967b92ed0056501e"`;
+exports[`episode 4: renders of every room > episode 4 room 292 1`] = `"sha256:863be4ea3714ff052ee2658eca1ec555bd87dc4b8ec7e1935821af7094e0a44f"`;
 
 exports[`episode 4: renders of every room > episode 4 room 304 1`] = `"sha256:a8b6ff0d24c8abf7a3590fa22950ad4bc86fb4c24008727d27dbab7ed1e29e49"`;
 
@@ -670,13 +670,13 @@ exports[`episode 4: renders of every room > episode 4 room 335 1`] = `"sha256:73
 
 exports[`episode 4: renders of every room > episode 4 room 341 1`] = `"sha256:0be281ade42d8457999370af7b2f665ead9ef0dc09125211dde58d89485de8d7"`;
 
-exports[`episode 4: renders of every room > episode 4 room 342 1`] = `"sha256:991ef7c4e898eccb4dba1edbdf8c82e5c7a456046b17260b03bb07371518416e"`;
+exports[`episode 4: renders of every room > episode 4 room 342 1`] = `"sha256:c32d13fe74c636cf18cab0f836098ef63e54254c6fbab1bdd260bbdbefbf6f20"`;
 
 exports[`episode 4: renders of every room > episode 4 room 343 1`] = `"sha256:23206753a5b348d23df6b6b6b6cc1ae12d89ae17c12b58c3c38953bd592a3ef3"`;
 
-exports[`episode 4: renders of every room > episode 4 room 344 1`] = `"sha256:8d5c39d0270f8147c194efd03319e735bb32a96e6414bc208a65c3d8c3a3ac7b"`;
+exports[`episode 4: renders of every room > episode 4 room 344 1`] = `"sha256:b8a4c6c3fff2b2013f12ed26303fc187e20a181599465c263e7f997649b13111"`;
 
-exports[`episode 4: renders of every room > episode 4 room 345 1`] = `"sha256:6950ff33ef0e8dd59d57b45fd717f254683ad03ca75201603cc432884037bf67"`;
+exports[`episode 4: renders of every room > episode 4 room 345 1`] = `"sha256:59ca4e84b517887d5295dc8e4060297f92c25bbd5e5ee5fe2d925c03e05349d2"`;
 
 exports[`episode 4: renders of every room > episode 4 room 346 1`] = `"sha256:9afea8de45f56cd166fcc020489e9af248d8605c81f665b62a828ab69b6d1514"`;
 
@@ -688,6 +688,6 @@ exports[`episode 4: renders of every room > episode 4 room 353 1`] = `"sha256:9b
 
 exports[`episode 4: renders of every room > episode 4 room 356 1`] = `"sha256:b6f93558ba81f1029df62d4ae791b00adf1085d6fcdf4cdafb673820e5722175"`;
 
-exports[`episode 4: renders of every room > episode 4 room 441 1`] = `"sha256:d20f592ca9985bc990e8d9069963c96ef7f9f035ad8cc72079a8a26ff80679c7"`;
+exports[`episode 4: renders of every room > episode 4 room 441 1`] = `"sha256:fe3d1d8557475b94fda2ed6d9551b2ec42eaefcdb6c4a4ec2ba7cec4fe75e1b0"`;
 
 exports[`episode 4: renders of every room > episode 4 room 453 1`] = `"sha256:a60ae9316ed44e267398a258cff65cf185721f7f20c1c3165278498911a89698"`;

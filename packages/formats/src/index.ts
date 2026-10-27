@@ -295,6 +295,7 @@ export {
   actorKindName,
   recordActorKind,
   cellActorSource,
+  leavingRobots,
   randomPlacement,
   randomRobotColours,
   robotSprite,

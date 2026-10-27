@@ -302,6 +302,12 @@ Files in `packages/formats/src`:
   with it). **Verified under Wine:** episode II's tangram (0x50) and oracle (0x51)
   shapes in Junior's grown `_Rob_object` are drawn by the game, cell for cell as our
   renderer draws them.
+- **Robots in the map:** the cells that become robots on entering (`leavingRobots`, by
+  `roomActors`' rules) are drawn without them (`shownCells`, so `renderRoom`, the room
+  view, thumbnails and the map): Junior to III's robot tile draws nothing anyway, IV's
+  (type 2, class 0xbd) is a grey "?" the game never shows there (46 cells in 25 rooms,
+  5 of them the tile catalogue room 2). The tile itself keeps its shape (texts,
+  palette). Other actors are drawn with their tile's shape, as the map shows them.
 - **Palettes** per episode (16 colours, `palette.ts`). The game expands them into 14
   blocks of 16 (0x4023d0; its screenshots carry them all): 0 the palette, 1 brighter
   (+64), 2 grey, 3–11 darker and greyer (`darkPalette`), 12 black, 13 a grey ramp.
@@ -480,7 +486,8 @@ Files in `packages/formats/src`:
   does but for 144's type 0x4d (a renderer gap); with only +0x00 switched it still drew 44. Drawing the room (0x401af0, 0x401ba0) loads that room's map from the scene and
   draws its cell wherever the room's own cell is of class 99, so the house's interior
   sits in the town around it; the backdrop's actors stay cells (robots draw nothing as
-  tiles). 22 rooms in episodes II–IV, e.g. II 115 over 15, III 147 over 47, IV 441 over
+  tiles but in IV, whose robot tile is a "?", so a robot in IV's backdrop shows one; from
+  the code, not seen). 22 rooms in episodes II–IV, e.g. II 115 over 15, III 147 over 47, IV 441 over
   341 (marked at (39, 1) only). The name rule (`SAME_NAME_CLASS`) looks at (0, 1) alone.
   Marks and cells are the game's one-layer map word, compared with 0x0063 exactly
   (`showsBackdrop`): class 99 in state 0 and no logic cell. An overlay object turns its
