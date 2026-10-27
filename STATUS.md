@@ -1052,7 +1052,7 @@ Supported:
   `tileTypes`): the copies, each with its picture in this episode, removable (×, not
   while rooms use the type); a form: the episode (Junior … IV), a type with a class
   there (named, its picture in its own palette), the free type it goes to (the same
-  number where free; free: no class in the exe as loaded and no room uses it, or a
+  number where free, else the first that is no copy yet; free: no class in the exe as loaded and no room uses it, or a
   copy already, which it then replaces); "Copy". Each one undo step, which makes a new
   base (`Editor.setTileType`): text entries edited before stay as they are, the copied
   description comes along; refused: a copy of a copy, a type without a class, a type

@@ -138,9 +138,14 @@ export class TileTypesView {
     }
     const sources = context.sources(choice.from);
     if (!sources.some((s) => s.type === choice.of)) choice.of = sources[0]?.type ?? 0;
-    // the same number where it is free, else the first free one
+    // the same number where it is free, else the first free one: not yet a copy, unless
+    // all are
     if (!context.free.includes(choice.to)) {
-      choice.to = context.free.includes(choice.of) ? choice.of : (context.free[0] ?? -1);
+      const copied = new Set(context.copies.map((c) => c.to));
+      const unused = context.free.filter((t) => !copied.has(t));
+      choice.to = unused.includes(choice.of)
+        ? choice.of
+        : (unused.at(0) ?? context.free.at(0) ?? -1);
     }
     this.choice = choice;
     const from = select(

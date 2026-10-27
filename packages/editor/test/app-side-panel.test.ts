@@ -393,3 +393,20 @@ test("the Episode tab copies tile types of other episodes, undoably; the mod kee
   expect(app.editor?.game).toBe(app.editor?.pristine);
   expect(document.querySelector('.tile-grid [data-tile="81"]')).toBeNull();
 });
+
+test("the copy form's target: the same number where free, else the first type no copy has", async () => {
+  app.showEpisode(0, 43);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const types = page.getByRole("region", { name: "Tile types" });
+  const to = types.getByLabelText("To type");
+  await userEvent.selectOptions(types.getByLabelText("From episode"), "II");
+  // types 0x01 and 0x02 have classes in Junior: the first free type, 0x3a (0x39 lies in room 51)
+  await userEvent.selectOptions(types.getByLabelText("Type"), String(0x01));
+  await expect.element(to).toHaveValue(String(0x3a));
+  await types.getByRole("button", { name: "Copy" }).click();
+  await userEvent.selectOptions(types.getByLabelText("Type"), String(0x02));
+  await expect.element(to).toHaveValue(String(0x3b));
+  await userEvent.selectOptions(types.getByLabelText("Type"), String(0x50));
+  await expect.element(to).toHaveValue(String(0x50));
+  app.undo();
+});
