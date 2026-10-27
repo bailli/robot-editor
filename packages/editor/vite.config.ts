@@ -11,6 +11,8 @@ const REFERENCE_EXE = new URL("reference/GameOfRobot.exe", ROOT);
 const HARNESS = new URL("tools/wine/harness.py", ROOT);
 const PLAY_EXE = new URL(".wine/play.exe", ROOT);
 const MAX_EXE_BYTES = 8 << 20; // the game's exe has about 2 MB
+/** How long the harness has to refuse playing before the game counts as started. */
+const PLAY_REFUSAL_MS = 1000;
 
 /** In development, serves reference/GameOfRobot.exe (see README) so it opens by itself. */
 function referenceExe(): Plugin {
@@ -75,14 +77,30 @@ function playInWine(): Plugin {
           const args = ["-I", fileURLToPath(HARNESS), "play", String(episode)];
           const game = spawn("python3", [...args, "--exe", fileURLToPath(PLAY_EXE)], {
             detached: true,
-            stdio: "ignore",
+            stdio: ["ignore", "ignore", "pipe"],
           });
+          let errors = "";
+          game.stderr.on("data", (chunk: Buffer) => {
+            errors += chunk.toString();
+          });
+          // the harness refuses at once (setup unfinished, no DISPLAY): the editor says why
+          const started = setTimeout(() => {
+            res.statusCode = 202;
+            res.end();
+          }, PLAY_REFUSAL_MS);
+          const failed = (text: string) => {
+            server.config.logger.error(`play: ${text}`);
+            if (res.writableEnded) return;
+            clearTimeout(started);
+            fail(500, text);
+          };
           game.on("error", (error) => {
-            server.config.logger.error(`play: ${error.message}`);
+            failed(error.message);
+          });
+          game.on("exit", (code) => {
+            if (code !== 0) failed(errors.trim() || `the harness ended with code ${String(code)}`);
           });
           game.unref();
-          res.statusCode = 202;
-          res.end();
         });
       });
     },

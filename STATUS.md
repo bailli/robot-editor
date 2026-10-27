@@ -761,8 +761,9 @@ Supported:
 - "Test in game": the edited exe with the episode starting in the shown room, the hero
   at the picked cell (Select tool, one cell, or Inspect) or the episode's start cell; `pnpm editor` runs it under Wine
   (`/play` on the dev server, only for requests from the editor's own page;
-  `harness.py play`, the game window on this display; the episode is chosen by hand),
-  the static build downloads it
+  `harness.py play`, the game window on this display; the episode is chosen by hand;
+  when the harness refuses, e.g. without DISPLAY, the editor says why and downloads the
+  exe), the static build downloads it
 - tile names (items) and the game's descriptions in tooltips and the hover line; logic
   cells say what their record does, notes and diary pages their message, packages what
   they hold (drawn in the hover line)
