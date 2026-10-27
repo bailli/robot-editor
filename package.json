@@ -9,9 +9,9 @@
   "scripts": {
     "snapshots": "vitest run --update",
     "typecheck": "pnpm -r typecheck",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint/ .",
+    "format": "prettier --write --cache .",
+    "format:check": "prettier --check --cache .",
     "test": "vitest run",
     "test:game": "ROBOT_GAME_TESTS=1 vitest run packages/tools/test/driver.test.ts",
     "test:without-game": "vitest run packages/formats/test/cp437.test.ts packages/formats/test/omf.test.ts packages/tools/test/tools.test.ts packages/editor/test/script-view.test.ts packages/editor/test/patch.test.ts",
