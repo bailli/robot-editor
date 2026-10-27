@@ -187,7 +187,9 @@ const MAX_STEPS = ROOM_CELLS * 4;
 
 /**
  * The game's trace (0x40f9a0) from (x, y), looking at (x + dx, y + dy). `value` gives a
- * cell as circuitCell does, undefined outside the map.
+ * cell as circuitCell does, undefined outside the map. Like the game, cells are found
+ * as x + y * 40 without a look at the column: west of column 0 is column 39 of the row
+ * above (outside the map the game reads whatever lies next to it; here the trace ends).
  */
 export function traceCircuit(
   value: (cell: number) => number | undefined,

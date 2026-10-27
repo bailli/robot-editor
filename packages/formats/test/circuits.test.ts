@@ -121,6 +121,12 @@ test("traces stop where nothing conducts (open) or a piece does not fit (broken)
   expect(end({ "9,5": piece(INPUTS) })).toMatchObject({ kind: "broken" });
 });
 
+test("west of column 0 the trace goes on at the end of the row above, as the game's does", () => {
+  // 0x40f9a0 reads the map at x + dx + (y + dy) * 40 without looking at the column
+  const wrapped = room({ "0,5": piece(ACROSS), "39,4": one }, [{ x: 1, y: 5 }]);
+  expect(signals(roomCircuit(wrapped, classes))).toEqual([1]);
+});
+
 test("pieces put down on other objects count, as the game stacks them", () => {
   const r = room({ "9,5": FENCE, "8,5": one }, [{ x: 10, y: 5 }]);
   assert.deepEqual(signals(roomCircuit(r, classes)), [-1]);
