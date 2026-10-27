@@ -750,10 +750,15 @@ Supported:
   teleporter wall 0xd044; robots, which draw
   nothing as tiles, show their first sprite; other invisible tiles a hatching; a filter
   by name, text or hex value) or any hex value; right click picks; dragging fills lines;
-  undo/redo per stroke; grid (G); Dark (D) draws the room and the map as dark as the game
+  the last 12 tiles painted with (per episode) in a row above the palette; undo/redo
+  per stroke; grid (G); Dark (D) draws the room and the map as dark as the game
   on entering (the darkness setting; scripts and light sources are not modelled)
-- tools Paint, Fill (the connected cells of the clicked value, 4 neighbours, within the
-  selected area if clicked inside it), Select (drag a rectangle) and Inspect; the Area
+- tools Paint (P), Fill (F; the connected cells of the clicked value, 4 neighbours,
+  within the selected area if clicked inside it), Select (S; drag a rectangle) and
+  Inspect (I; opens the tab of what is at the cell: its logic record, else the actor
+  placed there, its row marked, else the circuit it belongs to, else the Record tab);
+  L switches the layer; tools and layers are segmented buttons (radio buttons
+  underneath), so the header takes three short rows; the Area
   buttons and keys work on the selection in both layers: Copy (Ctrl+C), Cut (Ctrl+X),
   Clear (Delete), Fill (the area's cells of the current layer); Paste (Ctrl+V) shows the
   clip under the mouse until a click puts it down (Shift+click: again, Esc or right click:
@@ -764,13 +769,15 @@ Supported:
   below, west and east written vertically at the sides; doors, stairs, bus, oracles,
   teleporters and actors in a line above); the column right of it has the tool and layer
   settings (always visible) and tabs (Tiles, Record, Actors, Circuit, Script, Room,
-  Episode) that scroll on their own, its width can be dragged (remembered in the
-  browser); clicking a logic cell opens the Record tab; the tab buttons tell what is
-  there without opening them (`SidePanel.setState`): dimmed and dashed when empty for
-  the shown room (no record selected, no actors, no circuit nodes, no script, no
-  dealer), a badge with the number of actors and RandObj calls, the circuit's nodes on
-  of all (orange with problems), ● for a script (✎ in orange while a draft is not
-  applied), ● in orange for an edited dealer; the tooltip says it in words
+  Episode; keys 1–7) that scroll on their own, its width can be dragged (remembered in
+  the browser); clicking a logic cell opens the Record tab, which with no cell selected
+  lists the room's records (click selects the cell, hover outlines it; Escape drops the
+  selected cell and goes back to the list); the tab buttons tell what is there without
+  opening them (`SidePanel.setState`): dimmed and dashed when empty for the shown room
+  (no records, no actors, no circuit nodes, no script, no dealer), a badge with the
+  number of records, of actors and RandObj calls, the circuit's nodes on of all (orange
+  with problems), ● for a script (✎ in orange while a draft is not applied), ● in
+  orange for an edited dealer; the tooltip says it in words, with the tab's key
 - help (button "Shortcuts", key ?): a dialog listing the keys and mouse buttons
   (`help-dialog.ts`); keys typed in a dialog do not reach the room
 - exits: N/S/W/E targets incl. script changes; arrow keys follow fixed exits; per
@@ -870,7 +877,9 @@ Supported:
   way while typing, its own undo, completion of the game's functions with their arguments
   as fields, variables, constants and the script's own variables) compiles while typing (errors with line and column,
   syntax errors underlined where they are) and Apply sets source and compiled script as
-  one undo step; handlers are marked (a bar along their lines, a line above naming the
+  one undo step; a draft not applied stays with its room when another is shown (status
+  line, ✎ in the room list) and comes back there until Apply or Cancel; saving says
+  which drafts are not saved; another exe or mod drops them; handlers are marked (a bar along their lines, a line above naming the
   events, a warning below one that has no `return` and runs on, naming the handlers it
   registers again)
 - buttons: in every dialog and editor Cancel comes first, the confirming action last and

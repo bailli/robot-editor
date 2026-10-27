@@ -94,7 +94,7 @@ import {
 } from "./room-view.ts";
 import { type ScriptName, ScriptView } from "./script-view.ts";
 import { type SettingsContext, SettingsView } from "./settings-view.ts";
-import { SidePanel, type TabState } from "./side-panel.ts";
+import { SidePanel } from "./side-panel.ts";
 import { TileNames } from "./tile-info.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
@@ -138,17 +138,38 @@ const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 
 export type Tool = "paint" | "fill" | "select" | "inspect";
 
-const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
-  { tool: "paint", label: "Paint", title: "Paint cells with the tile; dragging draws lines" },
+/** The tools; `key` chooses one (see the help). */
+const TOOLS: readonly { tool: Tool; label: string; key: string; title: string }[] = [
+  {
+    tool: "paint",
+    label: "Paint",
+    key: "p",
+    title: "Paint cells with the tile; dragging draws lines (P)",
+  },
   {
     tool: "fill",
     label: "Fill",
+    key: "f",
     title:
-      "Fill the cells of the clicked cell's value around it (within the selected area, if inside)",
+      "Fill the cells of the clicked cell's value around it (within the selected area, if inside) (F)",
   },
-  { tool: "select", label: "Select", title: "Drag to select an area to copy, cut, clear or fill" },
-  { tool: "inspect", label: "Inspect", title: "Click a cell to see or add its logic record" },
+  {
+    tool: "select",
+    label: "Select",
+    key: "s",
+    title: "Drag to select an area to copy, cut, clear or fill (S)",
+  },
+  {
+    tool: "inspect",
+    label: "Inspect",
+    key: "i",
+    title:
+      "Click a cell to see what is there: its logic record, else its actor or circuit, in their tab (I)",
+  },
 ];
+
+/** Tiles kept per episode in the Tiles tab's row of recent ones. */
+const RECENT_TILES = 12;
 
 export interface AppOptions {
   /**
@@ -263,13 +284,16 @@ export class App {
   >();
   private readonly roomPane = h("div", { class: "room-pane" });
   private readonly tilesTab = h("div", { class: "tiles" });
+  /** The room's records, shown while no cell is selected. */
+  private readonly recordList = h("div", { class: "record-list" });
   private readonly recordTab = h(
     "div",
     {},
+    this.recordList,
     h(
       "p",
       { class: "hint record-hint" },
-      "Click a magenta cell, or any cell with the Inspect tool, to see its logic record here.",
+      "Click a magenta cell, or any cell with the Inspect tool, to see its logic record here (Escape: back to this list).",
     ),
   );
   private mapShown = false;
@@ -370,6 +394,13 @@ export class App {
   private readonly tileText = h("p", { class: "tile-text" });
   private readonly tileNames = new Map<number, TileNames>();
   private readonly tileGrid = h("div", { class: "tile-grid" });
+  /** The tiles painted with last, per episode, most recent first. */
+  private readonly recentTiles = new Map<number, number[]>();
+  private readonly recentRow = h("div", {
+    class: "tile-recent",
+    role: "group",
+    "aria-label": "Recent tiles",
+  });
   private readonly layerInputs = new Map<Layer, HTMLInputElement>();
   private readonly toolInputs = new Map<Tool, HTMLInputElement>();
   private readonly areaButtons = {
@@ -423,7 +454,9 @@ export class App {
       return [...keywords, ...constants];
     },
     drafted: () => {
-      if (this.editor) this.refreshScriptTab();
+      if (!this.editor) return;
+      this.refreshScriptTab();
+      this.markDrafts();
     },
   });
   readonly recordView = new RecordView({
@@ -526,17 +559,19 @@ export class App {
     for (const [i, name] of EPISODE_NAMES.entries()) {
       this.episodeSelect.append(h("option", { value: String(i) }, name));
     }
-    const layers = h("fieldset", { class: "layers" }, h("legend", {}, "Layer"));
+    // segmented buttons (radio buttons underneath), one row each: the column keeps its height
+    const layers = h("fieldset", { class: "segmented" }, h("legend", {}, "Layer"));
     for (const layer of ["base", "overlay"] as const) {
       const input = h("input", { type: "radio", name: "layer", value: layer });
       input.addEventListener("change", () => {
         this.setLayer(layer);
       });
       this.layerInputs.set(layer, input);
-      layers.append(h("label", {}, input, layer === "base" ? " Base" : " Overlay"));
+      const title = `Paint and pick in the ${layer} layer (L switches)`;
+      layers.append(h("label", { title }, input, layer === "base" ? "Base" : "Overlay"));
     }
 
-    const tools = h("fieldset", { class: "layers" }, h("legend", {}, "Tool"));
+    const tools = h("fieldset", { class: "segmented" }, h("legend", {}, "Tool"));
     for (const { tool, label, title } of TOOLS) {
       const input = h("input", { type: "radio", name: "tool", value: tool });
       input.checked = tool === this.tool;
@@ -544,12 +579,12 @@ export class App {
         this.setTool(tool);
       });
       this.toolInputs.set(tool, input);
-      tools.append(h("label", { title }, input, ` ${label}`));
+      tools.append(h("label", { title }, input, label));
     }
     const areaTools = h(
-      "fieldset",
-      { class: "layers area-tools" },
-      h("legend", {}, "Area"),
+      "div",
+      { class: "area-tools", role: "group", "aria-label": "Area" },
+      h("span", { class: "hint", "aria-hidden": "true" }, "Area"),
       ...Object.values(this.areaButtons),
     );
 
@@ -615,6 +650,7 @@ export class App {
     this.tilesTab.append(
       h("label", { class: "tile-current" }, this.tilePreview, this.tileInput),
       this.tileText,
+      this.recentRow,
       h(
         "p",
         { class: "hint" },
@@ -718,7 +754,7 @@ export class App {
       const name = this.modFile ?? this.fileName.replace(/(\.exe)?$/i, ".robotmod.json");
       download(new TextEncoder().encode(text), name, "application/json");
       this.modFile = name;
-      this.setStatus(`Saved ${name}`);
+      this.setStatus(`Saved ${name}${this.draftsNote()}`);
       this.refreshButtons();
       return text;
     } catch (error) {
@@ -730,6 +766,8 @@ export class App {
   /** Shows the editor's state: a newly loaded exe or mod. */
   private use(editor: Editor, status: string): void {
     this.editor = editor;
+    this.scriptView.dropDrafts();
+    this.recentTiles.clear();
     this.caches.clear();
     this.stopPasting();
     this.clip = undefined;
@@ -803,7 +841,13 @@ export class App {
     this.view.setHighlights([]);
     this.view.show(room, this.roomCache(room), this.backdrop(room));
     this.refreshConnections();
-    this.scriptView.show(roomScript(room), `${this.episode} ${id}`);
+    const key = `${this.episode} ${id}`;
+    if (this.scriptView.drafting && this.lastRoom !== undefined && this.lastRoom !== key) {
+      this.setStatus(
+        `The script draft of room ${this.lastRoom.split(" ")[1] ?? ""} is kept: Apply or Cancel it there`,
+      );
+    }
+    this.scriptView.show(roomScript(room), key);
     this.refreshScriptTab();
     this.showSettings(room);
     this.refreshActors();
@@ -813,9 +857,9 @@ export class App {
     const shown = `${this.episode} ${id}`;
     if (this.lastRoom !== shown) {
       if (this.selected) this.select(undefined);
-      else this.sidePanel.setState("record", NO_RECORD);
       this.setArea(undefined);
     }
+    this.refreshRecordTab();
     this.lastRoom = shown;
     this.remember(this.episode, id);
     if (this.mapShown) this.refreshMap();
@@ -1249,7 +1293,8 @@ export class App {
     if (index === undefined) {
       this.selected = undefined;
       this.recordView.hide();
-      this.sidePanel.setState("record", NO_RECORD);
+      this.refreshRecordTab();
+      this.actorsView.highlight(undefined);
       this.refreshCircuit();
       return;
     }
@@ -1265,16 +1310,9 @@ export class App {
     if (record) {
       const classes = game.episode(this.episode).classes;
       this.recordView.show(record, where, classes, readOracleSymbols(game.image));
-      this.sidePanel.setState("record", {
-        title: `${cellAt(index)}: ${describeRecord(record, classes).summary}`,
-      });
-    } else {
-      this.recordView.showEmpty(where);
-      this.sidePanel.setState("record", {
-        empty: true,
-        title: `${cellAt(index)}: no record (one can be added here)`,
-      });
-    }
+    } else this.recordView.showEmpty(where);
+    this.refreshRecordTab();
+    this.actorsView.highlight(index);
     // where a node can be added
     this.refreshCircuit();
   }
@@ -1299,8 +1337,15 @@ export class App {
       ),
     );
     this.tileText.title = this.names().title(value);
-    for (const button of this.tileGrid.querySelectorAll<HTMLElement>("button")) {
-      button.classList.toggle("selected", Number(button.dataset["tile"]) === value);
+    this.markTile();
+  }
+
+  /** Marks the current tile in the palette and the recent ones. */
+  private markTile(): void {
+    for (const grid of [this.tileGrid, this.recentRow]) {
+      for (const button of grid.querySelectorAll<HTMLElement>("button")) {
+        button.classList.toggle("selected", Number(button.dataset["tile"]) === this.tile);
+      }
     }
   }
 
@@ -1470,7 +1515,7 @@ export class App {
     try {
       const bytes = editor.save();
       download(bytes, this.fileName);
-      this.setStatus(`Saved ${this.fileName}`);
+      this.setStatus(`Saved ${this.fileName}${this.draftsNote()}`);
       this.refreshButtons();
       return bytes;
     } catch (error) {
@@ -1580,7 +1625,7 @@ export class App {
         this.setArea(areaBetween(index, index));
       } else if (this.tool === "inspect" || this.logicLayer(index)) {
         this.select(index);
-        this.sidePanel.show("record");
+        this.sidePanel.show(this.tabFor(index));
       } else if (this.tool === "fill") this.fill(index);
       else {
         this.painting = true;
@@ -1690,7 +1735,8 @@ export class App {
         const ctrl = event.ctrlKey || event.metaKey;
         if (event.key === "Escape") {
           if (this.pasting) this.stopPasting();
-          else this.setArea(undefined);
+          else if (this.area) this.setArea(undefined);
+          else if (this.selected) this.select(undefined);
         } else if (event.key === "Delete" && !ctrl) {
           this.clearArea();
         } else if (ctrl && !event.shiftKey && !event.altKey && key === "c") {
@@ -1723,6 +1769,15 @@ export class App {
           this.refreshActors();
         } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "m") {
           this.setMap(!this.mapShown);
+        } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "l") {
+          this.setLayer(this.layer === "base" ? "overlay" : "base");
+        } else if (!ctrl && !event.altKey && TOOLS.some((t) => t.key === key)) {
+          const tool = TOOLS.find((t) => t.key === key)?.tool;
+          if (tool) this.setTool(tool);
+        } else if (!ctrl && !event.altKey && /^[1-9]$/.test(event.key)) {
+          // the side panel's tabs in their order
+          const tab = this.sidePanel.names.at(Number(event.key) - 1);
+          if (tab) this.sidePanel.show(tab);
         }
       },
       { signal: this.listeners.signal },
@@ -1779,6 +1834,40 @@ export class App {
   private beginStroke(): void {
     this.need().beginStroke(this.episode, this.roomId, this.layer);
     this.lastPainted = undefined;
+    this.noteRecent(this.tile);
+  }
+
+  /** Puts a tile painted with first in the row of recent tiles. */
+  private noteRecent(tile: number): void {
+    const recent = this.recentTiles.get(this.episode) ?? [];
+    if (recent.at(0) === tile) return;
+    this.recentTiles.set(
+      this.episode,
+      [tile, ...recent.filter((t) => t !== tile)].slice(0, RECENT_TILES),
+    );
+    this.showRecent();
+  }
+
+  /** The Tiles tab's row of recent tiles (hidden while there are none). */
+  private showRecent(): void {
+    const recent = this.recentTiles.get(this.episode) ?? [];
+    this.recentRow.hidden = recent.length === 0;
+    this.recentRow.replaceChildren(
+      ...recent.map((value) =>
+        h(
+          "button",
+          {
+            "data-tile": String(value),
+            title: `${this.tileTitle(value)}\n(painted with recently)`,
+            click: () => {
+              this.setTile(value);
+            },
+          },
+          this.tileCanvas(value),
+        ),
+      ),
+    );
+    this.markTile();
   }
 
   /** Paints up to `index`, filling the cells between the previous and this one. */
@@ -1902,6 +1991,86 @@ export class App {
       ...(bulb === undefined ? {} : { bulb }),
       ...(free === undefined ? {} : { free }),
     });
+  }
+
+  /**
+   * The Record tab: with no cell selected the room's records (a click selects one's
+   * cell); its button counts them and names the selected one.
+   */
+  private refreshRecordTab(): void {
+    const editor = this.need();
+    const room = editor.room(this.episode, this.roomId);
+    const classes = editor.game.episode(this.episode).classes;
+    // the first cell (base layer first) showing each record
+    const cells = new Map<number, number>();
+    for (const layer of [room.base, room.overlay]) {
+      layer.forEach((cell, i) => {
+        if ((cell & 0xff) === LOGIC_CELL && !cells.has(cell >> 8)) cells.set(cell >> 8, i);
+      });
+    }
+    const records = room.records.toSorted(
+      (a, b) => (cells.get(a.slot) ?? Infinity) - (cells.get(b.slot) ?? Infinity),
+    );
+    this.recordList.replaceChildren(
+      h("h3", {}, records.length ? plural(records.length, "logic record") : "No logic records"),
+      ...records.map((record) => {
+        const cell = cells.get(record.slot);
+        const { summary } = describeRecord(record, classes);
+        const button = h(
+          "button",
+          {
+            title: `Slot ${record.slot}, type ${record.data[0]}`,
+            click: () => {
+              if (cell === undefined) return;
+              this.select(cell);
+              this.sidePanel.show("record");
+            },
+          },
+          cell === undefined ? "no cell" : cellAt(cell),
+        );
+        button.disabled = cell === undefined;
+        const row = h("div", { class: "record-list-row" }, button, h("span", {}, summary));
+        if (cell !== undefined) {
+          // its cell outlined in the room while hovered
+          const place = { x: cell % ROOM_WIDTH, y: Math.floor(cell / ROOM_WIDTH), w: 1, h: 1 };
+          row.addEventListener("mouseenter", () => {
+            this.view.setHighlights([place]);
+          });
+          row.addEventListener("mouseleave", () => {
+            this.view.setHighlights([]);
+          });
+        }
+        return row;
+      }),
+    );
+    const selected = this.selected;
+    const value = selected ? (room[selected.layer][selected.index] ?? 0) : 0;
+    const record =
+      selected && (value & 0xff) === LOGIC_CELL
+        ? room.records.find((r) => r.slot === value >> 8)
+        : undefined;
+    const count = plural(room.records.length, "logic record");
+    this.sidePanel.setState("record", {
+      ...(room.records.length > 0 ? { badge: String(room.records.length) } : {}),
+      empty: room.records.length === 0 && !record,
+      title: selected
+        ? `${cellAt(selected.index)}: ${record ? describeRecord(record, classes).summary : "no record (one can be added here)"}`
+        : `${count} in this room`,
+    });
+  }
+
+  /**
+   * The tab about a cell: its logic record, else the actor placed there, else the
+   * circuit it is part of, else the Record tab (where a record can be added).
+   */
+  private tabFor(index: number): string {
+    if (this.logicLayer(index)) return "record";
+    if (this.actors.some((a) => a.cell === index && !a.record)) return "actors";
+    const editor = this.need();
+    const room = editor.room(this.episode, this.roomId);
+    const circuit = roomCircuit(room, editor.game.episode(this.episode).classes);
+    if (circuit.cells.some((c) => c.cell === index)) return "circuit";
+    return "record";
   }
 
   /** The Script tab's button: whether the room has a script, a draft not applied. */
@@ -2112,6 +2281,7 @@ export class App {
 
   private showTiles(): void {
     if (!this.editor) return;
+    this.showRecent();
     const tiles = tilesOf(this.editor.game.episode(this.episode).rooms, this.layer);
     this.tileGrid.replaceChildren(
       ...tiles.map((value) =>
@@ -2171,7 +2341,32 @@ export class App {
       button.classList.toggle("edited", editor.isEdited(this.episode, id));
       button.title = this.roomLabel(this.episode, id);
     }
+    this.markDrafts();
     this.roomList.querySelector(".current")?.scrollIntoView({ block: "nearest" });
+  }
+
+  /** Marks the rooms in the list whose script has a draft not applied. */
+  private markDrafts(): void {
+    const drafts = new Set(this.scriptView.draftRooms);
+    for (const button of this.roomList.querySelectorAll<HTMLElement>("button")) {
+      const drafted = drafts.has(`${this.episode} ${button.dataset["room"] ?? ""}`);
+      button.classList.toggle("drafted", drafted);
+      const title = button.title.replace(DRAFT_NOTE, "");
+      button.title = drafted ? title + DRAFT_NOTE : title;
+    }
+  }
+
+  /** What saving says about script drafts not applied (they are not saved). */
+  private draftsNote(): string {
+    const rooms = this.scriptView.draftRooms.map((key) => {
+      const [episode = "", room = ""] = key.split(" ");
+      return Number(episode) === this.episode
+        ? room
+        : `${room} (${EPISODE_NAMES[Number(episode)] ?? ""})`;
+    });
+    return rooms.length === 0
+      ? ""
+      : ` – script drafts not applied (not saved) in room${rooms.length === 1 ? "" : "s"} ${rooms.join(", ")}`;
   }
 
   private refreshButtons(): void {
@@ -2362,11 +2557,8 @@ function roomKey(room: Room): string {
   return `${hash >>> 0} ${room.records.length}`;
 }
 
-/** The Record tab's button while no cell is selected. */
-const NO_RECORD: TabState = {
-  empty: true,
-  title: "No cell selected: click a magenta cell, or any cell with the Inspect tool",
-};
+/** Added to the tooltip of a room with a script draft not applied. */
+const DRAFT_NOTE = "\nscript draft not applied";
 
 const capitalize = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 

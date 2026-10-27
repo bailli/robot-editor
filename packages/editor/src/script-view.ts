@@ -374,6 +374,8 @@ export class ScriptView {
   /** The source the draft started from, and how to check the draft again. */
   private draftBase = "";
   private recheck: (() => void) | undefined;
+  /** Drafts not applied of the rooms not shown, by room: kept until Apply or Cancel there. */
+  private readonly drafts = new Map<string, { draft: string; base: string }>();
   /** The CodeMirror view shown (read-only or the editor). */
   private code: EditorView | undefined;
 
@@ -385,12 +387,15 @@ export class ScriptView {
 
   /**
    * Shows the script of `room` (any key naming it). A draft being edited stays when the
-   * same room is shown again (e.g. after another edit), and is dropped for another room.
+   * same room is shown again (e.g. after another edit); for another room it is kept and
+   * comes back, still being edited, when its room is shown again.
    */
   show(source: string, room: string): void {
     const same = room === this.room;
     // the same script stays as it is shown (scrolled, the info line)
     if (same && !this.editing && source === this.source && this.code) return;
+    if (!same && this.drafting)
+      this.drafts.set(this.room, { draft: this.draft, base: this.draftBase });
     this.source = source;
     this.room = room;
     if (same && this.editing) {
@@ -398,8 +403,26 @@ export class ScriptView {
       this.recheck?.();
       return;
     }
-    this.editing = false;
+    const kept = this.drafts.get(room);
+    this.drafts.delete(room);
+    this.editing = kept !== undefined;
+    if (kept) {
+      this.draft = kept.draft;
+      this.draftBase = kept.base;
+    }
     this.render();
+  }
+
+  /** The rooms (their keys) with a draft not applied, the shown one included. */
+  get draftRooms(): string[] {
+    return [...this.drafts.keys(), ...(this.drafting ? [this.room] : [])];
+  }
+
+  /** Drops every draft (another exe or mod: the rooms are not the same). */
+  dropDrafts(): void {
+    this.drafts.clear();
+    this.editing = false;
+    this.room = "";
   }
 
   /** Whether the script is being edited and the draft differs from the room's script. */

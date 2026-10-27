@@ -69,6 +69,7 @@ const where = (cell: number) => `(${cell % ROOM_WIDTH}, ${Math.floor(cell / ROOM
 export class ActorsView {
   readonly element = document.createElement("section");
   private readonly events: ActorsViewEvents;
+  private selected: number | undefined;
 
   constructor(events: ActorsViewEvents) {
     this.events = events;
@@ -104,6 +105,7 @@ export class ActorsView {
       for (const actor of group) {
         const button = document.createElement("button");
         button.textContent = where(actor.cell);
+        button.dataset["cell"] = String(actor.cell);
         button.addEventListener("click", () => {
           this.events.select(actor.cell);
         });
@@ -134,5 +136,16 @@ export class ActorsView {
     const heading = document.createElement("h3");
     heading.textContent = actors.length + scripted.length > 0 ? "Actors" : "No actors";
     this.element.replaceChildren(heading, ...rows, ...scriptRows);
+    this.highlight(this.selected);
+  }
+
+  /** Marks the actors at `cell` (the selected cell) and scrolls them into view. */
+  highlight(cell: number | undefined): void {
+    this.selected = cell;
+    for (const button of this.element.querySelectorAll<HTMLElement>("button[data-cell]")) {
+      const current = cell !== undefined && button.dataset["cell"] === String(cell);
+      button.classList.toggle("current", current);
+      if (current) button.scrollIntoView({ block: "nearest" });
+    }
   }
 }

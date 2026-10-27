@@ -55,6 +55,7 @@ export class SidePanel {
       badge.hidden = true;
       button.append(label, badge);
       button.setAttribute("role", "tab");
+      button.title = `key ${this.tabs.size + 1}`;
       button.addEventListener("click", () => {
         this.show(tab.name);
       });
@@ -116,9 +117,11 @@ export class SidePanel {
     tab.badge.hidden = state.badge === undefined;
     tab.badge.classList.toggle("note", state.note === true);
     tab.button.classList.toggle("empty", state.empty === true);
-    tab.button.title = state.title ?? "";
     if (state.title) tab.button.setAttribute("aria-description", state.title);
     else tab.button.removeAttribute("aria-description");
+    tab.button.title = [state.title, `key ${this.names.indexOf(name) + 1}`]
+      .filter(Boolean)
+      .join(" · ");
   }
 
   /** The state a tab's button shows (setState). */
@@ -127,8 +130,13 @@ export class SidePanel {
     return {
       badge: tab && !tab.badge.hidden ? tab.badge.textContent : undefined,
       empty: tab?.button.classList.contains("empty") ?? false,
-      title: tab?.button.title ?? "",
+      title: tab?.button.getAttribute("aria-description") ?? "",
     };
+  }
+
+  /** The tabs' names in their order. */
+  get names(): string[] {
+    return [...this.tabs.keys()];
   }
 
   get shown(): string {

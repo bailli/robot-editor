@@ -14,6 +14,16 @@ const HELP: readonly HelpGroup[] = [
     ],
   },
   {
+    title: "Tools",
+    rows: [
+      ["P", "Paint"],
+      ["F", "Fill"],
+      ["S", "Select an area"],
+      ["I", "Inspect: a click shows the cell's record, actor or circuit in its tab"],
+      ["L", "Switch the layer: base or overlay"],
+    ],
+  },
+  {
     title: "Room view",
     rows: [
       ["Left button", "Use the tool: paint (drag for lines), fill, select an area, inspect"],
@@ -29,7 +39,7 @@ const HELP: readonly HelpGroup[] = [
       ["Ctrl+C / Ctrl+X", "Copy or cut the area"],
       ["Ctrl+V", "Paste: a click puts the clip down, Shift+click keeps pasting"],
       ["Delete", "Clear the area"],
-      ["Escape", "Stop pasting, else drop the selection"],
+      ["Escape", "Stop pasting, else drop the selected area, else the selected cell"],
     ],
   },
   {
@@ -39,6 +49,18 @@ const HELP: readonly HelpGroup[] = [
       ["D", "Rooms as dark as in the game"],
       ["A", "Actors"],
       ["?", "This help"],
+    ],
+  },
+  {
+    title: "Side panel",
+    rows: [
+      ["1", "Tiles"],
+      ["2", "Record (with no cell selected: the room's records)"],
+      ["3", "Actors"],
+      ["4", "Circuit"],
+      ["5", "Script"],
+      ["6", "Room"],
+      ["7", "Episode (the dealer)"],
     ],
   },
   {
