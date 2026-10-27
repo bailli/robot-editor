@@ -153,9 +153,82 @@ function classId(exe: PeImage, vtable: number): number | undefined {
   return new DataView(code.buffer, code.byteOffset + 1, 4).getUint32(0, true);
 }
 
-export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasses {
-  const table = episode >= 0 ? CLASS_TABLES.at(episode) : undefined;
+/**
+ * One entry of an episode's class table: what tile type t is (see readClassTable).
+ */
+export interface ClassEntry {
+  /** The class object (a static instance whose vtable is set at startup, see vtables). */
+  object: number;
+  /**
+   * The entry's second dword. No reader found in the game (the episode constructor and
+   * 0x43a5f0 read only the object); mostly the class id, 0x33 in unused entries.
+   */
+  extra: number;
+}
+
+/** The shared empty class object (class 0) that unused tile types point to. */
+export const EMPTY_CLASS_OBJECT = 0x4c777c;
+/** The second dword of unused entries. */
+const EMPTY_EXTRA = 0x33;
+
+function classTable(episode: number): number {
+  const table = Number.isInteger(episode) && episode >= 0 ? CLASS_TABLES.at(episode) : undefined;
   if (table === undefined) throw new RangeError(`no episode ${episode}`);
+  return table;
+}
+
+/** The episode's class table, entry t for tile type t (128 entries). */
+export function readClassTable(exe: PeImage, episode: number): ClassEntry[] {
+  const table = classTable(episode);
+  return Array.from({ length: TYPES }, (_, type) => ({
+    object: u32(exe, table + 8 * type),
+    extra: u32(exe, table + 8 * type + 4),
+  }));
+}
+
+/**
+ * Tile types without a class (pointing to EMPTY_CLASS_OBJECT): free for a class from
+ * another episode (Junior 69, I 47, II none, III 18, IV 15).
+ */
+export function freeTileTypes(exe: PeImage, episode: number): number[] {
+  return readClassTable(exe, episode).flatMap((entry, type) =>
+    entry.object === EMPTY_CLASS_OBJECT ? [type] : [],
+  );
+}
+
+/**
+ * A copy of the exe whose class table for `episode` holds `entries` at the given tile
+ * types (null: unused, as the game's unused entries). Any class object works in any
+ * episode, e.g. readClassTable(exe, 2)[0x51] puts episode II's oracle into another; it
+ * also needs shapes (withShapes) and texts there, and some class code checks the episode.
+ */
+export function withClassEntries(
+  exe: PeImage,
+  episode: number,
+  entries: ReadonlyMap<number, ClassEntry | null>,
+): Uint8Array {
+  const table = classTable(episode);
+  const objects = vtables(exe);
+  const out = exe.data.slice();
+  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  const at = readVa(exe, table, 8 * TYPES).byteOffset - exe.data.byteOffset;
+  for (const [type, entry] of entries) {
+    if (!Number.isInteger(type) || type < 0 || type >= TYPES) {
+      throw new RangeError(`tile type ${type}`);
+    }
+    const { object, extra } = entry ?? { object: EMPTY_CLASS_OBJECT, extra: EMPTY_EXTRA };
+    if (!objects.has(object)) throw new RangeError(`0x${object.toString(16)} is no class object`);
+    if (!Number.isInteger(extra) || extra < 0 || extra > 0xffffffff) {
+      throw new RangeError(`extra ${extra}`);
+    }
+    view.setUint32(at + 8 * type, object, true);
+    view.setUint32(at + 8 * type + 4, extra, true);
+  }
+  return out;
+}
+
+export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasses {
+  const table = classTable(episode);
   const vts = vtables(exe);
   const classes = new Map<number, ObjectClass>();
   const typeOfClass = new Map<number, number>();

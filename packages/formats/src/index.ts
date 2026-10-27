@@ -1,13 +1,17 @@
 export {
   ACTOR_LOAD_METHODS,
   BOMB_LOAD_METHOD,
+  EMPTY_CLASS_OBJECT,
   FrameMethod,
   HATCHING_LOAD_METHODS,
   SAND_DESCRIBE_METHOD,
   SAND_SCORPION_STATES,
+  freeTileTypes,
+  readClassTable,
   readEpisodeClasses,
+  withClassEntries,
 } from "./classes.ts";
-export type { EpisodeClasses, ObjectClass } from "./classes.ts";
+export type { ClassEntry, EpisodeClasses, ObjectClass } from "./classes.ts";
 export {
   ACTOR_RECORD,
   OPEN_EXIT_CELLS,

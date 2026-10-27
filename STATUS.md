@@ -884,17 +884,16 @@ stands, decided 2026-10-27; details in the sections named.
   loader that replaces functions one by one), the proxy as an in-memory mod loader.
   Untried: the `RessourcePath` loose text files.
 - **Done:** the driver (proxy DLL, `driver.ts`, `pnpm test:game`) to verify edits in the
-  game; the OMF writer and `withShapes`; the **pilot: oracles in Junior**, working and
-  visible (see "A class table entry" under Limits): class table entries, texts and
-  shapes copied from episode II.
+  game; the OMF writer and `withShapes`; `withClassEntries`; the **pilot: oracles in
+  Junior**, working and visible (see "A class table entry" under Limits): class table
+  entries, texts and shapes copied from episode II.
 - **Cross-episode classes in general:** free tile types per episode (no class): Junior
   69 (0x39–0x7d), I 47, II **none**, III 18, IV 15. II would need a type that none of
   its rooms uses (not checked). Copied shapes keep their colour indices, and palettes
   differ per episode (remap if it matters). Some class code checks the episode number
   (e.g. describe method 0x4145b0): every class needs a try in its new episode.
-- **Next, in order:** (1) class table entries as a `formats` function with tests (the
-  pilot patched them by hand: Junior's table 0x479ad8 + 8 × type, the 8 bytes from II's
-  0x476e00 + 8 × type), and the English texts (only German ones were copied); (2) circuits
+- **Next, in order:** (1) the English texts for the oracles in Junior (only German
+  ones were copied; class table entries are done: `withClassEntries`); (2) circuits
   in episode III as the next pilot (many classes: letters, wires, gates, nodes);
   (3) the mod format and the editor's use of it; (4) if wanted, oracles that vanish
   after north and east in Junior too, a code patch (episode flags 0x4000/0x8000, only
@@ -1053,8 +1052,12 @@ Roughly by value for the editor.
   resource (OMF) and texts; some class code also checks the episode number (e.g. describe
   method 0x4145b0).
 - **A class table entry** is 8 bytes: a pointer to the class object (a vtable pointer
-  set at startup for every episode, so any episode may point to any class) and the
-  class id; unused types point to the empty class object 0x4c777c (class 0). What a
+  set at startup for every episode, so any episode may point to any class) and a
+  second dword that is mostly the class id but not always (455 of 640 entries; 0x33 in
+  unused ones) and that nothing in the game seems to read (the constructor 0x43b46a and
+  0x43a5f0 read only the object); unused types point to the empty class object
+  0x4c777c (class 0). `readClassTable`, `freeTileTypes` and `withClassEntries`
+  (`classes.ts`) read and patch them; the test redoes the pilot's patch byte for byte. What a
   cell does when walked into is its class's method: the oracle class (0x60, object
   0x4c6754, vtable 0x467d90) dispatches through 0x47be24 (0x412ae0, the oracle handler)
   and 0x47bdf4 (0x412860, the symbol check); a record showing a cell of another class
