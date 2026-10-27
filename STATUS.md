@@ -683,6 +683,27 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   tile 3 is class 3, which happens to map to the dealer's kind); walked into, he offers
   his items (cursor keys, Enter buys, Esc ends); after the purchase he wandered off and
   left through the bottom wall, which stood open briefly.
+- **The dealer's goods** (code only): both constructors (record 0x448ad5, `SetMan`
+  0x448c8b) take the goods table from the episode (vtable +0x10: address, entry count,
+  most goods shown) and then build the offer once (0x448440, the only caller): a count
+  `random(5, most)` (0x436890, inclusive) and that many distinct random entries (a
+  128-bit used set); nothing in the record chooses goods, so every dealer of an episode
+  sells from the same table at the same prices, rolled anew at each appearance, whatever
+  the hero owns. An entry is 4 bytes: tile type, state, price in gold (word); tile 0x6d's
+  state is remapped through 0x4c70e0. Junior 0x479a20 (19 entries, 5–8 shown; 0x40e1e0),
+  I 0x475730 (27, 5–10; 0x408de0), II 0x476ce8 (31, 5–8; 0x409fe0), IV 0x478bf8 (18,
+  5–8; 0x40d6c0); III has none (the base method 0x40be40 returns null and the constructor
+  gives up, so no dealer there). All four sell SLING 14, GARLIC 2, tile 0x0b 20, BOTTLE
+  10, tile 0x09 5, SUIT (55 in Junior, else 85), AMMU 5, MAGNET 10, tile 0x1c 15, tile
+  0x25 30/32, tile 0x29 28/48; all but IV tile 0x0c 22 and PUZZLE 0–3 at 8; Junior also
+  FLY 25 and KEY 9, 3; I DUPOBJ 27, PILL 1, 0x0f/28, 0x40, 0x37/2, 0x38/1 and KEY 2, 5,
+  9, 7, 8 (10–14); II like I with KEY 6, 3, 1, 15 (25–35) and 0x48 60, 0x66/0, 0x66/2,
+  0x6d/113, 0x68/2, 0x80, GIFT/8; IV KEY 6, 3, 1, 15, 0x38/1, 0x66/0 and 0x66/2. More
+  entries need a code patch (the count is an immediate); a table of fewer than 5 would
+  hang the distinct pick. Esc pays (0x4487d0): marked goods costing more than the hero's
+  gold (0x4fe30e) take all of it and give nothing (text 507 entry 4); otherwise event
+  0x101, the gold is paid, and goods the inventory does not take (0x42c010) are placed
+  on the dealer's cell (0x433300; then text 507 entry 5).
 
 ## The editor (`pnpm editor`)
 
@@ -1047,7 +1068,8 @@ Roughly by value for the editor.
 | 0x431f20                     | storing a room: records with byte 1 bit 5 dissolve into their cell             |
 | 0x42ca90, 0x430110, 0x430210 | read a word laid with letters; turn the Area square left, right                |
 | 0x42fdc0, 0x4302f0           | ShiftArea's shift; turn a punch card's square                                  |
-| 0x4130b0, 0x41f730, 0x448440 | dig (shovel); level tiles and bridges; the dealer's trade                      |
+| 0x4130b0, 0x41f730, 0x448440 | dig (shovel); level tiles and bridges; the dealer's offer (goods)              |
+| 0x4487d0, episode +0x10      | the dealer's trade keys (Esc pays); the episode's goods table                  |
 | 0x408da0 (per episode)       | episode start: arrival cell, start room (vtable +0x54, see `start.ts`)         |
 | 0x481170                     | 8×8 font                                                                       |
 | 0x4750d8                     | script keywords (functions and variables)                                      |
