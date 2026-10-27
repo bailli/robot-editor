@@ -19,7 +19,7 @@ the exe itself; findings are checked three ways where possible:
    press keys before the screenshot (`--keys`), e.g. to walk the hero somewhere. The
    **driver** (`packages/tools/src/driver.ts`, see "Input, time and the driver") runs the
    game step by step on virtual time instead and reads its memory: where the hero is,
-   in which room.
+   in which room, the score.
 
 What the game itself says helps too: its help texts (text 995 in each episode: controls,
 the rucksack) and the official info booklets (see Resources in the README) with hints
@@ -905,7 +905,11 @@ stands, decided 2026-10-27; details in the sections named.
   the first two nodes, which placed their stairs, once the hero took a spare piece; the
   frames before and after equal our render (bulbs lit or not, stairs, the piece gone),
   and the first take showed I's text with its 100 points. The circuit code works by
-  class (the map holds class | state << 8), none of it checks the episode.
+  class (the map holds class | state << 8), none of it checks the episode. **Both
+  pilots in other episodes, as mods, verified under Wine** (`pnpm test:game`, the
+  episode's start room): circuits in III, IV and Junior (with I's stairs, which Junior
+  lacks), oracles in Junior, I and IV (north sends to the target cell, east shows the
+  copied hint 331).
 - **`Game.withTileTypes(episode, from, types)`** copies what belongs to a tile type:
   the class table entry, the `_Rob_object` shape, the description (entry n), the sound
   table line (I's sound only where the episode has that MUSIC piece, else its own:
@@ -920,12 +924,16 @@ stands, decided 2026-10-27; details in the sections named.
   them with III's colours, as we do; remap if it matters). Some class code checks the
   episode number (e.g. describe method 0x4145b0): every class needs a try in its new
   episode. **Circuits** need 3 free types and stairs (a lit node places class 71):
-  Junior has **no stairs class** (it would need I's 0x3d as a fourth type; untried), IV
-  has them (untried). Their code checks no episode. **Oracles** need 2 types (tangram,
-  oracle; I has 0x50 and 0x51 free), their texts (`copyTexts`; Junior, I and IV have
-  nothing at 331, 334, 945) and, for their 3500 points, events 262–271: Junior, I, II
-  and III have them, **IV not** (a mod cannot add event entries beyond the tile types
-  yet). Their code checks the episode only for the flags 0x4000/0x8000 (0x412ae0).
+  Junior has **no stairs class** (I's 0x3d as a fourth type works), IV has them. Their
+  code checks no episode. Lighting nodes is event 293 (0x125): 4000 points and "Na also,
+  wieder etwas gelernt…" in I and II, 4000 points without a text in Junior, nothing in
+  III and IV (no entry; seen in the game: the event's bit is set, no points). **Oracles**
+  need 2 types (tangram, oracle; I has 0x50 and 0x51 free), their texts (`copyTexts`;
+  Junior, I and IV have nothing at 331, 334, 945) and, for their 3500 points, events
+  262–271: Junior, I, II and III have them, **IV not** (no points there, seen in the
+  game). A mod cannot add event entries beyond the tile types yet. Their code checks
+  the episode only for the flags 0x4000/0x8000 (0x412ae0). After the east hint the
+  hero stands on the oracle's cell (in II it vanishes; elsewhere it stays under him).
 - **Next, in order:** (1) the editor's use of the mod format (see below; `mod.ts` is
   done); (2) if wanted, oracles that
   vanish after north and east in Junior too, a code patch (episode flags

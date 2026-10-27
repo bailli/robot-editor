@@ -10,15 +10,16 @@ import {
   Game,
   LOGIC_CELL,
   type Mod,
+  type ModChanges,
   NO_CHANGES,
   ROOM_CELLS,
   ROOM_WIDTH,
-  type Room,
   STAIRS_CLASS,
   applyMod,
   emptyMod,
   readEpisodeStart,
   roomCircuit,
+  textsId,
   withExitMode,
 } from "@robot/formats";
 
@@ -76,72 +77,169 @@ async function walk(d: Driver, key: Key, done: (hero: HeroState) => boolean): Pr
 /** The game's map in memory: a word per cell, class | state << 8. */
 const MAP = 0x5197f8 + 0xc;
 
+/** Cells of the map in memory whose class is `classId` (state ignored). */
+async function cellsOfClass(d: Driver, classId: number, cells: number[]): Promise<number[]> {
+  const map = await d.peek(MAP, 2 * ROOM_CELLS);
+  const view = new DataView(map.buffer, map.byteOffset);
+  return cells.filter((cell) => (view.getUint16(2 * cell, true) & 0xff) === classId);
+}
+
 /**
- * Episode III with episode I's circuit pieces (LETTER, GATE, BULB at III's free types
- * 0x40, 0x59, 0x43) and three circuits in room 41, west of a spare piece the hero takes:
- * AND, XOR then NOT, NAND, each of 1 and 1, the node's stairs east of it; the hero
- * starts west of the piece. Made as a mod; returns the exe and the stairs rows (the
- * nodes' rows) that the circuit lights.
+ * A mod for `episode` whose start room (made calm, cells x0..x1, y0..y1 cleared) gets
+ * what `fill` puts there, the hero starting at (x, y). `fill` adds records with `record`.
  */
-function circuitsInEpisodeIII(game: Game): { exe: Uint8Array; lit: number[] } {
-  const [LETTER, GATE] = [0x40, 0x59];
-  const tileTypes = {
-    episode: 3,
-    from: 1,
-    types: [
-      [LETTER, 0x25],
-      [0x43, 0x43],
-      [GATE, 0x42],
-    ] as const,
-  };
-  // the room is made with the classes the mod gives episode III
-  const patched = new Game(game.withTileTypes(3, 1, new Map(tileTypes.types)));
-  const ep = patched.episode(3);
-  const room = calmRoom(patched.room(3, 41), ep.classes);
+function startRoomMod(
+  game: Game,
+  episode: number,
+  changes: Partial<ModChanges>,
+  area: { x0: number; x1: number; y0: number; y1: number },
+  hero: { x: number; y: number },
+  fill: (set: (x: number, y: number, cell: number) => void, record: RecordAdder) => void,
+): Mod {
+  const id = readEpisodeStart(game.image, episode).room;
+  const room = calmRoom(game.room(episode, id), game.episode(episode).classes);
   const base = room.base.slice();
   const overlay = room.overlay.slice();
-  const at = (x: number, y: number) => x + y * ROOM_WIDTH;
-  for (let y = 11; y <= 24; y++) {
-    for (let x = 1; x <= 14; x++) base[at(x, y)] = overlay[at(x, y)] = 0;
+  for (let y = area.y0; y <= area.y1; y++) {
+    for (let x = area.x0; x <= area.x1; x++)
+      base[x + y * ROOM_WIDTH] = overlay[x + y * ROOM_WIDTH] = 0;
   }
-  const one = LETTER | (0x31 << 8);
-  const piece = (state: number) => GATE | (state << 8);
   const records = room.records.slice();
   const used = new Set(records.map((r) => r.slot));
-  /** A gate west of a node at row y: A and B from 1s, the pieces from x = 9 on. */
-  const circuit = (y: number, pieces: number[]) => {
-    base[at(7, y - 1)] = base[at(7, y + 1)] = one;
-    base[at(8, y - 1)] = piece(0x0c);
-    base[at(8, y + 1)] = piece(0x0d);
-    base[at(8, y)] = piece(0x0e);
-    pieces.forEach((state, k) => (base[at(9 + k, y)] = piece(state)));
+  const set = (x: number, y: number, cell: number) => {
+    base[x + y * ROOM_WIDTH] = cell;
+  };
+  fill(set, (x, y, data) => {
     let slot = 0;
     while (used.has(slot)) slot++;
     used.add(slot);
-    const data = new Uint8Array(10);
-    data.set([11, 0, 0, 0, 12, y]); // stairs down at (12, y)
-    records.push({ slot, data });
-    base[at(9 + pieces.length, y)] = LOGIC_CELL | (slot << 8);
-  };
-  const [AND, NAND, XOR, NOT, ACROSS] = [1, 3, 4, 9, 0x0a];
-  circuit(14, [AND]);
-  circuit(18, [XOR, NOT]);
-  circuit(22, [NAND]);
-  base[at(4, 16)] = piece(ACROSS);
-  const edited: Room = { ...room, base, overlay, records };
-  const lit = roomCircuit(edited, ep.classes).nodes.flatMap((n) =>
-    n.signal === 1 ? [Math.floor(n.cell / ROOM_WIDTH)] : [],
-  );
-  const mod: Mod = {
-    ...emptyMod(game.image.data, "circuits in episode III"),
+    records.push({ slot, data: Uint8Array.from({ length: 10 }, (_, k) => data[k] ?? 0) });
+    set(x, y, LOGIC_CELL | (slot << 8));
+  });
+  return {
+    ...emptyMod(game.image.data),
     changes: {
       ...NO_CHANGES,
-      tileTypes: [tileTypes],
-      rooms: [{ episode: 3, id: 41, room: edited }],
-      start: [{ episode: 3, room: 41, x: 2, y: 16 }],
+      ...changes,
+      rooms: [{ episode, id, room: { ...room, base, overlay, records } }],
+      start: [{ episode, room: id, ...hero }],
     },
   };
-  return { exe: applyMod(game.image, mod), lit };
+}
+
+type RecordAdder = (x: number, y: number, data: number[]) => void;
+
+/**
+ * Episode I's circuit pieces (LETTER, GATE, BULB, and STAIRS where the episode has
+ * none) at free tile types of `episode`, and three circuits in its start room, west of
+ * a spare piece the hero takes: AND, XOR then NOT, NAND, each of 1 and 1, the node's
+ * stairs east of it at x = 12; the hero starts at (2, 16). Returns the mod and the rows
+ * whose nodes the circuit lights.
+ */
+function circuitsMod(
+  game: Game,
+  episode: number,
+  types: { letter: number; gate: number; bulb: number; stairs?: number },
+): { mod: Mod; lit: number[] } {
+  const pairs: [number, number][] = [
+    [types.letter, 0x25],
+    [types.gate, 0x42],
+    [types.bulb, 0x43],
+  ];
+  if (types.stairs !== undefined) pairs.push([types.stairs, 0x3d]);
+  const tileTypes = [{ episode, from: 1, types: pairs }];
+  const one = types.letter | (0x31 << 8);
+  const piece = (state: number) => types.gate | (state << 8);
+  const [AND, NAND, XOR, NOT, ACROSS] = [1, 3, 4, 9, 0x0a];
+  const mod = startRoomMod(
+    game,
+    episode,
+    { tileTypes },
+    { x0: 1, x1: 14, y0: 11, y1: 24 },
+    { x: 2, y: 16 },
+    (set, record) => {
+      /** A gate west of a node at row y: A and B from 1s, the pieces from x = 9 on. */
+      const circuit = (y: number, pieces: number[]) => {
+        set(7, y - 1, one);
+        set(7, y + 1, one);
+        set(8, y - 1, piece(0x0c));
+        set(8, y + 1, piece(0x0d));
+        set(8, y, piece(0x0e));
+        pieces.forEach((state, k) => {
+          set(9 + k, y, piece(state));
+        });
+        record(9 + pieces.length, y, [11, 0, 0, 0, 12, y]); // stairs down at (12, y)
+      };
+      circuit(14, [AND]);
+      circuit(18, [XOR, NOT]);
+      circuit(22, [NAND]);
+      set(4, 16, piece(ACROSS));
+    },
+  );
+  // the circuit as the editor sees it, with the classes the mod gives the episode
+  const classes = new Game(applyMod(game.image, mod)).episode(episode).classes;
+  const room = mod.changes.rooms[0]?.room;
+  assert.ok(room);
+  const lit = roomCircuit(room, classes).nodes.flatMap((n) =>
+    n.signal === 1 ? [Math.floor(n.cell / ROOM_WIDTH)] : [],
+  );
+  return { mod, lit };
+}
+
+/**
+ * Episode II's tangram and oracle at free tile types of `episode`, its hint and death
+ * texts (copyTexts), and two oracles with their symbols found in the start room: north
+ * of the hero's start (4, 16) one that sends him to (10, 16), at (12, 16) one that shows
+ * hint 331 when walked into eastwards.
+ */
+function oraclesMod(game: Game, episode: number, [tangram, oracle]: [number, number]): Mod {
+  const room = readEpisodeStart(game.image, episode).room;
+  const target = room | (10 << 10);
+  const copyTexts =
+    episode === 2 || episode === 3
+      ? []
+      : [
+          {
+            resource: textsId(episode),
+            from: textsId(2),
+            entries: [331, 334, 945].map((n) => [n, n] as const),
+          },
+        ];
+  const tileTypes = [
+    {
+      episode,
+      from: 2,
+      types: [
+        [tangram, 0x50],
+        [oracle, 0x51],
+      ] as const,
+    },
+  ];
+  return startRoomMod(
+    game,
+    episode,
+    { tileTypes, copyTexts },
+    { x0: 2, x1: 12, y0: 12, y1: 18 },
+    { x: 4, y: 16 },
+    (_, record) => {
+      // state 0x10 | n: symbol n found; target room | x << 10, y
+      const oracleRecord = (n: number) => [12, 0, oracle, 0x10 | n, target & 0xff, target >> 8, 16];
+      record(4, 15, oracleRecord(4));
+      record(12, 16, oracleRecord(1));
+    },
+  );
+}
+
+/** Writes the mod's exe to a temporary directory for `use`. */
+async function withModExe<T>(game: Game, mod: Mod, use: (exe: string) => Promise<T>): Promise<T> {
+  const dir = mkdtempSync(join(tmpdir(), "robot-driver-"));
+  try {
+    const exe = join(dir, "GameOfRobot.exe");
+    writeFileSync(exe, applyMod(game.image, mod));
+    return await use(exe);
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
 }
 
 describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () => {
@@ -214,29 +312,56 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     }
   }, 60_000);
 
-  test("episode III with episode I's circuit pieces: taking one lights the nodes", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "robot-driver-"));
-    try {
-      const exe = join(dir, "GameOfRobot.exe");
-      const { exe: data, lit } = circuitsInEpisodeIII(game);
+  const CIRCUITS = [
+    { episode: 3, types: { letter: 0x40, gate: 0x59, bulb: 0x43 } },
+    { episode: 4, types: { letter: 0x6d, gate: 0x6e, bulb: 0x6f } },
+    // Junior has no stairs: they come along from episode I
+    { episode: 0, types: { letter: 0x40, gate: 0x42, bulb: 0x43, stairs: 0x3d } },
+  ];
+  for (const { episode, types } of CIRCUITS) {
+    test(`episode ${String(episode)} with episode I's circuit pieces: taking one lights the nodes`, async () => {
+      const { mod, lit } = circuitsMod(game, episode, types);
       assert.deepEqual(lit, [14, 18], "AND and NOT XOR give 1, NAND 0");
-      writeFileSync(exe, data);
-      const stairs = await withGame(exe, async (d) => {
-        await d.startEpisode(3);
-        const cells = async () => {
-          const map = await d.peek(MAP, 2 * ROOM_CELLS);
-          const view = new DataView(map.buffer, map.byteOffset);
-          return [14, 18, 22].filter(
-            (y) => view.getUint16(2 * (12 + y * ROOM_WIDTH), true) === STAIRS_CLASS,
-          );
-        };
-        assert.deepEqual(await cells(), [], "no stairs before");
-        await walk(d, "right", (h) => h.x >= 4); // takes the spare piece
-        return cells();
-      });
-      assert.deepEqual(stairs, lit);
-    } finally {
-      rmSync(dir, { recursive: true });
-    }
-  }, 60_000);
+      const stairsCells = [14, 18, 22].map((y) => 12 + y * ROOM_WIDTH);
+      const stairs = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(episode);
+          assert.deepEqual(await cellsOfClass(d, STAIRS_CLASS, stairsCells), [], "none before");
+          await walk(d, "right", (h) => h.x >= 4); // takes the spare piece
+          return cellsOfClass(d, STAIRS_CLASS, stairsCells);
+        }),
+      );
+      assert.deepEqual(
+        stairs,
+        lit.map((y) => 12 + y * ROOM_WIDTH),
+      );
+    }, 60_000);
+  }
+
+  // IV's event table has no oracle events (262-271): no points there
+  const ORACLES = [
+    { episode: 0, types: [0x50, 0x51], points: 3500 },
+    { episode: 1, types: [0x50, 0x51], points: 3500 },
+    { episode: 4, types: [0x70, 0x71], points: 0 },
+  ] as const;
+  for (const { episode, types, points } of ORACLES) {
+    test(`episode ${String(episode)} with episode II's oracles: north sends, east hints`, async () => {
+      const mod = oraclesMod(game, episode, [...types]);
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          const room = (await d.startEpisode(episode)).room;
+          await d.hold("up", 40); // into the oracle north of the start
+          await d.run(200);
+          const sent = await d.hero();
+          const afterNorth = await d.score();
+          await walk(d, "right", (h) => h.x >= 11);
+          await d.hold("right", 40); // into the oracle at (12, 16): hint 331
+          await d.run(60);
+          return { room, sent, afterNorth, afterEast: await d.score() };
+        }),
+      );
+      assert.deepEqual(seen.sent, { room: seen.room, x: 10, y: 16 });
+      assert.deepEqual([seen.afterNorth, seen.afterEast], [points, 2 * points]);
+    }, 60_000);
+  }
 });

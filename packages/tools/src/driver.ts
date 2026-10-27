@@ -64,6 +64,8 @@ export interface HeroState {
 
 const ROOM = 0x4fe2fc;
 const HERO = 0x53e9ac;
+/** The score, kept obfuscated: ~[+4] ^ [+0] ^ 0x7895321e (0x42b600). */
+const SCORE = 0x4fe098;
 
 function parseStatus(answer: string): Status {
   const field = (name: string) => Number(new RegExp(`${name}=(\\d+)`).exec(answer)?.[1]);
@@ -275,6 +277,12 @@ export class Driver {
     const [x, y] = await this.peek(hero + 9, 2);
     const room = new DataView((await this.peek(ROOM, 2)).buffer).getUint16(0, true);
     return { room, x, y };
+  }
+
+  /** The player's points. */
+  async score(): Promise<number> {
+    const [a, b] = [await this.u32(SCORE), await this.u32(SCORE + 4)];
+    return (~b ^ a ^ 0x7895321e) >>> 0;
   }
 
   /**
