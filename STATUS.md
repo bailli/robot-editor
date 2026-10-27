@@ -55,14 +55,14 @@ for episodes I–IV.
 
 ## Repository map
 
-| Path                    | Content                                                                                       |
-| ----------------------- | --------------------------------------------------------------------------------------------- |
-| `packages/formats/src`  | `@robot/formats`: all decoders/encoders, no dependencies, Node and browser                    |
-| `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build; CodeMirror 6 for the script source)  |
-| `packages/tools/src`    | `@robot/tools`: CLI `pnpm robot …` (render, compare, eval, patch, shots, script, start, play) |
-| `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool; `serve` runs it for the driver |
-| `tools/wine/proxy`      | the only C: proxy `ddraw.dll` for the driver (mingw-w64, `pnpm proxy`)                        |
-| `shots.json`            | per reference screenshot: hash, palette offset, cells where our render still differs          |
+| Path                    | Content                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `packages/formats/src`  | `@robot/formats`: all decoders/encoders, no dependencies, Node and browser                         |
+| `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build; CodeMirror 6 for the script source)       |
+| `packages/tools/src`    | `@robot/tools`: CLI `pnpm robot …` (render, compare, eval, patch, shots, script, start, play, mod) |
+| `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool; `serve` runs it for the driver      |
+| `tools/wine/proxy`      | the only C: proxy `ddraw.dll` for the driver (mingw-w64, `pnpm proxy`)                             |
+| `shots.json`            | per reference screenshot: hash, palette offset, cells where our render still differs               |
 
 Files in `packages/formats/src`:
 
@@ -962,7 +962,7 @@ stands, decided 2026-10-27; details in the sections named.
 - **Delivery stays exe patching.** A new episode needs more than resources: the start
   (code, `start.ts`), class table entries (data), maybe code patches. Planned: a mod
   format, changes applied to a pristine exe (checked by hash), shared as a file holding
-  only its own data; see "The mod format (design)" below.
+  only its own data; see "The mod format" below.
 - **Rejected:** `WorldOfRobot.DLL` for episode data (see "Where resources come from":
   the exe only falls back to it for resources it lacks, and code-side changes need the
   exe anyway). **Deferred:** a native Linux wrapper instead of Wine (keys, time, DirectDraw
@@ -1046,7 +1046,7 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
      the episode never uses: IV's 197–200 (ids 388–391, no note, text or points; IV's
      scripts award 180–196, no code raises those ids). III has no such spare entry.
   2. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
-     if the exe holds `expect` there (e.g. the oracle flags in Junior). Later.
+     if the exe holds `expect` there (e.g. the oracle flags in Junior).
   3. `dealer` (key: episode): `{ episode, most, goods: [[class, state, price], …] }` →
      `withDealer` (see "The dealer's goods"): the episode's whole list, at most as many
      goods as its table has room for, each of a class the episode has a tile of.
