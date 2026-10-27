@@ -51,6 +51,18 @@ const changes: ModChanges = {
     },
   ],
   code: [],
+  // the oracles' hints and death message for Junior, from episode II's texts
+  copyTexts: [
+    {
+      resource: 1010,
+      from: 1210,
+      entries: [
+        [945, 945],
+        [331, 331],
+        [334, 334],
+      ],
+    },
+  ],
   // after tileTypes: the copied description of 0x59 gives way to this one
   texts: [
     { resource: 1310, entry: 0x59, variants: ["Ein Gatter."] },
@@ -86,6 +98,11 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   let text = direct.textSource(1310) ?? "";
   text = withTextEntry(withTextEntry(text, 0x59, ["Ein Gatter."]), 0x5b, undefined);
   direct = new Game(direct.withText(1310, text));
+  let junior = direct.textSource(1010) ?? "";
+  for (const entry of [331, 334, 945]) {
+    junior = withTextEntry(junior, entry, game.texts(1210)?.entries.get(entry));
+  }
+  direct = new Game(direct.withText(1010, junior));
   const rooms = direct
     .episode(3)
     .rooms.filter((r) => r.id !== 3)
@@ -102,6 +119,12 @@ test("a mod applies its changes as the editing functions do, in the order of kin
 
   expect(modded.episode(3).classes.typeOfClass.get(76)).toBe(0x59);
   expect(modded.episodeTexts(3)?.entries.get(0x59)).toEqual(["Ein Gatter."]);
+  for (const entry of [331, 334, 945]) {
+    expect(game.episodeTexts(0)?.entries.has(entry)).toBe(false);
+    expect(modded.episodeTexts(0)?.entries.get(entry)).toEqual(
+      game.episodeTexts(2)?.entries.get(entry),
+    );
+  }
   expect(modded.room(3, 41)).toEqual(room41);
   expect(modded.room(3, 300)).toEqual(room300);
   expect(modded.episode(3).rooms.some((r) => r.id === 3)).toBe(false);
@@ -127,6 +150,7 @@ test("compiled: byte writes in the tables and the start method, whole resources"
     );
   }
   expect(patch.resources.map((r) => `${r.type}/${r.name}`).sort()).toEqual([
+    "CRUNCHED/1010",
     "CRUNCHED/1306",
     "CRUNCHED/1310",
     "CRUNCHED/1320",
@@ -154,6 +178,7 @@ test("the file: saving again gives the same file, in key order", () => {
   const shuffled = mod({
     ...changes,
     tileTypes: changes.tileTypes.map((c) => ({ ...c, types: c.types.toReversed() })),
+    copyTexts: changes.copyTexts.map((c) => ({ ...c, entries: c.entries.toReversed() })),
     texts: changes.texts.toReversed(),
     rooms: changes.rooms.toReversed(),
   });
@@ -167,6 +192,9 @@ test("the file: saving again gives the same file, in key order", () => {
   );
   expect(JSON.parse(json)).toMatchObject({ format: 1, base: { sha256: emptyMod(exe()).base } });
   expect(json).toContain("[64, 37]");
+  expect(json).toContain("[945, 945]");
+  // the mod carries no text of the game's own
+  expect(json).not.toContain(game.texts(1210)?.entries.get(945)?.[0]?.slice(0, 20));
   // texts keep their brackets and spaces
   const text = { resource: 1310, entry: 1, variants: ["[\n 1,\n 2\n] [ 3,  4 ]"] };
   expect(parseMod(modJson(mod({ texts: [text] }))).changes.texts).toEqual([text]);
@@ -187,6 +215,14 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { rooms: [{ episode: 5, id: 41, room: null }] },
     { tileTypes: [{ episode: 3, from: 3, types: [[0x40, 0x40]] }] },
     { start: [{ episode: 3, room: 41, x: 40, y: 0 }] },
+    // an entry copied and written, a missing source entry or resource, a self copy
+    {
+      copyTexts: [{ resource: 1010, from: 1210, entries: [[331, 331]] }],
+      texts: [{ resource: 1010, entry: 331, variants: ["x"] }],
+    },
+    { copyTexts: [{ resource: 1010, from: 1210, entries: [[331, 9999]] }] },
+    { copyTexts: [{ resource: 1010, from: 1299, entries: [[331, 331]] }] },
+    { copyTexts: [{ resource: 1010, from: 1010, entries: [[1, 1]] }] },
     {
       code: [
         { va: 0x40b460, expect: new Uint8Array(4), bytes: new Uint8Array(4) },

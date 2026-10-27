@@ -5,9 +5,12 @@
  * kinds (a later kind wins over an earlier one):
  *   1. tileTypes  (episode, target type)  tile types from another episode (withTileTypes)
  *   2. code       (address)               bytes written where the exe holds `expect`
- *   3. texts      (resource, entry)       a text entry set or removed (withTextEntry)
+ *   3. copyTexts  (resource, entry)       a text entry copied from another one of the exe
+ *      texts      (resource, entry)       a text entry set or removed (withTextEntry)
  *   4. rooms      (episode, room id)      a room replaced, added or removed (withScene)
  *   5. start      (episode)               where the episode starts (withEpisodeStart)
+ * copyTexts and texts share their keys: an entry is either copied or written. Copies read
+ * the exe as kinds 1 and 2 left it, so the mod carries no text of the game's own.
  * Applying first compiles the mod against the pristine exe (checked by its sha256) into a
  * patch: byte writes outside the resources and whole replaced resources. The exe writer
  * (applyPatch) and, later, the proxy as an in-memory loader apply only that patch.
@@ -42,6 +45,15 @@ export interface CodeChange {
   bytes: Uint8Array;
 }
 
+export interface CopyTextsChange {
+  /** The CRUNCHED resource the entries go to. */
+  resource: number;
+  /** The CRUNCHED resource they come from (it may be `resource`). */
+  from: number;
+  /** [target entry, source entry] pairs. */
+  entries: readonly (readonly [to: number, of: number])[];
+}
+
 export interface TextChange {
   /** A CRUNCHED resource id (e.g. textsId, eventTextsId, roomNamesId). */
   resource: number;
@@ -64,6 +76,7 @@ export interface StartChange extends EpisodeStart {
 export interface ModChanges {
   tileTypes: readonly TileTypesChange[];
   code: readonly CodeChange[];
+  copyTexts: readonly CopyTextsChange[];
   texts: readonly TextChange[];
   rooms: readonly RoomChange[];
   start: readonly StartChange[];
@@ -100,7 +113,14 @@ export class ModError extends Error {
   override name = "ModError";
 }
 
-export const NO_CHANGES: ModChanges = { tileTypes: [], code: [], texts: [], rooms: [], start: [] };
+export const NO_CHANGES: ModChanges = {
+  tileTypes: [],
+  code: [],
+  copyTexts: [],
+  texts: [],
+  rooms: [],
+  start: [],
+};
 
 /** A mod without changes for the given exe. */
 export function emptyMod(exe: Uint8Array, name = ""): Mod {
@@ -122,7 +142,7 @@ function episodeOk(episode: number, where: string): void {
 /** Throws a ModError naming the change if any change is invalid or a key repeats. */
 export function checkMod(mod: Mod): void {
   need(/^[0-9a-f]{64}$/.test(mod.base), "base", "not a sha256 (64 lowercase hex digits)");
-  const { tileTypes, code, texts, rooms, start } = mod.changes;
+  const { tileTypes, code, copyTexts, texts, rooms, start } = mod.changes;
   const keys = new Set<string>();
   const once = (key: string, where: string) => {
     need(!keys.has(key), where, "changed twice");
@@ -152,9 +172,20 @@ export function checkMod(mod: Mod): void {
     const [[, end, before], [va, , where]] = [ranges[i - 1], ranges[i]];
     need(end <= va, where, `overlaps ${before}`);
   }
+  const textId = (v: number) => isInt(v, 0, 0xffff);
+  copyTexts.forEach((c, i) => {
+    const where = `copyTexts[${i}]`;
+    need(textId(c.resource) && textId(c.from), where, "bad resource id");
+    need(c.entries.length > 0, where, "no entries");
+    for (const [to, of] of c.entries) {
+      need(textId(to) && textId(of), where, `entries ${to}, ${of}`);
+      need(c.from !== c.resource || to !== of, where, `copies entry ${to} onto itself`);
+      once(`text ${c.resource} ${to}`, `${where} (${c.resource}:${to})`);
+    }
+  });
   texts.forEach((c, i) => {
     const where = `texts[${i}] (${c.resource}:${c.entry})`;
-    need(isInt(c.resource, 0, 0xffff) && isInt(c.entry, 0, 0xffff), where, "bad id");
+    need(textId(c.resource) && textId(c.entry), where, "bad id");
     need(c.variants === null || c.variants.length > 0, where, "no variants (null removes)");
     const problem = c.variants?.map(textEntryProblem).find((p) => p !== undefined);
     need(problem === undefined, where, problem ?? "");
@@ -206,6 +237,14 @@ function canonical(changes: ModChanges): ModChanges {
         ),
       ),
     code: changes.code.toSorted(byKeys((c) => c.va)),
+    copyTexts: changes.copyTexts
+      .map((c) => ({ ...c, entries: c.entries.toSorted(byKeys(([to]) => to)) }))
+      .toSorted(
+        byKeys(
+          (c) => c.resource,
+          (c) => c.entries[0]?.[0] ?? 0,
+        ),
+      ),
     texts: changes.texts.toSorted(
       byKeys(
         (c) => c.resource,
@@ -244,10 +283,26 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
     });
     game = new Game(out);
   }
-  for (const resource of new Set(changes.texts.map((c) => c.resource))) {
+  // copies read the texts before any is changed, then go with the others in key order
+  const copied = changes.copyTexts.flatMap((c, i) => {
+    const source = game.texts(c.from)?.entries;
+    need(source !== undefined, `copyTexts[${i}] (from ${c.from})`, "no such text resource");
+    return c.entries.map(([entry, of]) => {
+      const variants = source.get(of);
+      need(variants !== undefined, `copyTexts[${i}] (${c.from}:${of})`, "no such entry");
+      return { resource: c.resource, entry, variants };
+    });
+  });
+  const texts = [...copied, ...changes.texts].sort(
+    byKeys(
+      (c) => c.resource,
+      (c) => c.entry,
+    ),
+  );
+  for (const resource of new Set(texts.map((c) => c.resource))) {
     let text = game.textSource(resource);
     need(text !== undefined, `texts (${resource})`, "no such text resource");
-    for (const c of changes.texts.filter((t) => t.resource === resource)) {
+    for (const c of texts.filter((t) => t.resource === resource)) {
       text = withTextEntry(text, c.entry, c.variants ?? undefined);
     }
     game = new Game(game.withText(resource, text));
@@ -360,7 +415,7 @@ function fromHex(text: string, where: string): Uint8Array {
 /** The mod as its JSON file; changes in key order, so saving again gives the same file. */
 export function modJson(mod: Mod): string {
   checkMod(mod);
-  const { tileTypes, code, texts, rooms, start } = canonical(mod.changes);
+  const { tileTypes, code, copyTexts, texts, rooms, start } = canonical(mod.changes);
   const file: Json = {
     format: MOD_FORMAT,
     name: mod.name,
@@ -378,6 +433,11 @@ export function modJson(mod: Mod): string {
         expect: hex(c.expect),
         bytes: hex(c.bytes),
       })),
+      copyTexts: copyTexts.map((c) => ({
+        resource: c.resource,
+        from: c.from,
+        entries: c.entries.map(([to, of]) => [to, of]),
+      })),
       texts: texts.map((c) => ({
         resource: c.resource,
         entry: c.entry,
@@ -391,7 +451,7 @@ export function modJson(mod: Mod): string {
       start: start.map((c) => ({ episode: c.episode, room: c.room, x: c.x, y: c.y })),
     },
   };
-  // arrays of numbers (the type pairs) on one line each; strings hold no line breaks
+  // arrays of numbers (the pairs) on one line each; strings hold no line breaks
   const json = JSON.stringify(file, null, 2).replace(
     /\[\n\s+(\d+(?:,\n\s+\d+)*)\n\s+\]/g,
     (_, list: string) => `[${list.split(/,\n\s+/).join(", ")}]`,
@@ -419,6 +479,15 @@ function int(v: unknown, where: string): number {
   return v;
 }
 
+/** [to, of] pairs of integers. */
+function pairs(v: unknown, where: string): (readonly [number, number])[] {
+  return array(v, where).map((pair, i) => {
+    const items = array(pair, `${where}[${i}]`);
+    need(items.length === 2, `${where}[${i}]`, "not a pair");
+    return [int(items[0], `${where}[${i}]`), int(items[1], `${where}[${i}]`)] as const;
+  });
+}
+
 /** A mod from its JSON file (modJson); throws a ModError naming what is wrong. */
 export function parseMod(text: string): Mod {
   let json: unknown;
@@ -443,10 +512,7 @@ export function parseMod(text: string): Mod {
       tileTypes: list("tileTypes", (o, w) => ({
         episode: int(o["episode"], `${w}.episode`),
         from: int(o["from"], `${w}.from`),
-        types: array(o["types"], `${w}.types`).map((pair, i) => {
-          const [to, of] = array(pair, `${w}.types[${i}]`);
-          return [int(to, `${w}.types[${i}]`), int(of, `${w}.types[${i}]`)] as const;
-        }),
+        types: pairs(o["types"], `${w}.types`),
       })),
       code: list("code", (o, w) => {
         const va = string(o["va"], `${w}.va`);
@@ -457,6 +523,11 @@ export function parseMod(text: string): Mod {
           bytes: fromHex(string(o["bytes"], `${w}.bytes`), `${w}.bytes`),
         };
       }),
+      copyTexts: list("copyTexts", (o, w) => ({
+        resource: int(o["resource"], `${w}.resource`),
+        from: int(o["from"], `${w}.from`),
+        entries: pairs(o["entries"], `${w}.entries`),
+      })),
       texts: list("texts", (o, w) => ({
         resource: int(o["resource"], `${w}.resource`),
         entry: int(o["entry"], `${w}.entry`),

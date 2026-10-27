@@ -238,10 +238,11 @@ switch (command) {
     try {
       const mod = parseMod(readFileSync(source, "utf8"));
       writeFileSync(out, applyMod(game().image, mod));
-      const { tileTypes, code, texts, rooms, start } = mod.changes;
+      const { tileTypes, code, copyTexts, texts, rooms, start } = mod.changes;
       console.log(
         `${out}: ${tileTypes.length} tile type changes, ${code.length} code, ` +
-          `${texts.length} texts, ${rooms.length} rooms, ${start.length} starts`,
+          `${copyTexts.length} text copies, ${texts.length} texts, ` +
+          `${rooms.length} rooms, ${start.length} starts`,
       );
     } catch (error) {
       if (!(error instanceof ModError)) throw error;

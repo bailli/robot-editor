@@ -292,6 +292,7 @@ export {
 } from "./mod.ts";
 export type {
   CodeChange,
+  CopyTextsChange,
   Mod,
   ModChanges,
   ModPatch,

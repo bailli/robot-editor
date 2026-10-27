@@ -919,7 +919,13 @@ stands, decided 2026-10-27; details in the sections named.
   differ per episode (I's BULB uses colours 1 and 6, which differ in III: the game draws
   them with III's colours, as we do; remap if it matters). Some class code checks the
   episode number (e.g. describe method 0x4145b0): every class needs a try in its new
-  episode.
+  episode. **Circuits** need 3 free types and stairs (a lit node places class 71):
+  Junior has **no stairs class** (it would need I's 0x3d as a fourth type; untried), IV
+  has them (untried). Their code checks no episode. **Oracles** need 2 types (tangram,
+  oracle; I has 0x50 and 0x51 free), their texts (`copyTexts`; Junior, I and IV have
+  nothing at 331, 334, 945) and, for their 3500 points, events 262–271: Junior, I, II
+  and III have them, **IV not** (a mod cannot add event entries beyond the tile types
+  yet). Their code checks the episode only for the flags 0x4000/0x8000 (0x412ae0).
 - **Next, in order:** (1) the editor's use of the mod format (see below; `mod.ts` is
   done); (2) if wanted, oracles that
   vanish after north and east in Junior too, a code patch (episode flags
@@ -951,7 +957,11 @@ editor's use of it and the proxy loader.
   3. `texts` (key: resource id, entry): `{ resource, entry, variants | null }` →
      `withTextEntry`, entry by entry (room names, descriptions, hints, messages), never
      whole resources: the file holds only what the mod wrote, and two changes to one
-     resource compose.
+     resource compose. `copyTexts` (same keys: an entry is either copied or written):
+     `{ resource, from, entries: [[to, of], …] }` copies entries of resource `from` (as
+     kinds 1–2 left the exe) into `resource`, e.g. episode II's oracle hints and death
+     message (1210: 331, 334, 945) into Junior's 1010, so the mod carries no text of
+     the game's own.
   4. `rooms` (key: episode, room id): the room as its SCNV3 bytes (id, tags with the
      script, map, records; as `serializeScene` writes one room), base64; `null` removes
      the room. Others keep their place; once a room is added or removed, the episode's
