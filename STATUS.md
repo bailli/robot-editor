@@ -88,7 +88,7 @@ Files in `packages/formats/src`:
 | `records.ts`                 | what logic records do                                                                         |
 | `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                |
 | `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`); patching them    |
-| `dealer.ts`                  | the dealer's goods per episode: items, prices, how many shown; patching them                  |
+| `dealer.ts`                  | the dealer's goods per episode: classes, prices, how many shown; patching them                |
 | `mod.ts`, `sha256.ts`        | mods: keyed changes to the pristine exe, their JSON file, compiled to a patch and applied     |
 | `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
 | `game.ts`                    | `Game`: loads an exe, episodes lazily, saves scenes, texts, tile types from other episodes    |
@@ -708,16 +708,22 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   `random(5, most)` (0x436890, inclusive) and that many distinct random entries (a
   128-bit used set); nothing in the record chooses goods, so every dealer of an episode
   sells from the same table at the same prices, rolled anew at each appearance, whatever
-  the hero owns. An entry is 4 bytes: tile type, state, price in gold (word); tile 0x6d's
-  state is remapped through 0x4c70e0. Junior 0x479a20 (19 entries, 5–8 shown; 0x40e1e0),
-  I 0x475730 (27, 5–10; 0x408de0), II 0x476ce8 (31, 5–8; 0x409fe0), IV 0x478bf8 (18,
-  5–8; 0x40d6c0); III has none (the base method 0x40be40 returns null and the constructor
-  gives up, so no dealer there). All four sell SLING 14, GARLIC 2, tile 0x0b 20, BOTTLE
-  10, tile 0x09 5, SUIT (55 in Junior, else 85), AMMU 5, MAGNET 10, tile 0x1c 15, tile
-  0x25 30/32, tile 0x29 28/48; all but IV tile 0x0c 22 and PUZZLE 0–3 at 8; Junior also
-  FLY 25 and KEY 9, 3; I DUPOBJ 27, PILL 1, 0x0f/28, 0x40, 0x37/2, 0x38/1 and KEY 2, 5,
-  9, 7, 8 (10–14); II like I with KEY 6, 3, 1, 15 (25–35) and 0x48 60, 0x66/0, 0x66/2,
-  0x6d/113, 0x68/2, 0x80, GIFT/8; IV KEY 6, 3, 1, 15, 0x38/1, 0x66/0 and 0x66/2. More
+  the hero owns. An entry is 4 bytes: **class id** (not tile type), state, price in gold
+  (word): the game's run-time form of an object (class | state << 8). The offer line
+  names the class's tile type (0x4c70e0[class], 0x4485af), buying hands class | state
+  to the inventory (0x42c010); a package (class 0x6d) holds a class in its state, turned
+  into its tile type when offered (0x448565). (Corrected 2026-10-27: read as tile types,
+  episode I's class 0x40, a BARRIER item, became the thief, II's 0x66, FOOD, fire.)
+  Junior 0x479a20 (19 entries, 5–8 shown; 0x40e1e0), I 0x475730 (27, 5–10; 0x408de0), II
+  0x476ce8 (31, 5–8; 0x409fe0), IV 0x478bf8 (18, 5–8; 0x40d6c0); III has none (the base
+  method 0x40be40 returns null and the constructor gives up, so no dealer there). By
+  the tiles of their classes (unnamed ones as tile type), all four sell SLING 14, GARLIC
+  2, TREE (0x0b) 20, BOTTLE 10, 0x09 5, SUIT (55 in Junior, else 85), AMMU 5, MAGNET
+  10, 0x1c 15, TONIC 30/32, SAVE 28/48; all but IV 0x0c 22 and PUZZLE 0–3 at 8; Junior
+  also FLY 25 and KEY 9, 3; I SICKLE 27, 0x39 1, NOTE/0x1c 4, BARRIER 7, 0x12/2 12, LAMP
+  15 and KEY 2, 5, 9, 7, 8 (10–14); II like I (no NOTE, no 0x12) with KEY 6, 3, 1, 15
+  (25–35), WAND 60, FOOD 15 and 5, GIFT (holding class 0x71) 30, MONEY 3, KOMPASS 17,
+  AMMUL 25; IV KEY 6, 3, 1, 15, LAMP and FOOD twice. More
   entries need a code patch (the count is an immediate); a table of fewer than 5 would
   hang the distinct pick. Esc pays (0x4487d0): marked goods costing more than the hero's
   gold (0x4fe30e) take all of it and give nothing (text 507 entry 4); otherwise event
@@ -890,7 +896,9 @@ Supported:
 - save: downloads the exe with all edited episodes and texts (warns about unsaved changes
   on leave)
 - the episode's dealer (tab Episode, `dealer-view.ts`): the goods every dealer of the
-  episode sells, with picture, name and price, the most shown at once, the rooms with
+  episode sells, with picture and name (the tile the game makes of the class,
+  `goodTile`; a picked tile becomes its class, `cellGood`, tiles without one are
+  refused) and price, the most shown at once, the rooms with
   a dealer record (links); a picture click sells the current tile instead, right-click
   paints with it; prices typed, goods moved, removed (at least 5) or added (the current
   tile, up to the table's size), "Original goods"; each change one undo step (patched
@@ -1004,9 +1012,9 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
      scripts award 180–196, no code raises those ids). III has no such spare entry.
   2. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
      if the exe holds `expect` there (e.g. the oracle flags in Junior). Later.
-  3. `dealer` (key: episode): `{ episode, most, goods: [[type, state, price], …] }` →
+  3. `dealer` (key: episode): `{ episode, most, goods: [[class, state, price], …] }` →
      `withDealer` (see "The dealer's goods"): the episode's whole list, at most as many
-     goods as its table has room for.
+     goods as its table has room for, each of a class the episode has a tile of.
   4. `texts` (key: resource id, entry): `{ resource, entry, variants | null }` →
      `withTextEntry`, entry by entry (room names, descriptions, hints, messages), never
      whole resources: the file holds only what the mod wrote, and two changes to one

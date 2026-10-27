@@ -42,7 +42,7 @@ const room300: Room = { ...game.room(3, 3), id: 300 };
 /** Episode I's dealer with six goods, a SLING for 99 gold first, at most 6 shown. */
 const dealer1: Dealer = (() => {
   const goods = readDealer(game.image, 1)?.goods.slice(0, 6) ?? [];
-  return { goods: goods.with(0, { tile: 0x0020, price: 99 }), most: 6 };
+  return { goods: goods.with(0, { classId: 0x20, state: 0, price: 99 }), most: 6 };
 })();
 
 const changes: ModChanges = {
@@ -256,7 +256,21 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { dealer: [{ episode: 3, ...dealer1 }] },
     { dealer: [{ episode: 1, goods: Array(28).fill(dealer1.goods[0]), most: 6 }] },
     { dealer: [{ episode: 1, ...dealer1, most: 4 }] },
-    { dealer: [{ episode: 1, goods: dealer1.goods.with(1, { tile: 0x7f, price: 1 }), most: 6 }] },
+    {
+      dealer: [
+        { episode: 1, goods: dealer1.goods.with(1, { classId: 0, state: 0, price: 1 }), most: 6 },
+      ],
+    },
+    // a class episode I has no tile of (checked when applied)
+    {
+      dealer: [
+        {
+          episode: 1,
+          goods: dealer1.goods.with(1, { classId: 0xfe, state: 0, price: 1 }),
+          most: 6,
+        },
+      ],
+    },
     // an entry copied and written, a missing source entry or resource, a self copy
     {
       copyTexts: [{ resource: 1010, from: 1210, entries: [[331, 331]] }],

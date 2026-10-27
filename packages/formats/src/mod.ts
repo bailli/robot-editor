@@ -19,7 +19,7 @@
  * (applyPatch) and, later, the proxy as an in-memory loader apply only that patch.
  *
  * The file is JSON: format, name, author, description, base { sha256 }, changes with one
- * array per kind; code as hex strings, the dealer's goods as [type, state, price], rooms
+ * array per kind; code as hex strings, the dealer's goods as [class, state, price], rooms
  * as base64 of serializeRoom (null removes).
  */
 import { type Dealer, dealerProblem, withDealer } from "./dealer.ts";
@@ -359,7 +359,7 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
   }
   for (const c of changes.dealer) {
     try {
-      game = new Game(withDealer(game.image, c.episode, c));
+      game = new Game(withDealer(game.image, c.episode, c, game.episode(c.episode).classes));
     } catch (error) {
       if (error instanceof RangeError) need(false, `dealer (episode ${c.episode})`, error.message);
       throw error;
@@ -574,7 +574,7 @@ export function modJson(mod: Mod): string {
       dealer: dealer.map((c) => ({
         episode: c.episode,
         most: c.most,
-        goods: c.goods.map(({ tile, price }) => [tile & 0xff, tile >> 8, price]),
+        goods: c.goods.map(({ classId, state, price }) => [classId, state, price]),
       })),
       copyTexts: copyTexts.map((c) => ({
         resource: c.resource,
@@ -678,10 +678,9 @@ export function parseMod(text: string): Mod {
         goods: array(o["goods"], `${w}.goods`).map((v, n) => {
           const where = `${w}.goods[${n}]`;
           const items = array(v, where).map((item) => int(item, where));
-          need(items.length === 3, where, "not [type, state, price]");
-          const [type, state, price] = items;
-          need(isInt(type, 0, 0xff) && isInt(state, 0, 0xff), where, "type and state are bytes");
-          return { tile: type | (state << 8), price };
+          need(items.length === 3, where, "not [class, state, price]");
+          const [classId, state, price] = items;
+          return { classId, state, price };
         }),
       })),
       copyTexts: list("copyTexts", (o, w) => ({

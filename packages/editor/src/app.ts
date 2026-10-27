@@ -23,6 +23,7 @@ import {
   START_ROOMS,
   actorKindClass,
   backdropRoom,
+  cellGood,
   compileScript,
   cryptScene,
   darkPalette,
@@ -32,6 +33,7 @@ import {
   displayText,
   eventTextsId,
   exitMode,
+  goodTile,
   modJson,
   nodeBulb,
   parseCompiledScript,
@@ -522,6 +524,11 @@ export class App {
     tile: () => this.tile,
     useTile: (value) => {
       this.setTile(value);
+    },
+    goodTile: (good) => goodTile(good, this.need().game.episode(this.episode).classes),
+    cellGood: (cell) => cellGood(cell, this.need().game.episode(this.episode).classes),
+    refuse: (text) => {
+      this.setStatus(text, true);
     },
     go: (room) => {
       if (this.need().hasRoom(this.episode, room)) this.showRoom(room);

@@ -206,6 +206,20 @@ test("the Episode tab edits the dealer's goods, undoably; the mod keeps them", a
   await expect.element(dealer().getByText("Dealers appear in rooms 18, 24, 42.")).toBeVisible();
   expect(document.querySelectorAll(".dealer-good").length).toBe(27);
   await expect.element(dealer().getByText("27 of 27")).toBeVisible();
+  // the goods are classes, shown as the tiles the game makes of them
+  const names = [...document.querySelectorAll(".dealer-name")].map((n) => n.textContent);
+  expect(names.slice(14, 17)).toEqual(["Tonic", "Sickle", "Save"]);
+  expect(names.at(-1)).toBe("Lamp");
+  expect(names).not.toContain("Thief");
+  // a tile without a class cannot be sold
+  app.setTile(0);
+  document
+    .querySelector(".dealer-good canvas")
+    ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  expect(document.querySelector(".status")?.textContent).toBe(
+    "The tile 0x0000 has no class: the dealer cannot sell it",
+  );
+  expect(app.editor?.dealer(1)).toEqual(original);
   await expect
     .element(dealer().getByRole("button", { name: "Add the current tile" }))
     .toBeDisabled();
@@ -214,7 +228,7 @@ test("the Episode tab edits the dealer's goods, undoably; the mod keeps them", a
   const field = price(1).element();
   await userEvent.fill(price(1), "99");
   await userEvent.keyboard("{Tab}");
-  expect(app.editor?.dealer(1)?.goods[0]).toEqual({ tile: 0x0020, price: 99 });
+  expect(app.editor?.dealer(1)?.goods[0]).toEqual({ classId: 0x20, state: 0, price: 99 });
   expect(price(1).element()).toBe(field);
   expect(tab("episode")).toMatchObject({ badge: "●", title: "The dealer sells 27 goods (edited)" });
 
@@ -226,13 +240,13 @@ test("the Episode tab edits the dealer's goods, undoably; the mod keeps them", a
   defined(rows()[0].querySelector("canvas") ?? undefined).dispatchEvent(
     new MouseEvent("click", { bubbles: true }),
   );
-  expect(app.editor?.dealer(1)?.goods[0]).toEqual({ tile: 0x0315, price: 99 });
+  expect(app.editor?.dealer(1)?.goods[0]).toEqual({ classId: 0x15, state: 3, price: 99 });
   await userEvent.fill(dealer().getByLabelText("Shown at most"), "6");
   await userEvent.keyboard("{Enter}");
   expect(app.editor?.dealer(1)?.most).toBe(6);
   // room for one more now
   await dealer().getByRole("button", { name: "Add the current tile" }).click();
-  expect(app.editor?.dealer(1)?.goods.at(-1)).toEqual({ tile: 0x0315, price: 10 });
+  expect(app.editor?.dealer(1)?.goods.at(-1)).toEqual({ classId: 0x15, state: 3, price: 10 });
 
   const saved = parseMod(app.saveMod() ?? "");
   expect(saved.changes.dealer.map((c) => [c.episode, c.goods.length, c.most])).toEqual([

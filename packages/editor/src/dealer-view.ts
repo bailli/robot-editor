@@ -20,6 +20,12 @@ export interface DealerViewEvents {
   tile(): number;
   /** Makes a cell value the tile the editor paints with. */
   useTile(value: number): void;
+  /** The cell the game makes of a good (goodTile), undefined if the episode has none. */
+  goodTile(good: Pick<DealerGood, "classId" | "state">): number | undefined;
+  /** What a cell is sold as (cellGood): its class and state, undefined if it has no class. */
+  cellGood(cell: number): Pick<DealerGood, "classId" | "state"> | undefined;
+  /** Says why something cannot be done (e.g. selling a tile without a class). */
+  refuse(message: string): void;
   go(room: number): void;
 }
 
@@ -142,7 +148,8 @@ export class DealerView {
         ? `The table holds ${capacity} goods: other data follows it in the exe. Replace one instead (click its picture).`
         : "Add the tile the editor paints with, for 10 gold",
       () => {
-        this.change((goods) => goods.push({ tile: this.events.tile(), price: 10 }));
+        const good = this.currentGood();
+        if (good) this.change((goods) => goods.push({ ...good, price: 10 }));
       },
     );
     add.disabled = full;
@@ -187,6 +194,14 @@ export class DealerView {
     return line;
   }
 
+  /** The current tile as a good; refused (undefined) if it has no class. */
+  private currentGood(): Pick<DealerGood, "classId" | "state"> | undefined {
+    const tile = this.events.tile();
+    const good = this.events.cellGood(tile);
+    if (!good) this.events.refuse(`The tile ${hex(tile)} has no class: the dealer cannot sell it`);
+    return good;
+  }
+
   private goodRow(good: DealerGood, n: number, count: number): HTMLElement {
     const row = element("li", "dealer-good");
     row.dataset["key"] = String(n);
@@ -198,19 +213,28 @@ export class DealerView {
         if (i < goods.length) goods[i] = { ...goods[i], ...fields };
       });
     };
-    const preview = this.events.preview(good.tile);
+    // the tile the game makes of it: class 0x25 is the TONIC, tile 0x33 in episode I
+    const tile = this.events.goodTile(good);
+    const what = `class 0x${good.classId.toString(16)}, state ${good.state}`;
+    const preview = this.events.preview(tile ?? 0);
     preview.classList.add("pickable");
-    preview.title += "\nClick: sell the current tile instead · Right-click: paint with this one";
+    preview.title += `\n(${what})\nClick: sell the current tile instead · Right-click: paint with this one`;
     preview.addEventListener("click", () => {
-      edit({ tile: this.events.tile() });
+      const current = this.currentGood();
+      if (current) edit(current);
     });
     preview.addEventListener("contextmenu", (event) => {
       event.preventDefault();
       const at = this.dealer?.goods[index()];
-      if (at) this.events.useTile(at.tile);
+      const cell = at && this.events.goodTile(at);
+      if (cell !== undefined) this.events.useTile(cell);
     });
-    const name = element("span", "dealer-name", this.events.name(good.tile));
-    name.title = `${hex(good.tile)}: ${name.textContent}`;
+    const name = element(
+      "span",
+      "dealer-name",
+      tile === undefined ? `no tile of ${what}` : this.events.name(tile),
+    );
+    name.title = tile === undefined ? what : `${hex(tile)}: ${name.textContent} (${what})`;
     const price = element("input", "record-field dealer-price");
     price.type = "number";
     price.min = "0";

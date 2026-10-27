@@ -666,7 +666,7 @@ describe("Editor and mods", () => {
 
 describe("Editor and the dealer", () => {
   const original = defined(readDealer(game.image, 1), "episode I's dealer");
-  const cheaper = { goods: original.goods.with(0, { tile: 0x0020, price: 1 }), most: 6 };
+  const cheaper = { goods: original.goods.with(0, { classId: 0x20, state: 0, price: 1 }), most: 6 };
 
   test("the dealer's goods change as one step, saved into the exe and undone", () => {
     const editor = new Editor(game);

@@ -10,9 +10,15 @@
  *
  * Episode III's is the base method 0x40be40 (count and most 0, no table): no dealer there.
  * The dealer's offer (0x448440) is `random(5, most)` distinct entries of the table, rolled
- * anew at each appearance; an entry is 4 bytes: tile type, state (a cell value) and the
- * price in gold (word).
+ * anew at each appearance; an entry is 4 bytes: class id, state and the price in gold
+ * (word). Class and state are what the game's map holds at run time (class | state << 8):
+ * the offer line names the class's tile type (0x4c70e0[class], 0x4485af) and buying hands
+ * class | state to the inventory (0x42c010) or lays it on the dealer's cell (0x433300).
+ * A package (class 0x6d) keeps a class in its state too, turned into its tile type when
+ * offered (0x448565), as packages hold their contents at run time.
  */
+import type { EpisodeClasses } from "./classes.ts";
+import { PACKAGE_CLASS } from "./describe.ts";
 import { type PeImage, parsePe, readVa } from "./pe.ts";
 import { EPISODE_VTABLES } from "./start.ts";
 
@@ -47,8 +53,10 @@ export const MAX_SHOWN = 10;
 export const MAX_PRICE = 0x7fff;
 
 export interface DealerGood {
-  /** Tile type | state << 8, as a cell (tile 0x6d's state is remapped through 0x4c70e0). */
-  tile: number;
+  /** The class id of what is sold (not its tile type). */
+  classId: number;
+  /** Its state; a package's: the class of its contents. */
+  state: number;
   price: number;
 }
 
@@ -90,7 +98,8 @@ export function readDealer(image: PeImage, episode: number): Dealer | undefined 
   const bytes = readVa(image, method.table, method.count * ENTRY_SIZE);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const goods = Array.from({ length: method.count }, (_, n) => ({
-    tile: view.getUint16(n * ENTRY_SIZE, true),
+    classId: view.getUint8(n * ENTRY_SIZE),
+    state: view.getUint8(n * ENTRY_SIZE + 1),
     price: view.getUint16(n * ENTRY_SIZE + 2, true),
   }));
   return { goods, most: method.most };
@@ -106,8 +115,37 @@ export function dealerCapacity(image: PeImage, episode: number): number {
   return method ? Math.max(TABLES.get(method.table) ?? 0, method.count) : 0;
 }
 
-/** Why the dealer cannot be given to an episode whose table holds `capacity` goods. */
-export function dealerProblem(dealer: Dealer, capacity: number): string | undefined {
+/**
+ * The cell the game makes of a good (as it lies in a room: tile type | state << 8),
+ * undefined if the episode has no tile of its class (or of a package's contents).
+ */
+export function goodTile(good: Pick<DealerGood, "classId" | "state">, classes: EpisodeClasses) {
+  const type = classes.typeOfClass.get(good.classId);
+  const state = good.classId === PACKAGE_CLASS ? classes.typeOfClass.get(good.state) : good.state;
+  return type === undefined || state === undefined ? undefined : type | (state << 8);
+}
+
+/** The good a cell would be sold as (goodTile's inverse), undefined if it has no class. */
+export function cellGood(
+  cell: number,
+  classes: EpisodeClasses,
+): Pick<DealerGood, "classId" | "state"> | undefined {
+  const classId = classes.classes.get(cell & 0xff)?.id;
+  const state = classId === PACKAGE_CLASS ? classes.classes.get(cell >> 8)?.id : (cell >> 8) & 0xff;
+  return classId === undefined || classId === 0 || state === undefined
+    ? undefined
+    : { classId, state };
+}
+
+/**
+ * Why the dealer cannot be given to an episode whose table holds `capacity` goods; with
+ * the episode's classes also goods it has no tile for.
+ */
+export function dealerProblem(
+  dealer: Dealer,
+  capacity: number,
+  classes?: EpisodeClasses,
+): string | undefined {
   const { goods, most } = dealer;
   if (capacity === 0) return "the episode has no dealer";
   if (goods.length > capacity) return `the table holds at most ${capacity} goods`;
@@ -115,10 +153,14 @@ export function dealerProblem(dealer: Dealer, capacity: number): string | undefi
   if (!Number.isInteger(most) || most < MIN_SHOWN || most > Math.min(MAX_SHOWN, goods.length)) {
     return `at most ${MIN_SHOWN}–${Math.min(MAX_SHOWN, goods.length)} shown, not ${most}`;
   }
-  for (const [n, { tile, price }] of goods.entries()) {
-    const type = tile & 0xff;
-    if (!Number.isInteger(tile) || tile < 0 || tile > 0xffff || type === 0 || type >= 0x7f) {
-      return `good ${n + 1}: no item tile (0x${tile.toString(16)})`;
+  const byte = (v: number) => Number.isInteger(v) && v >= 0 && v <= 0xff;
+  for (const [n, good] of goods.entries()) {
+    const { classId, state, price } = good;
+    if (!byte(classId) || !byte(state) || classId === 0) {
+      return `good ${n + 1}: class ${classId}, state ${state} (bytes, class not 0)`;
+    }
+    if (classes && goodTile(good, classes) === undefined) {
+      return `good ${n + 1}: the episode has no tile of class 0x${classId.toString(16)}`;
     }
     if (!Number.isInteger(price) || price < 0 || price > MAX_PRICE) {
       return `good ${n + 1}: price ${price} (0–${MAX_PRICE})`;
@@ -130,12 +172,18 @@ export function dealerProblem(dealer: Dealer, capacity: number): string | undefi
 /**
  * A copy of the exe whose dealer in `episode` sells `dealer.goods` (in place of the
  * table's first entries; the rest stay but are never offered) and shows at most
- * `dealer.most` at once. Throws a RangeError naming what does not fit (dealerProblem).
+ * `dealer.most` at once. Throws a RangeError naming what does not fit (dealerProblem;
+ * with `classes`, the episode's, also goods without a tile).
  */
-export function withDealer(image: PeImage, episode: number, dealer: Dealer): Uint8Array {
+export function withDealer(
+  image: PeImage,
+  episode: number,
+  dealer: Dealer,
+  classes?: EpisodeClasses,
+): Uint8Array {
   const method = goodsMethod(image, episode);
   const capacity = dealerCapacity(image, episode);
-  const problem = dealerProblem(dealer, capacity);
+  const problem = dealerProblem(dealer, capacity, classes);
   if (!method || problem) throw new RangeError(problem ?? "the episode has no dealer");
   const out = image.data.slice();
   const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
@@ -144,8 +192,9 @@ export function withDealer(image: PeImage, episode: number, dealer: Dealer): Uin
   view.setUint32(at + MOST_AT, dealer.most, true);
   const table = readVa(image, method.table, capacity * ENTRY_SIZE);
   const tableAt = table.byteOffset - image.data.byteOffset;
-  for (const [n, { tile, price }] of dealer.goods.entries()) {
-    view.setUint16(tableAt + n * ENTRY_SIZE, tile, true);
+  for (const [n, { classId, state, price }] of dealer.goods.entries()) {
+    view.setUint8(tableAt + n * ENTRY_SIZE, classId);
+    view.setUint8(tableAt + n * ENTRY_SIZE + 1, state);
     view.setUint16(tableAt + n * ENTRY_SIZE + 2, price, true);
   }
   parsePe(out);
@@ -157,6 +206,9 @@ export function sameDealer(a: Dealer | undefined, b: Dealer | undefined): boolea
   return (
     a.most === b.most &&
     a.goods.length === b.goods.length &&
-    a.goods.every((g, n) => g.tile === b.goods[n]?.tile && g.price === b.goods[n]?.price)
+    a.goods.every((g, n) => {
+      const h = b.goods[n];
+      return g.classId === h.classId && g.state === h.state && g.price === h.price;
+    })
   );
 }

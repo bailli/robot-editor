@@ -335,7 +335,7 @@ export class Editor {
   /** Why the episode's dealer cannot sell `dealer` (dealerProblem), undefined if it can. */
   dealerProblem(episode: number, dealer: Dealer): string | undefined {
     try {
-      withDealer(this.game.image, episode, dealer);
+      withDealer(this.game.image, episode, dealer, this.game.episode(episode).classes);
     } catch (error) {
       return error instanceof RangeError ? error.message : String(error);
     }
