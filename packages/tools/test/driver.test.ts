@@ -19,6 +19,9 @@ import {
   applyMod,
   emptyMod,
   readEpisodeStart,
+  robotSprite,
+  robotSpriteCount,
+  roomActors,
   roomCircuit,
   textsId,
   withExitMode,
@@ -250,6 +253,22 @@ async function withModExe<T>(game: Game, mod: Mod, use: (exe: string) => Promise
   }
 }
 
+/**
+ * The actors in the room's list (0x53e9a8, linked by +4) in their order: class (+0x16)
+ * and, for robots (class 2), the `_Aliens` sprite (+0x28).
+ */
+async function actorList(d: Driver): Promise<string[]> {
+  const list: string[] = [];
+  for (let p = await d.u32(0x53e9a8); p !== 0 && list.length < 200;) {
+    const bytes = await d.peek(p, 0x2c);
+    const view = new DataView(bytes.buffer, bytes.byteOffset);
+    const cls = view.getUint16(0x16, true);
+    list.push(cls === 2 ? `2:${String(view.getUint32(0x28, true))}` : String(cls));
+    p = view.getUint32(4, true);
+  }
+  return list;
+}
+
 describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () => {
   const game = loadGame();
 
@@ -390,4 +409,52 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
       assert.deepEqual([seen.afterNorth, seen.afterEast], [points, 2 * points]);
     }, 60_000);
   }
+
+  test("episode III: robots take their sprite by their place among the room's actors", async () => {
+    const [ROBOT, TURTLE, BOAR, SNAKE, ITEM] = [0x02, 0x2e, 0x37, 0x2d, 0x08];
+    const row = [ROBOT, ROBOT, TURTLE, ROBOT, BOAR, ROBOT, ROBOT, SNAKE, ROBOT, ROBOT, ROBOT];
+    const mod = startRoomMod(
+      game,
+      3,
+      {},
+      { x0: 2, x1: 36, y0: 0, y1: 6 },
+      { x: 8, y: 15 },
+      (set, record) => {
+        set(20, 0, ROBOT); // row 0 is not loaded
+        for (const [i, cell] of row.entries()) {
+          set(3 + 3 * i, 3, cell);
+          set(4 + 3 * i, 5, cell);
+        }
+        record(6, 5, [7, 0, 0, 0, 0, 0, 0, 1]); // a native
+        for (const x of [30, 32, 34]) set(x, 3, ROBOT);
+      },
+    );
+    const [change] = mod.changes.rooms;
+    assert.ok(change);
+    const room = change.room;
+    assert.ok(room);
+    const overlay = room.overlay.slice();
+    overlay[30 + 3 * ROOM_WIDTH] = ITEM; // hides the robot under it
+    overlay[32 + 3 * ROOM_WIDTH] = ROBOT; // so does a robot in the same state
+    overlay[34 + 3 * ROOM_WIDTH] = ROBOT | 0x100; // not one in another state
+    const edited = { ...room, overlay, tags: room.tags.filter((t) => t.kind !== 6) };
+    const modded = { ...mod, changes: { ...mod.changes, rooms: [{ ...change, room: edited }] } };
+    const classes = game.episode(3).classes;
+    const count = robotSpriteCount(3, game.aliens(3).length);
+    const expected = roomActors(edited, classes)
+      .filter((a) => a.order !== undefined)
+      .map((a) => {
+        if (a.source === "creature") return "159";
+        const cls = classes.classes.get(a.type ?? 0)?.id ?? 0;
+        return cls === 2 ? `2:${String(robotSprite(a, count))}` : String(cls);
+      });
+    const seen = await withModExe(game, modded, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(3);
+        return actorList(d);
+      }),
+    );
+    assert.equal(expected.length, 2 * row.length + 1 + 2);
+    assert.deepEqual(seen, expected);
+  }, 60_000);
 });

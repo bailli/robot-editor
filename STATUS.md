@@ -704,12 +704,14 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   left through the bottom wall, which stood open briefly. **Verified by playing** (the
   original game, many times): following a leaving actor through that opening takes the
   hero to the record's room.
-- **Actors** (`actors.ts`, code only): entering a room (0x42b6f0) goes through rows 1–28
-  (row 0 is never loaded) cell by cell: a native or travelling actor record lets its
-  actor appear and leaves its cell in the map, then the cell's class gets its room-load
+- **Actors** (`actors.ts`): entering a room (0x42b6f0) goes through rows 1–28 (row 0
+  is never loaded) cell by cell: a native or travelling actor record lets its actor
+  appear and leaves its cell in the map, then the cell's class gets its room-load
   method, from the top of the cell down (0x433110: an overlay object is a type 1 record
-  on the base cell) and again for what is below while the method clears the cell, so a
-  robot under an object that stays never appears. Every actor but the hero joins the
+  on the base cell). Clearing the top of such a cell brings up the cell below
+  (0x4331a0), which is loaded too if it differs from what was there in class or state
+  (0x42b8cf): a robot under an object that stays, or under a robot in the same state,
+  never appears; under a robot in another state it does. Every actor but the hero joins the
   room's actor list (0x53e9a8, appended by 0x44c140). **Robots' sprites:** a robot takes
   `_Aliens` sprite (length of the list, itself included) mod episode +0x2c (0x445bd0 →
   0x445b60; IV's robot 0x44ac70), so a room's first actor, if a robot, takes sprite 1;
@@ -724,6 +726,10 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   default) replaces a list of types (0x4757a0, 0x476d68, 0x479a70) with the shapes of
   SHAPES 1003 (Junior) or 1903 (I, II), 0x43b220; IV draws class 0xdc (tile 0x74, in no
   room) with `_Bond`. `_Dealer`, `_Android` and `_Hero1` in 1003 are never looked up.
+  **Verified with the driver** (`pnpm test:game`, episode III's start room with robots,
+  turtles, boars, snakes and a native, rows 0, 3 and 5, stacked robots): the game's actor
+  list (class +0x16, sprite +0x28) is the order and the sprites `roomActors` and
+  `robotSprite` give; the robots' colours were their sprites' own.
 - **The dealer's goods** (code only): both constructors (record 0x448ad5, `SetMan`
   0x448c8b) take the goods table from the episode (vtable +0x10: address, entry count,
   most goods shown) and then build the offer once (0x448440, the only caller): a count

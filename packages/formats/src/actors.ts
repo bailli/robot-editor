@@ -31,7 +31,9 @@ import {
  * Entering a room (0x42b6f0) goes through rows 1-28 cell by cell: a native or travelling
  * actor record lets its actor appear, then the cell's class gets its room-load method,
  * from the top of the cell down (0x433110: an overlay object lies on the base cell) for
- * as long as the method clears the cell. Row 0, under the status line, is not loaded.
+ * as long as the method clears the cell and what comes up differs from what was there
+ * (0x42b8cf compares class and state: a robot lying on a robot of the same state hides
+ * it). Row 0, under the status line, is not loaded.
  *
  * Sources:
  *   tile       a cell whose class turns it into an actor on entering (room-load method in
@@ -211,9 +213,12 @@ export function roomActors(room: Room, classes: EpisodeClasses): RoomActor[] {
       ...((overlay & 0xff) === LOGIC_CELL || overlay === 0 ? [] : [["overlay", overlay] as const]),
       ["base", shown] as const,
     ];
-    for (const [layer, value] of tiles) {
+    // the cell as the game holds it: class | state << 8
+    const held = (value: number) => (classes.classes.get(value & 0xff)?.id ?? 0) | (value & 0xff00);
+    for (const [i, [layer, value]] of tiles.entries()) {
       const source = cellActorSource(value, classes);
       if (!source) break;
+      if (i > 0 && held(tiles[i - 1][1]) === held(value)) break;
       const type = value & 0xff;
       if (source !== "tile") {
         actors.push({ source, cell, layer, type });

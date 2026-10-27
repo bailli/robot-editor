@@ -161,23 +161,18 @@ test("only cells the game loads become actors", () => {
     ]);
   // row 0 lies under the status line
   expect(at(room([[1, 0, robot]]))).toEqual([]);
-  // an object that stays hides a robot under it; a robot on a robot: both appear
-  expect(
+  // an object that stays hides a robot under it; so does a robot in the same state (the
+  // cell holds the same once the top one left); one in another state comes up
+  const stacked = (top: number) =>
     at(
       room([
         [1, 1, robot],
-        [1, 1, 0x0b, "overlay"],
+        [1, 1, top, "overlay"],
       ]),
-    ),
-  ).toEqual([]);
-  expect(
-    at(
-      room([
-        [1, 1, robot],
-        [1, 1, robot, "overlay"],
-      ]),
-    ),
-  ).toEqual([
+    );
+  expect(stacked(0x0b)).toEqual([]);
+  expect(stacked(robot)).toEqual([[ROOM_WIDTH + 1, "overlay"]]);
+  expect(stacked(robot | 0x100)).toEqual([
     [ROOM_WIDTH + 1, "overlay"],
     [ROOM_WIDTH + 1, "base"],
   ]);
