@@ -985,6 +985,22 @@ Roughly by value for the editor.
   need a patched class table (an unused tile type), new shapes in that episode's SHAPES
   resource (OMF) and texts; some class code also checks the episode number (e.g. describe
   method 0x4145b0).
+- **A class table entry** is 8 bytes: a pointer to the class object (a vtable pointer
+  set at startup for every episode, so any episode may point to any class) and the
+  class id; unused types point to the empty class object 0x4c777c (class 0). What a
+  cell does when walked into is its class's method: the oracle class (0x60, object
+  0x4c6754, vtable 0x467d90) dispatches through 0x47be24 (0x412ae0, the oracle handler)
+  and 0x47bdf4 (0x412860, the symbol check); a record showing a cell of another class
+  does nothing. **Verified under Wine (oracles in Junior):** Junior's entries for 0x50
+  and 0x51 copied from II's (tangram 0x5f at 0x4c6758, oracle 0x60; 16 bytes at
+  0x479d58), the texts 80, 81, 331, 334 and 945 copied from II, and five oracle
+  records in room 43: with the symbol preset, north led to room 42, east showed hint
+  331, west turned it into a key, south killed; one without it showed hint 334 once
+  symbol 4 lay as tangram pieces in the map. As in III, they stay after north and east
+  (only II's constructor sets the flags 0x4000/0x8000). Both stay invisible: Junior's
+  `_Rob_object` has 57 entries (types 0–0x38), II's 127 (0x50: 5 frames, 0x51: 10), and
+  the game draws nothing past the end. Making them visible needs the shapes added to
+  Junior's SHAPES, i.e. writing OMF (the table holds pointers, so with fixups).
 
 ## Useful addresses
 
