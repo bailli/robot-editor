@@ -1,4 +1,11 @@
-import { type OmfFixup, type OmfModule, parseOmf } from "./omf.ts";
+import {
+  MAX_LEDATA,
+  type OmfFixup,
+  OmfFormatError,
+  type OmfModule,
+  parseOmf,
+  writeOmf,
+} from "./omf.ts";
 
 /**
  * SHAPES resources: sprite and tile graphics as OMF object files.
@@ -130,6 +137,132 @@ export function parseShapes(data: Uint8Array): Map<string, ShapeTable> {
     tables.set(pub.name, table);
   }
   return tables;
+}
+
+function concat(parts: readonly Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
+}
+
+/** Appends `bytes` to segment `index` (even offset), as LEDATA blocks; returns the offset. */
+function append(module: OmfModule, index: number, bytes: Uint8Array): number {
+  const segment = module.segments[index];
+  if (!segment) throw new OmfFormatError(`no segment ${index}`);
+  const at = segment.data.length + (segment.data.length & 1);
+  if (at + bytes.length > 0xffff)
+    throw new RangeError(`segment ${segment.name} would exceed 64 KiB`);
+  const data = new Uint8Array(at + bytes.length);
+  data.set(segment.data);
+  data.set(bytes, at);
+  segment.data = data;
+  for (let o = 0; o < bytes.length; o += MAX_LEDATA) {
+    module.blocks.push({
+      segment: index,
+      offset: at + o,
+      length: Math.min(MAX_LEDATA, bytes.length - o),
+    });
+  }
+  return at;
+}
+
+/**
+ * A SHAPES resource whose table `name` (e.g. "_Rob_object") holds `shapes` at the given
+ * indices (null: an empty slot), as the game would read them; the shapes may come
+ * from any resource (parseShapes). New frames and planes are appended to the segments
+ * the resource already uses for them, with fixups of the kinds it already uses. Slots
+ * within the table are rewritten in place; one beyond its end moves the table, grown
+ * and followed by an empty descriptor, to the end of its segment (the old bytes stay
+ * unused) and its public with it. Everything else is written back as it was (writeOmf).
+ */
+export function withShapes(
+  data: Uint8Array,
+  name: string,
+  shapes: ReadonlyMap<number, Shape | null>,
+): Uint8Array {
+  const module = parseOmf(data);
+  const pub = module.publics.find((p) => p.name === name);
+  if (!pub) throw new RangeError(`no shape table ${name}`);
+  const table = { segment: pub.segment, start: pub.offset };
+  const near = module.fixups.find((f) => f.location === 1 && f.segment === table.segment);
+  const far = module.fixups.find((f) => f.location === 3);
+  if (!near || !far) throw new OmfFormatError(`table ${name}: no pointers to copy the kind of`);
+  const planesSegment = far.target;
+  const length = (parseShapes(data).get(name) ?? []).length;
+  const slots = Math.max(length, ...[...shapes.keys()].map((i) => i + 1));
+  for (const i of shapes.keys()) {
+    if (!Number.isInteger(i) || i < 0) throw new RangeError(`slot ${i}`);
+  }
+
+  let start = table.start;
+  if (slots > length) {
+    // the grown table at the end of its segment, its old descriptors and pointers copied
+    const old = module.segments[table.segment]?.data ?? new Uint8Array();
+    const grown = new Uint8Array((slots + 1) * DESCRIPTOR_SIZE);
+    grown.set(old.subarray(table.start, table.start + length * DESCRIPTOR_SIZE));
+    start = append(module, table.segment, grown);
+    for (const f of module.fixups.filter(
+      (f) =>
+        f.segment === table.segment &&
+        f.offset >= table.start &&
+        f.offset < table.start + length * DESCRIPTOR_SIZE,
+    )) {
+      module.fixups.push({ ...f, offset: f.offset - table.start + start });
+    }
+    for (const p of module.publics) if (p.name === name) p.offset = start;
+  }
+
+  for (const [slot, shape] of shapes) {
+    const at = start + slot * DESCRIPTOR_SIZE;
+    module.fixups = module.fixups.filter(
+      (f) => !(f.segment === table.segment && f.offset === at + 6),
+    );
+    const descriptor = new Uint8Array(DESCRIPTOR_SIZE);
+    if (shape) {
+      // the planes one after another, then the frames pointing to them
+      const planeSize = shape.height * shape.bytesPerRow;
+      const used = shape.frames.flatMap((frame, k) =>
+        frame.planes.flatMap((plane, j) =>
+          plane ? [{ plane, entry: FRAME_SIZE * k + 2 + 4 * j }] : [],
+        ),
+      );
+      for (const { plane } of used) {
+        if (plane.length !== planeSize)
+          throw new RangeError(`slot ${slot}: plane of ${plane.length} bytes`);
+      }
+      const planesAt = append(module, planesSegment, concat(used.map((u) => u.plane)));
+      const frames = new Uint8Array(FRAME_SIZE * shape.frames.length);
+      const framesView = new DataView(frames.buffer);
+      for (const [k, frame] of shape.frames.entries())
+        framesView.setUint16(FRAME_SIZE * k, frame.word, true);
+      for (const [i, { entry }] of used.entries())
+        framesView.setUint16(entry, planesAt + i * planeSize, true);
+      const framesAt = append(module, table.segment, frames);
+      for (const { entry } of used) {
+        module.fixups.push({
+          ...far,
+          segment: table.segment,
+          offset: framesAt + entry,
+          target: planesSegment,
+        });
+      }
+      descriptor.set([shape.width, shape.height, 0, 0, shape.bytesPerRow, shape.frames.length]);
+      new DataView(descriptor.buffer).setUint16(6, framesAt, true);
+      descriptor.set([...shape.colours, shape.unknown], 8);
+      module.fixups.push({
+        ...near,
+        segment: table.segment,
+        offset: at + 6,
+        target: table.segment,
+      });
+    }
+    module.segments[table.segment]?.data.set(descriptor, at);
+  }
+  return writeOmf(module);
 }
 
 export function planeBit(shape: Shape, plane: Uint8Array, x: number, y: number): boolean {

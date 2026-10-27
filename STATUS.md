@@ -255,7 +255,12 @@ Files in `packages/formats/src`:
   LEDATA of frames, one of descriptors and a FIXUPP (descriptors → frames: far
   pointers, frame = target), the tables last (near offsets in DGROUP), MODEND; no
   displacements, every checksum set. `writeOmf` writes a parsed module back: **all 12
-  SHAPES resources come out byte for byte** (test).
+  SHAPES resources come out byte for byte** (test). `withShapes` puts shapes (from any
+  resource) into a table: frames and planes appended, slots inside rewritten in place,
+  a slot beyond the end moves the grown table to the end of its segment (its public
+  with it). **Verified under Wine:** episode II's tangram (0x50) and oracle (0x51)
+  shapes in Junior's grown `_Rob_object` are drawn by the game, cell for cell as our
+  renderer draws them.
 - **Palettes** per episode (16 colours, `palette.ts`). The game expands them into 14
   blocks of 16 (0x4023d0; its screenshots carry them all): 0 the palette, 1 brighter
   (+64), 2 grey, 3–11 darker and greyer (`darkPalette`), 12 black, 13 a grey ramp.
@@ -860,6 +865,41 @@ Not supported (yet):
 - remembering the last exe or unsaved work across reloads
 - any check that an edited room is still playable
 
+## Fan episodes: plan and decisions
+
+Where the work towards fan episodes (new content beyond the original episodes' toolkit)
+stands, decided 2026-10-27; details in the sections named.
+
+- **Delivery stays exe patching.** A new episode needs more than resources: the start
+  (code, `start.ts`), class table entries (data), maybe code patches. Planned: a mod
+  format, a list of changes applied to a pristine exe (checked by hash): replaced
+  resources (scenes, texts, shapes), class table entries, the start, later small code
+  patches; shared as a patch file holding only its own data. Not started: its shape
+  should follow from the pilots below.
+- **Rejected:** `WorldOfRobot.DLL` for episode data (see "Where resources come from":
+  the exe only falls back to it for resources it lacks, and code-side changes need the
+  exe anyway). **Deferred:** a native Linux wrapper instead of Wine (keys, time, DirectDraw
+  and GDI are few imports, but worth it only to run without Wine), a decompilation
+  (only if playing in the editor in the browser becomes a goal; incremental path: a
+  loader that replaces functions one by one), the proxy as an in-memory mod loader.
+  Untried: the `RessourcePath` loose text files.
+- **Done:** the driver (proxy DLL, `driver.ts`, `pnpm test:game`) to verify edits in the
+  game; the OMF writer and `withShapes`; the **pilot: oracles in Junior**, working and
+  visible (see "A class table entry" under Limits): class table entries, texts and
+  shapes copied from episode II.
+- **Cross-episode classes in general:** free tile types per episode (no class): Junior
+  69 (0x39–0x7d), I 47, II **none**, III 18, IV 15. II would need a type that none of
+  its rooms uses (not checked). Copied shapes keep their colour indices, and palettes
+  differ per episode (remap if it matters). Some class code checks the episode number
+  (e.g. describe method 0x4145b0): every class needs a try in its new episode.
+- **Next, in order:** (1) class table entries as a `formats` function with tests (the
+  pilot patched them by hand: Junior's table 0x479ad8 + 8 × type, the 8 bytes from II's
+  0x476e00 + 8 × type), and the English texts (only German ones were copied); (2) circuits
+  in episode III as the next pilot (many classes: letters, wires, gates, nodes);
+  (3) the mod format and the editor's use of it; (4) if wanted, oracles that vanish
+  after north and east in Junior too, a code patch (episode flags 0x4000/0x8000, only
+  II's constructor sets them).
+
 ## Open items and leads
 
 Roughly by value for the editor.
@@ -1024,11 +1064,12 @@ Roughly by value for the editor.
   records in room 43: with the symbol preset, north led to room 42, east showed hint
   331, west turned it into a key, south killed; one without it showed hint 334 once
   symbol 4 lay as tangram pieces in the map. As in III, they stay after north and east
-  (only II's constructor sets the flags 0x4000/0x8000). Both stay invisible: Junior's
-  `_Rob_object` has 57 entries (types 0–0x38), II's 127 (0x50: 5 frames, 0x51: 10), and
-  the game draws nothing past the end. Making them visible needs the shapes added to
-  Junior's SHAPES: a longer table and new blocks with their fixups, written with
-  `writeOmf` (not done yet).
+  (only II's constructor sets the flags 0x4000/0x8000). Without shapes both are
+  invisible: Junior's `_Rob_object` has 57 entries (types 0–0x38), II's 127 (0x50: 5
+  frames, 0x51: 10), and the game draws nothing past the end. With II's shapes added
+  (`withShapes`, the table grown to 0x52) the game draws them, the laid symbol as
+  solved pieces (**verified**, captured frame equal to our render but for runtime
+  effects).
 
 ## Useful addresses
 

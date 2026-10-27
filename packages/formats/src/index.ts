@@ -185,7 +185,14 @@ export {
   serializeScene,
 } from "./scene.ts";
 export type { LogicRecord, Room, RoomTag } from "./scene.ts";
-export { TILE_BACKGROUND, TRANSPARENT, parseShapes, planeBit, shapePixels } from "./shapes.ts";
+export {
+  TILE_BACKGROUND,
+  TRANSPARENT,
+  parseShapes,
+  planeBit,
+  shapePixels,
+  withShapes,
+} from "./shapes.ts";
 export type { Colours, Frame, Shape, ShapeTable } from "./shapes.ts";
 export {
   displayText,
