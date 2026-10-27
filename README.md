@@ -91,7 +91,8 @@ with the mingw-w64 cross-compiler (`apt install gcc-mingw-w64-i686`):
     pnpm test:game      the tests that run the game (Wine, Xvfb, harness.py setup)
 
 `python3 tools/wine/harness.py serve` starts the game with the proxy on a virtual
-display; `Driver.start()` does that and connects, `Driver.connect()` connects to a game
+display and prints `ready PORT DISPLAY TOKEN` once the game waits for its first step;
+`Driver.start()` does that and connects, `Driver.connect(PORT)` connects to a game
 served by hand (the protocol is one text line per command, see `proxy.c`).
 
 ```ts
@@ -100,7 +101,7 @@ await d.startEpisode(1); // { room: 43, x: 5, y: 14 }
 await d.hold("right", 60); // 60 steps of 7 ms
 await d.hero(); // { room: 43, x: 11, y: 14 }
 await d.screenshot("room.png"); // the last frame presented, 640 × 348
-d.close();
+await d.close();
 ```
 
 ## Resources

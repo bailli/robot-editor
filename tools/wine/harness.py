@@ -25,9 +25,12 @@ by an earlier `play` is ended first. Screenshots and saved games stay in the pre
 until the next `shot`, which deletes them.
 
 `serve` runs the game on a virtual display with the proxy DLL (tools/wine/proxy, built
-by `pnpm proxy`) on virtual time and prints "ready PORT" once the proxy listens on
-127.0.0.1:PORT; a driver (packages/tools/src/driver.ts) then steps the game, presses
-keys and reads memory. It stops when the game ends or on SIGTERM/SIGINT.
+by `pnpm proxy`) on virtual time and prints "ready PORT DISPLAY TOKEN" once the game
+waits in its main loop for the first step; a driver (packages/tools/src/driver.ts) then
+connects to 127.0.0.1:PORT, steps the game, presses keys and reads memory. The port is
+a free one unless --port is given; the proxy's `hello` names TOKEN, so a game of another
+checkout listening on the same port is not taken for this one. It stops when the game
+ends or on SIGTERM/SIGINT.
 
 Requires Wine (WineHQ packages install to /opt/wine-stable), Xvfb and xdotool. `shot`
 and `serve` run the game silently (Wine's audio drivers are disabled for them).
@@ -57,16 +60,16 @@ PROXY = os.path.join(ROOT, "tools", "wine", "proxy", "ddraw.dll")
 EPISODE_BUTTONS = {e: (340, 313 + 51 * e) for e in range(5)}
 
 
-def env(display=None, sound=False, proxy_port=None):
+def env(display=None, sound=False, proxy=None):
     e = dict(os.environ)
     if os.path.isdir(WINE_BIN):
         e["PATH"] = WINE_BIN + os.pathsep + e["PATH"]
     # Silent: without audio drivers the game plays neither sounds nor (MIDI) music.
     audio = "" if sound else ";winepulse.drv,winealsa.drv,wineoss.drv=d"
     e.update(WINEPREFIX=PREFIX, WINEDEBUG="-all", WINEDLLOVERRIDES="mscoree,mshtml=" + audio)
-    if proxy_port:  # the proxy ddraw.dll next to the exe, see `serve`
+    if proxy:  # (port, token): the proxy ddraw.dll next to the exe, see `serve`
         e["WINEDLLOVERRIDES"] += ";ddraw=n,b"
-        e["ROBOT_PROXY_PORT"] = str(proxy_port)
+        e["ROBOT_PROXY_PORT"], e["ROBOT_PROXY_TOKEN"] = str(proxy[0]), proxy[1]
     if display:
         e["DISPLAY"] = display
     return e
@@ -277,7 +280,30 @@ def play(episode=None, exe=EXE, mute=False):
 DRIVE_DIR = os.path.join(PREFIX, "drive_c", "robot-drive")
 
 
-def serve(exe=EXE, port=7531):
+def free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def proxy_ready(port, token):
+    """Whether our game's proxy answers on `port` and the game waits for its first step
+    (the proxy answers `status` once the game is idle, or an error after 3 s)."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=10) as s:
+            f = s.makefile("rw", newline="\n")
+            f.write("hello\n")
+            f.flush()
+            if f.readline().split()[3:] != [token]:  # ok robot-proxy VERSION TOKEN
+                return False
+            f.write("status\n")
+            f.flush()
+            return f.readline().startswith("ok ")
+    except OSError:
+        return False
+
+
+def serve(exe=EXE, port=None):
     """Run the game with the proxy DLL for a driver (see the module doc)."""
     if not os.path.isdir(GAME_DIR):
         sys.exit("run `harness.py setup` first")
@@ -299,25 +325,27 @@ def serve(exe=EXE, port=7531):
     signal.signal(signal.SIGINT, stop)
     try:
         time.sleep(1)
+        port = port or free_port()
+        token = os.urandom(8).hex()
         game = subprocess.Popen(["wine", "explorer", "/desktop=robot,1024x768", "C:\\robot-drive\\GameOfRobot.exe"],
-                                cwd=DRIVE_DIR, env=env(display, proxy_port=port),
+                                cwd=DRIVE_DIR, env=env(display, proxy=(port, token)),
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        deadline = time.time() + 30
-        while True:
-            try:
-                socket.create_connection(("127.0.0.1", port), timeout=1).close()
-                break
-            except OSError:
-                if time.time() > deadline or game.poll() is not None:
-                    raise RuntimeError("the proxy did not start listening")
-                time.sleep(0.2)
-        print("ready", port, display, flush=True)
+        deadline = time.time() + 60
+        while not proxy_ready(port, token):
+            if time.time() > deadline or game.poll() is not None:
+                raise RuntimeError(f"the game's proxy did not answer on port {port}")
+            time.sleep(0.2)
+        print("ready", port, display, token, flush=True)
         game.wait()
     finally:
+        # A signal now (the driver ends us as the game ends) must not cut this short.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         run("wineserver", "-k", check=False)
         if game:
             game.wait(timeout=10)
         xvfb.terminate()
+        xvfb.wait(timeout=10)
 
 
 def main():
@@ -339,7 +367,7 @@ def main():
     s.add_argument("--mute", action="store_true")
     s = sub.add_parser("serve")
     s.add_argument("--exe", default=EXE)
-    s.add_argument("--port", type=int, default=7531)
+    s.add_argument("--port", type=int, help="the proxy's port (default: a free one)")
     a = p.parse_args()
     if a.cmd == "setup":
         setup()

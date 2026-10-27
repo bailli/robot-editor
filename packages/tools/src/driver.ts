@@ -3,7 +3,7 @@ import { type Socket, connect } from "node:net";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
-import { type Rgb, SCREEN_HEIGHT, SCREEN_WIDTH } from "@robot/formats";
+import { type Rgb, SCREEN_WIDTH } from "@robot/formats";
 
 import { ROOT } from "./game.ts";
 import { type IndexedImage, writeIndexedPng } from "./png.ts";
@@ -46,7 +46,7 @@ export interface Status {
   frames: number;
 }
 
-/** A frame as the game presented it: palette indices of its 640 × 348 screen. */
+/** A frame as the game presented it: palette indices, row by row (640 × 348). */
 export interface Frame {
   width: number;
   height: number;
@@ -70,55 +70,106 @@ function parseStatus(answer: string): Status {
   return { tick: field("tick"), ms: field("ms"), steps: field("steps"), frames: field("frames") };
 }
 
+interface Pending {
+  resolve: (line: string) => void;
+  reject: (error: Error) => void;
+}
+
 export class Driver {
-  private readonly answers: ((line: string) => void)[] = [];
+  private readonly pending: Pending[] = [];
+  /** Why the connection is gone, once it is: later commands fail with it. */
+  private failure: Error | undefined;
   private readonly socket: Socket;
   private readonly server: ChildProcess | undefined;
+  private readonly serverExit: Promise<void>;
 
   private constructor(socket: Socket, server: ChildProcess | undefined) {
     this.socket = socket;
     this.server = server;
+    this.serverExit = new Promise((resolve) => {
+      if (server?.exitCode === null && server.signalCode === null) {
+        server.once("exit", () => {
+          resolve();
+        });
+      } else {
+        resolve();
+      }
+    });
     socket.setEncoding("latin1");
-    createInterface({ input: socket }).on("line", (line) => this.answers.shift()?.(line));
+    createInterface({ input: socket }).on("line", (line) => this.pending.shift()?.resolve(line));
+    socket.on("error", (error) => {
+      this.fail(new Error(`connection to the proxy failed: ${error.message}`));
+    });
+    socket.on("close", () => {
+      this.fail(new Error("the connection to the proxy closed (the game ended?)"));
+    });
   }
 
-  /** Starts the game with the proxy on a virtual display (needs Wine, Xvfb and the proxy). */
+  private fail(error: Error): void {
+    this.failure ??= error;
+    for (const p of this.pending.splice(0)) p.reject(this.failure);
+  }
+
+  /**
+   * Starts the game with the proxy on a virtual display (needs Wine, Xvfb and the proxy)
+   * on a free port, unless `port` is given.
+   */
   static async start(options: { exe?: string; port?: number } = {}): Promise<Driver> {
-    const port = options.port ?? 7531;
-    const args = ["-I", HARNESS, "serve", "--port", String(port)];
+    const args = ["-I", HARNESS, "serve"];
+    if (options.port !== undefined) args.push("--port", String(options.port));
     if (options.exe) args.push("--exe", options.exe);
     const server = spawn("python3", args, { stdio: ["ignore", "pipe", "inherit"] });
-    const ready = new Promise<void>((resolve, reject) => {
+    // ready PORT DISPLAY TOKEN
+    const ready = new Promise<{ port: number; token: string }>((resolve, reject) => {
       server.on("exit", (code) => {
         reject(new Error(`harness.py serve ended (${String(code)})`));
       });
       createInterface({ input: server.stdout }).on("line", (line) => {
-        if (line.startsWith("ready ")) resolve();
+        const [word, port, , token] = line.split(" ");
+        if (word === "ready") resolve({ port: Number(port), token });
       });
     });
     try {
-      await ready;
-      return await Driver.connect(port, server);
+      const { port, token } = await ready;
+      return await Driver.connect(port, token, server);
     } catch (error) {
       server.kill();
       throw error;
     }
   }
 
-  /** Connects to a game already served on `port` (e.g. by `harness.py serve` by hand). */
-  static connect(port = 7531, server?: ChildProcess): Promise<Driver> {
-    return new Promise((resolve, reject) => {
+  /**
+   * Connects to a game served on `port` (e.g. by `harness.py serve` by hand); with
+   * `token`, only to the game that `serve` printed it for.
+   */
+  static async connect(port: number, token?: string, server?: ChildProcess): Promise<Driver> {
+    const driver = await new Promise<Driver>((resolve, reject) => {
       const socket = connect(port, "127.0.0.1", () => {
+        socket.off("error", reject);
         resolve(new Driver(socket, server));
       });
       socket.once("error", reject);
     });
+    try {
+      const hello = await driver.command("hello"); // robot-proxy VERSION TOKEN
+      if (token !== undefined && hello.split(" ")[2] !== token) {
+        throw new Error(`port ${String(port)} serves another game (${hello})`);
+      }
+      return driver;
+    } catch (error) {
+      await driver.close();
+      throw error;
+    }
   }
 
   /** Sends one command line and returns the answer after "ok" (throws on "error"). */
   async command(line: string): Promise<string> {
-    const answer = await new Promise<string>((resolve) => {
-      this.answers.push(resolve);
+    const answer = await new Promise<string>((resolve, reject) => {
+      if (this.failure) {
+        reject(this.failure);
+        return;
+      }
+      this.pending.push({ resolve, reject });
       this.socket.write(`${line}\n`);
     });
     if (answer.startsWith("error")) throw new Error(`proxy: ${answer} (for ${line})`);
@@ -171,26 +222,25 @@ export class Driver {
 
   async peek(address: number, length: number): Promise<Uint8Array> {
     const hex = await this.command(`peek ${address.toString(16)} ${String(length)}`);
-    return Uint8Array.from(hex.match(/../g) ?? [], (byte) => parseInt(byte, 16));
+    return new Uint8Array(Buffer.from(hex, "hex"));
   }
 
   async poke(address: number, bytes: Uint8Array): Promise<void> {
-    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-    await this.command(`poke ${address.toString(16)} ${hex}`);
+    await this.command(`poke ${address.toString(16)} ${Buffer.from(bytes).toString("hex")}`);
   }
 
   /**
    * The last frame presented: the game's own frame buffer (palette indices, like its
-   * screenshots), cut to the screen it shows.
+   * screenshots), as many rows as the game showed (640 × 348; 360 rows in one mode,
+   * 0x402161).
    */
   async frame(): Promise<Frame> {
     const [width, height, frame, hex] = (await this.command("frame")).split(" ");
-    if (Number(width) !== SCREEN_WIDTH || Number(height) < SCREEN_HEIGHT) {
-      throw new Error(`unexpected frame buffer ${width}x${height}`);
+    const indices = new Uint8Array(Buffer.from(hex, "hex"));
+    if (Number(width) !== SCREEN_WIDTH || indices.length !== Number(width) * Number(height)) {
+      throw new Error(`unexpected frame ${width}x${height} of ${String(indices.length)} bytes`);
     }
-    const all = Uint8Array.from(hex.match(/../g) ?? [], (byte) => parseInt(byte, 16));
-    const indices = all.subarray(0, SCREEN_WIDTH * SCREEN_HEIGHT);
-    return { width: SCREEN_WIDTH, height: SCREEN_HEIGHT, indices, frame: Number(frame) };
+    return { width: Number(width), height: Number(height), indices, frame: Number(frame) };
   }
 
   /** The colours the last frame was presented with (the game changes them, e.g. in the dark). */
@@ -259,9 +309,14 @@ export class Driver {
     throw new Error(`episode ${String(episode)} did not start`);
   }
 
-  /** Closes the connection and, if this driver started it, the game. */
-  close(): void {
+  /**
+   * Closes the connection and, if this driver started it, ends the game; resolves once
+   * `harness.py serve` has cleaned up (its `wineserver -k` would end a game started
+   * in the same prefix after that).
+   */
+  async close(): Promise<void> {
     this.socket.end();
     this.server?.kill();
+    await this.serverExit;
   }
 }

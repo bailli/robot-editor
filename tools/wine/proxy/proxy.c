@@ -5,7 +5,8 @@
  * WINEDLLOVERRIDES=ddraw=n,b), it forwards DirectDrawCreate to the real one. Without
  * ROBOT_PROXY_PORT in the environment it does nothing else. With it, it listens on
  * 127.0.0.1:PORT for a driver (one line per command, one line per answer, see
- * `command`) and puts the game on virtual time:
+ * `command`; `hello` names ROBOT_PROXY_TOKEN, so a driver knows it has the game it
+ * started) and puts the game on virtual time:
  *
  * - All game time comes from timeGetTime through 0x4016a0 (the main loop's call at
  *   0x405bde: elapsed clock units at 147 per second, at most 20 per call, then the
@@ -45,7 +46,7 @@
 #define PRESENT_CALLS {0x402379, 0x437270}
 #define PRESENT_TARGET 0x437620 /* display object method: present the frame buffer */
 #define DD_WIDTH 640            /* its frame buffer (display +0x4c), rows 4-byte aligned */
-#define DD_HEIGHT 400
+#define DD_HEIGHT 348           /* of its 400 rows, those presented (0x402365) */
 #define MAX_FRAME (640 * 400)
 #define STALL_MS 3000 /* `run` gives up when the game does not get idle for this long */
 
@@ -128,7 +129,7 @@ static SHORT WINAPI hook_GetAsyncKeyState(int vk) { return keys[vk & 0xff] ? (SH
 static BOOL WINAPI hook_GetMessageA(MSG *msg, HWND hwnd, UINT first, UINT last) {
   BOOL result = real_GetMessageA(msg, hwnd, first, last);
   UINT m = msg->message;
-  if (result > 0 && m >= WM_KEYDOWN && m <= WM_SYSKEYUP && m != WM_CHAR && m != WM_SYSCHAR) {
+  if (result > 0 && (m == WM_KEYDOWN || m == WM_KEYUP || m == WM_SYSKEYDOWN || m == WM_SYSKEYUP)) {
     BYTE state[256];
     GetKeyboardState(state);
     BYTE down = m == WM_KEYDOWN || m == WM_SYSKEYDOWN ? 0x80 : 0;
@@ -374,8 +375,13 @@ static int hex(char c) {
   return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
 }
 
+/* "up" → 1, "down" → 0, anything else → -1. */
+static int up_or_down(const char *word) { return !strcmp(word, "up") ? 1 : !strcmp(word, "down") ? 0 : -1; }
+
+static char token[64]; /* ROBOT_PROXY_TOKEN */
+
 /* One command line → one answer line ("ok …" or "error …"). Commands:
- *   hello                            ok robot-proxy VERSION
+ *   hello                            ok robot-proxy VERSION TOKEN
  *   status                           ok tick=… ms=… steps=… frames=… (frames presented)
  *   run N                            N steps; "stalled … left=K" if the game stops stepping
  *   stepms MS                        virtual milliseconds per step (default 7)
@@ -394,10 +400,15 @@ static void command(char *line, char *out, size_t size) {
   char word[16] = "", arg1[32] = "", arg2[4096] = "";
   sscanf(line, "%15s %31s %4095s", word, arg1, arg2);
   BOOL input = !strcmp(word, "key") || !strcmp(word, "mouse") || !strcmp(word, "button");
+  char *rest;
   if (!strcmp(word, "hello")) {
-    snprintf(out, size, "ok robot-proxy %d", VERSION);
+    snprintf(out, size, "ok robot-proxy %d %s", VERSION, token);
   } else if (!strcmp(word, "run")) {
-    LONG n = atol(arg1);
+    LONG n = strtol(arg1, &rest, 10);
+    if (n <= 0 || *rest) {
+      snprintf(out, size, "error run needs a positive number of steps");
+      return;
+    }
     DWORD target = steps + n;
     InterlockedExchangeAdd(&budget, n);
     SetEvent(wake);
@@ -427,9 +438,11 @@ static void command(char *line, char *out, size_t size) {
     snprintf(out, size, "ok");
   } else if (!window) {
     snprintf(out, size, "error no game window yet");
+  } else if ((!strcmp(word, "key") || !strcmp(word, "button")) && up_or_down(arg2) < 0) {
+    snprintf(out, size, "error %s needs down or up", word);
   } else if (!strcmp(word, "key")) {
     UINT vk = strtoul(arg1, NULL, 10) & 0xff;
-    BOOL up = !strcmp(arg2, "up");
+    BOOL up = up_or_down(arg2);
     keys[vk] = !up;
     post(up ? WM_KEYUP : WM_KEYDOWN, vk, key_lparam(vk, up));
     snprintf(out, size, "ok");
@@ -439,7 +452,7 @@ static void command(char *line, char *out, size_t size) {
     post(WM_MOUSEMOVE, mouse_buttons(), MAKELPARAM(cursor.x, cursor.y));
     snprintf(out, size, "ok");
   } else if (!strcmp(word, "button")) {
-    BOOL left = !strcmp(arg1, "left"), up = !strcmp(arg2, "up");
+    BOOL left = !strcmp(arg1, "left"), up = up_or_down(arg2);
     keys[left ? VK_LBUTTON : VK_RBUTTON] = !up;
     UINT msg = left ? (up ? WM_LBUTTONUP : WM_LBUTTONDOWN) : (up ? WM_RBUTTONUP : WM_RBUTTONDOWN);
     post(msg, mouse_buttons(), MAKELPARAM(cursor.x, cursor.y));
@@ -458,12 +471,27 @@ static void command(char *line, char *out, size_t size) {
     free(buffer);
   } else if (!strcmp(word, "poke")) {
     BYTE *at = (BYTE *)strtoul(arg1, NULL, 16);
-    size_t len = strlen(arg2) / 2;
-    BYTE bytes[2048];
-    for (size_t i = 0; i < len; i++) bytes[i] = (BYTE)(hex(arg2[2 * i]) << 4 | hex(arg2[2 * i + 1]));
-    snprintf(out, size, write_code(at, bytes, len) ? "ok" : "error cannot write %p", (void *)at);
+    size_t digits = strlen(arg2), len = digits / 2;
+    BYTE bytes[sizeof arg2 / 2];
+    BOOL valid = digits > 0 && digits % 2 == 0;
+    for (size_t i = 0; valid && i < len; i++) {
+      int high = hex(arg2[2 * i]), low = hex(arg2[2 * i + 1]);
+      valid = high >= 0 && low >= 0;
+      bytes[i] = (BYTE)(high << 4 | low);
+    }
+    if (!valid) {
+      snprintf(out, size, "error poke needs bytes as hex digits");
+    } else {
+      snprintf(out, size, write_code(at, bytes, len) ? "ok" : "error cannot write %p", (void *)at);
+    }
   } else {
     snprintf(out, size, "error unknown command %s", word);
+  }
+}
+
+static void send_all(SOCKET to, const char *text) {
+  for (int sent = 0, len = (int)strlen(text), n; sent < len; sent += n) {
+    if ((n = send(to, text + sent, len - sent, 0)) <= 0) break;
   }
 }
 
@@ -477,31 +505,52 @@ static DWORD WINAPI serve(void *param) {
   address.sin_family = AF_INET;
   address.sin_port = htons((u_short)(UINT_PTR)param);
   address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  if (bind(server, (struct sockaddr *)&address, sizeof address) || listen(server, 1)) return 1;
+  if (bind(server, (struct sockaddr *)&address, sizeof address) || listen(server, 1)) {
+    say("serve: cannot listen on port %u (%d)", (unsigned)(UINT_PTR)param, WSAGetLastError());
+    return 1; /* the game waits for steps forever; the driver's harness gives up */
+  }
+  /* One driver at a time; another connection gets "error busy" at once instead of
+   * waiting unanswered. */
   static char line[8192], answer[1 << 20];
+  SOCKET client = INVALID_SOCKET;
+  size_t used = 0;
   for (;;) {
-    SOCKET client = accept(server, NULL, NULL);
-    say("serve: accept %d", (int)client);
-    if (client == INVALID_SOCKET) continue;
-    size_t used = 0;
-    int got;
-    while ((got = recv(client, line + used, (int)(sizeof line - 1 - used), 0)) > 0) {
-      say("serve: recv %d", got);
-      used += got;
-      line[used] = 0;
-      char *end;
-      while ((end = strchr(line, '\n'))) {
-        *end = 0;
-        if (end > line && end[-1] == '\r') end[-1] = 0;
-        command(line, answer, sizeof answer - 1);
-        strcat(answer, "\n");
-        send(client, answer, (int)strlen(answer), 0);
-        used -= end + 1 - line;
-        memmove(line, end + 1, used + 1);
+    fd_set readable;
+    FD_ZERO(&readable);
+    FD_SET(server, &readable);
+    if (client != INVALID_SOCKET) FD_SET(client, &readable);
+    if (select(0, &readable, NULL, NULL, NULL) <= 0) continue;
+    if (FD_ISSET(server, &readable)) {
+      SOCKET other = accept(server, NULL, NULL);
+      say("serve: accept %d", (int)other);
+      if (client == INVALID_SOCKET) {
+        client = other;
+        used = 0;
+      } else if (other != INVALID_SOCKET) {
+        send_all(other, "error busy: another driver is connected\n");
+        closesocket(other);
       }
-      if (used == sizeof line - 1) used = 0; /* an overlong line: dropped */
     }
-    closesocket(client);
+    if (client == INVALID_SOCKET || !FD_ISSET(client, &readable)) continue;
+    int got = recv(client, line + used, (int)(sizeof line - 1 - used), 0);
+    if (got <= 0) {
+      closesocket(client);
+      client = INVALID_SOCKET;
+      continue;
+    }
+    used += got;
+    line[used] = 0;
+    char *end;
+    while ((end = strchr(line, '\n'))) {
+      *end = 0;
+      if (end > line && end[-1] == '\r') end[-1] = 0;
+      command(line, answer, sizeof answer - 1);
+      strcat(answer, "\n");
+      send_all(client, answer);
+      used -= end + 1 - line;
+      memmove(line, end + 1, used + 1);
+    }
+    if (used == sizeof line - 1) used = 0; /* an overlong line: dropped */
   }
 }
 
@@ -550,6 +599,7 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved) {
   DisableThreadLibraryCalls(instance);
   char port[16];
   if (!GetEnvironmentVariableA("ROBOT_PROXY_PORT", port, sizeof port)) return TRUE;
+  GetEnvironmentVariableA("ROBOT_PROXY_TOKEN", token, sizeof token);
   char log_path[MAX_PATH];
   if (GetEnvironmentVariableA("ROBOT_PROXY_LOG", log_path, sizeof log_path)) log_file = fopen(log_path, "w");
   InitializeCriticalSection(&lock);

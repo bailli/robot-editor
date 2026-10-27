@@ -26,7 +26,7 @@ async function withGame<T>(exe: string | undefined, use: (d: Driver) => Promise<
   try {
     return await use(d);
   } finally {
-    d.close();
+    await d.close();
   }
 }
 

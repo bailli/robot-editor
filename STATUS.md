@@ -1065,8 +1065,12 @@ Roughly by value for the editor.
   started (`wineserver -k`), and `shot` deletes `Documents/Robot` in the prefix, i.e.
   also the screenshots and saved games of played games. A worktree of the repository
   has its own `.wine/` (run `harness.py setup` there), so its games do not collide.
+  `Driver.close()` resolves only after `serve` has cleaned up, so the next game is not
+  ended by the previous one's `wineserver -k`: await it.
 - The proxy does nothing but forward unless `ROBOT_PROXY_PORT` is set;
   `ROBOT_PROXY_LOG=C:\…` makes it write a log (a path in the prefix, e.g.
-  `C:\robot-drive\proxy.log`).
+  `C:\robot-drive\proxy.log`), including a port it could not listen on. `serve` picks a
+  free port and a token the proxy's `hello` must name, so two checkouts' games never
+  get mixed up; it reports ready only once the game waits for its first step.
 - `run` answers "stalled" when the game stops stepping for 3 s: a message box or a
   modal dialog, or a crash (Wine's crash dialog is then on the virtual display).
