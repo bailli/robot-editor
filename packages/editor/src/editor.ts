@@ -14,6 +14,7 @@ import {
   LOGIC_CELL,
   type LogicRecord,
   MAX_ROOMS,
+  MAX_RUCKSACK,
   type Mod,
   type ModChanges,
   NAMED_ROOMS,
@@ -40,7 +41,9 @@ import {
   parsePe,
   parseTexts,
   readDealer,
+  readEpisodeFlags,
   readEpisodeStart,
+  readRucksack,
   recordCell,
   recordCellOffsets,
   roomChanges,
@@ -55,11 +58,13 @@ import {
   sha256,
   textChanges,
   withDealer,
+  withEpisodeFlags,
   withEpisodeStart,
   withExitMode,
   withRoomChanges,
   withRoomScript,
   withRoomSettings,
+  withRucksack,
   withTextChanges,
   withTextEntry,
 } from "@robot/formats";
@@ -115,6 +120,10 @@ export interface Edit {
   dealer?: { before: Dealer; after: Dealer };
   /** Where the episode starts, before and after. */
   start?: { before: EpisodeStart; after: EpisodeStart };
+  /** The rucksack's capacity before and after. */
+  rucksack?: { before: number; after: number };
+  /** The episode's flags before and after. */
+  flags?: { before: number; after: number };
   /** Steps done and undone together, in this order (the edit's own fields: the first's). */
   parts?: Edit[];
 }
@@ -235,8 +244,8 @@ const inRoom = (index: number) => Number.isInteger(index) && index >= 0 && index
  *
  * With a mod (mod.ts), the editor works on its base: the pristine exe with the changes
  * it does not edit (tile types, events, code, text copies) applied. The mod's rooms,
- * texts, dealers and starts are where editing starts; saveMod gives them back with the
- * edits, as the differences to the base.
+ * texts, dealers, starts, rucksacks and flags are where editing starts; saveMod gives
+ * them back with the edits, as the differences to the base.
  */
 export class Editor {
   private readonly edited = new Map<number, Room[]>();
@@ -245,8 +254,10 @@ export class Editor {
   private readonly parsed = new Map<number, { source: string; texts: Texts }>();
   /** Edited dealers by episode. */
   private readonly dealers = new Map<number, Dealer>();
-  /** Edited starts by episode. */
+  /** Edited starts, rucksacks' capacities and flags by episode. */
   private readonly starts = new Map<number, EpisodeStart>();
+  private readonly rucksacks = new Map<number, number>();
+  private readonly flagWords = new Map<number, number>();
   private readonly undoStack: Edit[] = [];
   private readonly redoStack: Edit[] = [];
   private stroke: Edit | undefined;
@@ -269,15 +280,7 @@ export class Editor {
     }
     const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer, rucksack, flags } =
       mod.changes;
-    const kept: ModChanges = {
-      ...NO_CHANGES,
-      tileTypes,
-      events,
-      code,
-      copyTexts,
-      rucksack,
-      flags,
-    };
+    const kept: ModChanges = { ...NO_CHANGES, tileTypes, events, code, copyTexts };
     this.game = new Game(applyMod(game.image, { ...mod, changes: kept }));
     this.mod = { ...mod, changes: kept };
     for (const episode of new Set(rooms.map((c) => c.episode))) {
@@ -300,6 +303,8 @@ export class Editor {
       if (problem) throw new RangeError(`episode ${episode}'s start: ${problem}`);
       this.starts.set(episode, at);
     }
+    for (const { episode, capacity } of rucksack) this.rucksacks.set(episode, capacity);
+    for (const c of flags) this.flagWords.set(c.episode, c.flags);
   }
 
   rooms(episode: number): readonly Room[] {
@@ -434,6 +439,57 @@ export class Editor {
   isStartEdited(episode: number): boolean {
     const start = this.starts.get(episode);
     return start !== undefined && !sameStart(start, readEpisodeStart(this.game.image, episode));
+  }
+
+  /** The rucksack's capacity as edited (its slots; the weight it holds stays below). */
+  rucksack(episode: number): number {
+    return this.rucksacks.get(episode) ?? readRucksack(this.game.image, episode);
+  }
+
+  /**
+   * Gives the episode's rucksack another capacity; one undo step (shown in room `room`).
+   * Throws a RangeError outside 1 to MAX_RUCKSACK.
+   */
+  setRucksack(episode: number, room: number, capacity: number): Edit | undefined {
+    this.endStroke();
+    if (!Number.isInteger(capacity) || capacity < 1 || capacity > MAX_RUCKSACK)
+      throw new RangeError(`a rucksack holds 1 to ${MAX_RUCKSACK}`);
+    const before = this.rucksack(episode);
+    if (before === capacity) return undefined;
+    return this.commitEpisode({ episode, room, rucksack: { before, after: capacity } });
+  }
+
+  isRucksackEdited(episode: number): boolean {
+    const capacity = this.rucksacks.get(episode);
+    return capacity !== undefined && capacity !== readRucksack(this.game.image, episode);
+  }
+
+  /** The flags the episode's constructor sets, as edited (episode-flags.ts). */
+  episodeFlags(episode: number): number {
+    return this.flagWords.get(episode) ?? readEpisodeFlags(this.game.image, episode);
+  }
+
+  /** Sets the episode's flags (32 bits); one undo step (shown in room `room`). */
+  setEpisodeFlags(episode: number, room: number, flags: number): Edit | undefined {
+    this.endStroke();
+    if (!Number.isInteger(flags) || flags < 0 || flags > 0xffffffff)
+      throw new RangeError(`flags ${flags}`);
+    const before = this.episodeFlags(episode);
+    if (before === flags) return undefined;
+    return this.commitEpisode({ episode, room, flags: { before, after: flags } });
+  }
+
+  isFlagsEdited(episode: number): boolean {
+    const flags = this.flagWords.get(episode);
+    return flags !== undefined && flags !== readEpisodeFlags(this.game.image, episode);
+  }
+
+  /** Applies a change of the episode's settings as one undo step. */
+  private commitEpisode(edit: Pick<Edit, "episode" | "room" | "rucksack" | "flags">): Edit {
+    const step: Edit = { ...edit, layer: "base", changes: [] };
+    this.apply(step, after);
+    this.push(step);
+    return step;
   }
 
   /** The name the game shows for a room, with the edited names. */
@@ -1155,10 +1211,25 @@ export class Editor {
     const start = [...this.starts]
       .filter(([episode]) => this.isStartEdited(episode))
       .map(([episode, at]) => ({ episode, ...at }));
+    const rucksack = [...this.rucksacks]
+      .filter(([episode]) => this.isRucksackEdited(episode))
+      .map(([episode, capacity]) => ({ episode, capacity }));
+    const flags = [...this.flagWords]
+      .filter(([episode]) => this.isFlagsEdited(episode))
+      .map(([episode, word]) => ({ episode, flags: word }));
     const mod: Mod = {
       ...this.mod,
       base: sha256(this.pristine.image.data),
-      changes: { ...this.mod.changes, dealer, copyTexts, texts, rooms, start },
+      changes: {
+        ...this.mod.changes,
+        dealer,
+        copyTexts,
+        texts,
+        rooms,
+        start,
+        rucksack,
+        flags,
+      },
     };
     checkMod(mod);
     this.saved = this.undoStack.at(-1);
@@ -1198,6 +1269,12 @@ export class Editor {
     for (const [episode, start] of this.starts) {
       if (this.isStartEdited(episode)) exe = withEpisodeStart(parsePe(exe), episode, start);
     }
+    for (const [episode, capacity] of this.rucksacks) {
+      if (this.isRucksackEdited(episode)) exe = withRucksack(parsePe(exe), episode, capacity);
+    }
+    for (const [episode, flags] of this.flagWords) {
+      if (this.isFlagsEdited(episode)) exe = withEpisodeFlags(parsePe(exe), episode, flags);
+    }
     return exe;
   }
 
@@ -1230,6 +1307,15 @@ export class Editor {
     }
     if (edit.start) {
       this.starts.set(edit.episode, value === before ? edit.start.before : edit.start.after);
+      return;
+    }
+    if (edit.rucksack) {
+      const { before: old, after: now } = edit.rucksack;
+      this.rucksacks.set(edit.episode, value === before ? old : now);
+      return;
+    }
+    if (edit.flags) {
+      this.flagWords.set(edit.episode, value === before ? edit.flags.before : edit.flags.after);
       return;
     }
     const present = value === after ? edit.added : edit.removed;

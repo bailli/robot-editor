@@ -600,15 +600,23 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     const seen = await withModExe(game, mod, (exe) =>
       withGame(exe, async (d) => {
         await d.startEpisode(3);
+        // onto the third, which stays: message 998 ("Zum Tragen ist das mindestens eins zu
+        // viel.") waits for Return
         await d.hold("right", 120);
         await d.run(30);
+        const third = await d.peek(MAP + 2 * at(start.x + 3, start.y), 2);
         const slots = await d.peek(0x4fe0c0, 2 + 2 * 6);
-        return Array.from({ length: 7 }, (_, k) => slots[2 * k] | (slots[2 * k + 1] << 8));
+        const words = Array.from({ length: 7 }, (_, k) => slots[2 * k] | (slots[2 * k + 1] << 8));
+        return { words, hero: await d.hero(), third: third[0] | (third[1] << 8) };
       }),
     );
     // capacity 6 and the slots (class | state << 8): two items, 2 + 2 + 2 would reach 6;
     // with the original 200 the hero takes all five
-    assert.deepEqual(seen, [6, 0x78, 0xb4, 0, 0, 0, 0]);
+    assert.deepEqual(seen, {
+      words: [6, 0x78, 0xb4, 0, 0, 0, 0],
+      hero: { room: start.room, x: start.x + 3, y: start.y },
+      third: game.episode(3).classes.classes.get(items[2])?.id, // the map holds classes
+    });
   }, 60_000);
 
   test("episode II: class 99 under an object, in another state or a logic cell shows no backdrop", async () => {

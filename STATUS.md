@@ -332,13 +332,15 @@ Files in `packages/formats/src`:
   is both the number of slots (words class | state << 8 from 0x4fe0c2; the letters'
   count 0x4fe2b6 follows, so at most 250) and a weight limit: taking an item (0x42c010)
   needs a free slot and the weights carried plus the item's to stay **below** it, else
-  the hero cannot step onto the item. An item's weight is the word of its shape's frame
+  the hero steps onto the item, it stays there, and message 998 says so ("Zum Tragen
+  ist das mindestens eins zu viel.", one of three variants; the box waits for Return).
+  An item's weight is the word of its shape's frame
   for its state (`Frame.word`, read through 0x43a990; 0 counts as 4); with the second
   argument set 0x42c010 skips the weight. Junior's, I's, II's and IV's items weigh 1
   (ammunition 2 or 3 in its fuller states, Junior's magnet in state 1: 2); III's up to
   10 (tools 2, the ladder 3, chests 4, wood 5, the tree and the magic pipes 10), so only
   there the weight matters. **Verified under Wine:** in III with capacity 6 the hero
-  takes two of five tools of weight 2 and cannot step onto the third
+  takes two of five tools of weight 2 and leaves the third, with message 998
   (`pnpm test:game`); with 200 he takes all five; in I with capacity 4 three of five
   items of weight 1, with 50 all five.
 - **Episode flags** are the word at +8 of the episode object ([0x51bb18]+8): the base
@@ -1045,7 +1047,11 @@ Supported:
   browser's
 - save: downloads the exe with all edited episodes and texts (warns about unsaved changes
   on leave)
-- the episode's start (tab Episode, `start-view.ts`): the room and the hero's cell
+- the episode's settings (tab Episode, `episode-view.ts`): the rucksack's capacity
+  (1–250) and whether oracles vanish after north and after east (the episode flags
+  0x4000, 0x8000), one undo step each, saved into the exe and the mod (`rucksack`,
+  `flags`)
+- the episode's start (tab Episode, `episode-view.ts`): the room and the hero's cell
   there; "Start here" sets the shown room and the picked cell (Select tool, one cell,
   or Inspect; else the start's cell), "Original start" goes back to the exe's; one undo
   step each; not room 1, nor a cell under the status line (row 0); the cell is marked
@@ -1138,8 +1144,8 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
-- **Next:** the proxy as an in-memory loader; editing the mod's other kinds in the
-  editor.
+- **Next:** the proxy as an in-memory loader; editing the mod's other kinds (tile
+  types, events, code) in the editor.
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
@@ -1221,10 +1227,11 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   `serializeRoom`/`parseRoom` in `scene.ts`. On the command line
   `robot mod apply MOD OUT.exe`, later `robot mod compile MOD OUT.patch` for the proxy.
 - **The editor** works on two images: the **base** (pristine + kinds 1–2, the parts the
-  editor does not edit) and the **edited** state on top (kinds 3–6, what it edits
-  today: the dealers, rooms, texts and the start). Opening takes an exe and,
-  optionally, a mod; "Save mod" writes kinds 1–2 as loaded plus kinds 3–6 as the
-  difference between the edited state and the base (dealers and starts that differ, rooms that
+  editor does not edit) and the **edited** state on top (kinds 3–8, what it edits
+  today: the dealers, rooms, texts, the start, the rucksack and the flags). Opening takes an exe and,
+  optionally, a mod; "Save mod" writes kinds 1–2 as loaded plus kinds 3–8 as the
+  difference between the edited state and the base (dealers, starts, rucksacks and
+  flags that differ, rooms that
   differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
   written in the editor replaces its copy in `copyTexts`. "Save exe" and "Test in
   game" stay, built from the base and the edits. Undo/redo, dirty state (either save

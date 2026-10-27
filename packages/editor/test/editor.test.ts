@@ -5,6 +5,8 @@ import {
   LOGIC_CELL,
   type Mod,
   NO_CHANGES,
+  ORACLE_VANISHES_EAST,
+  ORACLE_VANISHES_NORTH,
   ROOM_CELLS,
   applyMod,
   compileScript,
@@ -14,7 +16,9 @@ import {
   parseMod,
   parsePe,
   readDealer,
+  readEpisodeFlags,
   readEpisodeStart,
+  readRucksack,
   roomCompiledScript,
   roomScript,
   roomSettings,
@@ -702,6 +706,37 @@ describe("Editor and the start", () => {
     expect(() => editor.setStart(3, { room: 1, x: 2, y: 16 })).toThrow(/title screen/);
     expect(() => editor.setStart(3, { room: 41, x: 40, y: 16 })).toThrow(RangeError);
     expect(() => editor.setStart(3, { room: 41, x: 2, y: 0 })).toThrow(/status line/);
+  });
+});
+
+describe("Editor and the episode's settings", () => {
+  test("the rucksack and the flags change as one step each, saved into exe and mod", () => {
+    const editor = new Editor(game);
+    expect(editor.rucksack(3)).toBe(200);
+    expect(editor.setRucksack(3, 41, 200)).toBeUndefined();
+    editor.setRucksack(3, 41, 6);
+    const oracles = ORACLE_VANISHES_NORTH | ORACLE_VANISHES_EAST;
+    editor.setEpisodeFlags(0, 43, readEpisodeFlags(game.image, 0) | oracles);
+    expect([editor.isRucksackEdited(3), editor.isFlagsEdited(0)]).toEqual([true, true]);
+    const exe = parsePe(editor.save());
+    expect(readRucksack(exe, 3)).toBe(6);
+    expect(readEpisodeFlags(exe, 0)).toBe(0x4801e946);
+    const mod = editor.saveMod();
+    expect(mod.changes.rucksack).toEqual([{ episode: 3, capacity: 6 }]);
+    expect(mod.changes.flags).toEqual([{ episode: 0, flags: 0x4801e946 }]);
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    // a mod's settings are where editing starts, not part of the base
+    const opened = new Editor(game, mod);
+    expect([opened.rucksack(3), opened.episodeFlags(0)]).toEqual([6, 0x4801e946]);
+    expect(readRucksack(opened.game.image, 3)).toBe(200);
+    expect(modJson(opened.saveMod())).toBe(modJson(mod));
+    editor.undo();
+    expect(editor.episodeFlags(0)).toBe(0x48012946);
+    editor.undo();
+    expect(editor.rucksack(3)).toBe(200);
+    expect(editor.saveMod().changes).toMatchObject({ rucksack: [], flags: [] });
+    expect(() => editor.setRucksack(3, 41, 0)).toThrow(RangeError);
+    expect(() => editor.setRucksack(3, 41, 251)).toThrow(RangeError);
   });
 });
 

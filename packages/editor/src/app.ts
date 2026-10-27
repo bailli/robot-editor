@@ -43,9 +43,11 @@ import {
   parseScene,
   randomPlacement,
   readDealer,
+  readEpisodeFlags,
   readEpisodeStart,
   readEventTable,
   readOracleSymbols,
+  readRucksack,
   recordActorKind,
   robotSprite,
   robotSpriteCount,
@@ -85,6 +87,7 @@ import {
   tilesOf,
   wrapsRow,
 } from "./editor.ts";
+import { EpisodeView } from "./episode-view.ts";
 import { type Connections, ExitsView, connections, fixedExit, leadsTo } from "./exits-view.ts";
 import { showHelp } from "./help-dialog.ts";
 import { MapView } from "./map-view.ts";
@@ -102,7 +105,6 @@ import {
 import { type ScriptName, ScriptView } from "./script-view.ts";
 import { type SettingsContext, SettingsView } from "./settings-view.ts";
 import { SidePanel } from "./side-panel.ts";
-import { StartView } from "./start-view.ts";
 import { TileNames } from "./tile-info.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
@@ -516,7 +518,7 @@ export class App {
       this.refreshButtons();
     },
   });
-  readonly startView = new StartView({
+  readonly episodeView = new EpisodeView({
     here: () => {
       const index = this.pickedCell();
       const { x, y } =
@@ -530,6 +532,12 @@ export class App {
     },
     go: (room) => {
       if (this.need().hasRoom(this.episode, room)) this.showRoom(room);
+    },
+    rucksack: (capacity) => {
+      this.editEpisode(() => this.need().setRucksack(this.episode, this.roomId, capacity));
+    },
+    flags: (flags) => {
+      this.editEpisode(() => this.need().setEpisodeFlags(this.episode, this.roomId, flags));
     },
   });
   readonly dealerView = new DealerView({
@@ -577,7 +585,7 @@ export class App {
       {
         name: "episode",
         label: "Episode",
-        content: h("div", {}, this.startView.element, this.dealerView.element),
+        content: h("div", {}, this.episodeView.element, this.dealerView.element),
       },
     ],
     (width) => {
@@ -2129,6 +2137,17 @@ export class App {
     });
   }
 
+  /** Changes a setting of the episode (one undo step), saying why it could not. */
+  private editEpisode(change: () => void): void {
+    try {
+      change();
+    } catch (error) {
+      this.setStatus(`Cannot change the episode: ${message(error)}`, true);
+    }
+    this.refreshEpisodeTab();
+    this.refreshButtons();
+  }
+
   /** Lets the episode start at `start` (Editor.setStart), shown in the start room. */
   private setStart(start: EpisodeStart): void {
     const editor = this.need();
@@ -2151,16 +2170,23 @@ export class App {
     const editor = this.need();
     const start = editor.start(this.episode);
     this.view.setStart(start.room === this.roomId ? start.y * ROOM_WIDTH + start.x : undefined);
-    this.startView.show({
+    const { image } = editor.game;
+    this.episodeView.show({
       episode: EPISODE_NAMES[this.episode] ?? `episode ${this.episode}`,
       start,
-      original: readEpisodeStart(editor.game.image, this.episode),
+      original: readEpisodeStart(image, this.episode),
+      rucksack: editor.rucksack(this.episode),
+      originalRucksack: readRucksack(image, this.episode),
+      flags: editor.episodeFlags(this.episode),
+      originalFlags: readEpisodeFlags(image, this.episode),
       room: this.roomId,
       label: (room) => `Go to ${this.roomLabel(this.episode, room)}`,
     });
     const dealer = editor.dealer(this.episode);
     const dealerEdited = editor.isDealerEdited(this.episode);
-    const edited = dealerEdited || editor.isStartEdited(this.episode);
+    const settingsEdited =
+      editor.isRucksackEdited(this.episode) || editor.isFlagsEdited(this.episode);
+    const edited = dealerEdited || settingsEdited || editor.isStartEdited(this.episode);
     this.dealerView.show({
       episode: EPISODE_NAMES[this.episode] ?? `episode ${this.episode}`,
       dealer,
@@ -2173,6 +2199,7 @@ export class App {
       note: edited,
       title: [
         `Starts in room ${start.room} at (${start.x}, ${start.y})${editor.isStartEdited(this.episode) ? " (edited)" : ""}`,
+        `a rucksack of ${editor.rucksack(this.episode)}${settingsEdited ? ", settings edited" : ""}`,
         dealer
           ? `the dealer sells ${plural(dealer.goods.length, "good")}${dealerEdited ? " (edited)" : ""}`
           : "no dealer",
@@ -2229,7 +2256,15 @@ export class App {
       this.showEpisode(edit.episode, this.lastSeen(edit.episode, edit.room));
     } else if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
     else if (edit.room !== this.roomId) this.showRoom(edit.room);
-    else if (edit.records || edit.tags || edit.text || edit.dealer || edit.start) {
+    else if (
+      edit.records ||
+      edit.tags ||
+      edit.text ||
+      edit.dealer ||
+      edit.start ||
+      edit.rucksack ||
+      edit.flags
+    ) {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);
       if (this.selected) this.select(this.selected.index);

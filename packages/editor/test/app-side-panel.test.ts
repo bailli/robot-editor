@@ -48,7 +48,7 @@ test("the tabs tell what the room has without opening them", () => {
   expect(tab("episode")).toMatchObject({
     badge: undefined,
     empty: false,
-    title: "Starts in room 43 at (5, 14); the dealer sells 27 goods",
+    title: "Starts in room 43 at (5, 14); a rucksack of 50; the dealer sells 27 goods",
   });
   // seven circuit nodes, none on
   app.showRoom(128);
@@ -60,7 +60,7 @@ test("the tabs tell what the room has without opening them", () => {
   app.showEpisode(3, 41);
   expect(tab("episode")).toMatchObject({
     empty: false,
-    title: "Starts in room 41 at (8, 15); no dealer",
+    title: "Starts in room 41 at (8, 15); a rucksack of 200; no dealer",
   });
 });
 
@@ -248,7 +248,7 @@ test("the Episode tab edits the dealer's goods, undoably; the mod keeps them", a
   expect(price(1).element()).toBe(field);
   expect(tab("episode")).toMatchObject({
     badge: "●",
-    title: "Starts in room 43 at (5, 14); the dealer sells 27 goods (edited)",
+    title: "Starts in room 43 at (5, 14); a rucksack of 50; the dealer sells 27 goods (edited)",
   });
 
   // the last good goes; the current tile replaces the first one; fewer shown
@@ -296,7 +296,7 @@ test("the Episode tab sets the start to the shown room and the picked cell, undo
   expect(app.editor?.start(1)).toEqual({ room: 44, x: 20, y: 10 });
   expect(tab("episode")).toMatchObject({
     badge: "●",
-    title: "Starts in room 44 at (20, 10) (edited); the dealer sells 27 goods",
+    title: "Starts in room 44 at (20, 10) (edited); a rucksack of 50; the dealer sells 27 goods",
   });
   expect(document.querySelector(".start-line")?.textContent).toBe(
     "Robot I starts in room 44, the hero at (20, 10) (edited).",
@@ -324,4 +324,35 @@ test("the Episode tab sets the start to the shown room and the picked cell, undo
   expect(app.editor?.start(1)).toEqual({ room: 43, x: 5, y: 14 });
   expect(tab("episode").badge).toBeUndefined();
   await expect.element(start().getByRole("button", { name: "Original start" })).toBeDisabled();
+});
+
+test("the Episode tab sets the rucksack and the oracles' flags, undoably; the mod keeps them", async () => {
+  app.showEpisode(0, 43);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const rucksack = page.getByRole("region", { name: "Rucksack" });
+  const oracles = page.getByRole("region", { name: "Oracles" });
+  await expect.element(rucksack.getByLabelText("Capacity")).toHaveValue(38);
+  await userEvent.fill(rucksack.getByLabelText("Capacity"), "12");
+  await userEvent.keyboard("{Enter}");
+  expect(app.editor?.rucksack(0)).toBe(12);
+  // out of range: the field goes back
+  await userEvent.fill(rucksack.getByLabelText("Capacity"), "251");
+  await userEvent.keyboard("{Enter}");
+  expect(app.editor?.rucksack(0)).toBe(12);
+  await expect.element(rucksack.getByLabelText("Capacity")).toHaveValue(12);
+  await oracles.getByRole("checkbox", { name: /sending the hero/ }).click();
+  await oracles.getByRole("checkbox", { name: /their hint/ }).click();
+  expect(app.editor?.episodeFlags(0)).toBe(0x4801e946);
+  expect(tab("episode")).toMatchObject({ badge: "●" });
+  expect(tab("episode").title).toMatch(/a rucksack of 12, settings edited/);
+  const saved = parseMod(app.saveMod() ?? "");
+  expect(saved.changes.rucksack).toEqual([{ episode: 0, capacity: 12 }]);
+  expect(saved.changes.flags).toEqual([{ episode: 0, flags: 0x4801e946 }]);
+  for (let i = 0; i < 3; i++) app.undo();
+  expect(app.editor?.rucksack(0)).toBe(38);
+  expect(app.editor?.episodeFlags(0)).toBe(0x48012946);
+  await expect
+    .element(oracles.getByRole("checkbox", { name: /sending the hero/ }))
+    .not.toBeChecked();
+  expect(tab("episode").badge).toBeUndefined();
 });
