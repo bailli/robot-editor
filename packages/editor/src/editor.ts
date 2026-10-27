@@ -235,6 +235,10 @@ export class Editor {
     return this.edited.get(episode) ?? this.game.episode(episode).rooms;
   }
 
+  hasRoom(episode: number, id: number): boolean {
+    return this.rooms(episode).some((r) => r.id === id);
+  }
+
   room(episode: number, id: number): Room {
     const room = this.rooms(episode).find((r) => r.id === id);
     if (!room) throw new Error(`episode ${episode} has no room ${id}`);
@@ -355,7 +359,7 @@ export class Editor {
     const rooms = this.rooms(episode);
     if (!Number.isInteger(id) || id < 1 || id > MAX_ROOM_ID)
       return `room ids go from 1 to ${MAX_ROOM_ID}`;
-    if (rooms.some((r) => r.id === id)) return `room ${id} exists`;
+    if (this.hasRoom(episode, id)) return `room ${id} exists`;
     if (rooms.length >= MAX_ROOMS) return `an episode has at most ${MAX_ROOMS} rooms`;
     return undefined;
   }

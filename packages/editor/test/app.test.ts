@@ -18,6 +18,7 @@ import {
   readEpisodeStart,
   readEventTable,
   renderRoom,
+  roomPassages,
   roomScript,
   roomSettings,
   shownCells,
@@ -366,6 +367,25 @@ test("doors and stairs are listed with the exits", async () => {
   expect(document.querySelector('.passage[data-direction="stairs down"]')?.textContent).toBe(
     "Stairs down122",
   );
+});
+
+test("painting over stairs counts them in the exits, also after undo", () => {
+  app.showEpisode(3, 22); // stairs down to 122: in the base at 215, in the overlay at 349
+  const stairs = () => document.querySelector('.passage[data-direction="stairs down"] button');
+  const room = defined(app.editor).room(3, 22);
+  const ids = new Set(
+    defined(app.editor)
+      .rooms(3)
+      .map((r) => r.id),
+  );
+  const cells = roomPassages(room, game.episode(3).classes, ids).map((p) => p.cell);
+  expect(cells).toEqual([215, 349]);
+  expect(stairs()?.getAttribute("title")).toMatch(/\(2 cells\)$/);
+  app.setTile(0x0000);
+  app.paintCell(215);
+  expect(stairs()?.getAttribute("title")).toMatch(/\(1 cell\)$/);
+  app.undo();
+  expect(stairs()?.getAttribute("title")).toMatch(/\(2 cells\)$/);
 });
 
 test("stairs a circuit places are listed with the exits", async () => {

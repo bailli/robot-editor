@@ -215,10 +215,7 @@ export class App {
       this.refreshRoomList();
       this.refreshButtons();
     },
-    exists: (room) =>
-      this.need()
-        .rooms(this.episode)
-        .some((r) => r.id === room),
+    exists: (room) => this.need().hasRoom(this.episode, room),
     thumbnail: (room) => this.thumbnail(room),
     name: (room) => {
       const editor = this.need();
@@ -301,11 +298,7 @@ export class App {
   readonly newRoomDialog = new NewRoomDialog({
     check: (id) => this.checkNewRoom(id),
     source: (id) =>
-      this.need()
-        .rooms(this.episode)
-        .some((r) => r.id === id)
-        ? this.roomLabel(this.episode, id)
-        : undefined,
+      this.need().hasRoom(this.episode, id) ? this.roomLabel(this.episode, id) : undefined,
     interior: (id) => this.describeInterior(id),
     interiorStairs: (id) => this.interiorStairs(id),
     create: (id, content, openNeighbours) => this.addRoom(id, content, openNeighbours),
@@ -415,12 +408,7 @@ export class App {
       this.afterRecordEdit();
     },
     go: (room) => {
-      if (
-        this.need()
-          .rooms(this.episode)
-          .some((r) => r.id === room)
-      )
-        this.showRoom(room);
+      if (this.need().hasRoom(this.episode, room)) this.showRoom(room);
     },
     preview: (value) => this.cellPreview(value),
     tile: () => this.tile,
@@ -658,10 +646,7 @@ export class App {
     this.workspace.hidden = false;
     this.testButton.disabled = false;
     const linked = roomInAddress();
-    if (
-      linked &&
-      this.editor.game.episode(linked.episode).rooms.some((r) => r.id === linked.room)
-    ) {
+    if (linked && this.editor.hasRoom(linked.episode, linked.room)) {
       this.episode = linked.episode;
       this.roomId = linked.room;
       // after a reload: our entries in the browser's history are still there
@@ -704,7 +689,6 @@ export class App {
   showRoom(id: number): void {
     const editor = this.need();
     this.roomId = id;
-    this.showRoomName(id);
     this.roomTitle.textContent = `${EPISODE_NAMES[this.episode] ?? ""} – room ${id}`;
     const room = editor.room(this.episode, id);
     // outlines shown while hovering the actor list or the script belong to the old room:
@@ -712,12 +696,7 @@ export class App {
     this.view.setAreas([]);
     this.view.setHighlights([]);
     this.view.show(room, this.roomCache(room), this.backdrop(room));
-    this.connections = connections(
-      room,
-      new Set(editor.rooms(this.episode).map((r) => r.id)),
-      editor.game.episode(this.episode).classes,
-    );
-    this.exitsView.show(this.connections);
+    this.refreshConnections();
     this.scriptView.show(roomScript(room), `${this.episode} ${id}`);
     this.showSettings(room);
     this.refreshActors();
@@ -961,11 +940,7 @@ export class App {
 
   /** Opens room `id` if the episode has it (the Go to room field). */
   goTo(id: number): void {
-    if (
-      this.need()
-        .rooms(this.episode)
-        .some((r) => r.id === id)
-    ) {
+    if (this.need().hasRoom(this.episode, id)) {
       this.setMap(false, id);
       this.goInput.value = "";
     } else {
@@ -1009,13 +984,13 @@ export class App {
 
   /** The room shown last in an episode that still exists. */
   private lastSeen(episode: number, first?: number): number | undefined {
-    const rooms = this.need().rooms(episode);
+    const editor = this.need();
     const seen = this.history
       .slice(0, this.historyIndex + 1)
       .reverse()
       .filter((entry) => entry.episode === episode)
       .map((entry) => entry.room);
-    return [first, ...seen].find((id) => rooms.some((r) => r.id === id));
+    return [first, ...seen].find((id) => id !== undefined && editor.hasRoom(episode, id));
   }
 
   /**
@@ -1066,9 +1041,7 @@ export class App {
   /** "room 43 – DER START": a room with the name the game shows for it. */
   private roomLabel(episode: number, id: number): string {
     const editor = this.need();
-    const name = editor.rooms(episode).some((r) => r.id === id)
-      ? editor.roomName(episode, id)
-      : undefined;
+    const name = editor.hasRoom(episode, id) ? editor.roomName(episode, id) : undefined;
     return name ? `room ${id} – ${name.name}` : `room ${id}`;
   }
 
@@ -1098,7 +1071,7 @@ export class App {
     for (let i = index + step; i >= 0 && i < this.history.length; i += step) {
       const entry = this.history[i];
       if (entry.episode === shown?.episode && entry.room === shown.room) continue;
-      if (this.editor?.rooms(entry.episode).some((r) => r.id === entry.room)) return i;
+      if (this.editor?.hasRoom(entry.episode, entry.room)) return i;
     }
     return undefined;
   }
@@ -1106,7 +1079,7 @@ export class App {
   /** The browser went back or forward to one of our entries: show its room. */
   private arrive(state: unknown): void {
     if (!this.editor || !isHistoryState(state)) return;
-    if (!this.editor.rooms(state.episode).some((r) => r.id === state.room)) {
+    if (!this.editor.hasRoom(state.episode, state.room)) {
       // the room is gone: on in the same direction, else back to where the browser came from
       const step = state.index < this.historyIndex ? -1 : 1;
       const to = this.nearest(state.index, step) ?? this.historyIndex;
@@ -1526,7 +1499,7 @@ export class App {
       () => {
         const linked = roomInAddress();
         if (!this.editor || !linked || isHistoryState(window.history.state)) return;
-        if (!this.editor.rooms(linked.episode).some((r) => r.id === linked.room)) return;
+        if (!this.editor.hasRoom(linked.episode, linked.room)) return;
         this.replaceNext = true; // the browser made the history entry already
         if (linked.episode === this.episode) this.showRoom(linked.room);
         else this.showEpisode(linked.episode, linked.room);
@@ -1683,9 +1656,26 @@ export class App {
     if (this.need().endStroke()) {
       this.refreshRoomList();
       this.refreshButtons();
+      this.refreshConnections();
       this.refreshActors();
       this.refreshCircuit();
     }
+  }
+
+  /**
+   * Finds the room's exits and its name again (painted doors, stairs and exit tiles lead
+   * elsewhere; class 99 cells change which room's name the game shows).
+   */
+  private refreshConnections(): void {
+    const editor = this.need();
+    const room = editor.room(this.episode, this.roomId);
+    this.connections = connections(
+      room,
+      new Set(editor.rooms(this.episode).map((r) => r.id)),
+      editor.game.episode(this.episode).classes,
+    );
+    this.exitsView.show(this.connections);
+    this.showRoomName(this.roomId);
   }
 
   /** Finds the room's actors again (after painting, record edits, …) and shows them. */
@@ -1785,7 +1775,8 @@ export class App {
       if (this.selected) this.select(this.selected.index);
     } else {
       this.updateView(edit.changes.map((c) => c.index));
-      // painted cells may be actors (as at the end of a stroke)
+      // as at the end of a stroke: painted cells may be passages or actors
+      this.refreshConnections();
       this.refreshActors();
       this.refreshCircuit();
     }
