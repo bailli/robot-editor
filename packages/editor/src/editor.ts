@@ -17,6 +17,7 @@ import {
   MAX_RUCKSACK,
   type Mod,
   type ModChanges,
+  ModError,
   NAMED_ROOMS,
   NO_CHANGES,
   OPPOSITE,
@@ -31,12 +32,14 @@ import {
   type RoomTag,
   STAIRS_CLASS,
   type Texts,
+  type TileTypesChange,
   applyMod,
   backdropRoom,
   checkMod,
   dealerCapacity,
   encodeCp437,
   exitMode,
+  freeTileTypes,
   nameRoom,
   parsePe,
   parseTexts,
@@ -124,8 +127,42 @@ export interface Edit {
   rucksack?: { before: number; after: number };
   /** The episode's flags before and after. */
   flags?: { before: number; after: number };
+  /** The tile types copied from other episodes, and the edited texts, before and after. */
+  tileTypes?: {
+    before: readonly TileTypeCopy[];
+    after: readonly TileTypeCopy[];
+    texts: { before: ReadonlyMap<number, string>; after: ReadonlyMap<number, string> };
+  };
   /** Steps done and undone together, in this order (the edit's own fields: the first's). */
   parts?: Edit[];
+}
+
+/** A tile type of an episode made a type of another (mod kind tileTypes, withTileTypes). */
+export interface TileTypeCopy {
+  episode: number;
+  /** The target type, free in the episode. */
+  to: number;
+  /** The episode and type it comes from. */
+  from: number;
+  of: number;
+}
+
+/** The tile types a copy can never go to or come from: empty floor and logic cells. */
+const FIXED_TYPES: readonly number[] = [0, LOGIC_CELL];
+
+/** The mod's tileTypes changes for a list of copies: one per episode and source episode. */
+function tileTypeChanges(copies: readonly TileTypeCopy[]): TileTypesChange[] {
+  const groups = new Map<string, TileTypesChange & { types: [number, number][] }>();
+  for (const c of copies) {
+    const key = `${c.episode} ${c.from}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { episode: c.episode, from: c.from, types: [] };
+      groups.set(key, group);
+    }
+    group.types.push([c.to, c.of]);
+  }
+  return [...groups.values()];
 }
 
 /** A room next to a room id on the grid, and how its exit towards that id stands. */
@@ -243,9 +280,10 @@ const inRoom = (index: number) => Number.isInteger(index) && index >= 0 && index
  * are added, changed and removed with the record operations, each one undo step.
  *
  * With a mod (mod.ts), the editor works on its base: the pristine exe with the changes
- * it does not edit (tile types, events, code, text copies) applied. The mod's rooms,
- * texts, dealers, starts, rucksacks and flags are where editing starts; saveMod gives
- * them back with the edits, as the differences to the base.
+ * it does not edit (events, code, text copies) and the tile types copied from other
+ * episodes applied; copying tile types makes a new base. The mod's rooms, texts,
+ * dealers, starts, rucksacks and flags are where editing starts; saveMod gives them
+ * back with the edits, as the differences to the base.
  */
 export class Editor {
   private readonly edited = new Map<number, Room[]>();
@@ -265,24 +303,30 @@ export class Editor {
   private saved: Edit | undefined;
 
   /** The exe as edited: the loaded one, or with a mod its base (see above). */
-  readonly game: Game;
+  private base: Game;
   /** The exe as loaded, which mods apply to. */
   readonly pristine: Game;
   /** The loaded mod's name, author, description and the changes the editor keeps. */
   private readonly mod: Omit<Mod, "base">;
+  /** The tile types copied from other episodes (part of the base). */
+  private copies: readonly TileTypeCopy[] = [];
 
   constructor(game: Game, mod?: Mod) {
     this.pristine = game;
     if (!mod) {
-      this.game = game;
+      this.base = game;
       this.mod = { name: "", author: "", description: "", changes: NO_CHANGES };
       return;
     }
     const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer, rucksack, flags } =
       mod.changes;
-    const kept: ModChanges = { ...NO_CHANGES, tileTypes, events, code, copyTexts };
-    this.game = new Game(applyMod(game.image, { ...mod, changes: kept }));
+    if (mod.base !== this.pristineHash) throw new ModError("base: the mod is for another exe");
+    const kept: ModChanges = { ...NO_CHANGES, events, code, copyTexts };
     this.mod = { ...mod, changes: kept };
+    this.copies = tileTypes.flatMap(({ episode, from, types }) =>
+      types.map(([to, of]) => ({ episode, from, to, of })),
+    );
+    this.base = this.baseWith(this.copies);
     for (const episode of new Set(rooms.map((c) => c.episode))) {
       const set = rooms.filter((c) => c.episode === episode);
       this.edited.set(episode, withRoomChanges(this.game.episode(episode).rooms, set));
@@ -305,6 +349,139 @@ export class Editor {
     }
     for (const { episode, capacity } of rucksack) this.rucksacks.set(episode, capacity);
     for (const c of flags) this.flagWords.set(c.episode, c.flags);
+  }
+
+  /** The exe the edits apply to: the loaded one, or with a mod its base (see above). */
+  get game(): Game {
+    return this.base;
+  }
+
+  /** The base with these tile types copied (the pristine exe if there is nothing to apply). */
+  private baseWith(copies: readonly TileTypeCopy[]): Game {
+    const changes = { ...this.mod.changes, tileTypes: tileTypeChanges(copies) };
+    const { tileTypes, events, code, copyTexts } = changes;
+    if ([tileTypes, events, code, copyTexts].every((list) => list.length === 0))
+      return this.pristine;
+    return new Game(
+      applyMod(this.pristine.image, { ...this.mod, base: this.pristineHash, changes }),
+    );
+  }
+
+  private get pristineHash(): string {
+    this.hash ??= sha256(this.pristine.image.data);
+    return this.hash;
+  }
+
+  private hash: string | undefined;
+
+  /** The episode's tile types copied from other episodes, by target type. */
+  tileTypeCopies(episode: number): TileTypeCopy[] {
+    return this.copies.filter((c) => c.episode === episode).sort((a, b) => a.to - b.to);
+  }
+
+  /**
+   * The types a copy can go to: those without a class in the exe as loaded that no room
+   * of the episode uses, and those that are copies already (a copy there replaces it).
+   */
+  freeTileTypes(episode: number): number[] {
+    const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
+    const used = new Set<number>();
+    for (const room of this.rooms(episode)) {
+      for (const layer of [room.base, room.overlay])
+        for (const cell of layer) used.add(cell & 0xff);
+    }
+    return freeTileTypes(this.pristine.image, episode).filter(
+      (type) => copied.has(type) || (!used.has(type) && !FIXED_TYPES.includes(type)),
+    );
+  }
+
+  /**
+   * The types of episode `from` a copy can come from: those with a class in the exe as
+   * loaded, not copies themselves.
+   */
+  sourceTileTypes(from: number): number[] {
+    const copied = new Set(this.tileTypeCopies(from).map((c) => c.to));
+    return [...this.pristine.episode(from).classes.classes]
+      .filter(([type, c]) => c.id !== 0 && !FIXED_TYPES.includes(type) && !copied.has(type))
+      .map(([type]) => type)
+      .sort((a, b) => a - b);
+  }
+
+  /** Why `copy` cannot be made, undefined if it can. */
+  tileTypeProblem(copy: TileTypeCopy): string | undefined {
+    const { episode, to, from, of } = copy;
+    if (from === episode) return "a copy comes from another episode";
+    if (!this.freeTileTypes(episode).includes(to))
+      return `type 0x${to.toString(16)} is not free in the episode (it has a class, or rooms use it)`;
+    if (this.copies.some((c) => c.episode === from && c.to === of))
+      return `type 0x${of.toString(16)} of episode ${from} is a copy itself`;
+    const source = this.pristine.episode(from).classes.classes.get(of);
+    if (FIXED_TYPES.includes(of) || !source?.id)
+      return `episode ${from} has no class at 0x${of.toString(16)}`;
+    return undefined;
+  }
+
+  /**
+   * Makes tile type `to` of the episode a copy of type `source.of` of episode
+   * `source.from` (withTileTypes: class, shape, description, sound, first take), or with
+   * `source` undefined removes the copy; one undo step (shown in room `room`), which
+   * makes a new base: text entries edited here stay as they are. Throws a RangeError
+   * where the copy cannot be made (tileTypeProblem), where a removed copy's type lies in
+   * rooms, or where an edited dealer would sell a class the episode then lacks.
+   */
+  setTileType(
+    episode: number,
+    room: number,
+    to: number,
+    source: { from: number; of: number } | undefined,
+  ): Edit | undefined {
+    this.endStroke();
+    const others = this.copies.filter((c) => c.episode !== episode || c.to !== to);
+    const old = this.copies.find((c) => c.episode === episode && c.to === to);
+    if (source === undefined) {
+      if (!old) return undefined;
+      const rooms = this.rooms(episode)
+        .filter((r) => [...r.base, ...r.overlay].some((cell) => (cell & 0xff) === to))
+        .map((r) => r.id);
+      if (rooms.length > 0)
+        throw new RangeError(`rooms ${rooms.join(", ")} use type 0x${to.toString(16)}`);
+    } else {
+      if (old?.from === source.from && old.of === source.of) return undefined;
+      const problem = this.tileTypeProblem({ episode, to, ...source });
+      if (problem) throw new RangeError(problem);
+    }
+    const copies = source === undefined ? others : [...others, { episode, to, ...source }];
+    const base = this.baseWith(copies);
+    const texts = new Map(
+      [...this.texts].map(([id, text]) => {
+        const changes = textChanges(id, this.base.textSource(id) ?? "", text);
+        return [id, withTextChanges(base.textSource(id) ?? "", changes)];
+      }),
+    );
+    for (const [e, dealer] of this.dealers) {
+      if (e !== episode) continue;
+      try {
+        withDealer(base.image, e, dealer, base.episode(e).classes);
+      } catch (error) {
+        if (error instanceof RangeError)
+          throw new RangeError(`the dealer: ${error.message}`, { cause: error });
+        throw error;
+      }
+    }
+    const step: Edit = {
+      episode,
+      room,
+      layer: "base",
+      changes: [],
+      tileTypes: {
+        before: this.copies,
+        after: copies,
+        texts: { before: new Map(this.texts), after: texts },
+      },
+    };
+    this.apply(step, after);
+    this.push(step);
+    return step;
   }
 
   rooms(episode: number): readonly Room[] {
@@ -1219,9 +1396,10 @@ export class Editor {
       .map(([episode, word]) => ({ episode, flags: word }));
     const mod: Mod = {
       ...this.mod,
-      base: sha256(this.pristine.image.data),
+      base: this.pristineHash,
       changes: {
         ...this.mod.changes,
+        tileTypes: tileTypeChanges(this.copies),
         dealer,
         copyTexts,
         texts,
@@ -1307,6 +1485,15 @@ export class Editor {
     }
     if (edit.start) {
       this.starts.set(edit.episode, value === before ? edit.start.before : edit.start.after);
+      return;
+    }
+    if (edit.tileTypes) {
+      const { tileTypes } = edit;
+      this.copies = value === before ? tileTypes.before : tileTypes.after;
+      this.base = this.baseWith(this.copies);
+      this.texts.clear();
+      for (const [id, text] of value === before ? tileTypes.texts.before : tileTypes.texts.after)
+        this.texts.set(id, text);
       return;
     }
     if (edit.rucksack) {

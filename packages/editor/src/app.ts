@@ -106,6 +106,7 @@ import { type ScriptName, ScriptView } from "./script-view.ts";
 import { type SettingsContext, SettingsView } from "./settings-view.ts";
 import { SidePanel } from "./side-panel.ts";
 import { TileNames } from "./tile-info.ts";
+import { TileTypesView } from "./tile-types-view.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
 
@@ -540,6 +541,31 @@ export class App {
       this.editEpisode(() => this.need().setEpisodeFlags(this.episode, this.roomId, flags));
     },
   });
+  readonly tileTypesView = new TileTypesView({
+    copy: (to, source) => {
+      try {
+        this.need().setTileType(this.episode, this.roomId, to, source);
+      } catch (error) {
+        this.setStatus(`Cannot copy the tile type: ${message(error)}`, true);
+        this.refreshEpisodeTab();
+        return;
+      }
+      this.gameChanged();
+      this.setStatus(
+        source
+          ? `Type ${hex(to)} is now type ${hex(source.of)} of ${EPISODE_NAMES[source.from] ?? ""}`
+          : `Type ${hex(to)} is free again`,
+      );
+    },
+    preview: (episode, type) => {
+      if (episode === this.episode) return this.cellPreview(type);
+      const preview = cellCanvas(this.sourceCache(episode), type);
+      preview.title = hex(type);
+      return preview;
+    },
+  });
+  /** Per episode of the exe as loaded: its cells and names, for the types to copy. */
+  private readonly sourceCaches = new Map<number, { cells: CellCache; names: TileNames }>();
   readonly dealerView = new DealerView({
     change: (dealer) => {
       try {
@@ -585,7 +611,13 @@ export class App {
       {
         name: "episode",
         label: "Episode",
-        content: h("div", {}, this.episodeView.element, this.dealerView.element),
+        content: h(
+          "div",
+          {},
+          this.episodeView.element,
+          this.tileTypesView.element,
+          this.dealerView.element,
+        ),
       },
     ],
     (width) => {
@@ -819,6 +851,7 @@ export class App {
     this.tileNames.clear();
     this.robotSprites.clear();
     this.thumbnails.clear();
+    this.sourceCaches.clear();
     this.musicPieces.clear();
     this.roomMusic = undefined;
     this.lastRoom = undefined; // nothing stays selected from the exe before
@@ -2137,6 +2170,34 @@ export class App {
     });
   }
 
+  /**
+   * After the base changed (tile types copied): what was drawn and named with it goes,
+   * the shown room and the tiles come again.
+   */
+  private gameChanged(): void {
+    this.caches.clear();
+    this.tileNames.clear();
+    this.robotSprites.clear();
+    this.thumbnails.clear();
+    this.showEpisode(this.episode, this.roomId);
+    this.refreshButtons();
+  }
+
+  /** The cells and names of an episode as loaded (sources of tile types to copy). */
+  private sourceCache(episode: number): CellCache {
+    return this.source(episode).cells;
+  }
+
+  private source(episode: number): { cells: CellCache; names: TileNames } {
+    let found = this.sourceCaches.get(episode);
+    if (!found) {
+      const game = this.need().pristine;
+      found = { cells: new CellCache(game.episode(episode)), names: new TileNames(game, episode) };
+      this.sourceCaches.set(episode, found);
+    }
+    return found;
+  }
+
   /** Changes a setting of the episode (one undo step), saying why it could not. */
   private editEpisode(change: () => void): void {
     try {
@@ -2181,6 +2242,17 @@ export class App {
       originalFlags: readEpisodeFlags(image, this.episode),
       room: this.roomId,
       label: (room) => `Go to ${this.roomLabel(this.episode, room)}`,
+    });
+    this.tileTypesView.show({
+      episode: this.episode,
+      names: EPISODE_NAMES,
+      copies: editor.tileTypeCopies(this.episode),
+      free: editor.freeTileTypes(this.episode),
+      sources: (from) =>
+        editor.sourceTileTypes(from).map((type) => {
+          const names = this.source(from).names;
+          return { type, name: names.info(type).name ?? names.summary(type).slice(0, 40) };
+        }),
     });
     const dealer = editor.dealer(this.episode);
     const dealerEdited = editor.isDealerEdited(this.episode);
@@ -2251,7 +2323,10 @@ export class App {
   /** Shows the room of an undone or redone edit. */
   private revisit(edit: Edit | undefined): void {
     if (!edit) return;
-    if (edit.added || edit.removed) {
+    if (edit.tileTypes) {
+      if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
+      this.gameChanged();
+    } else if (edit.added || edit.removed) {
       // the room list changes: show the room, or the last room seen that still exists
       this.showEpisode(edit.episode, this.lastSeen(edit.episode, edit.room));
     } else if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);

@@ -356,3 +356,32 @@ test("the Episode tab sets the rucksack and the oracles' flags, undoably; the mo
     .not.toBeChecked();
   expect(tab("episode").badge).toBeUndefined();
 });
+
+test("the Episode tab copies tile types of other episodes, undoably; the mod keeps them", async () => {
+  app.showEpisode(0, 43);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const types = page.getByRole("region", { name: "Tile types" });
+  await expect
+    .element(types.getByText("Robot Junior has no tile types of other episodes."))
+    .toBeVisible();
+  await userEvent.selectOptions(types.getByLabelText("From episode"), "II");
+  await userEvent.selectOptions(types.getByLabelText("Type"), String(0x51));
+  // the same number, free in Junior
+  await expect.element(types.getByLabelText("To type")).toHaveValue(String(0x51));
+  await types.getByRole("button", { name: "Copy" }).click();
+  expect(app.editor?.tileTypeCopies(0)).toEqual([{ episode: 0, to: 0x51, from: 2, of: 0x51 }]);
+  expect(app.editor?.game.episode(0).classes.classes.get(0x51)?.id).toBe(
+    game.episode(2).classes.classes.get(0x51)?.id,
+  );
+  expect(document.querySelectorAll(".side-episode .dealer-good").length).toBeGreaterThan(0);
+  const saved = parseMod(app.saveMod() ?? "");
+  expect(saved.changes.tileTypes).toEqual([{ episode: 0, from: 2, types: [[0x51, 0x51]] }]);
+  // removed with ×, back with undo, gone with another
+  await types.getByRole("button", { name: "×" }).click();
+  expect(app.editor?.tileTypeCopies(0)).toEqual([]);
+  app.undo();
+  expect(app.editor?.tileTypeCopies(0)).toHaveLength(1);
+  app.undo();
+  expect(app.editor?.tileTypeCopies(0)).toEqual([]);
+  expect(app.editor?.game).toBe(app.editor?.pristine);
+});

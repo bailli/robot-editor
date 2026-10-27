@@ -1047,6 +1047,15 @@ Supported:
   browser's
 - save: downloads the exe with all edited episodes and texts (warns about unsaved changes
   on leave)
+- tile types from other episodes (tab Episode, `tile-types-view.ts`; mod kind
+  `tileTypes`): the copies, each with its picture in this episode, removable (×, not
+  while rooms use the type); a form: the episode (Junior … IV), a type with a class
+  there (named, its picture in its own palette), the free type it goes to (the same
+  number where free; free: no class in the exe as loaded and no room uses it, or a
+  copy already, which it then replaces); "Copy". Each one undo step, which makes a new
+  base (`Editor.setTileType`): text entries edited before stay as they are, the copied
+  description comes along; refused: a copy of a copy, a type without a class, a type
+  an edited dealer then lacks. The tiles, names and drawings follow at once
 - the episode's settings (tab Episode, `episode-view.ts`): the rucksack's capacity
   (1–250) and whether oracles vanish after north and after east (the episode flags
   0x4000, 0x8000), one undo step each, saved into the exe and the mod (`rucksack`,
@@ -1121,8 +1130,10 @@ stands, decided 2026-10-27; details in the sections named.
   shows (the oracle's hints and messages), English texts, code that checks the
   episode.
 - **Cross-episode classes in general:** free tile types per episode (no class): Junior
-  69 (0x39–0x7d), I 47, II **none**, III 18, IV 15. II would need a type that none of
-  its rooms uses (not checked). Copied shapes keep their colour indices, and palettes
+  69 (0x39–0x7d), I 47, II **none**, III 18, IV 15. Some of them lie in rooms anyway
+  (cells without a class): Junior 0x39 (room 51, 12 cells), I 0x53 (room 14), III 0x11
+  (room 99, one cell), IV 0x03 (room 2), so a copy should not go there (the editor
+  leaves them out). II would need a type that none of its rooms uses. Copied shapes keep their colour indices, and palettes
   differ per episode (I's BULB uses colours 1 and 6, which differ in III: the game draws
   them with III's colours, as we do; remap if it matters). Some class code checks the
   episode number (e.g. describe method 0x4145b0): every class needs a try in its new
@@ -1144,8 +1155,8 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
-- **Next:** the proxy as an in-memory loader; editing the mod's other kinds (tile
-  types, events, code) in the editor.
+- **Next:** the proxy as an in-memory loader; editing the mod's other kinds (events,
+  code, text copies) in the editor.
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
@@ -1226,10 +1237,11 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   `applyPatch` and `applyMod`; `sha256.ts` (synchronous, for the browser too);
   `serializeRoom`/`parseRoom` in `scene.ts`. On the command line
   `robot mod apply MOD OUT.exe`, later `robot mod compile MOD OUT.patch` for the proxy.
-- **The editor** works on two images: the **base** (pristine + kinds 1–2, the parts the
-  editor does not edit) and the **edited** state on top (kinds 3–8, what it edits
-  today: the dealers, rooms, texts, the start, the rucksack and the flags). Opening takes an exe and,
-  optionally, a mod; "Save mod" writes kinds 1–2 as loaded plus kinds 3–8 as the
+- **The editor** works on two images: the **base** (pristine + kinds 1–2: the tile types,
+  which it edits by making a new base, and events and code, which it does not edit) and
+  the **edited** state on top (kinds 3–8: the dealers, rooms, texts, the start, the
+  rucksack and the flags). Opening takes an exe and, optionally, a mod; "Save mod"
+  writes the tile types as edited, events and code as loaded plus kinds 3–8 as the
   difference between the edited state and the base (dealers, starts, rucksacks and
   flags that differ, rooms that
   differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
@@ -1245,8 +1257,8 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   builds a fan episode in the slot of one of the five), mods on top of mods, other exe
   versions.
 - **Decided 2026-10-27:** whole rooms (no cell diffs); no editor UI for `tileTypes`
-  and code at first (the file and the command line); English texts later. The start
-  got its UI the same day (Episode tab).
+  and code at first (the file and the command line); English texts later. The start,
+  then the tile types got their UI the same day (Episode tab).
   Open: the patch file's format for the proxy (only when the loader is built).
 
 ## Trying edits in the game

@@ -709,6 +709,65 @@ describe("Editor and the start", () => {
   });
 });
 
+describe("Editor and tile types from other episodes", () => {
+  test("a copy makes a new base, one undo step; saved into exe and mod", () => {
+    const editor = new Editor(game);
+    // III has 18 types without a class; room 99 uses 0x11
+    expect(editor.freeTileTypes(3)).toHaveLength(17);
+    expect(editor.freeTileTypes(3)).not.toContain(0x11);
+    expect(editor.game.episode(3).classes.classes.get(0x59)?.id).toBe(0);
+    // episode I's GATE (class 76) at III's free type 0x59
+    const edit = editor.setTileType(3, 41, 0x59, { from: 1, of: 0x42 });
+    expect(edit?.room).toBe(41);
+    expect(editor.game.episode(3).classes.classes.get(0x59)?.id).toBe(76);
+    expect(editor.tileTypeCopies(3)).toEqual([{ episode: 3, to: 0x59, from: 1, of: 0x42 }]);
+    expect(editor.setTileType(3, 41, 0x59, { from: 1, of: 0x42 })).toBeUndefined();
+    const mod = editor.saveMod();
+    expect(mod.changes.tileTypes).toEqual([{ episode: 3, from: 1, types: [[0x59, 0x42]] }]);
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    const opened = new Editor(game, mod);
+    expect(opened.tileTypeCopies(3)).toEqual(editor.tileTypeCopies(3));
+    expect(modJson(opened.saveMod())).toBe(modJson(mod));
+    editor.undo();
+    expect(editor.game).toBe(game);
+    expect(editor.tileTypeCopies(3)).toEqual([]);
+    editor.redo();
+    expect(editor.game.episode(3).classes.classes.get(0x59)?.id).toBe(76);
+  });
+
+  test("text entries edited before a copy stay; the copy's description comes along", () => {
+    const editor = new Editor(game);
+    editor.setRoomName(1, 44, "DER GANG");
+    editor.setTileType(1, 43, 0x50, { from: 2, of: 0x50 });
+    expect(editor.roomName(1, 44)?.name).toBe("DER GANG");
+    const texts = (g: Game) => g.episodeTexts(1)?.entries;
+    expect(game.episodeTexts(2)?.entries.get(0x50)).toBeDefined();
+    expect(texts(new Game(editor.save()))?.get(0x50)).toEqual(
+      game.episodeTexts(2)?.entries.get(0x50),
+    );
+    expect(editor.saveMod().changes.texts.map((c) => c.entry)).toEqual([1044]);
+    editor.undo();
+    expect(editor.roomName(1, 44)?.name).toBe("DER GANG");
+    expect(texts(new Game(editor.save()))?.has(0x50)).toBe(false);
+  });
+
+  test("refused: no free type, no class there, a copy of a copy, a type rooms use", () => {
+    const editor = new Editor(game);
+    expect(editor.freeTileTypes(2)).toEqual([]);
+    expect(() => editor.setTileType(2, 43, 0x50, { from: 1, of: 0x42 })).toThrow(/not free/);
+    expect(() => editor.setTileType(3, 41, 0x59, { from: 3, of: 0x42 })).toThrow(/another/);
+    expect(() => editor.setTileType(3, 41, 0x59, { from: 0, of: 0x50 })).toThrow(/no class/);
+    editor.setTileType(0, 43, 0x50, { from: 2, of: 0x50 });
+    expect(() => editor.setTileType(3, 41, 0x59, { from: 0, of: 0x50 })).toThrow(/a copy itself/);
+    // a tangram piece painted in Junior: the copy stays
+    editor.beginStroke(0, 43, "base");
+    editor.paint(ROOM_CELLS - 50, 0x50);
+    editor.endStroke();
+    expect(() => editor.setTileType(0, 43, 0x50, undefined)).toThrow(/rooms 43 use/);
+    expect(editor.freeTileTypes(0)).toContain(0x50);
+  });
+});
+
 describe("Editor and the episode's settings", () => {
   test("the rucksack and the flags change as one step each, saved into exe and mod", () => {
     const editor = new Editor(game);
