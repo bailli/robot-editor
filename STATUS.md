@@ -598,7 +598,12 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   put down on other objects count) and stops at the first cell that does not continue
   the trace; anything but a `1`/`0` at the end counts as 0. Cells are found as
   x + y * 40 without a column check: west of column 0 the trace goes on at column 39 of
-  the row above (read from the code, as `traceCircuit` does). A node that changes places
+  the row above (read from the code, as `traceCircuit` does). In I 128 this cannot be
+  used (**verified under Wine** with the driver): the hero takes a GATE piece by walking
+  onto it (first take: 100 points) and both rucksack actions, "Ablegen" and "Benutzen",
+  put it on his own cell, so the only column-0 cell he could reach, the west exit
+  (0, 15), takes him to room 127 instead; the `1`/`0` letters there are not taken when
+  he walks onto them. A node that changes places
   or empties its stairs cell (0x433300: not on water, stacked on what lies there;
   turned off, the cell becomes empty) and casts or drops a light (byte 8 holds it at run
   time). A node is drawn as its record's cell with a BULB on top (class 77, lit while
