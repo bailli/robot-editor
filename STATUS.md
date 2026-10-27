@@ -821,7 +821,11 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   next to each episode's start): in Junior to III the hero stepping on it leaves class
   0x27 there and one actor in the room's list, in IV the heap stays and no actor
   appears (first seen playing IV). `cellActorSource` and `calmRoom` follow
-  it; IV's one heap (state 6) is no longer an actor source.
+  it; IV's one heap (state 6) is no longer an actor source. **Known from playing:** a
+  scorpion walks around and can kill the hero, and after a while burrows into the sand
+  again, whatever it is doing; with the driver, about 2 s after it came out it was gone
+  from the actor list and the cell was a heap again (state 6 or 7). Where the game
+  decides that is not traced.
 - **The dealer's goods** (code only): both constructors (record 0x448ad5, `SetMan`
   0x448c8b) take the goods table from the episode (vtable +0x10: address, entry count,
   most goods shown) and then build the offer once (0x448440, the only caller): a count
@@ -1235,9 +1239,6 @@ Roughly by value for the editor.
    code), records in rooms whose objects and records exceed the table.
 2. **Actors** (see actors above): the robot-free room and the telephone (code only;
    what the Ghostbusters' second call stores), RandObj's empty cell (code only).
-   Scorpions after coming out (seen with the driver, not traced): about 2 s after one
-   came out, with the hero standing still on the cell, it was gone from the actor list
-   and the cell was a heap again (state 6 or 7); what it did in between is not known.
 3. **Scripts** (see room scripts above): what `Phone`'s n limits (still
    answered after 60 s), whether `Area`/`ShiftArea` settings survive leaving the room,
    RIGHT and the wand words. Possibly worth adding to the compiler: `while`,
