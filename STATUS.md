@@ -884,16 +884,15 @@ stands, decided 2026-10-27; details in the sections named.
 
 - **Delivery stays exe patching.** A new episode needs more than resources: the start
   (code, `start.ts`), class table entries (data), maybe code patches. Planned: a mod
-  format, a list of changes applied to a pristine exe (checked by hash): replaced
-  resources (scenes, texts, shapes), class table entries, the start, later small code
-  patches; shared as a patch file holding only its own data. Not started: its shape
-  should follow from the pilots below.
+  format, changes applied to a pristine exe (checked by hash), shared as a file holding
+  only its own data; see "The mod format (design)" below.
 - **Rejected:** `WorldOfRobot.DLL` for episode data (see "Where resources come from":
   the exe only falls back to it for resources it lacks, and code-side changes need the
   exe anyway). **Deferred:** a native Linux wrapper instead of Wine (keys, time, DirectDraw
   and GDI are few imports, but worth it only to run without Wine), a decompilation
   (only if playing in the editor in the browser becomes a goal; incremental path: a
-  loader that replaces functions one by one), the proxy as an in-memory mod loader.
+  loader that replaces functions one by one), the proxy as an in-memory mod loader
+  (the mod format is designed for it, see below).
   Untried: the `RessourcePath` loose text files.
 - **Done:** the driver (proxy DLL, `driver.ts`, `pnpm test:game`) to verify edits in the
   game; the OMF writer and `withShapes`; `withClassEntries`; the **pilot: oracles in
@@ -928,6 +927,70 @@ stands, decided 2026-10-27; details in the sections named.
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
   945), better carried by the mod format.
+
+### The mod format (design, not implemented)
+
+Drafted 2026-10-27 from the two pilots and the editor as it is; open points at the end.
+
+- **A mod is a set of keyed changes, not a log.** Each change has a key (below) and
+  appears once; changing the same thing again replaces it. Applying a mod replays the
+  changes through the functions the editor and the pilots already use, in a **fixed
+  order of kinds**, so the file needs no ordering and a later kind wins over an earlier
+  one (a text change beats the description `tileTypes` copied). Later kinds as needed:
+  event entries (`withEventEntries`), shapes of the mod's own.
+  1. `tileTypes` (key: episode, target type): `{ episode, from, types: [[to, of], …] }`
+     → `Game.withTileTypes`.
+  2. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
+     if the exe holds `expect` there (e.g. the oracle flags in Junior). Later.
+  3. `texts` (key: resource id, entry): `{ resource, entry, variants | null }` →
+     `withTextEntry`, entry by entry (room names, descriptions, hints, messages), never
+     whole resources: the file holds only what the mod wrote, and two changes to one
+     resource compose.
+  4. `rooms` (key: episode, room id): the room as its SCNV3 bytes (id, tags with the
+     script, map, records; as `serializeScene` writes one room), base64; `null` removes
+     the room. Others keep their place, new ones are appended in id order → `withScene`.
+  5. `start` (key: episode): `{ episode, room, x, y }` → `withEpisodeStart`.
+- **File:** one JSON file (`*.robotmod.json`) with `format` (1), `name`, `author`,
+  `description`, `base` (`{ sha256 }`) and `changes` (`tileTypes`, `code`, `texts`,
+  `rooms`, `start`: arrays of the changes above). `base` is the sha256 of the whole
+  pristine exe (the Windows version 2018, `reference/GameOfRobot.exe`); applying
+  refuses any other exe. A changed room carries the original content it keeps (a fan
+  episode's rooms are mostly new; cell diffs only if that matters).
+- **Two forms.** The mod above is what authors write and share. Applying it first
+  **compiles** it against the user's own pristine exe into a low-level patch: byte
+  writes in the image (`va`, bytes: class and event tables, the start method, code)
+  and whole replaced resources (type, id → bytes: scenes, texts, shapes). Both delivery
+  paths apply that patch and nothing else: the **exe writer** (`replaceResource`, byte
+  writes; what "Save exe" and "Test in game" use) and later the **proxy as an
+  in-memory loader**. That one needs no TypeScript logic in C: `DDRAW.dll` is a static
+  import, so the proxy's `DllMain` runs before the game's startup code and the episode
+  constructors; it writes the bytes (`VirtualProtect`) and hooks `FindResourceA`,
+  `SizeofResource`, `LoadResource` and `LockResource` (imported; every resource read
+  goes through the opener 0x430d20) to serve the replaced resources. The compiled patch
+  holds whole original resources, so it stays on the user's machine; only the mod is
+  shared. Not checked yet: whether anything reads the exe file itself.
+- **Code:** `packages/formats/src/mod.ts`: the types, `parseMod` (validation:
+  `textEntryProblem`, room sizes, value ranges, with the change's key in the message),
+  `compileMod(image, mod)` and `applyPatch(image, patch)`; on the command line
+  `robot mod apply MOD OUT.exe`, later `robot mod compile MOD OUT.patch` for the proxy.
+- **The editor** works on two images: the **base** (pristine + kinds 1–2, the parts the
+  editor does not edit) and the **edited** state on top (kinds 3–5, what it edits
+  today: rooms, texts; later the start). Opening takes an exe and, optionally, a mod;
+  "Save mod" writes kinds 1–2 as loaded plus kinds 3–5 as the difference between the
+  edited state and the base (rooms that differ byte for byte, text entries that
+  differ), so text copied by `tileTypes` never shows up as an edit. "Save exe" and
+  "Test in game" stay, built from the mod. Undo/redo, dirty state and the room list
+  work as now.
+- **Invariants for tests:** for any editor state, applying `saveMod()` to the pristine
+  exe gives the exe the editor saves today, byte for byte; a mod saved and loaded again
+  saves the same file; later, the game state through the proxy loader equals the one
+  from the written exe (the driver can read both).
+- **Out of scope:** a sixth episode (the episode list and factories are code: a mod
+  builds a fan episode in the slot of one of the five), mods on top of mods, other exe
+  versions.
+- **Decided 2026-10-27:** whole rooms (no cell diffs); no editor UI for `tileTypes`,
+  code and the start at first (the file and the command line); English texts later.
+  Open: the patch file's format for the proxy (only when the loader is built).
 
 ## Open items and leads
 
