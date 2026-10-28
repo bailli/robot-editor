@@ -301,6 +301,59 @@ export class Driver {
     return (await this.run(steps)).tick > before.tick;
   }
 
+  /** Holds `key` until `done` holds for the hero; where he stands then. */
+  async walk(key: Key, done: (hero: HeroState) => boolean): Promise<HeroState> {
+    await this.key(key, true);
+    await this.until(async () => {
+      const hero = await this.hero();
+      return hero !== undefined && done(hero);
+    }, 3000);
+    await this.key(key, false);
+    await this.run(20);
+    const hero = await this.hero();
+    if (!hero) throw new Error("no hero after walking");
+    return hero;
+  }
+
+  /**
+   * Closes message boxes (a first take's, a bonus's) with Return while the game clock
+   * stands still, at most `most`; how many it closed.
+   */
+  async closeBoxes(most = 3): Promise<number> {
+    let closed = 0;
+    while (closed < most && !(await this.running())) {
+      await this.press("return", 100);
+      closed++;
+    }
+    return closed;
+  }
+
+  /**
+   * Walks with `key` until `done` onto an item, which takes it, and closes the boxes that
+   * brings (its first take's); where the hero stands then.
+   */
+  async pickUp(key: Key, done: (hero: HeroState) => boolean): Promise<HeroState> {
+    const hero = await this.walk(key, done);
+    await this.run(50);
+    await this.closeBoxes();
+    return hero;
+  }
+
+  /**
+   * Puts the rucksack's only item onto the hero's cell and closes the boxes that brings:
+   * Return opens the rucksack, which with one item offers its actions at once, "Benutzen"
+   * (`use`) then "Ablegen" (`drop`); both put a circuit piece down on the hero's cell,
+   * only "Benutzen" has the circuits evaluated (tried). With several items the rucksack
+   * asks for the item first: not handled.
+   */
+  async putDown(action: "use" | "drop" = "use"): Promise<void> {
+    await this.press("return", 100);
+    if (action === "drop") await this.press("down", 100);
+    await this.press("return", 100);
+    await this.run(60);
+    await this.closeBoxes();
+  }
+
   /**
    * From the episode menu (after start) to the hero standing in the start room: clicks the
    * episode, then Return through the title menu, the player-name dialog and the room's

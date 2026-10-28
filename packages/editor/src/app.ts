@@ -623,6 +623,14 @@ export class App {
       this.gameChanged();
       this.setStatus(`${kit.name} of ${EPISODE_NAMES[kit.from] ?? ""} added to ${name}`);
     },
+    example: (kit) => {
+      const clip = this.need().kitExample(this.episode, this.roomId, kit);
+      if (!clip) return;
+      this.clip = clip;
+      this.clipImage = undefined;
+      this.refreshAreaButtons();
+      this.startPasting();
+    },
   });
   readonly textsView = new TextsView({
     copy: (to, source) => {
@@ -2343,6 +2351,7 @@ export class App {
       episode: this.episode,
       names: EPISODE_NAMES,
       plan: (kit, events) => editor.kitPlan(this.episode, kit, events),
+      hasExample: (kit) => editor.kitExample(this.episode, this.roomId, kit) !== undefined,
     });
     this.tileTypesView.show({
       episode: this.episode,

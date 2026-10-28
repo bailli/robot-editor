@@ -10,12 +10,14 @@ import {
   ORACLE_VANISHES_EAST,
   ORACLE_VANISHES_NORTH,
   ROOM_CELLS,
+  ROOM_WIDTH,
   applyMod,
   compileScript,
   emptyMod,
   findResource,
   kitChanges,
   modJson,
+  movedRecord,
   parseMod,
   parsePe,
   planKit,
@@ -25,7 +27,9 @@ import {
   readEpisodeFlags,
   readEpisodeStart,
   readEventTable,
+  readOracleSymbols,
   readRucksack,
+  roomCircuit,
   roomCompiledScript,
   roomScript,
   roomSettings,
@@ -1026,6 +1030,71 @@ describe("Editor and kits", () => {
     expect(editor.addKit(2, 43, kit("oracles"))).toBeUndefined();
     expect(editor.addKit(1, 43, kit("circuits"))).toBeUndefined();
     expect(editor.dirty).toBe(false);
+  });
+});
+
+describe("Editor and kit examples", () => {
+  const kit = (key: string) => defined(KITS.find((k) => k.key === key));
+  const at = (x: number, y: number) => x + y * ROOM_WIDTH;
+  const nodes = (editor: Editor, episode: number, room: number) =>
+    roomCircuit(editor.room(episode, room), editor.game.episode(episode).classes).nodes;
+
+  test("the circuit lights once the missing wire lies in its gap; its stairs move along", () => {
+    const editor = new Editor(game);
+    expect(editor.kitExample(3, 41, kit("circuits"))).toBeUndefined();
+    editor.addKit(3, 41, kit("circuits"));
+    const clip = defined(editor.kitExample(3, 41, kit("circuits")));
+    expect([clip.w, clip.h, clip.records.length]).toEqual([7, 3, 1]);
+    editor.pasteArea(3, 41, 20, 10, clip);
+    // the node at (24, 11), its stairs two cells east; 1 OR 0 does not reach it yet
+    const node = nodes(editor, 3, 41).find((n) => n.cell === at(24, 11));
+    expect(node?.signal).not.toBe(1);
+    const record = defined(
+      editor.room(3, 41).records.find((r) => r.data[0] === 11 && r.data[4] === 26),
+    );
+    expect([...record.data.slice(4, 7)]).toEqual([26, 11, 0]);
+    // the wire lies below its gap; put there, the node is lit
+    const wire = defined(editor.room(3, 41).base[at(23, 12)]);
+    editor.beginStroke(3, 41, "base");
+    editor.paint(at(23, 11), wire);
+    editor.endStroke();
+    const lit = nodes(editor, 3, 41).find((n) => n.cell === at(24, 11));
+    expect(lit?.signal).toBe(1);
+    // copied and pasted elsewhere, the stairs stay two cells east of the node
+    const copy = editor.copyArea(3, 41, { x: 20, y: 10, w: 7, h: 3 });
+    editor.pasteArea(3, 41, 2, 20, copy);
+    const moved = editor.room(3, 41).records.filter((r) => r.data[0] === 11 && r.data[5] === 21);
+    expect(moved.map((r) => r.data[4])).toEqual([8]);
+  });
+
+  test("an oracle with its symbol laid out, sending below it in the room it is put in", () => {
+    const editor = new Editor(game);
+    const ivRoom = readEpisodeStart(game.image, 4).room;
+    editor.addKit(4, ivRoom, kit("oracles"));
+    const clip = defined(editor.kitExample(4, ivRoom, kit("oracles")));
+    editor.pasteArea(4, ivRoom, 5, 5, clip);
+    const room = editor.room(4, ivRoom);
+    // symbol 1: its event (263) has an entry, its hint 331 came with the kit
+    const symbol = defined(readOracleSymbols(game.image)[1]);
+    const tangram = defined(editor.tileTypeCopies(4).find((c) => c.of === 0x50)).to;
+    expect([at(5, 5), at(6, 5), at(5, 6), at(6, 6)].map((i) => room.base[i])).toEqual(
+      symbol.map((state) => tangram | (state << 8)),
+    );
+    const oracle = defined(room.records.find((r) => r.data[0] === 12));
+    expect(oracle.data[3]).toBe(1);
+    const target = defined(oracle.data[4]) | (defined(oracle.data[5]) << 8);
+    expect([target & 0x3ff, target >> 10, oracle.data[6]]).toEqual([ivRoom, 5, 7]);
+    // in episode II, whose oracles are its own, symbol 1 as well (hint 331)
+    expect(new Editor(game).kitExample(2, 43, kit("oracles"))?.records[0]?.data[3]).toBe(1);
+  });
+
+  test("records keep positions outside the copied area and other rooms' targets", () => {
+    const node = Uint8Array.from([11, 0, 0, 0, 30, 5, 0, 0, 0, 0]);
+    const area = { room: 41, x: 0, y: 0, w: 7, h: 3 };
+    expect([...movedRecord(node, area, { room: 41, x: 10, y: 10 }).slice(4, 6)]).toEqual([30, 5]);
+    const elsewhere = 42 | (1 << 10);
+    const oracle = Uint8Array.from([12, 0, 0, 0, elsewhere & 0xff, elsewhere >> 8, 1, 0, 0, 0]);
+    expect([...movedRecord(oracle, area, { room: 41, x: 10, y: 10 })]).toEqual([...oracle]);
   });
 });
 

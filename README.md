@@ -103,6 +103,9 @@ const d = await Driver.start();
 await d.startEpisode(1); // { room: 43, x: 5, y: 14 }
 await d.hold("right", 60); // 60 steps of 7 ms
 await d.hero(); // { room: 43, x: 11, y: 14 }
+await d.walk("up", (h) => h.y <= 10); // holds Up until the hero is there
+await d.pickUp("left", (h) => h.x <= 8); // walks onto an item, closes its first-take box
+await d.putDown("use"); // the rucksack's only item onto the hero's cell ("Benutzen")
 await d.screenshot("room.png"); // the last frame presented, 640 × 348
 await d.close();
 ```

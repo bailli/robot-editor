@@ -261,6 +261,7 @@ export {
   TANGRAM_TILE,
   describeRecord,
   readOracleSymbols,
+  movedRecord,
   recordCellOffsets,
   teleporterCondition,
 } from "./records.ts";
@@ -288,7 +289,7 @@ export {
   withDealer,
 } from "./dealer.ts";
 export type { Dealer, DealerGood } from "./dealer.ts";
-export type { RecordInfo, RecordKind, TeleporterCondition } from "./records.ts";
+export type { RecordInfo, RecordKind, RoomCell, TeleporterCondition } from "./records.ts";
 export {
   ACTOR_CLASS_NAMES,
   ACTOR_KIND_CLASSES,
@@ -370,5 +371,5 @@ export type {
   TileTypesChange,
 } from "./mod.ts";
 export { sha256 } from "./sha256.ts";
-export { KITS, kitChanges, planKit } from "./kits.ts";
-export type { Kit, KitOptions, KitPlan } from "./kits.ts";
+export { KITS, kitChanges, kitExample, planKit } from "./kits.ts";
+export type { Kit, KitExample, KitOptions, KitPlan } from "./kits.ts";

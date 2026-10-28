@@ -29,6 +29,8 @@ import {
   emptyMod,
   eventTextsId,
   kitChanges,
+  kitExample,
+  movedRecord,
   planKit,
   readEpisodeFlags,
   readEpisodeStart,
@@ -42,7 +44,7 @@ import {
   withRoomScript,
 } from "@robot/formats";
 
-import { Driver, type HeroState, type Key } from "../src/driver.ts";
+import { Driver } from "../src/driver.ts";
 import { ROOT, loadGame } from "../src/game.ts";
 import { calmRoom } from "../src/patch.ts";
 import { readIndexedPng } from "../src/png.ts";
@@ -78,20 +80,6 @@ function gameScreenshots(): Map<string, number> {
     }
   }
   return found;
-}
-
-/** Holds `key` until `done` holds for the hero, then lets go. */
-async function walk(d: Driver, key: Key, done: (hero: HeroState) => boolean): Promise<HeroState> {
-  await d.key(key, true);
-  await d.until(async () => {
-    const hero = await d.hero();
-    return hero !== undefined && done(hero);
-  }, 3000);
-  await d.key(key, false);
-  await d.run(20);
-  const hero = await d.hero();
-  assert.ok(hero);
-  return hero;
 }
 
 /** The game's map in memory: a word per cell, class | state << 8. */
@@ -253,6 +241,43 @@ function oraclesMod(
   return { mod, box };
 }
 
+/**
+ * A kit (planKit, kitChanges) in `episode` and its example (kitExample) with its top left
+ * cell at `at` in the start room, the hero starting at `hero` (the area around cleared).
+ */
+function exampleMod(
+  game: Game,
+  episode: number,
+  key: string,
+  at: { x: number; y: number },
+  hero: { x: number; y: number },
+): Mod {
+  const chosen = kit(key);
+  const changes = kitChanges(game, episode, chosen, planKit(game, episode, chosen));
+  // the example's types are those the kit gives the episode
+  const withKit = new Game(
+    applyMod(game.image, { ...emptyMod(game.image.data), changes: { ...NO_CHANGES, ...changes } }),
+  );
+  const room = readEpisodeStart(game.image, episode).room;
+  const example = kitExample(withKit, episode, chosen, room);
+  assert.ok(example);
+  const area = { room, x: 0, y: 0, w: example.w, h: example.h };
+  return startRoomMod(
+    game,
+    episode,
+    changes,
+    { x0: 2, x1: 16, y0: 12, y1: 20 },
+    hero,
+    (set, record) => {
+      example.base.forEach((cell, k) => {
+        set(at.x + (k % example.w), at.y + Math.floor(k / example.w), cell);
+      });
+      for (const r of example.records)
+        record(at.x + r.x, at.y + r.y, [...movedRecord(r.data, area, { room, ...at })]);
+    },
+  );
+}
+
 /** Writes the mod's exe to a temporary directory for `use`. */
 async function withModExe<T>(game: Game, mod: Mod, use: (exe: string) => Promise<T>): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), "robot-driver-"));
@@ -381,11 +406,11 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
       const arrived = await withGame(exe, async (d) => {
         await d.startEpisode(1);
         // around the inner wall west of the start: east, north, west, south to the exit
-        await walk(d, "right", (h) => h.x >= 8);
-        await walk(d, "up", (h) => h.y <= 8);
-        await walk(d, "left", (h) => h.x <= 2);
-        await walk(d, "down", (h) => h.y >= 15);
-        return walk(d, "left", (h) => h.room !== 43);
+        await d.walk("right", (h) => h.x >= 8);
+        await d.walk("up", (h) => h.y <= 8);
+        await d.walk("left", (h) => h.x <= 2);
+        await d.walk("down", (h) => h.y >= 15);
+        return d.walk("left", (h) => h.room !== 43);
       });
       assert.deepEqual(arrived, { room: 42, x: 38, y: 15 });
     } finally {
@@ -414,7 +439,7 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
           await d.startEpisode(episode);
           assert.deepEqual(await cellsOfClass(d, STAIRS_CLASS, stairsCells), [], "none before");
           const before = await d.score();
-          await walk(d, "right", (h) => h.x >= 4); // takes the spare piece
+          await d.walk("right", (h) => h.x >= 4); // takes the spare piece
           await d.run(60);
           return {
             stairs: await cellsOfClass(d, STAIRS_CLASS, stairsCells),
@@ -427,6 +452,56 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
         lit.map((y) => 12 + y * ROOM_WIDTH),
       );
       assert.equal(seen.points, firstTake.points + nodePoints);
+    }, 60_000);
+  }
+
+  // the kits' examples next to the start, as "Place example" puts them: the circuit's
+  // missing wire lies below its gap; the oracle's symbol is laid out (not preset)
+  for (const { episode, nodePoints } of CIRCUITS) {
+    test(`episode ${String(episode)}: the circuit example lights once its wire is put into the gap`, async () => {
+      const mod = exampleMod(game, episode, "circuits", { x: 6, y: 14 }, { x: 9, y: 18 });
+      // the wire's first take, as the kit copied it from episode I
+      const gate = kitType(planKit(game, episode, kit("circuits")), 0x42);
+      const wire = readEventTable(new Game(applyMod(game.image, mod)).image, episode)[gate];
+      assert.ok(wire);
+      const stairsCell = [12 + 15 * ROOM_WIDTH];
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(episode);
+          await d.pickUp("up", (h) => h.y <= 16); // the wire, with its first take's box
+          const taken = await cellsOfClass(d, STAIRS_CLASS, stairsCell);
+          await d.walk("up", (h) => h.y <= 15); // into the gap
+          await d.putDown("use"); // "Benutzen": onto the hero's cell, the circuits evaluated
+          return {
+            taken,
+            stairs: await cellsOfClass(d, STAIRS_CLASS, stairsCell),
+            score: await d.score(),
+          };
+        }),
+      );
+      assert.deepEqual(seen.taken, [], "no stairs while the wire is missing");
+      assert.deepEqual(seen.stairs, stairsCell);
+      assert.equal(seen.score, wire.points + nodePoints);
+    }, 60_000);
+  }
+
+  for (const episode of [4, 0]) {
+    test(`episode ${String(episode)}: the oracle example sends the hero below its symbol`, async () => {
+      // the example at (6, 14): symbol (6..7, 14..15), oracle (9, 15), target (6, 16)
+      const mod = exampleMod(game, episode, "oracles", { x: 6, y: 14 }, { x: 9, y: 17 });
+      const room = readEpisodeStart(game.image, episode).room;
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(episode);
+          await d.hold("up", 40); // into the oracle
+          await d.run(200);
+          // IV's copied event brings its text: a bonus box, then the oracle sends
+          if (episode === 4) await d.press("return", 200);
+          return { hero: await d.hero(), score: await d.score() };
+        }),
+      );
+      assert.deepEqual(seen.hero, { room, x: 6, y: 16 });
+      assert.equal(seen.score, 3500);
     }, 60_000);
   }
 
@@ -451,7 +526,7 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
           if (box) await d.press("return", 200);
           const sent = await d.hero();
           const afterNorth = await d.score();
-          await walk(d, "right", (h) => h.x >= 11);
+          await d.walk("right", (h) => h.x >= 11);
           await d.hold("right", 40); // into the oracle at (12, 16): hint 331
           await d.run(60);
           return { room, sent, afterNorth, afterEast: await d.score() };
@@ -554,13 +629,13 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
             await d.startEpisode(0);
             await d.hold("up", 40); // into the oracle north of the start: sent to (10, 16)
             await d.run(200);
-            await walk(d, "right", (h) => h.x >= 11);
+            await d.walk("right", (h) => h.x >= 11);
             await d.hold("right", 40); // into the oracle at (12, 16): its hint
             await d.run(60);
             await d.press("return", 100); // the hint's box
             // away from it, to see what lies there: the record shows an empty cell (0x4331a0
             // sets the cell a logic cell shows) or still the oracle
-            await walk(d, "left", (h) => h.x <= 9);
+            await d.walk("left", (h) => h.x <= 9);
             const frame = await d.frame();
             const pixels = (cell: number) => {
               const [x, y] = [(cell % ROOM_WIDTH) * 16, Math.floor(cell / ROOM_WIDTH) * 12];
@@ -572,7 +647,7 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
             const floor = pixels(at(6, 13));
             const gone = cells.map((cell) => pixels(cell) === floor);
             // the north oracle once more: it sends again, or the hero walks on
-            await walk(d, "left", (h) => h.x <= 4);
+            await d.walk("left", (h) => h.x <= 4);
             await d.hold("up", 40);
             await d.run(200);
             return { gone, again: await d.hero() };
@@ -678,11 +753,11 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
           await d.startEpisode(1);
           const set = await point(d);
           // around the inner wall west of the start, as in the test above
-          await walk(d, "right", (h) => h.x >= 8);
-          await walk(d, "up", (h) => h.y <= 8);
-          await walk(d, "left", (h) => h.x <= 2);
-          await walk(d, "down", (h) => h.y >= 15);
-          const arrived = await walk(d, "left", (h) => h.room !== 43);
+          await d.walk("right", (h) => h.x >= 8);
+          await d.walk("up", (h) => h.y <= 8);
+          await d.walk("left", (h) => h.x <= 2);
+          await d.walk("down", (h) => h.y >= 15);
+          const arrived = await d.walk("left", (h) => h.room !== 43);
           return { set, arrived: arrived.room, after: await point(d) };
         }),
       );

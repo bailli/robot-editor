@@ -12,7 +12,7 @@ import {
   roomActors,
 } from "@robot/formats";
 
-import { app, bytes, clickCell, game, useApp } from "./app-setup.ts";
+import { app, bytes, clickCell, fireAt, game, useApp } from "./app-setup.ts";
 import { defined } from "./game.ts";
 
 useApp();
@@ -542,4 +542,31 @@ test("the Episode tab adds kits: oracles with the symbols picked, then circuits"
   app.showEpisode(2, 43);
   await expect.element(kits.getByText("Robot II has oracles already.")).toBeVisible();
   await expect.element(kits.getByText("Robot II has circuits already.")).toBeVisible();
+});
+
+test("a kit's example is placed like a paste, once the episode has the kit", async () => {
+  app.showEpisode(3, 41);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const circuits = page.getByRole("region", { name: "Kits" }).getByRole("button", {
+    name: "Place example",
+  });
+  // circuits: the second kit; III has oracles of its own, so their example is offered
+  await expect.element(circuits.nth(1)).toBeDisabled();
+  await expect.element(circuits.nth(0)).toBeEnabled();
+  await page.getByRole("button", { name: "Add circuits" }).click();
+  await circuits.nth(1).click();
+  expect(app.pasting).toBe(true);
+  const target = 10 * ROOM_WIDTH + 20;
+  fireAt("mousemove", target);
+  fireAt("mousedown", target);
+  expect(app.pasting).toBe(false);
+  expect(app.area).toEqual({ x: 20, y: 10, w: 7, h: 3 });
+  // the node at (24, 11) with its stairs at (26, 11)
+  const node = defined(app.editor)
+    .room(3, 41)
+    .records.find((r) => r.data[0] === 11 && r.data[5] === 11);
+  expect(node?.data[4]).toBe(26);
+  app.undo();
+  app.undo();
+  expect(app.editor?.game).toBe(app.editor?.pristine);
 });

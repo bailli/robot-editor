@@ -51,7 +51,8 @@ import type { LogicRecord } from "./scene.ts";
  *       a gate's operator cell (OR, AND, NOR, NAND, XOR, B or not A, A or not B, B and not
  *       A, A and not B) with 0x0e, its left half, west of it; the inputs come from above
  *       and below the left half. The game evaluates all nodes when such a piece is taken
- *       or put down. A lit node (byte 7) places stairs (up if byte 6, else down) at (byte
+ *       or used ("Benutzen" puts it on the hero's cell; "Ablegen" does too but evaluates
+ *       nothing, tried). A lit node (byte 7) places stairs (up if byte 6, else down) at (byte
  *       4, byte 5), if byte 5 is not 0; a final node (byte 1 bit 0) only once all the
  *       room's nodes are lit, itself included (episode I room 128: the stairs to room
  *       228; byte 1 bit 1 remembers it); a lit node casts a light (byte 8 holds it at
@@ -106,6 +107,46 @@ const SYMBOL_COUNT = 10;
 export function readOracleSymbols(image: PeImage): number[][] {
   const bytes = readVa(image, ORACLE_SYMBOLS, SYMBOL_COUNT * 4);
   return Array.from({ length: SYMBOL_COUNT }, (_, n) => [...bytes.subarray(n * 4, n * 4 + 4)]);
+}
+
+/** A cell of a room: where a record's positions point (movedRecord). */
+export interface RoomCell {
+  room: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * A copy of a record's data whose positions in the room (a circuit node's stairs, bytes 4
+ * and 5 while byte 5 is set; an oracle's or teleporter's target, offset 4 room | x << 10
+ * and byte 6, while it is in room `from.room`) are moved by `to` where they lie in the
+ * area `from` (the cells w × h from (x, y) of room `from.room`): to.x - from.x across,
+ * to.y - from.y down, into room `to.room`. Positions outside the area stay.
+ */
+export function movedRecord(
+  data: Uint8Array,
+  from: RoomCell & { w: number; h: number },
+  to: RoomCell,
+): Uint8Array {
+  const out = data.slice();
+  const inside = (x: number, y: number) =>
+    x >= from.x && y >= from.y && x < from.x + from.w && y < from.y + from.h;
+  const [dx, dy] = [to.x - from.x, to.y - from.y];
+  const type = out[0];
+  if (type === 11 && out[5] && inside(out[4], out[5])) {
+    out[4] = out[4] + dx;
+    out[5] = out[5] + dy;
+  } else if (type === 12 || type === 13) {
+    const target = out[4] | (out[5] << 8);
+    const [room, x, y] = [target & 0x3ff, target >> 10, out[6]];
+    if (room === from.room && inside(x, y)) {
+      const moved = to.room | ((x + dx) << 10);
+      out[4] = moved & 0xff;
+      out[5] = moved >> 8;
+      out[6] = y + dy;
+    }
+  }
+  return out;
 }
 
 /**

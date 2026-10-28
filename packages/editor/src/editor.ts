@@ -35,6 +35,7 @@ import {
   ROOM_TEXT_SIZE,
   ROOM_WIDTH,
   type Room,
+  type RoomCell,
   type RoomName,
   type RoomSettings,
   type RoomTag,
@@ -52,6 +53,8 @@ import {
   exitMode,
   freeTileTypes,
   kitChanges,
+  kitExample,
+  movedRecord,
   nameRoom,
   parsePe,
   parseTexts,
@@ -121,6 +124,11 @@ export interface Clip {
   base: Uint16Array;
   overlay: Uint16Array;
   records: LogicRecord[];
+  /**
+   * The room and top left cell it was copied from: positions in its records that lie in
+   * the clip (a node's stairs, a target in the room) move with it when pasted (movedRecord).
+   */
+  origin?: RoomCell;
 }
 
 /** One step to undo: a stroke's cells in one layer of one room, and record changes. */
@@ -827,6 +835,25 @@ export class Editor {
   }
 
   /**
+   * The kit's example (formats' kitExample) as a clip to paste, for room `room`: undefined
+   * where the episode lacks one of its types. Its positions (a node's stairs, an oracle's
+   * target) move with it where it is put (Clip.origin).
+   */
+  kitExample(episode: number, room: number, kit: Kit): Clip | undefined {
+    const texts = this.textEntries(textsId(episode))?.entries;
+    const example = kitExample(this.game, episode, kit, room, (n) => texts?.has(n) === true);
+    if (!example) return undefined;
+    const { w, h } = example;
+    const base = Uint16Array.from(example.base);
+    const records = example.records.map(({ x, y, data }, slot) => {
+      base[x + y * w] = LOGIC_CELL | (slot << 8);
+      return { slot, data };
+    });
+    const overlay = new Uint16Array(w * h);
+    return { episode, w, h, base, overlay, records, origin: { room, x: 0, y: 0 } };
+  }
+
+  /**
    * Adds `kit` to the episode (kitPlan: tile types, texts, events and their texts) as
    * one undo step that makes a new base (rebase); undefined if it has nothing to add.
    * Throws a RangeError where the plan has a problem.
@@ -1507,7 +1534,7 @@ export class Editor {
     const records = room.records
       .filter((r) => slots.has(r.slot))
       .map((r) => ({ ...r, data: r.data.slice() }));
-    return { episode, w, h, base, overlay, records };
+    return { episode, w, h, base, overlay, records, origin: { room: roomId, x, y } };
   }
 
   /** Empties an area in both layers (records of its logic cells go too); one undo step. */
@@ -1524,7 +1551,8 @@ export class Editor {
   /**
    * Puts a clip into a room with its top left cell at (x, y), both layers (cells outside
    * the room are dropped); its logic cells get new records in free slots, the records
-   * of logic cells it covers go. One undo step. Throws a RangeError if the records and
+   * of logic cells it covers go, positions in them within the clip move with it
+   * (Clip.origin). One undo step. Throws a RangeError if the records and
    * overlay objects would not fit into the game's table (recordCapacity).
    */
   pasteArea(episode: number, roomId: number, x: number, y: number, clip: Clip): Edit | undefined {
@@ -1541,7 +1569,14 @@ export class Editor {
         });
       }
     }
-    return this.writeArea(episode, roomId, writes, clip.records);
+    const { origin } = clip;
+    const records = origin
+      ? clip.records.map((r) => ({
+          ...r,
+          data: movedRecord(r.data, { ...origin, w: clip.w, h: clip.h }, { room: roomId, x, y }),
+        }))
+      : clip.records;
+    return this.writeArea(episode, roomId, writes, records);
   }
 
   /**

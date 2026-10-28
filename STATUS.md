@@ -969,7 +969,9 @@ Supported:
   clip under the mouse until a click puts it down (Shift+click: again, Esc or right click:
   stop), in any room or episode; logic cells take their records along (new slots, the
   same ones where free), the records of covered logic cells go, a paste beyond the game's
-  200 records and overlay objects is refused; each one undo step
+  200 records and overlay objects is refused; positions in records that lay in the copied
+  area move with it (`movedRecord`: a circuit node's stairs, an oracle's or teleporter's
+  target in the same room, which then is the room pasted into); each one undo step
 - layout: the room fits the window's height with its exits around it (north above, south
   below, west and east written vertically at the sides; doors, stairs, bus, oracles,
   teleporters and actors in a line above); the column right of it has the tool and layer
@@ -1144,7 +1146,16 @@ Supported:
   new base; the parts then show in the lists of tile types, events and texts, each
   removable there. **Verified under Wine** (`pnpm test:game`, the circuit and oracle
   game tests now build their mods with `planKit` and `kitChanges`): circuits in III
-  (types 0x0e, 0x0f, 0x43), IV and Junior, oracles in Junior, I and IV
+  (types 0x0e, 0x0f, 0x43), IV and Junior, oracles in Junior, I and IV. "Place example"
+  (once the episode has the kit's types, by copy or its own; `kitExample`) pastes a
+  working setup like Ctrl+V: circuits (7 × 3) letters 1 and 0 into an OR gate, a wire
+  on to a node with its stairs two cells east, the wire missing and lying below its gap;
+  oracles (4 × 3) the tangram block laid as a symbol (the first whose event has an entry
+  and whose hint exists: symbol 1 with II's texts), the oracle east of it sending the
+  hero below the block. **Verified under Wine**: in III, IV and Junior the wire taken and
+  used in the gap ("Benutzen") lights the node and places its stairs (with the wire's
+  first take and, but in III, 4000 points); in IV and Junior the laid symbol is found and
+  walked into northwards the oracle sends the hero below it (3500 points)
 - the episode's settings (tab Episode, `episode-view.ts`): the rucksack's capacity
   (1–250); the rules, episode flags as checkboxes: oracles vanish after north, after
   east (0x4000, 0x8000), doors into buildings open without the key (0x80000), robots
@@ -1250,10 +1261,9 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
-- **Next:** "place an example" for the kits (a working oracle with its symbol laid out,
-  a small circuit with its stairs, next to the start in the shown room); the proxy as
-  an in-memory loader; the `code` kind in the editor; an event's sound line with its
-  copy. Both pilots are kits in the Episode tab now ("Add oracles", "Add circuits").
+- **Next:** the proxy as an in-memory loader; the `code` kind in the editor; an event's
+  sound line with its copy. Both pilots are kits in the Episode tab now ("Add oracles",
+  "Add circuits", each with "Place example").
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
@@ -1384,7 +1394,11 @@ By hand or with the screenshot harness:
   misses presses now and then). Message boxes (first takes, bonuses) stay until Return.
 - The rucksack: Return opens it, a letter key or the arrows pick an item (letters first
   appear as one "?" item to choose with Return), Down picks the action, Return does it
-  ("Benutzen" puts a letter down next to the hero).
+  ("Benutzen" puts a letter down next to the hero). With one item it offers that item's
+  actions at once ("Benutzen", then "Ablegen"); both put a circuit piece on the hero's
+  cell, only "Benutzen" has the circuits evaluated (**verified**). The driver's `pickUp`
+  (walk onto an item, close its boxes) and `putDown` (one item: "use" or "drop") do that; `closeBoxes` presses Return while the
+  game clock stands still (a message box).
 - `PrintVal(x)` in a script shows a value in a box. Put objects the hero needs on the
   map to be taken: a shovel given by `Take()` in a script did not show up in the
   rucksack. Episode IV's status line shows the room and the hero's cell
@@ -1563,8 +1577,11 @@ Roughly by value for the editor.
   harness only warns). After the dialogs the harness presses Return until nothing
   reacts; a Return that opens something in the room would end up in the screenshot
   (not seen so far, review finding).
-- The game evaluates circuits only when a circuit piece is taken or put down, not on
-  entering the room: a test needs the hero to move a piece.
+- The game evaluates circuits only when a circuit piece is taken or used ("Benutzen"),
+  not on entering the room and not when it is put down with "Ablegen" (**verified**: in
+  III the example's wire dropped into its gap with "Ablegen" lay there, the node stayed
+  dark, also after stepping off; with "Benutzen" it lit): a test needs the hero to take
+  or use a piece.
 - Each `App` in the editor listens on `window`; tests must `dispose()` old instances,
   or they react to history and key events too.
 - `harness.py play`, `shot` and `serve` share the prefix: each ends a game another

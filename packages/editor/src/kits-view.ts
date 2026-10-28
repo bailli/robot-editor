@@ -5,6 +5,8 @@ import { patchChildren } from "./patch.ts";
 export interface KitsViewEvents {
   /** Adds the kit to the shown episode, the events chosen (Editor.addKit). */
   add(kit: Kit, events: readonly number[] | undefined): void;
+  /** Starts pasting the kit's example into the shown room (Editor.kitExample). */
+  example(kit: Kit): void;
 }
 
 /** What the view shows: the kits' plans for the shown episode. */
@@ -13,6 +15,8 @@ export interface KitsContext {
   names: readonly string[];
   /** What adding the kit does now, with these events chosen (Editor.kitPlan). */
   plan: (kit: Kit, events?: readonly number[]) => KitPlan;
+  /** Whether the episode has all the kit's types, so its example can be placed. */
+  hasExample: (kit: Kit) => boolean;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -88,6 +92,7 @@ export class KitsView {
     const own = plan.present.length === kit.types.length && plan.lacking.length === 0;
     if (own && plan.texts.length === 0) {
       box.append(line("own", `${name(episode)} has ${kit.name.toLowerCase()} already.`));
+      box.append(this.exampleBar(context, kit));
       return box;
     }
     const types = plan.types.map(([to, of]) => `${hex(to)} ← ${typeName(of)}`);
@@ -165,7 +170,22 @@ export class KitsView {
     bar.dataset["key"] = "add";
     bar.append(add);
     if (plan.problem) bar.append(element("span", "hint", plan.problem));
-    box.append(bar);
+    box.append(bar, this.exampleBar(context, kit));
     return box;
+  }
+
+  /** "Place example": the kit's working setup to put into the shown room. */
+  private exampleBar(context: KitsContext, kit: Kit): HTMLElement {
+    const place = element("button", undefined, "Place example");
+    place.type = "button";
+    place.disabled = !context.hasExample(kit);
+    place.title = place.disabled ? `Add the ${kit.name.toLowerCase()} first` : kit.example;
+    place.addEventListener("click", () => {
+      this.events.example(kit);
+    });
+    const bar = element("div", "start-bar");
+    bar.dataset["key"] = "example";
+    bar.append(place);
+    return bar;
   }
 }
