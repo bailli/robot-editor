@@ -428,8 +428,13 @@ export class Editor {
   private readonly undoStack: Edit[] = [];
   private readonly redoStack: Edit[] = [];
   private stroke: Edit | undefined;
-  /** The last stroke applied when saved (state identity: strokes are unique). */
-  private saved: Edit | undefined;
+  /**
+   * The last stroke applied when saved as an exe and as a mod (state identity: strokes
+   * are unique). Once there is a mod (opened or saved), saving means saving the mod.
+   */
+  private savedExe: Edit | undefined;
+  private savedMod: Edit | undefined;
+  private modded = false;
 
   /** The exe as edited: the loaded one, or with a mod its base (see above). */
   private base: Game;
@@ -451,6 +456,7 @@ export class Editor {
     const { rucksack, flags, backdrop, moves } = mod.changes;
     if (mod.base !== this.pristineHash) throw new ModError("base: the mod is for another exe");
     this.mod = { ...mod, changes: NO_CHANGES };
+    this.modded = true;
     const copies = tileTypes.flatMap(({ episode, from, types }) =>
       types.map(([to, of]) => ({ episode, from, to, of })),
     );
@@ -1577,9 +1583,9 @@ export class Editor {
     return ids.find((k) => k > near && !used.has(k)) ?? ids.find((k) => !used.has(k));
   }
 
-  /** Changes since loading or the last save. */
+  /** Changes since loading or the last save: of the mod, once there is one. */
   get dirty(): boolean {
-    return this.undoStack.at(-1) !== this.saved;
+    return this.undoStack.at(-1) !== (this.modded ? this.savedMod : this.savedExe);
   }
 
   canPaint(room: Room, layer: Layer, index: number, value: number): boolean {
@@ -1967,14 +1973,15 @@ export class Editor {
       },
     };
     checkMod(mod);
-    this.saved = this.undoStack.at(-1);
+    this.savedMod = this.undoStack.at(-1);
+    this.modded = true;
     return mod;
   }
 
   /** The loaded exe with every edited episode's scene and text replaced. */
   save(): Uint8Array {
     const exe = this.build();
-    this.saved = this.undoStack.at(-1);
+    this.savedExe = this.undoStack.at(-1);
     return exe;
   }
 

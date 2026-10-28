@@ -676,6 +676,22 @@ describe("Editor and mods", () => {
     expect(texts.map((c) => c.entry)).toEqual([1042, 1044]);
   });
 
+  test("with a mod, saving the exe leaves the edits unsaved: the mod is what keeps them", () => {
+    const editor = new Editor(game, aMod());
+    paint(editor, free, 0x0105);
+    editor.save();
+    expect(editor.dirty).toBe(true);
+    editor.saveMod();
+    expect(editor.dirty).toBe(false);
+    // an exe's editor once saved as a mod too
+    const plain = new Editor(game);
+    paint(plain, free, 0x0105);
+    plain.saveMod();
+    paint(plain, free, 0x0106);
+    plain.save();
+    expect(plain.dirty).toBe(true);
+  });
+
   test("the mod's code: listed, written over by edits here, taken out as one step", () => {
     // III's start method: the hero's x (c6 05 09 e3 4f 00 xx); III's event entry 16's points
     const startX = 0x40b460 + 6;
