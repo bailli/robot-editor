@@ -24,6 +24,7 @@ What is decoded, what the editor supports and what is still open: [STATUS.md](ST
 - `packages/editor` – `@robot/editor`: the level editor in the browser
 - `packages/tools` – `@robot/tools`: command line tools (`pnpm robot ...`)
 - `tools/wine/harness.py` – runs the real game under Wine for reference screenshots
+- `tools/wine/proxy` – the proxy DLL (`ddraw.dll`, C) the driver uses to step the game
 
 ## Editor
 
@@ -38,10 +39,18 @@ choose the tool, L the layer, 1–7 the side panel's tab (? or the "Shortcuts" b
 lists all keys). The Fill
 tool fills connected cells; with the Select tool an area is copied (Ctrl+C), cut
 (Ctrl+X), cleared (Delete) and pasted (Ctrl+V, then click), logic records included. The
-Room tab sets the description shown under the room's name on entering, the darkness, the
-points for the first visit and the music; the Episode tab sets what the episode's dealer
-sells and for how much. "Save exe"
-downloads a copy with the edited scenes, texts and goods. Scenes that grow move to the end of
+side panel's tabs: Tiles; Record (a logic record's fields); Actors (robots and other actors
+of the room); Circuit (the room's logic circuit); Script (a room's script, source and
+disassembly); Room (the description shown under the room's name on entering, the darkness,
+the points for the first visit, the music); Episode (the start room and cell, the rucksack's
+capacity, the episode rules such as flags, the backdrop rule and diagonal moves, what the
+dealer sells and for how much, copies of tile types, events and texts from other episodes,
+the mod's code patches, and kits: "Add oracles" / "Add circuits" with "Place example").
+"Map" shows all rooms and their links, "Dark" draws rooms as dark as in the game.
+"Save exe" downloads a copy with the edits (scenes, texts, the Episode tab's settings).
+A mod is the same edits as a JSON file against the pristine exe: "Open mod…" loads one,
+"Save mod" writes the edits (and the opened mod's changes) as one; the format is in
+[STATUS.md](STATUS.md). Scenes that grow move to the end of
 the resource section (the exe's signature is dropped). Logic cells (magenta) refer to
 the room's logic records and cannot be painted over (the inspector and the area tools change them). The room's name is edited in the
 field next to the title, where "Delete room…" deletes it; "New room…" (or a + on the map)
@@ -125,13 +134,16 @@ await d.close();
   cache in `node_modules/.cache`; a changed type can leave an unchanged file's cached
   lint result stale, `rm -r node_modules/.cache/eslint` lints everything again)
 - `pnpm test` – tests only (Vitest; `pnpm exec vitest` to watch)
+- `pnpm typecheck`, `pnpm lint` – the type check and ESLint alone
+- `pnpm test:game` – the tests that run the game (Wine, proxy; see above)
+- `pnpm proxy` – build the proxy DLL (see above)
 - `pnpm test:without-game` – the tests that need no game data (what CI runs)
 - `pnpm snapshots` – record changed outputs in `packages/formats/test/__snapshots__/`
   (review the diff)
 - `pnpm format` – apply Prettier
 
-GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, format check and
-`pnpm test:without-game` on every push to `main` and every pull request, and publishes the
+GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, format check,
+`pnpm test:without-game` and the editor's build on every push to `main` and every pull request, and publishes the
 editor's static build from `main` on GitHub Pages at https://bailli.github.io/robot-editor/
 (Settings → Pages → Source: GitHub Actions).
 
