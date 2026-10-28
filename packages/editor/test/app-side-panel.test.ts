@@ -428,6 +428,15 @@ test("the copy form's target: the same number where free, else the first type no
   await userEvent.selectOptions(types.getByLabelText("Type"), String(0x50));
   await expect.element(to).toHaveValue(String(0x50));
   app.undo();
+  // a free type painted into a room is no longer offered, again once undone
+  const offered = () => [...(to.element() as HTMLSelectElement).options].map((o) => o.value);
+  await userEvent.selectOptions(types.getByLabelText("Type"), String(0x01));
+  expect(offered()).toContain(String(0x3a));
+  app.setTile(0x3a);
+  await clickCell(5 * ROOM_WIDTH + 20);
+  expect(offered()).not.toContain(String(0x3a));
+  app.undo();
+  expect(offered()).toContain(String(0x3a));
 });
 
 test("the Episode tab copies events of other episodes to spare entries, undoably", async () => {

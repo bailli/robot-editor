@@ -2087,6 +2087,8 @@ export class App {
       this.refreshConnections();
       this.refreshActors();
       this.refreshCircuit();
+      // painted tile types are no longer free, copies in use cannot go
+      this.refreshEpisodeTab();
     }
   }
 
@@ -2576,6 +2578,7 @@ export class App {
       this.refreshConnections();
       this.refreshActors();
       this.refreshCircuit();
+      this.refreshEpisodeTab();
     }
     this.refreshRoomList();
     this.refreshButtons();
