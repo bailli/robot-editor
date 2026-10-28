@@ -106,3 +106,17 @@ test("circuits: I's pieces, stairs only where the episode has none; event 293 wh
   // too few free types
   expect(planKit(game, 0, circuits, { free: [0x40] }).problem).toMatch(/4 free tile types needed/);
 });
+
+test("a type a record holds (an oracle's object, a teleporter's cell) is not free", () => {
+  const room = game.episode(0).rooms[0];
+  // Junior would take 0x50 and 0x51 for the oracles; a type 12 record names 0x50 at
+  // offset 8 (what the oracle turns into), a type 13 one 0x51 at offset 2
+  const oracle = Uint8Array.of(12, 0, 0, 0, 0, 0, 0, 0, 0x50, 0);
+  const teleporter = Uint8Array.of(13, 0, 0x51, 0, 0, 0, 0, 0, 0, 0);
+  const records = [...room.records, { slot: 200, data: oracle }, { slot: 201, data: teleporter }];
+  const rooms = game.episode(0).rooms.map((r) => (r === room ? { ...r, records } : r));
+  const changed = new Game(game.withScene(0, rooms));
+  const types = planKit(changed, 0, oracles, { source: game }).types;
+  expect(types.map(([, of]) => of)).toEqual([0x50, 0x51]);
+  expect(types.map(([to]) => to).filter((to) => to === 0x50 || to === 0x51)).toEqual([]);
+});

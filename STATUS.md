@@ -1189,7 +1189,9 @@ Supported:
   gate 0x42, bulb 0x43, stairs 0x3d; event 293). Per kit what adding it to the shown
   episode copies: the types whose class the episode lacks (stairs only to Junior; II
   and III have oracles, I and II circuits: "has … already"), each at the same number
-  where free, else the first free type no copy has; the texts the kit's classes show
+  where free, else the first free type no copy has (free: no class, and no room's map
+  or record cells, `recordCellOffsets`, hold it; `Editor.freeTileTypes` still looks at
+  the maps only); the texts the kit's classes show
   that the episode lacks (`classTexts`, for classes it does not have by itself, so a
   type copied by hand still gets them); the events its table lacks, in spare entries
   the mod does not set yet (`Editor.kitPlan`). Where they do not all fit (IV: four

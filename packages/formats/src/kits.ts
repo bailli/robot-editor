@@ -2,7 +2,7 @@ import { classTexts, freeTileTypes } from "./classes.ts";
 import { EVENT_TEXT, FIRST_EVENT_ENTRY, readEventTable, spareEventEntries } from "./events.ts";
 import { type Game, eventTextsId, textsId } from "./game.ts";
 import type { CopyTextsChange, ModChanges } from "./mod.ts";
-import { readOracleSymbols } from "./records.ts";
+import { readOracleSymbols, recordCellOffsets } from "./records.ts";
 import { LOGIC_CELL } from "./scene.ts";
 
 /**
@@ -169,11 +169,17 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
   return plan;
 }
 
-/** Types without a class that no room of the episode uses. */
+/**
+ * Types without a class that no room of the episode uses: in its maps or in the cells its
+ * logic records hold (an oracle's object, what a teleporter or a circuit node shows).
+ */
 function unusedFreeTypes(game: Game, episode: number): number[] {
   const used = new Set<number>();
   for (const room of game.episode(episode).rooms) {
     for (const layer of [room.base, room.overlay]) for (const cell of layer) used.add(cell & 0xff);
+    for (const { data } of room.records) {
+      for (const at of recordCellOffsets(data[0])) used.add(data[at]);
+    }
   }
   return freeTileTypes(game.image, episode).filter(
     (t) => t !== 0 && t !== LOGIC_CELL && !used.has(t),
