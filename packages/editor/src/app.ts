@@ -566,22 +566,14 @@ export class App {
   });
   readonly tileTypesView = new TileTypesView({
     copy: (to, source) => {
-      void this.busy(
+      this.rebaseAction(
         source ? `Copying type ${hex(source.of)}…` : `Freeing type ${hex(to)}…`,
-        () => {
-          try {
-            this.need().setTileType(this.episode, this.roomId, to, source);
-          } catch (error) {
-            this.setStatus(`Cannot copy the tile type: ${message(error)}`, true);
-            this.refreshEpisodeTab();
-            return;
-          }
-          this.gameChanged();
-          this.setStatus(
-            source
-              ? `Type ${hex(to)} is now type ${hex(source.of)} of ${EPISODE_NAMES[source.from] ?? ""}`
-              : `Type ${hex(to)} is free again`,
-          );
+        "copy the tile type",
+        (episode, room) => {
+          this.need().setTileType(episode, room, to, source);
+          return source
+            ? `Type ${hex(to)} is now type ${hex(source.of)} of ${EPISODE_NAMES[source.from] ?? ""}`
+            : `Type ${hex(to)} is free again`;
         },
       );
     },
@@ -600,22 +592,14 @@ export class App {
   });
   readonly eventsView = new EventsView({
     copy: (entry, source) => {
-      void this.busy(
+      this.rebaseAction(
         source ? `Copying event entry ${source.of}…` : `Resetting entry ${entry}…`,
-        () => {
-          try {
-            this.need().copyEvent(this.episode, this.roomId, entry, source);
-          } catch (error) {
-            this.setStatus(`Cannot copy the event: ${message(error)}`, true);
-            this.refreshEpisodeTab();
-            return;
-          }
-          this.gameChanged();
-          this.setStatus(
-            source
-              ? `Entry ${entry} is now entry ${source.of} of ${EPISODE_NAMES[source.from] ?? ""}`
-              : `Entry ${entry} is as the exe has it again`,
-          );
+        "copy the event",
+        (episode, room) => {
+          this.need().copyEvent(episode, room, entry, source);
+          return source
+            ? `Entry ${entry} is now entry ${source.of} of ${EPISODE_NAMES[source.from] ?? ""}`
+            : `Entry ${entry} is as the exe has it again`;
         },
       );
     },
@@ -623,41 +607,31 @@ export class App {
   readonly codeView = new CodeView({
     add: (va, bytes) => {
       const at = `0x${va.toString(16)}`;
-      void this.busy(`Patching the code at ${at}…`, () => {
-        try {
-          this.need().addCode(this.episode, this.roomId, va, bytes);
-        } catch (error) {
-          this.setStatus(`Cannot patch the code: ${message(error)}`, true);
-          this.refreshEpisodeTab();
-          return;
-        }
-        this.gameChanged();
-        this.setStatus(`${plural(bytes.length, "byte")} written at ${at}`);
+      this.rebaseAction(`Patching the code at ${at}…`, "patch the code", (episode, room) => {
+        this.need().addCode(episode, room, va, bytes);
+        return `${plural(bytes.length, "byte")} written at ${at}`;
       });
     },
     remove: (va) => {
       const at = `0x${va.toString(16)}`;
-      void this.busy(`Removing the code at ${at}…`, () => {
-        if (!this.need().removeCode(this.episode, this.roomId, va)) return;
-        this.gameChanged();
-        this.setStatus(`The code at ${at} is as the exe has it again`);
-      });
+      this.rebaseAction(`Removing the code at ${at}…`, "remove the code patch", (episode, room) =>
+        this.need().removeCode(episode, room, va)
+          ? `The code at ${at} is as the exe has it again`
+          : undefined,
+      );
     },
   });
   readonly kitsView = new KitsView({
     add: (kit, events) => {
       const name = EPISODE_NAMES[this.episode] ?? "";
-      void this.busy(`Adding the ${kit.name.toLowerCase()}…`, () => {
-        try {
-          if (!this.need().addKit(this.episode, this.roomId, kit, events)) return;
-        } catch (error) {
-          this.setStatus(`Cannot add the ${kit.name.toLowerCase()}: ${message(error)}`, true);
-          this.refreshEpisodeTab();
-          return;
-        }
-        this.gameChanged();
-        this.setStatus(`${kit.name} of ${EPISODE_NAMES[kit.from] ?? ""} added to ${name}`);
-      });
+      this.rebaseAction(
+        `Adding the ${kit.name.toLowerCase()}…`,
+        `add the ${kit.name.toLowerCase()}`,
+        (episode, room) =>
+          this.need().addKit(episode, room, kit, events)
+            ? `${kit.name} of ${EPISODE_NAMES[kit.from] ?? ""} added to ${name}`
+            : undefined,
+      );
     },
     example: (kit) => {
       const clip = this.need().kitExample(this.episode, this.roomId, kit);
@@ -2354,14 +2328,32 @@ export class App {
     copies: readonly { to: number; source: TextSource | undefined }[],
     done: string,
   ): void {
-    void this.busy("Copying texts…", () => {
+    this.rebaseAction("Copying texts…", "copy the text", (episode, room) =>
+      this.need().setTextCopies(episode, room, copies) ? done : undefined,
+    );
+  }
+
+  /**
+   * A change of the episode that takes a second (busy): `work` gets the episode and room
+   * shown when it was asked for, and returns what to say once done, or undefined when it
+   * changed nothing. A throw is said as "Cannot <what>: ..." and the tab shows the state.
+   */
+  private rebaseAction(
+    label: string,
+    what: string,
+    work: (episode: number, room: number) => string | undefined,
+  ): void {
+    const { episode, roomId } = this;
+    void this.busy(label, () => {
+      let done: string | undefined;
       try {
-        if (!this.need().setTextCopies(this.episode, this.roomId, copies)) return;
+        done = work(episode, roomId);
       } catch (error) {
-        this.setStatus(`Cannot copy the text: ${message(error)}`, true);
+        this.setStatus(`Cannot ${what}: ${message(error)}`, true);
         this.refreshEpisodeTab();
         return;
       }
+      if (done === undefined) return;
       this.gameChanged();
       this.setStatus(done);
     });
