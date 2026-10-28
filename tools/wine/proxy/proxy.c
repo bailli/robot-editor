@@ -507,6 +507,16 @@ static void send_all(SOCKET to, const char *text) {
   }
 }
 
+/* Whether the peer closed `s` (it is readable with nothing to read). */
+static BOOL peer_closed(SOCKET s) {
+  fd_set readable;
+  FD_ZERO(&readable);
+  FD_SET(s, &readable);
+  struct timeval now = {0, 0};
+  char c;
+  return select(0, &readable, NULL, NULL, &now) > 0 && recv(s, &c, 1, MSG_PEEK) <= 0;
+}
+
 static DWORD WINAPI serve(void *param) {
   WSADATA wsa;
   say("serve: thread");
@@ -522,7 +532,8 @@ static DWORD WINAPI serve(void *param) {
     return 1; /* the game waits for steps forever; the driver's harness gives up */
   }
   /* One driver at a time; another connection gets "error busy" at once instead of
-   * waiting unanswered. */
+   * waiting unanswered, unless the one before has gone (e.g. the harness's probe, which
+   * closes just before the driver connects). */
   static char line[8192], answer[1 << 20];
   SOCKET client = INVALID_SOCKET;
   size_t used = 0;
@@ -535,6 +546,10 @@ static DWORD WINAPI serve(void *param) {
     if (FD_ISSET(server, &readable)) {
       SOCKET other = accept(server, NULL, NULL);
       say("serve: accept %d", (int)other);
+      if (client != INVALID_SOCKET && other != INVALID_SOCKET && peer_closed(client)) {
+        closesocket(client);
+        client = INVALID_SOCKET;
+      }
       if (client == INVALID_SOCKET) {
         client = other;
         used = 0;
