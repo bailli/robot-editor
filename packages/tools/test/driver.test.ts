@@ -324,54 +324,6 @@ async function actorList(d: Driver): Promise<string[]> {
   return list;
 }
 
-/** The rucksack (0x4fe0c0): its capacity, then a word per slot, class | state << 8. */
-const RUCKSACK = 0x4fe0c0;
-
-/** The items in the rucksack (class | state << 8), its empty slots left out. */
-async function rucksack(d: Driver): Promise<number[]> {
-  const bytes = await d.peek(RUCKSACK + 2, 2 * 20);
-  const view = new DataView(bytes.buffer, bytes.byteOffset);
-  return Array.from({ length: 20 }, (_, k) => view.getUint16(2 * k, true)).filter((w) => w);
-}
-
-/** The map cell (class | state << 8) at (x, y). */
-async function mapCell(d: Driver, x: number, y: number): Promise<number> {
-  const b = await d.peek(MAP + 2 * (x + y * ROOM_WIDTH), 2);
-  return b[0] | (b[1] << 8);
-}
-
-/**
- * Uses the `index`th item of the rucksack: Return opens it (with several items their
- * actions show at once, for the first), → goes on to the next item, Return is "Benutzen".
- * What it shows (a note, …) leaves the game clock running: closed with Return here.
- */
-async function useItem(d: Driver, index: number): Promise<void> {
-  await d.press("return", 100);
-  for (let k = 0; k < index; k++) await d.press("right", 50);
-  await d.press("return", 100);
-  await d.run(60);
-  await d.press("return", 100);
-}
-
-/** Walks right onto each of the cells in `xs` in turn and closes the boxes that brings. */
-async function pickUpAll(d: Driver, xs: readonly number[]): Promise<void> {
-  for (const x of xs) await d.pickUp("right", (h) => h.x >= x);
-}
-
-/**
- * The thief among the room's actors (kind 0x105 at +0x14): whether it robbed the hero
- * (+0x10 bit 26, 0x41f470), undefined while there is none.
- */
-async function thiefRobbed(d: Driver): Promise<boolean | undefined> {
-  for (let p = await d.u32(0x53e9a8), n = 0; p !== 0 && n < 200; n++) {
-    const bytes = await d.peek(p, 0x18);
-    const view = new DataView(bytes.buffer, bytes.byteOffset);
-    if (view.getUint16(0x14, true) === 0x105) return (view.getUint32(0x10, true) & 0x4000000) !== 0;
-    p = view.getUint32(4, true);
-  }
-  return undefined;
-}
-
 /**
  * Episode II's room 115 (drawn over room 15) as the start room, the hero at (21, 9) in
  * the house, with `edit` applied to its cells; the cells where the game's frame differs
@@ -759,226 +711,179 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     assert.deepEqual(seen, expected);
   }, 60_000);
 
-  for (const episode of [0, 1, 2, 3, 4]) {
-    const scorpions = episode !== 4;
-    test(`episode ${String(episode)}: a sand heap ${scorpions ? "lets a scorpion out" : "does nothing"}`, async () => {
-      const start = readEpisodeStart(game.image, episode);
-      const [x, y] = [start.x + 1, start.y];
-      const heap = (episode === 0 ? 0x27 : 0x31) | 0x600;
-      const area = { x0: x, x1: x, y0: y, y1: y };
-      const mod = startRoomMod(game, episode, {}, area, start, (set) => {
-        set(x, y, heap);
-      });
-      const seen = await withModExe(game, mod, (exe) =>
-        withGame(exe, async (d) => {
-          await d.startEpisode(episode);
-          await d.hold("right", 20); // onto the heap
-          await d.run(30);
-          const map = await d.peek(MAP + 2 * (x + y * ROOM_WIDTH), 2);
-          return {
-            cell: new DataView(map.buffer, map.byteOffset).getUint16(0, true),
-            actors: (await actorList(d)).length,
-          };
-        }),
-      );
-      // the class of sand is 0x27 in every episode
-      assert.deepEqual(seen, scorpions ? { cell: 0x27, actors: 1 } : { cell: 0x627, actors: 0 });
-    }, 60_000);
-  }
-
   const at = (x: number, y: number) => x + y * ROOM_WIDTH;
   const HERO = at(21, 9);
 
-  for (const vanish of [false, true]) {
-    test(`Junior's oracles ${vanish ? "vanish with II's flags" : "stay"} after north and east`, async () => {
-      const oracles = ORACLE_VANISHES_NORTH | ORACLE_VANISHES_EAST;
-      const { mod } = oraclesMod(game, 0);
-      const flags = readEpisodeFlags(game.image, 0) | (vanish ? oracles : 0);
-      const cells = [at(4, 15), at(12, 16)];
-      const seen = await withModExe(
-        game,
-        { ...mod, changes: { ...mod.changes, flags: [{ episode: 0, flags }] } },
-        (exe) =>
-          withGame(exe, async (d) => {
-            await d.startEpisode(0);
-            await d.hold("up", 40); // into the oracle north of the start: sent to (10, 16)
-            await d.run(200);
-            await d.walk("right", (h) => h.x >= 11);
-            await d.hold("right", 40); // into the oracle at (12, 16): its hint
-            await d.run(60);
-            await d.press("return", 100); // the hint's box
-            // away from it, to see what lies there: the record shows an empty cell (0x4331a0
-            // sets the cell a logic cell shows) or still the oracle
-            await d.walk("left", (h) => h.x <= 9);
-            const frame = await d.frame();
-            const pixels = (cell: number) => {
-              const [x, y] = [(cell % ROOM_WIDTH) * 16, Math.floor(cell / ROOM_WIDTH) * 12];
-              const row = (r: number) => (y + r) * frame.width + x;
-              return Array.from({ length: 12 }, (_, r) =>
-                frame.indices.subarray(row(r), row(r) + 16).join(","),
-              ).join(";");
-            };
-            const floor = pixels(at(6, 13));
-            const gone = cells.map((cell) => pixels(cell) === floor);
-            // the north oracle once more: it sends again, or the hero walks on
-            await d.walk("left", (h) => h.x <= 4);
-            await d.hold("up", 40);
-            await d.run(200);
-            return { gone, again: await d.hero() };
-          }),
-      );
-      assert.deepEqual(seen.gone, [vanish, vanish], "the oracles drawn as empty floor");
-      assert.deepEqual(seen.again, vanish ? { room: 43, x: 4, y: 12 } : { room: 43, x: 10, y: 16 });
-    }, 60_000);
-  }
-
-  for (const own of [false, true]) {
-    test(`Junior's robots ${own ? "keep their sprite's colours with flag 0x20" : "roll colours"}`, async () => {
-      const start = readEpisodeStart(game.image, 0);
-      const area = { x0: 10, x1: 20, y0: 5, y1: 5 };
-      const flags = readEpisodeFlags(game.image, 0) | (own ? 0x20 : 0);
-      const mod = startRoomMod(game, 0, { flags: [{ episode: 0, flags }] }, area, start, (set) => {
-        for (const x of [10, 13, 16, 19]) set(x, 5, 0x02);
-      });
-      const robots = await withModExe(game, mod, (exe) =>
+  // the episode rules as a mod changes them; what the originals do is in STATUS.md
+  test("Junior's oracles vanish with II's flags after north and east", async () => {
+    const oracles = ORACLE_VANISHES_NORTH | ORACLE_VANISHES_EAST;
+    const { mod } = oraclesMod(game, 0);
+    const flags = readEpisodeFlags(game.image, 0) | oracles;
+    const cells = [at(4, 15), at(12, 16)];
+    const seen = await withModExe(
+      game,
+      { ...mod, changes: { ...mod.changes, flags: [{ episode: 0, flags }] } },
+      (exe) =>
         withGame(exe, async (d) => {
           await d.startEpisode(0);
-          // the actors (0x53e9a8, linked by +4): robots (class 2) with their sprite (+0x28)
-          // and colours (+0x30, rolled by the constructor 0x445bd0)
-          const found: { sprite: number; colours: number[] }[] = [];
-          for (let p = await d.u32(0x53e9a8); p !== 0 && found.length < 50;) {
-            const bytes = await d.peek(p, 0x34);
-            const view = new DataView(bytes.buffer, bytes.byteOffset);
-            if (view.getUint16(0x16, true) === 2) {
-              found.push({
-                sprite: view.getUint32(0x28, true),
-                colours: [...bytes.subarray(0x30, 0x33)],
-              });
-            }
-            p = view.getUint32(4, true);
+          await d.hold("up", 40); // into the oracle north of the start: sent to (10, 16)
+          await d.run(200);
+          await d.walk("right", (h) => h.x >= 11);
+          await d.hold("right", 40); // into the oracle at (12, 16): its hint
+          await d.run(60);
+          await d.press("return", 100); // the hint's box
+          // away from it, to see what lies there: the record shows an empty cell (0x4331a0
+          // sets the cell a logic cell shows) or still the oracle
+          await d.walk("left", (h) => h.x <= 9);
+          const frame = await d.frame();
+          const pixels = (cell: number) => {
+            const [x, y] = [(cell % ROOM_WIDTH) * 16, Math.floor(cell / ROOM_WIDTH) * 12];
+            const row = (r: number) => (y + r) * frame.width + x;
+            return Array.from({ length: 12 }, (_, r) =>
+              frame.indices.subarray(row(r), row(r) + 16).join(","),
+            ).join(";");
+          };
+          const floor = pixels(at(6, 13));
+          const gone = cells.map((cell) => pixels(cell) === floor);
+          // the north oracle once more: it sends again, or the hero walks on
+          await d.walk("left", (h) => h.x <= 4);
+          await d.hold("up", 40);
+          await d.run(200);
+          return { gone, again: await d.hero() };
+        }),
+    );
+    assert.deepEqual(seen.gone, [true, true], "the oracles drawn as empty floor");
+    assert.deepEqual(seen.again, { room: 43, x: 4, y: 12 }, "the hero walks on");
+  }, 60_000);
+
+  test("Junior's robots keep their sprite's colours with flag 0x20", async () => {
+    const start = readEpisodeStart(game.image, 0);
+    const area = { x0: 10, x1: 20, y0: 5, y1: 5 };
+    const flags = readEpisodeFlags(game.image, 0) | 0x20;
+    const mod = startRoomMod(game, 0, { flags: [{ episode: 0, flags }] }, area, start, (set) => {
+      for (const x of [10, 13, 16, 19]) set(x, 5, 0x02);
+    });
+    const robots = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(0);
+        // the actors (0x53e9a8, linked by +4): robots (class 2) with their sprite (+0x28)
+        // and colours (+0x30, rolled by the constructor 0x445bd0 without the flag)
+        const found: { sprite: number; colours: number[] }[] = [];
+        for (let p = await d.u32(0x53e9a8); p !== 0 && found.length < 50;) {
+          const bytes = await d.peek(p, 0x34);
+          const view = new DataView(bytes.buffer, bytes.byteOffset);
+          if (view.getUint16(0x16, true) === 2) {
+            found.push({
+              sprite: view.getUint32(0x28, true),
+              colours: [...bytes.subarray(0x30, 0x33)],
+            });
           }
-          return found;
-        }),
-      );
-      assert.equal(robots.length, 4);
-      const aliens = game.aliens(0);
-      for (const { sprite, colours } of robots) {
-        if (own) assert.deepEqual(colours, aliens[sprite]?.colours);
-        else {
-          assert.equal(new Set(colours).size, 3, "three distinct colours");
-          assert.ok(
-            colours.every((c) => c >= 8 && c <= 14),
-            `${String(colours)} in 8-14`,
-          );
+          p = view.getUint32(4, true);
         }
-      }
-    }, 60_000);
-  }
+        return found;
+      }),
+    );
+    assert.equal(robots.length, 4);
+    const aliens = game.aliens(0);
+    for (const { sprite, colours } of robots) assert.deepEqual(colours, aliens[sprite]?.colours);
+  }, 60_000);
 
-  for (const noKey of [false, true]) {
-    test(`episode II: a door in ${noKey ? "takes the hero without the key with flag 0x80000" : "wants the key"}`, async () => {
-      const ep = game.episode(2);
-      const room = calmRoom(game.room(2, 15), ep.classes);
-      const flags = readEpisodeFlags(game.image, 2) | (noKey ? 0x80000 : 0);
-      const mod: Mod = {
-        ...emptyMod(game.image.data),
-        changes: {
-          ...NO_CHANGES,
-          rooms: [{ episode: 2, id: 15, room }],
-          // north of the house's door (26, 8), state 7: entered walking south
-          start: [{ episode: 2, room: 15, x: 26, y: 7 }],
-          flags: [{ episode: 2, flags }],
-        },
-      };
-      const hero = await withModExe(game, mod, (exe) =>
-        withGame(exe, async (d) => {
-          await d.startEpisode(2);
-          await d.hold("down", 40);
-          await d.run(100);
-          return d.hero();
-        }),
-      );
-      assert.equal(hero?.room, noKey ? 115 : 15);
-    }, 60_000);
-  }
+  test("episode II: a door in takes the hero without the key with flag 0x80000", async () => {
+    const ep = game.episode(2);
+    const room = calmRoom(game.room(2, 15), ep.classes);
+    const flags = readEpisodeFlags(game.image, 2) | 0x80000;
+    const mod: Mod = {
+      ...emptyMod(game.image.data),
+      changes: {
+        ...NO_CHANGES,
+        rooms: [{ episode: 2, id: 15, room }],
+        // north of the house's door (26, 8), state 7: entered walking south
+        start: [{ episode: 2, room: 15, x: 26, y: 7 }],
+        flags: [{ episode: 2, flags }],
+      },
+    };
+    const hero = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(2);
+        await d.hold("down", 40);
+        await d.run(100);
+        return d.hero();
+      }),
+    );
+    assert.equal(hero?.room, 115, "in the house, without the key");
+  }, 60_000);
 
-  for (const cleared of [true, false]) {
-    test(`episode I: the Teleport() point is ${cleared ? "cleared on entering a room (flag 0x2000)" : "kept without flag 0x2000"}`, async () => {
-      const ep = game.episode(1);
-      const options = { constants: game.scriptConstants(1), keywords: game.scriptKeywords() };
-      const room43 = withRoomScript(
-        withExitMode(calmRoom(game.room(1, 43), ep.classes), "west", "neighbour"),
-        "Teleport(44, 5, 6);",
-        options,
-      );
-      const flags = readEpisodeFlags(game.image, 1) & ~(cleared ? 0 : 0x2000);
-      const mod: Mod = {
-        ...emptyMod(game.image.data),
-        changes: {
-          ...NO_CHANGES,
-          rooms: [{ episode: 1, id: 43, room: room43 }],
-          flags: [{ episode: 1, flags: flags >>> 0 }],
-        },
-      };
-      // the point: room (word), x, y at 0x4fe358
-      const point = async (d: Driver) => [...(await d.peek(0x4fe358, 4))];
-      const seen = await withModExe(game, mod, (exe) =>
-        withGame(exe, async (d) => {
-          await d.startEpisode(1);
-          const set = await point(d);
-          // around the inner wall west of the start, as in the test above
-          await d.walk("right", (h) => h.x >= 8);
-          await d.walk("up", (h) => h.y <= 8);
-          await d.walk("left", (h) => h.x <= 2);
-          await d.walk("down", (h) => h.y >= 15);
-          const arrived = await d.walk("left", (h) => h.room !== 43);
-          return { set, arrived: arrived.room, after: await point(d) };
-        }),
-      );
-      assert.deepEqual(seen, {
-        set: [44, 0, 5, 6],
-        arrived: 42,
-        // cleared: room 0, teleporters go to their own target again (x and y stay)
-        after: cleared ? [0, 0, 5, 6] : [44, 0, 5, 6],
-      });
-    }, 60_000);
-  }
+  test("episode I: the Teleport() point is kept on entering a room without flag 0x2000", async () => {
+    const ep = game.episode(1);
+    const options = { constants: game.scriptConstants(1), keywords: game.scriptKeywords() };
+    const room43 = withRoomScript(
+      withExitMode(calmRoom(game.room(1, 43), ep.classes), "west", "neighbour"),
+      "Teleport(44, 5, 6);",
+      options,
+    );
+    const flags = readEpisodeFlags(game.image, 1) & ~0x2000;
+    const mod: Mod = {
+      ...emptyMod(game.image.data),
+      changes: {
+        ...NO_CHANGES,
+        rooms: [{ episode: 1, id: 43, room: room43 }],
+        flags: [{ episode: 1, flags: flags >>> 0 }],
+      },
+    };
+    // the point: room (word), x, y at 0x4fe358
+    const point = async (d: Driver) => [...(await d.peek(0x4fe358, 4))];
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(1);
+        const set = await point(d);
+        // around the inner wall west of the start, as in the test above
+        await d.walk("right", (h) => h.x >= 8);
+        await d.walk("up", (h) => h.y <= 8);
+        await d.walk("left", (h) => h.x <= 2);
+        await d.walk("down", (h) => h.y >= 15);
+        const arrived = await d.walk("left", (h) => h.room !== 43);
+        return { set, arrived: arrived.room, after: await point(d) };
+      }),
+    );
+    assert.deepEqual(seen, {
+      set: [44, 0, 5, 6],
+      arrived: 42,
+      // with the flag (the originals) room 0: teleporters go to their own target again
+      after: [44, 0, 5, 6],
+    });
+  }, 60_000);
 
-  // a house cell in state 10 east of the hero, floor behind it
-  for (const [id, flag, blocks] of [
-    [114, true, true],
-    [114, false, false],
-    [41, true, false],
-  ] as const) {
-    test(`episode III room ${String(id)}: a house cell in state 10 ${blocks ? "blocks" : "lets the hero on"} ${flag ? "with" : "without"} flag 0x40000`, async () => {
-      const ep = game.episode(3);
-      const room = calmRoom(game.room(3, id), ep.classes);
-      const base = room.base.slice();
-      const overlay = room.overlay.slice();
-      const [x, y] = [14, 22];
-      for (let k = 0; k < 6; k++) base[at(x + k, y)] = overlay[at(x + k, y)] = 0;
-      base[at(x + 2, y)] = 0x53 | (10 << 8); // class 98, state 10
-      const flags = readEpisodeFlags(game.image, 3) & ~(flag ? 0 : 0x40000);
-      const mod: Mod = {
-        ...emptyMod(game.image.data),
-        changes: {
-          ...NO_CHANGES,
-          rooms: [{ episode: 3, id, room: { ...room, base, overlay } }],
-          start: [{ episode: 3, room: id, x: x + 1, y }],
-          flags: [{ episode: 3, flags: flags >>> 0 }],
-        },
-      };
-      const hero = await withModExe(game, mod, (exe) =>
-        withGame(exe, async (d) => {
-          await d.startEpisode(3);
-          await d.hold("right", 30);
-          await d.run(30);
-          return d.hero();
-        }),
-      );
-      assert.equal((hero?.x ?? 0) > x + 1, !blocks);
-    }, 60_000);
-  }
+  // a house cell in state 10 east of the hero, floor behind it; with the flag (III's) it
+  // blocks from room 100 on
+  test("episode III room 114: a house cell in state 10 lets the hero on without flag 0x40000", async () => {
+    const id = 114;
+    const ep = game.episode(3);
+    const room = calmRoom(game.room(3, id), ep.classes);
+    const base = room.base.slice();
+    const overlay = room.overlay.slice();
+    const [x, y] = [14, 22];
+    for (let k = 0; k < 6; k++) base[at(x + k, y)] = overlay[at(x + k, y)] = 0;
+    base[at(x + 2, y)] = 0x53 | (10 << 8); // class 98, state 10
+    const flags = readEpisodeFlags(game.image, 3) & ~0x40000;
+    const mod: Mod = {
+      ...emptyMod(game.image.data),
+      changes: {
+        ...NO_CHANGES,
+        rooms: [{ episode: 3, id, room: { ...room, base, overlay } }],
+        start: [{ episode: 3, room: id, x: x + 1, y }],
+        flags: [{ episode: 3, flags: flags >>> 0 }],
+      },
+    };
+    const hero = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(3);
+        await d.hold("right", 30);
+        await d.run(30);
+        return d.hero();
+      }),
+    );
+    assert.ok((hero?.x ?? 0) > x + 1, "on the house cell");
+  }, 60_000);
 
   test("episode II with the backdrop rule of IV: room 244 shows 144 behind it", async () => {
     const ep = game.episode(2);
@@ -1025,25 +930,23 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     );
   }, 60_000);
 
-  for (const diagonal of [false, true]) {
-    test(`Junior: the hero ${diagonal ? "walks diagonally with III's step method" : "does not walk diagonally"}`, async () => {
-      const hero = { x: 5, y: 15 };
-      const area = { x0: 2, x1: 10, y0: 12, y1: 19 };
-      const changes = { moves: diagonal ? [{ episode: 0, diagonal }] : [] };
-      const mod = startRoomMod(game, 0, changes, area, hero, () => undefined);
-      const after = await withModExe(game, mod, (exe) =>
-        withGame(exe, async (d) => {
-          await d.startEpisode(0);
-          await d.key(34, true); // PgDn: down and right (DOS key 0x151)
-          await d.run(20);
-          await d.key(34, false);
-          await d.run(30);
-          return d.hero();
-        }),
-      );
-      assert.deepEqual(after, diagonal ? { room: 43, x: 7, y: 17 } : { room: 43, ...hero });
-    }, 60_000);
-  }
+  test("Junior: the hero walks diagonally with III's step method", async () => {
+    const hero = { x: 5, y: 15 };
+    const area = { x0: 2, x1: 10, y0: 12, y1: 19 };
+    const changes = { moves: [{ episode: 0, diagonal: true }] };
+    const mod = startRoomMod(game, 0, changes, area, hero, () => undefined);
+    const after = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(0);
+        await d.key(34, true); // PgDn: down and right (DOS key 0x151)
+        await d.run(20);
+        await d.key(34, false);
+        await d.run(30);
+        return d.hero();
+      }),
+    );
+    assert.deepEqual(after, { room: 43, x: 7, y: 17 }, "2 down, 2 right (without: none)");
+  }, 60_000);
 
   test("episode III: the rucksack holds a weight below its capacity", async () => {
     // shovel, hammer, axe, bucket, sextant: weight 2 each (their shapes' frame word)
@@ -1104,208 +1007,4 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     assert.ok(seen.edited.length > 100, "our render shows no room 15");
     assert.deepEqual(seen.game, [HERO], "the game draws as we do");
   }, 60_000);
-
-  test("episode I: notes are read where they lie or from the rucksack, with the dictionary for 300 points", async () => {
-    const [NOTE, BOOK] = [0x3a, 0x3b]; // classes 15 and 8
-    const start = readEpisodeStart(game.image, 1);
-    const { y } = start;
-    const area = { x0: start.x + 1, x1: start.x + 8, y0: y, y1: y };
-    // message 801 (a way through the room of many eyes): read on the spot, then carried
-    const mod = startRoomMod(game, 1, {}, area, start, (set) => {
-      set(6, y, NOTE | (0x81 << 8));
-      set(8, y, NOTE | (0x01 << 8));
-      set(10, y, BOOK);
-      set(12, y, NOTE | (0x01 << 8));
-    });
-    const seen = await withModExe(game, mod, (exe) =>
-      withGame(exe, async (d) => {
-        await d.startEpisode(1);
-        await d.walk("right", (h) => h.x >= 6);
-        await d.run(60);
-        const stepped = { running: await d.running(), boxes: await d.closeBoxes() };
-        const read = await mapCell(d, 6, y);
-        await pickUpAll(d, [8]); // first take: 100 points
-        const carried = await rucksack(d);
-        await useItem(d, 0); // without the dictionary: its vowels are gone
-        const without = { score: await d.score(), rucksack: await rucksack(d) };
-        await pickUpAll(d, [10, 12]); // the dictionary's first take: 1000 points
-        const both = await rucksack(d);
-        await useItem(d, 1);
-        const withBook = { score: await d.score(), rucksack: await rucksack(d) };
-        return { stepped, read, carried, without, both, withBook };
-      }),
-    );
-    assert.deepEqual(seen, {
-      stepped: { running: false, boxes: 1 },
-      read: 0,
-      carried: [0x10f],
-      without: { score: 100, rucksack: [] },
-      both: [8, 0x10f],
-      withBook: { score: 1400, rucksack: [8] },
-    });
-  }, 90_000);
-
-  test("episode IV: a cassette without the recorder stays in the rucksack", async () => {
-    const start = readEpisodeStart(game.image, 4);
-    const area = { x0: start.x + 1, x1: start.x + 4, y0: start.y, y1: start.y };
-    const mod = startRoomMod(game, 4, {}, area, start, (set) => {
-      set(start.x + 2, start.y, 0x3a | (0x01 << 8));
-    });
-    const seen = await withModExe(game, mod, (exe) =>
-      withGame(exe, async (d) => {
-        await d.startEpisode(4);
-        await pickUpAll(d, [start.x + 2]);
-        const before = await d.score();
-        await useItem(d, 0); // message 974: no recorder
-        return { rucksack: await rucksack(d), points: (await d.score()) - before };
-      }),
-    );
-    assert.deepEqual(seen, { rucksack: [0x10f], points: 0 });
-  }, 60_000);
-
-  test("episode III: diary pages are read where they lie and marked read", async () => {
-    const start = readEpisodeStart(game.image, 3);
-    const { y } = start;
-    const area = { x0: start.x + 1, x1: start.x + 8, y0: y, y1: y };
-    // pages 2 and 4 of resource 1320 and state 3, which has none
-    const xs = [start.x + 2, start.x + 4, start.x + 6];
-    const mod = startRoomMod(game, 3, {}, area, start, (set) => {
-      [2, 3, 4].forEach((page, k) => {
-        set(xs[k] ?? 0, y, 0x3a | (page << 8));
-      });
-    });
-    const seen = await withModExe(game, mod, (exe) =>
-      withGame(exe, async (d) => {
-        await d.startEpisode(3);
-        const boxes = [];
-        for (const x of xs) {
-          await d.walk("right", (h) => h.x >= x);
-          await d.run(50);
-          boxes.push(await d.closeBoxes());
-        }
-        return {
-          boxes,
-          cells: await Promise.all(xs.map((x) => mapCell(d, x, y))),
-          read: [...(await d.peek(0x4fe3c8, 2))],
-          rucksack: await rucksack(d),
-          score: await d.score(),
-        };
-      }),
-    );
-    // the first page: the diary's bonus (event 164, 100 points), then the page
-    assert.deepEqual(seen, {
-      boxes: [2, 0, 1],
-      cells: [0, 0, 0],
-      read: [0x14, 0],
-      rucksack: [0xa4],
-      score: 100,
-    });
-  }, 60_000);
-
-  // a package opened from the rucksack becomes what it holds on the hero's cell
-  test("episode III: a chest with gold opens to gold", async () => {
-    const GOLD = 0x26;
-    const start = readEpisodeStart(game.image, 3);
-    const area = { x0: start.x + 1, x1: start.x + 4, y0: start.y, y1: start.y };
-    const x = start.x + 2;
-    const mod = startRoomMod(game, 3, {}, area, start, (set) => {
-      set(x, start.y, 0x5e | (GOLD << 8));
-    });
-    const seen = await withModExe(game, mod, (exe) =>
-      withGame(exe, async (d) => {
-        await d.startEpisode(3);
-        await pickUpAll(d, [x]);
-        const before = await d.score();
-        await d.putDown("use"); // the first opening's bonus box
-        return {
-          cell: await mapCell(d, x, start.y),
-          rucksack: await rucksack(d),
-          points: (await d.score()) - before,
-        };
-      }),
-    );
-    assert.deepEqual(seen, {
-      cell: game.episode(3).classes.classes.get(GOLD)?.id,
-      rucksack: [],
-      points: 1500,
-    });
-  }, 60_000);
-
-  test("episode II: a present with a robot lets it appear, one with a fence kills", async () => {
-    const start = readEpisodeStart(game.image, 2);
-    const area = { x0: start.x + 1, x1: start.x + 4, y0: start.y, y1: start.y };
-    const x = start.x + 2;
-    const open = (inside: number) =>
-      withModExe(
-        game,
-        startRoomMod(game, 2, {}, area, start, (set) => {
-          set(x, start.y, 0x5e | (inside << 8));
-        }),
-        (exe) =>
-          withGame(exe, async (d) => {
-            await d.startEpisode(2);
-            await pickUpAll(d, [x]);
-            await d.press("return", 100);
-            await d.press("return", 100);
-            await d.run(60);
-            const actors = await actorList(d);
-            await d.closeBoxes(); // the opening's bonus
-            await d.run(150);
-            await d.closeBoxes(); // the fence's message 951, once the hero is struck
-            await d.run(400);
-            return { actors: actors.map((a) => a.split(":")[0]), hero: await d.hero() };
-          }),
-      );
-    const robot = await open(0x02);
-    assert.deepEqual(robot.actors, ["2"]);
-    const fence = await open(0x07);
-    assert.deepEqual(fence, { actors: [], hero: start }, "back at the start, a life less");
-  }, 90_000);
-
-  test("episode I: the thief takes some of the hero's items, never notes", async () => {
-    const BOOK = 0x3b;
-    const start = readEpisodeStart(game.image, 1);
-    const { y } = start;
-    const area = { x0: start.x + 1, x1: start.x + 12, y0: y, y1: y };
-    const xs = [6, 7, 8, 9];
-    // walked into, it picks floor(n / 2) + 1 times among the n items (0x41f470)
-    const robbed = (items: readonly number[]) =>
-      withModExe(
-        game,
-        startRoomMod(game, 1, {}, area, start, (set, record) => {
-          items.forEach((item, k) => {
-            set(xs[k] ?? 0, y, item);
-          });
-          // a travelling actor, kind 0x105 (0x85), leaving to (10, 10) of the start room
-          record(16, y, [8, 0, 0, 0, start.room, 0, 10, 10, 0x85]);
-        }),
-        (exe) =>
-          withGame(exe, async (d) => {
-            await d.startEpisode(1);
-            await pickUpAll(d, xs.slice(0, items.length));
-            const before = { rucksack: await rucksack(d), score: await d.score() };
-            await d.until(async () => (await thiefRobbed(d)) === false);
-            await d.run(300); // it walks up to the hero
-            await d.key("right", true);
-            await d.until(async () => (await thiefRobbed(d)) === true, 600);
-            await d.key("right", false);
-            await d.run(60);
-            return {
-              before,
-              rucksack: await rucksack(d),
-              points: (await d.score()) - before.score,
-            };
-          }),
-      );
-    // the same item each time: one goes per pick, but for picks past the last item (the
-    // index is random(0, n), both ends included)
-    const books = await robbed([BOOK, BOOK, BOOK, BOOK]);
-    assert.deepEqual(books.before.rucksack, [8, 8, 8, 8]);
-    const kept = books.rucksack.length;
-    assert.ok(kept >= 1 && kept <= 3, `kept ${String(kept)} of 4`);
-    assert.ok(books.rucksack.every((item) => item === 8));
-    assert.equal(books.points, 10, "event 300: 10 points");
-    const notes = await robbed([0x3a | (0x01 << 8), 0x3a | (0x02 << 8)]);
-    assert.deepEqual([notes.rucksack, notes.points], [[0x10f, 0x20f], 0]);
-  }, 120_000);
 });

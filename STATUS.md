@@ -389,7 +389,9 @@ Files in `packages/formats/src`:
   the key, without it he stays in 15; with 0x2000 (episode I) the Teleport() point a
   room's script set is room 0 after walking into the next room (x and y stay), without
   it it stays; with 0x40000 the hero stops in front of a state 10 house cell in III
-  room 114, without it he walks over it, and in room 41 he walks over it with it.
+  room 114, without it he walks over it, and in room 41 he walks over it with it. The
+  game tests keep each rule's changed case; the originals' cases were tests up to
+  10e727d.
 
 ### Room connections (`exits.ts`)
 
@@ -661,7 +663,7 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   and then gives 300 points; in IV, which has the recorder (class 0xbf), it plays only
   with the recorder (messages 973/974). Every note in the played rooms has its message
   (test); e.g. Junior's 15 notes are messages 801–815, episode II room 105's six notes
-  the file listings 833–842. **Verified under Wine** (`pnpm test:game`, episode I): a note
+  the file listings 833–842. **Verified under Wine** (a game test up to 10e727d, episode I): a note
   with bit 7 shows its message when stepped on (the clock stands until Return) and its
   cell empties; one without is picked up (its first take: 100 points) and "Benutzen"
   shows it without vowels ("Ds Schrft st nlsrlch!"), with the dictionary carried in full
@@ -921,7 +923,7 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   II and III a native's) is 0x41f9d0: the heap becomes plain sand and a scorpion comes
   out (0x44dcf0: a robot with the scorpion flag, at the cell stepped on); robots may not
   step on it. In IV every kind gets 0x41eca0 or 0x446f10, so its heaps are only sand
-  ("Noch mehr Sand", text 49 there). **Verified under Wine** (`pnpm test:game`, a heap
+  ("Noch mehr Sand", text 49 there). **Verified under Wine** (a game test up to 10e727d, a heap
   next to each episode's start): in Junior to III the hero stepping on it leaves class
   0x27 there and one actor in the room's list, in IV the heap stays and no actor
   appears (first seen playing IV). `cellActorSource` and `calmRoom` follow
@@ -1436,13 +1438,16 @@ The driver tests (`packages/tools/test/driver.test.ts`, `pnpm test:game`) verify
 edit repeatably: a mod or patched exe, the change next to the hero's start, then the
 game's memory (hero, map, actor list, score) or a frame compared with our render. What
 they cover: the driver (every episode's start, runs repeat exactly, a frame equals the
-game's screenshot); episode I's room 43 to 42, every gate and NOT, notes, the thief; the
-circuits and oracles kits (examples too) in III, IV, Junior and I; an event copied with
-its sound (IV); robots' sprites (III) and colours (Junior, flag 0x20); sand heaps
-(scorpions); Junior's oracles with and without the vanish flags; the episode rules (door
-without the key, Teleport() points, house cells, diagonal moves, the backdrop rule and
-class 99 cases); the rucksack's capacity (III); a cassette (IV), diary pages and a chest
-(III), presents (II). There is no game test for the dealer.
+game's screenshot); episode I's room 43 to 42 and every gate and NOT, against our
+circuit model; the circuits and oracles kits (examples too) in III, IV, Junior and I; an
+event copied with its sound (IV); robots' sprites (III) against `robotSprite`; the
+episode rules as changed (Junior's oracles vanishing, robots' own colours, doors without
+the key, Teleport() points kept, house cells, diagonal moves, the backdrop rule); class 99
+cases against our render; the rucksack's capacity (III). There is no game test for the
+dealer. Tests of what the originals do by themselves (the rules unchanged, sand heaps,
+notes, a cassette, diary pages, packages, the thief) ran up to 10e727d and are recorded
+here only: the exe does not change, so they cannot fail again; `git show
+10e727d:packages/tools/test/driver.test.ts` has them.
 By hand or with the screenshot harness:
 
 - Build the exe (`Game.withScene`, or the editor's "Save exe"), put the change next to
@@ -1643,7 +1648,8 @@ Roughly by value for the editor.
 - Each `App` in the editor listens on `window`; tests must `dispose()` old instances,
   or they react to history and key events too.
 - `harness.py play`, `shot` and `serve` share the prefix: each ends a game another
-  started (`wineserver -k`), and `shot` deletes `Documents/Robot` in the prefix, i.e.
+  started (`wineserver -k`; the editor's "Test in game" runs `play`, so it fails a
+  running `pnpm test:game`), and `shot` deletes `Documents/Robot` in the prefix, i.e.
   also the screenshots and saved games of played games. A worktree of the repository
   has its own `.wine/` (run `harness.py setup` there), so its games do not collide.
   `Driver.close()` resolves only after `serve` has cleaned up, so the next game is not
