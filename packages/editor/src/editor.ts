@@ -440,8 +440,8 @@ export class Editor {
   private base: Game;
   /** The exe as loaded, which mods apply to. */
   readonly pristine: Game;
-  /** The loaded mod's name, author, description and the changes the editor keeps. */
-  private readonly mod: Omit<Mod, "base">;
+  /** The loaded mod's name, author and description (the changes are the editor's own). */
+  private readonly mod: Omit<Mod, "base" | "changes">;
   /** Tile types, event entries, code and text copies: what the base adds to the pristine exe. */
   private changes: BaseChanges = { copies: [], events: [], code: [], copyTexts: [] };
 
@@ -449,13 +449,13 @@ export class Editor {
     this.pristine = game;
     if (!mod) {
       this.base = game;
-      this.mod = { name: "", author: "", description: "", changes: NO_CHANGES };
+      this.mod = { name: "", author: "", description: "" };
       return;
     }
     const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
     const { rucksack, flags, backdrop, moves } = mod.changes;
     if (mod.base !== this.pristineHash) throw new ModError("base: the mod is for another exe");
-    this.mod = { ...mod, changes: NO_CHANGES };
+    this.mod = { name: mod.name, author: mod.author, description: mod.description };
     this.modded = true;
     const copies = tileTypes.flatMap(({ episode, from, types }) =>
       types.map(([to, of]) => ({ episode, from, to, of })),
@@ -496,7 +496,7 @@ export class Editor {
   /** The base with these changes (the pristine exe if there is nothing to apply). */
   private baseWith({ copies, events, code, copyTexts }: BaseChanges): Game {
     const tileTypes = tileTypeChanges(copies);
-    const changes = { ...this.mod.changes, tileTypes, events, code, copyTexts };
+    const changes = { ...NO_CHANGES, tileTypes, events, code, copyTexts };
     if ([tileTypes, events, code, copyTexts].every((list) => list.length === 0))
       return this.pristine;
     return new Game(
@@ -1957,7 +1957,6 @@ export class Editor {
       ...this.mod,
       base: this.pristineHash,
       changes: {
-        ...this.mod.changes,
         tileTypes: tileTypeChanges(this.changes.copies),
         events: this.changes.events,
         code: this.changes.code,
