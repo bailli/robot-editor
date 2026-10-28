@@ -286,12 +286,22 @@ static HRESULT __attribute__((thiscall)) present(BYTE *display, RECT *rect) {
 
 /* ---- patching the exe in memory ---- */
 
+/* Writes page by page, each page's protection restored to its own. */
 static BOOL write_code(void *at, const void *bytes, size_t size) {
-  DWORD old;
-  if (!VirtualProtect(at, size, PAGE_EXECUTE_READWRITE, &old)) return FALSE;
-  memcpy(at, bytes, size);
-  VirtualProtect(at, size, old, &old);
-  FlushInstructionCache(GetCurrentProcess(), at, size);
+  BYTE *to = at;
+  const BYTE *from = bytes;
+  while (size > 0) {
+    size_t part = 0x1000 - ((UINT_PTR)to & 0xfff);
+    if (part > size) part = size;
+    DWORD old;
+    if (!VirtualProtect(to, part, PAGE_EXECUTE_READWRITE, &old)) return FALSE;
+    memcpy(to, from, part);
+    VirtualProtect(to, part, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), to, part);
+    to += part;
+    from += part;
+    size -= part;
+  }
   return TRUE;
 }
 
@@ -410,7 +420,16 @@ static char token[64]; /* ROBOT_PROXY_TOKEN */
  */
 static void command(char *line, char *out, size_t size) {
   char word[16] = "", arg1[32] = "", arg2[4096] = "";
+  int at1 = 0, at2 = 0;
+  sscanf(line, " %*s %n%*s %n", &at1, &at2);
   sscanf(line, "%15s %31s %4095s", word, arg1, arg2);
+  /* longer words were cut by sscanf: refused rather than taken shortened */
+  if (strcspn(line + strspn(line, " \t"), " \t") >= sizeof word ||
+      (at1 && strcspn(line + at1, " \t") >= sizeof arg1) ||
+      (at2 && strcspn(line + at2, " \t") >= sizeof arg2)) {
+    snprintf(out, size, "error a word of the command is too long");
+    return;
+  }
   BOOL input = !strcmp(word, "key") || !strcmp(word, "mouse") || !strcmp(word, "button");
   char *rest;
   if (!strcmp(word, "hello")) {
@@ -446,7 +465,12 @@ static void command(char *line, char *out, size_t size) {
       for (int i = 0; i < 256; i++) n += snprintf(out + n, size - n, "%08lx", frame_colours[i]);
     }
   } else if (!strcmp(word, "stepms")) {
-    step_ms = strtoul(arg1, NULL, 10);
+    unsigned long ms = strtoul(arg1, &rest, 10);
+    if (ms == 0 || *rest || ms > 1000) {
+      snprintf(out, size, "error stepms needs 1 to 1000 milliseconds");
+      return;
+    }
+    step_ms = ms;
     snprintf(out, size, "ok");
   } else if (!window) {
     snprintf(out, size, "error no game window yet");
@@ -471,11 +495,14 @@ static void command(char *line, char *out, size_t size) {
     snprintf(out, size, "ok");
   } else if (!strcmp(word, "peek")) {
     BYTE *at = (BYTE *)strtoul(arg1, NULL, 16);
-    size_t len = strtoul(arg2, NULL, 10);
-    if (len > (size - 4) / 2) len = (size - 4) / 2;
+    size_t len = strtoul(arg2, &rest, 10);
+    if (len == 0 || *rest || len > (size - 4) / 2) {
+      snprintf(out, size, "error peek reads 1 to %u bytes", (unsigned)((size - 4) / 2));
+      return;
+    }
     BYTE *buffer = malloc(len);
     SIZE_T read = 0;
-    if (!ReadProcessMemory(GetCurrentProcess(), at, buffer, len, &read) || read != len) {
+    if (!buffer || !ReadProcessMemory(GetCurrentProcess(), at, buffer, len, &read) || read != len) {
       snprintf(out, size, "error cannot read %p", (void *)at);
     } else {
       hex_bytes(out + snprintf(out, size, "ok "), size - 3, buffer, len);
@@ -537,12 +564,16 @@ static DWORD WINAPI serve(void *param) {
   static char line[8192], answer[1 << 20];
   SOCKET client = INVALID_SOCKET;
   size_t used = 0;
+  BOOL overlong = FALSE; /* dropping a line too long for `line`, up to its end */
   for (;;) {
     fd_set readable;
     FD_ZERO(&readable);
     FD_SET(server, &readable);
     if (client != INVALID_SOCKET) FD_SET(client, &readable);
-    if (select(0, &readable, NULL, NULL, NULL) <= 0) continue;
+    if (select(0, &readable, NULL, NULL, NULL) <= 0) {
+      Sleep(10); /* an error: not spinning on it */
+      continue;
+    }
     if (FD_ISSET(server, &readable)) {
       SOCKET other = accept(server, NULL, NULL);
       say("serve: accept %d", (int)other);
@@ -553,6 +584,7 @@ static DWORD WINAPI serve(void *param) {
       if (client == INVALID_SOCKET) {
         client = other;
         used = 0;
+        overlong = FALSE;
       } else if (other != INVALID_SOCKET) {
         send_all(other, "error busy: another driver is connected\n");
         closesocket(other);
@@ -568,16 +600,24 @@ static DWORD WINAPI serve(void *param) {
     used += got;
     line[used] = 0;
     char *end;
-    while ((end = strchr(line, '\n'))) {
+    while ((end = memchr(line, '\n', used))) {
       *end = 0;
       if (end > line && end[-1] == '\r') end[-1] = 0;
-      command(line, answer, sizeof answer - 1);
-      strcat(answer, "\n");
-      send_all(client, answer);
+      if (overlong) {
+        send_all(client, "error the command line is too long\n");
+        overlong = FALSE;
+      } else {
+        command(line, answer, sizeof answer - 1);
+        strcat(answer, "\n");
+        send_all(client, answer);
+      }
       used -= end + 1 - line;
       memmove(line, end + 1, used + 1);
     }
-    if (used == sizeof line - 1) used = 0; /* an overlong line: dropped */
+    if (used == sizeof line - 1) {
+      used = 0; /* no line end in the whole buffer: the rest of this line goes too */
+      overlong = TRUE;
+    }
   }
 }
 
