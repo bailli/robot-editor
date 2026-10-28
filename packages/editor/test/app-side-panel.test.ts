@@ -426,3 +426,44 @@ test("the copy form's target: the same number where free, else the first type no
   await expect.element(to).toHaveValue(String(0x50));
   app.undo();
 });
+
+test("the Episode tab copies events of other episodes to spare entries, undoably", async () => {
+  const start = app.editor?.start(4).room ?? 0;
+  app.showEpisode(4, start);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const events = page.getByRole("region", { name: "Events" });
+  await expect.element(events.getByText(/has no events of other episodes/)).toBeVisible();
+  await userEvent.selectOptions(events.getByLabelText("From episode"), "II");
+  // II's entry 135: an oracle's event 263, with its text
+  await userEvent.selectOptions(events.getByLabelText("Event"), "135");
+  await expect.element(events.getByLabelText("To entry")).toHaveValue("197");
+  await events.getByRole("button", { name: "Copy" }).click();
+  expect(app.editor?.eventEntries(4)).toEqual([
+    { episode: 4, entry: 197, id: 263, points: 3500, text: { from: 2, of: 135 } },
+  ]);
+  await expect.element(events.getByText("197 ← II 135: event 263, 3500 points")).toBeVisible();
+  expect(status()).toMatch(/Entry 197 is now entry 135 of/);
+  // the copied event is no longer offered; the next copy goes to the next spare entry
+  const offered = [...(events.getByLabelText("Event").element() as HTMLSelectElement).options].map(
+    (o) => o.value,
+  );
+  expect(offered).not.toContain("135");
+  await expect.element(events.getByLabelText("To entry")).toHaveValue("198");
+  const saved = parseMod(app.saveMod() ?? "");
+  expect(saved.changes.events).toEqual([{ episode: 4, entry: 197, id: 263, points: 3500 }]);
+  expect(saved.changes.copyTexts).toEqual([
+    { resource: 1410, from: 1210, entries: [[1997, 1935]] },
+  ]);
+  // removed with ×, back with undo, gone with another
+  await events.getByRole("button", { name: "×" }).click();
+  expect(app.editor?.eventEntries(4)).toEqual([]);
+  app.undo();
+  expect(app.editor?.eventEntries(4)).toHaveLength(1);
+  app.undo();
+  expect(app.editor?.eventEntries(4)).toEqual([]);
+  expect(app.editor?.game).toBe(app.editor?.pristine);
+  // II has no entry the game never uses
+  app.showEpisode(2, 43);
+  await expect.element(events.getByRole("button", { name: "Copy" })).toBeDisabled();
+  await expect.element(events.getByText("0 spare")).toBeVisible();
+});

@@ -1,15 +1,20 @@
 import {
   BACKDROP_CLASS,
   type BackdropRule,
+  type CopyTextsChange,
   DIRECTIONS,
   DOOR_IN_CLASS,
   DOOR_OUT_CLASS,
   type Dealer,
   type Direction,
+  EPISODES,
+  EVENT_TEXT,
   EXIT_CELL,
   type EpisodeClasses,
   type EpisodeStart,
+  type EventChange,
   type ExitMode,
+  FIRST_EVENT_ENTRY,
   GRID_STEP,
   Game,
   LOGIC_CELL,
@@ -39,6 +44,8 @@ import {
   checkMod,
   dealerCapacity,
   encodeCp437,
+  eventTableLength,
+  eventTextsId,
   exitMode,
   freeTileTypes,
   nameRoom,
@@ -49,6 +56,7 @@ import {
   readDiagonalMoves,
   readEpisodeFlags,
   readEpisodeStart,
+  readEventTable,
   readRucksack,
   recordCell,
   recordCellOffsets,
@@ -62,6 +70,7 @@ import {
   roomTextLength,
   sameDealer,
   sha256,
+  spareEventEntries,
   textChanges,
   withBackdropRule,
   withDealer,
@@ -136,10 +145,10 @@ export interface Edit {
   backdrop?: { before: BackdropRule; after: BackdropRule };
   /** Whether the hero walks diagonally, before and after. */
   diagonal?: { before: boolean; after: boolean };
-  /** The tile types copied from other episodes, and the edited texts, before and after. */
-  tileTypes?: {
-    before: readonly TileTypeCopy[];
-    after: readonly TileTypeCopy[];
+  /** What the base adds to the exe as loaded, and the edited texts, before and after. */
+  base?: {
+    before: BaseChanges;
+    after: BaseChanges;
     texts: { before: ReadonlyMap<number, string>; after: ReadonlyMap<number, string> };
   };
   /** Steps done and undone together, in this order (the edit's own fields: the first's). */
@@ -152,6 +161,28 @@ export interface TileTypeCopy {
   /** The target type, free in the episode. */
   to: number;
   /** The episode and type it comes from. */
+  from: number;
+  of: number;
+}
+
+/**
+ * What the base adds to the exe as loaded (Editor): tile types copied from other
+ * episodes, event table entries (mod kind events) and text entries copied (copyTexts).
+ */
+export interface BaseChanges {
+  copies: readonly TileTypeCopy[];
+  events: readonly EventChange[];
+  copyTexts: readonly CopyTextsChange[];
+}
+
+/** An event table entry the mod sets (kind events), and where its text comes from. */
+export interface EventEntry extends EventChange {
+  /** The entry whose text 1800 + n it copies (kind copyTexts), if one. */
+  text?: { from: number; of: number };
+}
+
+/** An entry of another episode's event table (from 128 on) to copy into an episode's. */
+export interface EventSource {
   from: number;
   of: number;
 }
@@ -289,8 +320,8 @@ const inRoom = (index: number) => Number.isInteger(index) && index >= 0 && index
  * are added, changed and removed with the record operations, each one undo step.
  *
  * With a mod (mod.ts), the editor works on its base: the pristine exe with the changes
- * it does not edit (events, code, text copies) and the tile types copied from other
- * episodes applied; copying tile types makes a new base. The mod's rooms, texts,
+ * it does not edit (code) and the tile types, event entries and text copies applied;
+ * copying tile types or events makes a new base. The mod's rooms, texts,
  * dealers, starts, rucksacks and flags are where editing starts; saveMod gives them
  * back with the edits, as the differences to the base.
  */
@@ -319,8 +350,8 @@ export class Editor {
   readonly pristine: Game;
   /** The loaded mod's name, author, description and the changes the editor keeps. */
   private readonly mod: Omit<Mod, "base">;
-  /** The tile types copied from other episodes (part of the base). */
-  private copies: readonly TileTypeCopy[] = [];
+  /** Tile types, event entries and text copies: what the base adds to the pristine exe. */
+  private changes: BaseChanges = { copies: [], events: [], copyTexts: [] };
 
   constructor(game: Game, mod?: Mod) {
     this.pristine = game;
@@ -332,12 +363,13 @@ export class Editor {
     const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
     const { rucksack, flags, backdrop, moves } = mod.changes;
     if (mod.base !== this.pristineHash) throw new ModError("base: the mod is for another exe");
-    const kept: ModChanges = { ...NO_CHANGES, events, code, copyTexts };
+    const kept: ModChanges = { ...NO_CHANGES, code };
     this.mod = { ...mod, changes: kept };
-    this.copies = tileTypes.flatMap(({ episode, from, types }) =>
+    const copies = tileTypes.flatMap(({ episode, from, types }) =>
       types.map(([to, of]) => ({ episode, from, to, of })),
     );
-    this.base = this.baseWith(this.copies);
+    this.changes = { copies, events, copyTexts };
+    this.base = this.baseWith(this.changes);
     for (const episode of new Set(rooms.map((c) => c.episode))) {
       const set = rooms.filter((c) => c.episode === episode);
       this.edited.set(episode, withRoomChanges(this.game.episode(episode).rooms, set));
@@ -369,10 +401,11 @@ export class Editor {
     return this.base;
   }
 
-  /** The base with these tile types copied (the pristine exe if there is nothing to apply). */
-  private baseWith(copies: readonly TileTypeCopy[]): Game {
-    const changes = { ...this.mod.changes, tileTypes: tileTypeChanges(copies) };
-    const { tileTypes, events, code, copyTexts } = changes;
+  /** The base with these changes (the pristine exe if there is nothing to apply). */
+  private baseWith({ copies, events, copyTexts }: BaseChanges): Game {
+    const tileTypes = tileTypeChanges(copies);
+    const changes = { ...this.mod.changes, tileTypes, events, copyTexts };
+    const { code } = changes;
     if ([tileTypes, events, code, copyTexts].every((list) => list.length === 0))
       return this.pristine;
     return new Game(
@@ -389,7 +422,7 @@ export class Editor {
 
   /** The episode's tile types copied from other episodes, by target type. */
   tileTypeCopies(episode: number): TileTypeCopy[] {
-    return this.copies.filter((c) => c.episode === episode).sort((a, b) => a.to - b.to);
+    return this.changes.copies.filter((c) => c.episode === episode).sort((a, b) => a.to - b.to);
   }
 
   /**
@@ -438,7 +471,7 @@ export class Editor {
     if (from === episode) return "a copy comes from another episode";
     if (!this.freeTileTypes(episode).includes(to))
       return `type 0x${to.toString(16)} is not free in the episode (it has a class, or rooms use it)`;
-    if (this.copies.some((c) => c.episode === from && c.to === of))
+    if (this.changes.copies.some((c) => c.episode === from && c.to === of))
       return `type 0x${of.toString(16)} of episode ${from} is a copy itself`;
     const source = this.pristine.episode(from).classes.classes.get(of);
     if (FIXED_TYPES.includes(of) || !source?.id)
@@ -461,8 +494,8 @@ export class Editor {
     source: { from: number; of: number } | undefined,
   ): Edit | undefined {
     this.endStroke();
-    const others = this.copies.filter((c) => c.episode !== episode || c.to !== to);
-    const old = this.copies.find((c) => c.episode === episode && c.to === to);
+    const others = this.changes.copies.filter((c) => c.episode !== episode || c.to !== to);
+    const old = this.changes.copies.find((c) => c.episode === episode && c.to === to);
     if (source === undefined) {
       if (!old) return undefined;
       const rooms = this.rooms(episode)
@@ -476,37 +509,167 @@ export class Editor {
       if (problem) throw new RangeError(problem);
     }
     const copies = source === undefined ? others : [...others, { episode, to, ...source }];
-    const base = this.baseWith(copies);
+    return this.rebase(episode, room, { ...this.changes, copies }, (base) => {
+      for (const [e, dealer] of this.dealers) {
+        if (e !== episode) continue;
+        try {
+          withDealer(base.image, e, dealer, base.episode(e).classes);
+        } catch (error) {
+          if (error instanceof RangeError)
+            throw new RangeError(`the dealer: ${error.message}`, { cause: error });
+          throw error;
+        }
+      }
+    });
+  }
+
+  /**
+   * One undo step (shown in room `room`) that makes a new base with these changes: text
+   * entries edited here stay as they are. `check` may refuse the new base by throwing.
+   */
+  private rebase(
+    episode: number,
+    room: number,
+    changes: BaseChanges,
+    check?: (base: Game) => void,
+  ): Edit {
+    const base = this.baseWith(changes);
+    check?.(base);
     const texts = new Map(
       [...this.texts].map(([id, text]) => {
-        const changes = textChanges(id, this.base.textSource(id) ?? "", text);
-        return [id, withTextChanges(base.textSource(id) ?? "", changes)];
+        const edits = textChanges(id, this.base.textSource(id) ?? "", text);
+        return [id, withTextChanges(base.textSource(id) ?? "", edits)];
       }),
     );
-    for (const [e, dealer] of this.dealers) {
-      if (e !== episode) continue;
-      try {
-        withDealer(base.image, e, dealer, base.episode(e).classes);
-      } catch (error) {
-        if (error instanceof RangeError)
-          throw new RangeError(`the dealer: ${error.message}`, { cause: error });
-        throw error;
-      }
-    }
     const step: Edit = {
       episode,
       room,
       layer: "base",
       changes: [],
-      tileTypes: {
-        before: this.copies,
-        after: copies,
+      base: {
+        before: this.changes,
+        after: changes,
         texts: { before: new Map(this.texts), after: texts },
       },
     };
     this.apply(step, after);
     this.push(step);
     return step;
+  }
+
+  /**
+   * The episode's event table entries the mod sets, by entry, with the entry whose text
+   * each one copies (an episode's texts 1800 + n, eventTextsId).
+   */
+  eventEntries(episode: number): EventEntry[] {
+    const resource = eventTextsId(episode);
+    return this.changes.events
+      .filter((c) => c.episode === episode)
+      .map((c) => {
+        const copy = this.textCopy(resource, EVENT_TEXT + c.entry);
+        const from = copy && EPISODES.find((e) => eventTextsId(e) === copy.from);
+        return from === undefined || !copy
+          ? { ...c }
+          : { ...c, text: { from, of: copy.of - EVENT_TEXT } };
+      })
+      .sort((a, b) => a.entry - b.entry);
+  }
+
+  /** The entry of another resource that entry `to` of `resource` copies, if one. */
+  private textCopy(resource: number, to: number): { from: number; of: number } | undefined {
+    for (const c of this.changes.copyTexts) {
+      const pair = c.resource === resource ? c.entries.find(([t]) => t === to) : undefined;
+      if (pair) return { from: c.from, of: pair[1] };
+    }
+    return undefined;
+  }
+
+  /** The entries an event can be copied to: those the game never uses (spareEventEntries). */
+  eventTargets(episode: number): readonly number[] {
+    return spareEventEntries(episode);
+  }
+
+  /**
+   * The events of episode `from` (as loaded, from entry 128 on, not its spare entries)
+   * that can be copied into `episode`: those whose id its table lacks.
+   */
+  sourceEvents(from: number, episode: number): number[] {
+    const held = new Set(readEventTable(this.game.image, episode).map((e) => e.id));
+    const spare = spareEventEntries(from);
+    return readEventTable(this.pristine.image, from)
+      .map((e, n) => ({ ...e, n }))
+      .filter((e) => e.n >= FIRST_EVENT_ENTRY && e.id !== 0 && !spare.includes(e.n))
+      .filter((e) => !held.has(e.id))
+      .map((e) => e.n);
+  }
+
+  /** Why entry `entry` of the episode cannot be a copy of `source`, undefined if it can. */
+  eventProblem(episode: number, entry: number, source: EventSource): string | undefined {
+    const { from, of } = source;
+    if (from === episode) return "a copy comes from another episode";
+    if (!spareEventEntries(episode).includes(entry))
+      return `entry ${entry} is not one the game never uses`;
+    const event =
+      of >= FIRST_EVENT_ENTRY &&
+      of < eventTableLength(from) &&
+      !spareEventEntries(from).includes(of)
+        ? readEventTable(this.pristine.image, from)[of]
+        : undefined;
+    if (!event?.id) return `episode ${from} has no event at entry ${of}`;
+    const held = readEventTable(this.game.image, episode).findIndex(
+      (e, n) => n !== entry && e.id === event.id,
+    );
+    if (held >= 0) return `the episode has event ${event.id} already (entry ${held})`;
+    return undefined;
+  }
+
+  /**
+   * Makes entry `entry` of the episode's event table entry `source.of` of episode
+   * `source.from` (its id and points, mod kind events, and its text, copyTexts), or with
+   * `source` undefined takes the mod's change of the entry back, and its text copy; one
+   * undo step that makes a new base (rebase). Throws a RangeError where the copy cannot
+   * be made (eventProblem).
+   */
+  copyEvent(
+    episode: number,
+    room: number,
+    entry: number,
+    source: EventSource | undefined,
+  ): Edit | undefined {
+    this.endStroke();
+    const old = this.eventEntries(episode).find((e) => e.entry === entry);
+    const others = this.changes.events.filter((c) => c.episode !== episode || c.entry !== entry);
+    const resource = eventTextsId(episode);
+    const text = EVENT_TEXT + entry;
+    // the entry's text copy goes, whichever resource it came from
+    const copyTexts = this.changes.copyTexts
+      .map((c) =>
+        c.resource === resource ? { ...c, entries: c.entries.filter(([to]) => to !== text) } : c,
+      )
+      .filter((c) => c.entries.length > 0);
+    if (source === undefined) {
+      if (!old) return undefined;
+      return this.rebase(episode, room, { ...this.changes, events: others, copyTexts });
+    }
+    const problem = this.eventProblem(episode, entry, source);
+    if (problem) throw new RangeError(problem);
+    const { id, points } = readEventTable(this.pristine.image, source.from)[source.of];
+    const from = eventTextsId(source.from);
+    const of = EVENT_TEXT + source.of;
+    const hasText = this.pristine.texts(from)?.entries.has(of) === true;
+    const sameText = hasText
+      ? old?.text?.from === source.from && old.text.of === source.of
+      : old?.text === undefined;
+    if (old?.id === id && old.points === points && sameText) return undefined;
+    const events = [...others, { episode, entry, id, points }];
+    if (hasText) {
+      const pair: [number, number] = [text, of];
+      const group = copyTexts.find((c) => c.resource === resource && c.from === from);
+      if (group)
+        copyTexts[copyTexts.indexOf(group)] = { ...group, entries: [...group.entries, pair] };
+      else copyTexts.push({ resource, from, entries: [pair] });
+    }
+    return this.rebase(episode, room, { ...this.changes, events, copyTexts });
   }
 
   rooms(episode: number): readonly Room[] {
@@ -1446,7 +1609,7 @@ export class Editor {
       textChanges(id, this.game.textSource(id) ?? "", source),
     );
     const written = new Set(texts.map((t) => `${t.resource} ${t.entry}`));
-    const copyTexts = this.mod.changes.copyTexts
+    const copyTexts = this.changes.copyTexts
       .map((c) => ({
         ...c,
         entries: c.entries.filter(([to]) => !written.has(`${c.resource} ${to}`)),
@@ -1475,7 +1638,8 @@ export class Editor {
       base: this.pristineHash,
       changes: {
         ...this.mod.changes,
-        tileTypes: tileTypeChanges(this.copies),
+        tileTypes: tileTypeChanges(this.changes.copies),
+        events: this.changes.events,
         dealer,
         copyTexts,
         texts,
@@ -1571,12 +1735,12 @@ export class Editor {
       this.starts.set(edit.episode, value === before ? edit.start.before : edit.start.after);
       return;
     }
-    if (edit.tileTypes) {
-      const { tileTypes } = edit;
-      this.copies = value === before ? tileTypes.before : tileTypes.after;
-      this.base = this.baseWith(this.copies);
+    if (edit.base) {
+      const { base } = edit;
+      this.changes = value === before ? base.before : base.after;
+      this.base = this.baseWith(this.changes);
       this.texts.clear();
-      for (const [id, text] of value === before ? tileTypes.texts.before : tileTypes.texts.after)
+      for (const [id, text] of value === before ? base.texts.before : base.texts.after)
         this.texts.set(id, text);
       return;
     }

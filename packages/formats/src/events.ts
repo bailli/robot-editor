@@ -45,6 +45,23 @@ export function eventTableLength(episode: number): number {
 export const FIRST_EVENT_ID = 256;
 export const EVENT_IDS_END = 0x188;
 
+/** Entries from 128 on: game events, the rest of the table belongs to tile types. */
+export const FIRST_EVENT_ENTRY = 128;
+
+/**
+ * Per episode (0 = Junior): the entries the game never uses, which a new event can take
+ * over. The tables are full: Junior and I have entry 190 (id 0), IV entries 197-200
+ * (ids 388-391: no points, text or sound; IV's scripts award 180-196, no code raises
+ * those ids); II and III have none.
+ */
+const SPARE_ENTRIES: readonly (readonly number[])[] = [[190], [190], [], [], [197, 198, 199, 200]];
+
+/** The episode's entries the game never uses (see SPARE_ENTRIES). */
+export function spareEventEntries(episode: number): readonly number[] {
+  eventTable(episode);
+  return SPARE_ENTRIES[episode] ?? [];
+}
+
 export function readEventTable(image: PeImage, episode: number): GameEvent[] {
   const [address, count] = eventTable(episode);
   const bytes = readVa(image, address, count * ENTRY_SIZE);

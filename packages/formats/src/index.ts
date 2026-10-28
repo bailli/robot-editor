@@ -265,9 +265,11 @@ export {
 export {
   EVENT_IDS_END,
   EVENT_TEXT,
+  FIRST_EVENT_ENTRY,
   FIRST_EVENT_ID,
   eventTableLength,
   readEventTable,
+  spareEventEntries,
   withEventEntries,
 } from "./events.ts";
 export type { GameEvent } from "./events.ts";

@@ -1105,6 +1105,17 @@ Supported:
   an edited dealer then lacks. The tiles, names and drawings follow at once. **Tried in
   the game** (by hand): Junior's book copied to IV and placed next to the start, taken:
   its first-take box came and its points were added
+- events from other episodes (tab Episode, `events-view.ts`; mod kinds `events` and
+  `copyTexts`): the entries the mod sets (entry ← episode and entry whose text it
+  copies: event id, points), each removable (×: the entry as the exe has it, its text
+  copy gone too); a form: the episode, one of its events (entries from 128 on, not its
+  spare ones, as loaded) whose id this episode's table lacks, the spare entry it goes to
+  (`spareEventEntries`: Junior and I 190, IV 197–200, II and III none; the first no
+  copy has); "Copy" sets the entry's id and points and copies text 1800 + n
+  (`Editor.copyEvent`). Each one undo step, which makes a new base like a tile type
+  copy; refused: an id the table has already, an entry that is not spare. Not copied:
+  the sound (the target's sound table line stays). II's oracle events 263 and 266 into
+  IV's 197 and 198 save as the mod the oracle game test uses (verified under Wine)
 - the episode's settings (tab Episode, `episode-view.ts`): the rucksack's capacity
   (1–250); the rules, episode flags as checkboxes: oracles vanish after north, after
   east (0x4000, 0x8000), doors into buildings open without the key (0x80000), robots
@@ -1208,8 +1219,9 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
-- **Next:** the proxy as an in-memory loader; editing the mod's other kinds (events,
-  code, text copies) in the editor.
+- **Next:** the proxy as an in-memory loader; editing the mod's other kinds (code,
+  text copies other than an event's) in the editor. Events copied from other episodes
+  have their UI (Episode tab).
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
@@ -1293,11 +1305,12 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   `applyPatch` and `applyMod`; `sha256.ts` (synchronous, for the browser too);
   `serializeRoom`/`parseRoom` in `scene.ts`. On the command line
   `robot mod apply MOD OUT.exe`, later `robot mod compile MOD OUT.patch` for the proxy.
-- **The editor** works on two images: the **base** (pristine + kinds 1–2: the tile types,
-  which it edits by making a new base, and events and code, which it does not edit) and
+- **The editor** works on two images: the **base** (pristine + kinds 1–2 and the text
+  copies: the tile types, events and text copies, which it edits by making a new base
+  (`BaseChanges`; events copied with their texts), and code, which it does not edit) and
   the **edited** state on top (kinds 3–9: the dealers, rooms, texts, the start, the
   rucksack, the flags, the backdrop rule and diagonal moves). Opening takes an exe and, optionally, a
-  mod; "Save mod" writes the tile types as edited, events and code as loaded plus kinds
+  mod; "Save mod" writes the tile types, events and text copies as edited, code as loaded plus kinds
   3–9 as the difference between the edited state and the base (dealers, starts,
   rucksacks, flags, backdrop rules and moves that differ, rooms that
   differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
@@ -1314,7 +1327,8 @@ points }` → `withEventEntries`, after the tile types (it may override a copied
   versions.
 - **Decided 2026-10-27:** whole rooms (no cell diffs); no editor UI for `tileTypes`
   and code at first (the file and the command line); English texts later. The start,
-  then the tile types got their UI the same day (Episode tab).
+  then the tile types got their UI the same day (Episode tab), events copied from other
+  episodes on 2026-10-28.
   Open: the patch file's format for the proxy (only when the loader is built).
 
 ## Trying edits in the game

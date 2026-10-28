@@ -20,6 +20,7 @@ import {
   readDiagonalMoves,
   readEpisodeFlags,
   readEpisodeStart,
+  readEventTable,
   readRucksack,
   roomCompiledScript,
   roomScript,
@@ -767,6 +768,103 @@ describe("Editor and tile types from other episodes", () => {
     editor.endStroke();
     expect(() => editor.setTileType(0, 43, 0x50, undefined)).toThrow(/rooms 43 use/);
     expect(editor.freeTileTypes(0)).toContain(0x50);
+  });
+});
+
+describe("Editor and events from other episodes", () => {
+  /** Episode IV's room the tests show (any: it is where undo goes). */
+  const shown = readEpisodeStart(game.image, 4).room;
+
+  test("II's oracle events in IV's spare entries: a new base, saved as the driver test's mod", () => {
+    const editor = new Editor(game);
+    expect(editor.eventTargets(4)).toEqual([197, 198, 199, 200]);
+    // II's entries 134-143 are the oracles' events 262-271, which IV lacks; II's 128
+    // (event 256) IV has
+    const sources = editor.sourceEvents(2, 4);
+    expect(sources).toContain(135);
+    expect(sources).not.toContain(128);
+    editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
+    const edit = editor.copyEvent(4, shown, 198, { from: 2, of: 138 });
+    expect(edit?.room).toBe(shown);
+    expect(editor.copyEvent(4, shown, 198, { from: 2, of: 138 })).toBeUndefined();
+    expect(readEventTable(editor.game.image, 4).slice(197, 199)).toEqual([
+      { id: 263, points: 3500 },
+      { id: 266, points: 3500 },
+    ]);
+    expect(editor.game.texts(1410)?.entries.get(1997)).toEqual(game.texts(1210)?.entries.get(1935));
+    expect(editor.eventEntries(4)).toEqual([
+      { episode: 4, entry: 197, id: 263, points: 3500, text: { from: 2, of: 135 } },
+      { episode: 4, entry: 198, id: 266, points: 3500, text: { from: 2, of: 138 } },
+    ]);
+    expect(editor.sourceEvents(2, 4)).not.toContain(135);
+    const mod = editor.saveMod();
+    expect(mod.changes.events).toEqual([
+      { episode: 4, entry: 197, id: 263, points: 3500 },
+      { episode: 4, entry: 198, id: 266, points: 3500 },
+    ]);
+    expect(mod.changes.copyTexts).toEqual([
+      {
+        resource: 1410,
+        from: 1210,
+        entries: [
+          [1997, 1935],
+          [1998, 1938],
+        ],
+      },
+    ]);
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    const opened = new Editor(game, mod);
+    expect(opened.eventEntries(4)).toEqual(editor.eventEntries(4));
+    expect(modJson(opened.saveMod())).toBe(modJson(mod));
+    editor.undo();
+    editor.undo();
+    expect(editor.game).toBe(game);
+    expect(editor.eventEntries(4)).toEqual([]);
+    editor.redo();
+    expect(editor.eventEntries(4).map((e) => e.entry)).toEqual([197]);
+  });
+
+  test("a copy replaces the entry's copy, text and all; × takes it back", () => {
+    const editor = new Editor(game);
+    editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
+    // episode I's 262 has no text: the entry keeps none
+    editor.copyEvent(4, shown, 197, { from: 1, of: 134 });
+    expect(editor.eventEntries(4)).toEqual([{ episode: 4, entry: 197, id: 262, points: 3500 }]);
+    expect(editor.saveMod().changes.copyTexts).toEqual([]);
+    expect(editor.game.texts(1410)?.entries.has(1997)).toBe(false);
+    editor.copyEvent(4, shown, 197, undefined);
+    expect(editor.eventEntries(4)).toEqual([]);
+    expect(editor.copyEvent(4, shown, 197, undefined)).toBeUndefined();
+    expect(editor.game).toBe(game);
+  });
+
+  test("text entries edited before a copy stay", () => {
+    const editor = new Editor(game);
+    editor.setRoomName(4, shown, "DER ANFANG");
+    editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
+    expect(editor.roomName(4, shown)?.name).toBe("DER ANFANG");
+    const texts = new Game(editor.save()).texts(1410)?.entries;
+    expect(texts?.get(1997)).toEqual(game.texts(1210)?.entries.get(1935));
+    editor.undo();
+    expect(editor.roomName(4, shown)?.name).toBe("DER ANFANG");
+  });
+
+  test("refused: the same episode, no spare entry, no event there, an id the table has", () => {
+    const editor = new Editor(game);
+    expect(editor.eventTargets(2)).toEqual([]);
+    expect(() => editor.copyEvent(4, shown, 197, { from: 4, of: 135 })).toThrow(/another/);
+    expect(() => editor.copyEvent(2, 43, 190, { from: 1, of: 134 })).toThrow(/never uses/);
+    expect(() => editor.copyEvent(4, shown, 196, { from: 2, of: 134 })).toThrow(/never uses/);
+    // Junior's 190 is spare (id 0), entries below 128 are tile types
+    expect(() => editor.copyEvent(4, shown, 197, { from: 0, of: 190 })).toThrow(/no event/);
+    expect(() => editor.copyEvent(4, shown, 197, { from: 2, of: 21 })).toThrow(/no event/);
+    expect(() => editor.copyEvent(4, shown, 197, { from: 2, of: 128 })).toThrow(
+      /has event 256 already \(entry 128\)/,
+    );
+    editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
+    expect(() => editor.copyEvent(4, shown, 198, { from: 3, of: 155 })).toThrow(
+      /has event 263 already \(entry 197\)/,
+    );
   });
 });
 

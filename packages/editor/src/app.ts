@@ -92,6 +92,7 @@ import {
   wrapsRow,
 } from "./editor.ts";
 import { EpisodeView } from "./episode-view.ts";
+import { EventsView } from "./events-view.ts";
 import { type Connections, ExitsView, connections, fixedExit, leadsTo } from "./exits-view.ts";
 import { showHelp } from "./help-dialog.ts";
 import { MapView } from "./map-view.ts";
@@ -582,6 +583,23 @@ export class App {
       return preview;
     },
   });
+  readonly eventsView = new EventsView({
+    copy: (entry, source) => {
+      try {
+        this.need().copyEvent(this.episode, this.roomId, entry, source);
+      } catch (error) {
+        this.setStatus(`Cannot copy the event: ${message(error)}`, true);
+        this.refreshEpisodeTab();
+        return;
+      }
+      this.gameChanged();
+      this.setStatus(
+        source
+          ? `Entry ${entry} is now entry ${source.of} of ${EPISODE_NAMES[source.from] ?? ""}`
+          : `Entry ${entry} is as the exe has it again`,
+      );
+    },
+  });
   /** Per episode of the exe as loaded: its cells and names, for the types to copy. */
   private readonly sourceCaches = new Map<number, { cells: CellCache; names: TileNames }>();
   readonly dealerView = new DealerView({
@@ -634,6 +652,7 @@ export class App {
           {},
           this.episodeView.element,
           this.tileTypesView.element,
+          this.eventsView.element,
           this.dealerView.element,
         ),
       },
@@ -2279,6 +2298,22 @@ export class App {
           return { type, name: names.info(type).name ?? names.summary(type).slice(0, 40) };
         }),
     });
+    this.eventsView.show({
+      episode: this.episode,
+      names: EPISODE_NAMES,
+      entries: editor.eventEntries(this.episode),
+      targets: editor.eventTargets(this.episode),
+      sources: (from) => {
+        const { pristine } = editor;
+        const table = readEventTable(pristine.image, from);
+        const texts = pristine.texts(eventTextsId(from))?.entries;
+        return editor.sourceEvents(from, this.episode).map((entry) => {
+          const text = texts?.get(EVENT_TEXT + entry)?.[0];
+          const { id, points } = table[entry] ?? { id: 0, points: 0 };
+          return { entry, id, points, text: text ? displayText(text).replace(/\s+/g, " ") : "" };
+        });
+      },
+    });
     const dealer = editor.dealer(this.episode);
     const dealerEdited = editor.isDealerEdited(this.episode);
     const settingsEdited =
@@ -2351,7 +2386,7 @@ export class App {
   /** Shows the room of an undone or redone edit. */
   private revisit(edit: Edit | undefined): void {
     if (!edit) return;
-    if (edit.tileTypes) {
+    if (edit.base) {
       if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
       this.gameChanged();
     } else if (edit.added || edit.removed) {
