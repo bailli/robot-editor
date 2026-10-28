@@ -274,6 +274,17 @@ export function checkMod(mod: Mod): void {
       once(`type ${c.episode} ${to}`, `${where} (type ${to})`);
     }
   });
+  // copies read the exe as the earlier ones left it: a source that is a copy itself would
+  // carry a third episode's type (the editor refuses it likewise)
+  tileTypes.forEach((c, i) => {
+    for (const [, of] of c.types) {
+      need(
+        !keys.has(`type ${c.from} ${of}`),
+        `tileTypes[${i}] (type ${of})`,
+        `copies type ${of} of episode ${c.from}, which is a copy itself`,
+      );
+    }
+  });
   events.forEach((c, i) => {
     const where = `events[${i}] (episode ${c.episode}, entry ${c.entry})`;
     episodeOk(c.episode, where);

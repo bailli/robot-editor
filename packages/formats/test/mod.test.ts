@@ -25,6 +25,7 @@ import {
   NO_CHANGES,
   applyMod,
   applyPatch,
+  checkMod,
   compileMod,
   emptyMod,
   modJson,
@@ -270,6 +271,24 @@ test("the file: saving again gives the same file, in key order", () => {
   // texts keep their brackets and spaces
   const text = { resource: 1310, entry: 1, variants: ["[\n 1,\n 2\n] [ 3,  4 ]"] };
   expect(parseMod(modJson(mod({ texts: [text] }))).changes.texts).toEqual([text]);
+});
+
+test("refused: a tile type copy of a type that is a copy itself", () => {
+  const chain = [
+    { episode: 1, from: 0, types: [[0x60, 0x25]] as const },
+    { episode: 2, from: 1, types: [[0x61, 0x60]] as const },
+  ];
+  expect(() => compileMod(game.image, mod({ tileTypes: chain }))).toThrow(
+    /tileTypes\[1\].*which is a copy itself/,
+  );
+  // another type of the source, or another source episode, is no chain
+  const fine = [
+    chain[0] ?? { episode: 1, from: 0, types: [] },
+    { episode: 2, from: 1, types: [[0x61, 0x25]] as const },
+  ];
+  expect(() => {
+    checkMod(mod({ tileTypes: fine }));
+  }).not.toThrow();
 });
 
 test("refused: another exe, keys changed twice, bad values, broken files", () => {

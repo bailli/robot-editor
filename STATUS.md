@@ -1343,7 +1343,8 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
   they were made in (new text entries, sound lines and shapes are appended). Later
   kinds as needed: shapes of the mod's own.
   1. `tileTypes` (key: episode, target type): `{ episode, from, types: [[to, of], …] }`
-     → `Game.withTileTypes`.
+     → `Game.withTileTypes`. `checkMod` refuses a copy of a copy (a source type that is a target of
+     the mod), as the editor does: copies apply in episode order and would chain.
   2. `events` (key: episode, entry): `{ episode, entry, id, points, sound? }` →
      `withEventEntries`, after the tile types (it may override a copied first take);
      `sound` (a MUSIC piece of the episode, `!` before it for bit 7) sets line `entry` of
