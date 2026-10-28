@@ -108,3 +108,30 @@ test("shapePixels XORs plane colours onto the background", () => {
   assert.deepEqual([...shapePixels(shape, 0, 15, [0x36, 0x10, 0])], [9, 9, 9, TRANSPARENT]);
   assert.throws(() => shapePixels(shape, 1), RangeError);
 });
+
+test("a written SHAPES has no fixup cut in two by a block boundary", () => {
+  // 60 frames of 4 planes: the pointer at 18 * 56 + 2 + 4 * 3 = 1022 would straddle the
+  // first 1024-byte block of the frames
+  const plane = Uint8Array.of(0xff);
+  const shape: Shape = {
+    width: 8,
+    height: 1,
+    bytesPerRow: 1,
+    colours: [1, 2, 3],
+    unknown: 0,
+    frames: Array.from({ length: 60 }, () => ({ word: 0, planes: [plane, plane, plane, plane] })),
+  };
+  const written = withShapes(shapes("1002"), "_Rob_object", new Map([[0x10, shape]]));
+  const module = parseOmf(written);
+  assert.deepEqual(objects(written)[0x10], shape);
+  for (const f of module.fixups) {
+    const size = f.location === 3 ? 4 : 2;
+    assert.ok(
+      module.blocks.some(
+        (b) =>
+          b.segment === f.segment && f.offset >= b.offset && f.offset + size <= b.offset + b.length,
+      ),
+      `fixup at ${f.segment}:${f.offset} lies in no single block`,
+    );
+  }
+});

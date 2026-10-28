@@ -53,6 +53,8 @@ export const TRANSPARENT = 0xff;
 const DESCRIPTOR_SIZE = 12;
 const FRAME_SIZE = 18;
 const PLANES = 4;
+/** A far pointer's fixup covers 4 bytes. */
+const FAR_POINTER = 4;
 const DRAWN_PLANES = 3;
 
 interface Pointer {
@@ -149,8 +151,17 @@ function concat(parts: readonly Uint8Array[]): Uint8Array {
   return out;
 }
 
-/** Appends `bytes` to segment `index` (even offset), as LEDATA blocks; returns the offset. */
-function append(module: OmfModule, index: number, bytes: Uint8Array): number {
+/**
+ * Appends `bytes` to segment `index` (even offset), as LEDATA blocks; returns the offset.
+ * `fixups` are the offsets within `bytes` of far pointers (4 bytes), which must lie in one
+ * block: a block ends before a pointer it would cut in two.
+ */
+function append(
+  module: OmfModule,
+  index: number,
+  bytes: Uint8Array,
+  fixups: readonly number[] = [],
+): number {
   const segment = module.segments[index];
   if (!segment) throw new OmfFormatError(`no segment ${index}`);
   const at = segment.data.length + (segment.data.length & 1);
@@ -160,12 +171,12 @@ function append(module: OmfModule, index: number, bytes: Uint8Array): number {
   data.set(segment.data);
   data.set(bytes, at);
   segment.data = data;
-  for (let o = 0; o < bytes.length; o += MAX_LEDATA) {
-    module.blocks.push({
-      segment: index,
-      offset: at + o,
-      length: Math.min(MAX_LEDATA, bytes.length - o),
-    });
+  for (let o = 0; o < bytes.length;) {
+    let end = Math.min(o + MAX_LEDATA, bytes.length);
+    const cut = fixups.find((f) => f < end && f + FAR_POINTER > end);
+    if (cut !== undefined && cut > o) end = cut;
+    module.blocks.push({ segment: index, offset: at + o, length: end - o });
+    o = end;
   }
   return at;
 }
@@ -241,7 +252,12 @@ export function withShapes(
         framesView.setUint16(FRAME_SIZE * k, frame.word, true);
       for (const [i, { entry }] of used.entries())
         framesView.setUint16(entry, planesAt + i * planeSize, true);
-      const framesAt = append(module, table.segment, frames);
+      const framesAt = append(
+        module,
+        table.segment,
+        frames,
+        used.map((u) => u.entry),
+      );
       for (const { entry } of used) {
         module.fixups.push({
           ...far,
