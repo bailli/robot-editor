@@ -406,7 +406,7 @@ Files in `packages/formats/src`:
   is plain arithmetic, rows and hundreds do not matter: **verified under Wine** (episode I,
   new rooms as copies of room 42): west of room 51 is 50, west of 50 is **49**, the end of
   the row above. No original room id ends in 0 (but episode II's 600, which no grid exit
-  reaches), so rows never join at their ends; ids ending in 9 are common. Across hundreds
+  reaches; the ship's voyage leads there, see Endings), so rows never join at their ends; ids ending in 9 are common. Across hundreds
   the grid is used on purpose: episode IV's 194/195 (south) and 204/205 (north) are
   neighbours. The originals leave the exits byte at "neighbour" towards missing rooms,
   so a room added there is entered from its neighbours at once.
@@ -645,7 +645,49 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   knows no operations beyond those our compiler emits (opcodes 0x01–0x09, 0x0e/0x0f,
   0x41–0x43, operators 0x80–0x8e and 0x91–0x96), so `while`, `break` or compound
   assignments, if the original language had them, compiled to the same forms.
-- **Episode IV's ending** is started by its start room's script (room 53, "Der
+- `pnpm robot script E ROOM` shows a script and its disassembly; with a source file and
+  an output exe it writes the script into the room (`withRoomScript`).
+
+### Endings
+
+From the code only; no ending has been played through or tried in the game.
+
+- **Mechanism:** bit 0x100 of the game flags 0x4fe448 makes the main loop (0x4027ed)
+  clear it and call the episode's ending method, vtable +0x6c: Junior 0x447fd0 (only
+  `ret`), I 0x4095e0 (a text window, 0x409130), II 0x40a820 (NxtRoom = 600), III
+  0x40b4a0 (a window), IV 0x40d6e0 (not read). Two places set the bit: a room change to
+  NxtRoom 255 in episode I (0x40281a checks the episode number, [0x51bb18]+4; elsewhere
+  255 is just a missing room) and episode III's 0x416700. Episode II's ship calls +0x6c
+  itself; Junior and IV end without it.
+- **Junior:** the ZIEL, class 50 (tile 50, states 0–5 its 3×2 parts, "Das ist Dein
+  ZIEL!") at (19–21, 2–3) in the start room 43. Its touch (vtable +0x0c, 0x41d540 →
+  table 0x47ef40) lets the hero step on; its +0x10 handler (as the wizard's door, table
+  0x47ef70, entry 0 = the hero) is 0x41f450: event 0x12a and text 994 ("Du hast es
+  geschafft! … Dein Ziel ist erreicht, die Diamanten sind eingesackt").
+- **I:** room 2, the cinema ("DAS KINO", reached only through the wizard's door, so only
+  registered), has a teleporter at (9, 0) with flag 0x02 (default target 43 at (4, 15));
+  the room's script `Teleport(255, 0, 0)` sends it to 255, which ends the episode. The
+  unregistered episode I cannot be finished.
+- **II:** the ship, class 129 (0x81; tile 114, states 0–2 at (33, 17–19)) in room 603
+  ("Oberer Rand der Wüste"; the 600s lie behind the bus east, registered only). Walking
+  into its stern (state 1) with object 0x370 (presumably the ticket; touch 0x4117d0)
+  hides the hero (mode 5, 0x4477f0) and clears NoSwim; its +0x10 handler (0x411830)
+  turns the ship's cells into an actor of its class (constructor 0x44aad0). That
+  actor's tick (0x44ab20) moves it a row north per step, from row 14 up also a column
+  west; past the top edge it calls +0x6c, so NxtRoom = 600. Entering room 600 (open
+  sea; no exits, script or records) runs 0x40a690: the hero is hidden and text 900
+  ("ES IST VOLLBRACHT … auf dem Weg zur fernen Südseeinsel", leading to III) shows.
+- **III:** after the last pipe piece (event 0x145, the lava mechanism), using the
+  bottle next to the fiery well (class 0xee) fills it (state 1, event 0x14c, 0x415401;
+  its text 1939 sends the hero back to the village), and using it next to Judith
+  Birnbaum (class 169, tile 70, only room 147 at (13, 13)) empties it and sets bit 0x4
+  of 0x4fe448, "healed" (0x41546b; event 0x146, 50000 points). Her touch handler
+  (0x416640, table 0x47d0dc entry 0) shows text 445 before, 446 after. Healing her is
+  not the end: 0x416700 (entry 12 of the table 0x47d10c behind class 169's +0x10; what
+  reaches entry 12 is not known) sets the ending flag only with bit 0x4 and shows text
+  442, the chief's feast speech ("Der Häuptling verkündet feierlich, daß der heilige
+  'Barburok' nun besänftigt sei …").
+- **IV** is started by its start room's script (room 53, "Der
   Landeplatz"): `SetWArea(13, 18, 1, 1)`, and on entering that cell with StationBOff
   == 6 it replaces the lamps (class 233) at (22, 18) and (25, 21) with O_WALL2 and calls
   `SetObj(116, 0, 30, 0)`. Tile 116 (class 0xdc) is James Blond's helicopter, an actor
@@ -662,9 +704,7 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   (13, 17) in the map (`BOND`), #3 Blond goes, the hero steps to (13, 17) and is hidden,
   the helicopter rises and flies off north-east (`DIDADA`). The removed lamps lie inside
   the window, which grows from about (28, 16) to (18, 11); they would blink through it
-  (a guess from the window's arguments, 0x43e880). Not tried in the game.
-- `pnpm robot script E ROOM` shows a script and its disassembly; with a source file and
-  an output exe it writes the script into the room (`withRoomScript`).
+  (a guess from the window's arguments, 0x43e880).
 
 ### Descriptions and logic records
 
@@ -1523,7 +1563,7 @@ Roughly by value for the editor.
    in 146 could not reach its teleporters, which lie in the cave wall).
 5. **Rooms and connections:** not tried in the game: the old mechanism raising 149 into
    49 (needs a licensee and a matching number in the harness's prefix), the wizard's
-   door. Episode II's jump to room 600 at 0x40a820 is not understood. Two edge-exit
+   door. Two edge-exit
    code paths: 0x427a9b (arrival only) and 0x44c5a0 (also sets the RandObj reference
    point; with game flag bit 10 of [0x51bb18]+8 clear, the arrival moves one cell
    further in); which one runs when is not known.
@@ -1653,6 +1693,9 @@ Roughly by value for the editor.
 | 0x407ec0, 0x42c820, 0x410050 | script Wizzard; the word KILLHIM; place the wizard's door (registered only)    |
 | 0x44a831                     | the bus: BusWest, or BusEast (≥ 100 only registered, else room 53)             |
 | 0x407160, 0x433420           | script SetObj; place a value (an actor if its class has a factory)             |
+| 0x4027ed, 0x40281a           | game flag 0x100 → episode +0x6c (the ending); NxtRoom 255 sets it (episode I)  |
+| 0x41f450, 0x44ab20, 0x40a690 | Junior's ZIEL; episode II's ship sailing off; II entering room 600 (text 900)  |
+| 0x41546b, 0x416640, 0x416700 | episode III: Judith healed (bit 0x4); her handler; the ending (text 442)       |
 | 0x446920, 0x446de0           | episode IV's ending: the helicopter's tick; text 1970's `#n` markers           |
 
 ## Gotchas
