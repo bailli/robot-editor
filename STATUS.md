@@ -41,7 +41,8 @@ for episodes I–IV.
   tests need `reference/GameOfRobot.exe`; the few that don't are listed in
   `pnpm test:without-game` (add new data-free test files there), which is what CI runs.
   `pnpm test:game` runs the tests that start the real game through the driver (opt-in:
-  they need Wine, Xvfb and the proxy DLL; about 4 s per game start).
+  they need Wine, Xvfb and the proxy DLL; each game test takes about 4 s, Wine's start
+  included).
 - **Git:** commit freely; subject within ~72 characters, a short body when more
   needs saying (not a longer subject), **no attribution footer**; linear history
   (`merge.ff=only`, rebase on pull), never merge commits. Identity: bailli. **Never push**: only the user pushes to `origin` (GitHub).
@@ -240,7 +241,7 @@ Files in `packages/formats/src`:
   cell `readEpisodeStart` reads; in episode I room 43 without robots and with west
   "neighbour", walking out west arrives in room 42 at (38, 15); a captured frame equals
   the game's own screenshot (Ctrl+Alt+P) pixel for pixel. From launch to the hero in
-  the start room takes about 1 s once Wine is up.
+  the start room takes about 4 s per test, Wine's start included.
 
 ### Scenes (rooms)
 
@@ -956,7 +957,7 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   gold (0x4fe30e) take all of it and give nothing (text 507 entry 4); otherwise event
   0x101, the gold is paid, and goods the inventory does not take (0x42c010) are placed
   on the dealer's cell (0x433300; then text 507 entry 5).
-  **Editable** (`dealer.ts`, code only, not tried in the game): the goods method is
+  **Editable** (`dealer.ts`; code only: **no game test**, never tried in the game): the goods method is
   `mov [eax], count; mov [ecx], most; mov eax, table` (immediates at +0x0b, +0x11,
   +0x16), so `withDealer` rewrites the table's entries in place and both counts. The
   table has no room to grow (a 4-byte pad, then other data): at most as many goods as
@@ -1262,8 +1263,8 @@ stands, decided 2026-10-27; details in the sections named.
   exe anyway). **Deferred:** a native Linux wrapper instead of Wine (keys, time, DirectDraw
   and GDI are few imports, but worth it only to run without Wine), a decompilation
   (only if playing in the editor in the browser becomes a goal; incremental path: a
-  loader that replaces functions one by one), the proxy as an in-memory mod loader
-  (the mod format is designed for it, see below).
+  loader that replaces functions one by one), the proxy as an in-memory mod loader (the
+  plan is in "The mod format", "Two forms"; the only place that says how).
   Untried: the `RessourcePath` loose text files.
 - **Done:** the driver (proxy DLL, `driver.ts`, `pnpm test:game`) to verify edits in the
   game; the OMF writer and `withShapes`; `withClassEntries`; the **pilot: oracles in
@@ -1276,10 +1277,10 @@ stands, decided 2026-10-27; details in the sections named.
   frames before and after equal our render (bulbs lit or not, stairs, the piece gone),
   and the first take showed I's text with its 100 points. The circuit code works by
   class (the map holds class | state << 8), none of it checks the episode. **Both
-  pilots in other episodes, as mods, verified under Wine** (`pnpm test:game`, the
-  episode's start room): circuits in III, IV and Junior (with I's stairs, which Junior
-  lacks), oracles in Junior, I and IV (north sends to the target cell, east shows the
-  copied hint 331).
+  pilots in other episodes, as mods (now the editor's kits, see "kits"), verified under
+  Wine** (`pnpm test:game`, the episode's start room): circuits in III, IV and Junior
+  (with I's stairs, which Junior lacks), oracles in Junior, I and IV (north sends to the
+  target cell, east shows the copied hint 331).
 - **`Game.withTileTypes(episode, from, types)`** copies what belongs to a tile type:
   the class table entry, the `_Rob_object` shape, the description (entry n), the sound
   table line (I's sound only where the episode has that MUSIC piece, else its own:
@@ -1315,12 +1316,8 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
-- **Next:** the proxy as an in-memory loader. The `code` kind is in the editor
-  (Episode tab: listed, written, removed). Both
-  pilots are kits in the Episode tab now ("Add oracles", "Add circuits", each with
-  "Place example"); a copied event takes its sound where the episode has the piece
-  (mod kind `events`, `sound`). Sounds the episode lacks would need MUSIC pieces copied,
-  and MUSIC is not decoded.
+- **Next:** the proxy as an in-memory loader ("The mod format", "Two forms"). Sounds a
+  copied event's episode lacks would need MUSIC pieces copied, and MUSIC is not decoded.
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
@@ -1342,22 +1339,24 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
   they were made in (new text entries, sound lines and shapes are appended). Later
   kinds as needed: shapes of the mod's own.
   1. `tileTypes` (key: episode, target type): `{ episode, from, types: [[to, of], …] }`
-     → `Game.withTileTypes`. `events` (key: episode, entry): `{ episode, entry, id,
-points, sound? }` → `withEventEntries`, after the tile types (it may override a
-     copied first take); `sound` (a MUSIC piece of the episode, `!` before it for bit 7)
-     sets line `entry` of the sound table, its note kept (`Game.withSounds`; refused for
-     a piece the episode lacks), without it the line stays. From entry 128 on the id is 0 or 256–391: the constructor maps id →
-     entry in 0x4c70e0 (0x43b4bf, shared with class → type below 256, 0x188 long, no
-     bounds check); applying refuses two entries with one id. The tables are full
-     (Junior and I: entry 190 free, nothing else), so a new event takes over an entry
-     the episode never uses: IV's 197–200 (ids 388–391, no note, text or points; IV's
-     scripts award 180–196, no code raises those ids). III has no such spare entry.
-  2. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
+     → `Game.withTileTypes`.
+  2. `events` (key: episode, entry): `{ episode, entry, id, points, sound? }` →
+     `withEventEntries`, after the tile types (it may override a copied first take);
+     `sound` (a MUSIC piece of the episode, `!` before it for bit 7) sets line `entry` of
+     the sound table, its note kept (`Game.withSounds`; refused for a piece the episode
+     lacks), without it the line stays. From entry 128 on the id is 0 or 256–391: the
+     constructor maps id → entry in 0x4c70e0 (0x43b4bf, shared with class → type below
+     256, 0x188 long, no bounds check); applying refuses two entries with one id. The
+     tables are full (Junior and I: entry 190 free, nothing else), so a new event takes
+     over an entry the episode never uses: IV's 197–200 (ids 388–391, no note, text or
+     points; IV's scripts award 180–196, no code raises those ids). III has no such
+     spare entry.
+  3. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
      if the exe holds `expect` there (e.g. the oracle flags in Junior).
-  3. `dealer` (key: episode): `{ episode, most, goods: [[class, state, price], …] }` →
+  4. `dealer` (key: episode): `{ episode, most, goods: [[class, state, price], …] }` →
      `withDealer` (see "The dealer's goods"): the episode's whole list, at most as many
      goods as its table has room for, each of a class the episode has a tile of.
-  4. `texts` (key: resource id, entry): `{ resource, entry, variants | null }` →
+  5. `texts` (key: resource id, entry): `{ resource, entry, variants | null }` →
      `withTextEntry`, entry by entry (room names, descriptions, hints, messages), never
      whole resources: the file holds only what the mod wrote, and two changes to one
      resource compose. `copyTexts` (same keys: an entry is either copied or written):
@@ -1365,17 +1364,17 @@ points, sound? }` → `withEventEntries`, after the tile types (it may override 
      kinds 1–3 left the exe) into `resource`, e.g. episode II's oracle hints and death
      message (1210: 331, 334, 945) into Junior's 1010, so the mod carries no text of
      the game's own.
-  5. `rooms` (key: episode, room id): the room as its SCNV3 bytes (id, tags with the
+  6. `rooms` (key: episode, room id): the room as its SCNV3 bytes (id, tags with the
      script, map, records; as `serializeScene` writes one room), base64; `null` removes
      the room. Others keep their place; once a room is added or removed, the episode's
      rooms are sorted by id, as the editor keeps them → `withScene`.
-  6. `start` (key: episode): `{ episode, room, x, y }` → `withEpisodeStart`.
-  7. `rucksack` (key: episode): `{ episode, capacity }` → `withRucksack` (1–250).
-  8. `flags` (key: episode): `{ episode, flags }` (the whole word, hex in the file) →
+  7. `start` (key: episode): `{ episode, room, x, y }` → `withEpisodeStart`.
+  8. `rucksack` (key: episode): `{ episode, capacity }` → `withRucksack` (1–250).
+  9. `flags` (key: episode): `{ episode, flags }` (the whole word, hex in the file) →
      `withEpisodeFlags`.
-  9. `backdrop` (key: episode): `{ episode, rule }` ("mod100", "minus100") →
-     `withBackdropRule`. `moves` (key: episode): `{ episode, diagonal }` →
-     `withDiagonalMoves`.
+  10. `backdrop` (key: episode): `{ episode, rule }` ("mod100", "minus100") →
+      `withBackdropRule`.
+  11. `moves` (key: episode): `{ episode, diagonal }` → `withDiagonalMoves`.
 - **File:** one JSON file (`*.robotmod.json`) with `format` (1), `name`, `author`,
   `description`, `base` (`{ sha256 }`) and `changes` (`tileTypes`, `events`, `code`,
   `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`, `backdrop`, `moves`: arrays of the
@@ -1426,17 +1425,24 @@ points, sound? }` → `withEventEntries`, after the tile types (it may override 
 - **Out of scope:** a sixth episode (the episode list and factories are code: a mod
   builds a fan episode in the slot of one of the five), mods on top of mods, other exe
   versions.
-- **Decided 2026-10-27:** whole rooms (no cell diffs); no editor UI for `tileTypes`
-  and code at first (the file and the command line); English texts later. The start,
-  then the tile types got their UI the same day (Episode tab), events copied from other
-  episodes on 2026-10-28, code patches the same day.
-  Open: the patch file's format for the proxy (only when the loader is built).
+- **Decided 2026-10-27:** whole rooms (no cell diffs); English texts later. (The editor
+  UI for tile types, events, texts and code, first left to the file and the command
+  line, came on 2026-10-27/28.) Open: the patch file's format for the proxy (only when
+  the loader is built).
 
 ## Trying edits in the game
 
 The driver tests (`packages/tools/test/driver.test.ts`, `pnpm test:game`) verify an
 edit repeatably: a mod or patched exe, the change next to the hero's start, then the
-game's memory (hero, map, actor list, score) or a frame compared with our render.
+game's memory (hero, map, actor list, score) or a frame compared with our render. What
+they cover: the driver (every episode's start, runs repeat exactly, a frame equals the
+game's screenshot); episode I's room 43 to 42, every gate and NOT, notes, the thief; the
+circuits and oracles kits (examples too) in III, IV, Junior and I; an event copied with
+its sound (IV); robots' sprites (III) and colours (Junior, flag 0x20); sand heaps
+(scorpions); Junior's oracles with and without the vanish flags; the episode rules (door
+without the key, Teleport() points, house cells, diagonal moves, the backdrop rule and
+class 99 cases); the rucksack's capacity (III); a cassette (IV), diary pages and a chest
+(III), presents (II). There is no game test for the dealer.
 By hand or with the screenshot harness:
 
 - Build the exe (`Game.withScene`, or the editor's "Save exe"), put the change next to
@@ -1467,16 +1473,16 @@ By hand or with the screenshot harness:
 
 Roughly by value for the editor.
 
-1. **Logic records in play** (see logic records above): a final
+1. **Logic records in play:** a final
    node waiting for itself (from the code), records in rooms whose objects and records
    exceed the table.
-2. **Actors** (see actors above): the robot-free room and the telephone (code only;
+2. **Actors:** the robot-free room and the telephone (code only;
    what the Ghostbusters' second call stores), RandObj's empty cell (code only).
-3. **Scripts** (see room scripts above): what `Phone`'s n limits (still
+3. **Scripts:** what `Phone`'s n limits (still
    answered after 60 s), whether `Area`/`ShiftArea` settings survive leaving the room,
    RIGHT and the wand words. Possibly worth adding to the compiler: `while`,
    `break`, compound assignments (they compile to existing operations).
-4. **Room tags** (see room tags above): bit 0 of kind 3 not tried in the game (the
+4. **Room tags:** bit 0 of kind 3 not tried in the game (the
    labyrinth: entering room 144 from 146 generates a new maze of teleporters, 0x40c910;
    the booklet confirms the labyrinth "changes its size and its paths"; a test starting
    in 146 could not reach its teleporters, which lie in the cave wall).
@@ -1501,9 +1507,8 @@ Roughly by value for the editor.
 7. **Description extras:** key colours (strings 0x9c50/0x9c51 from the exe's string
    table), messages 200/201 added by two classes, codes formatted by 0x41d2c0/0x40ff80, and
    four describe methods that depend on game flags/options.
-8. **Not decoded at all:** MUSIC (only its instrument and piece names) and PCXBITMAP
-   resources, the obfuscated command strings
-   near 0x4828d4 ("Command %s unknown!", probably cheats; two jump ±100 rooms).
+8. **Not decoded at all:** MUSIC's data (see Resources) and PCXBITMAP resources, the
+   obfuscated command strings near 0x4828d4 ("Command %s unknown!", probably cheats; two jump ±100 rooms).
 
 ## Limits and what is shared between episodes
 
