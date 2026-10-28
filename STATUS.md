@@ -120,7 +120,9 @@ Files in `packages/formats/src`:
   **Verified under Wine:** a re-encoded episode I text with a new room name entry shows
   that name in the banner and the screenshot's name.
 - **Texts** (`1E10`): numbered entries `N:k` with `|`-separated variants ending in `;`;
-  headers without text share the next text. Entries 0–127 describe tile type N, higher
+  headers without text share the next text. The game's fetch (0x438850) ends an entry at
+  the first `;`, also within a line (III's 1320 entries 120 and 1180 go on after one; the
+  rest is never shown, `parseTexts` drops it too). Entries 0–127 describe tile type N, higher
   numbers are messages (`Message(id, …)`); 510 is "no description". `displayText` removes
   colour codes (`²x`) and the wrapping of the game's message boxes (a backslash breaks a
   line, also without a line feed after it); `_` is a hard space.

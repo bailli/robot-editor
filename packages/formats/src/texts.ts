@@ -5,7 +5,7 @@
  * numbered entries
  *   N:k            k = number of variants (empty: 1)
  *   text|          variants, separated by "|", the last one ends with ";"
- *   text;
+ *   text;          (the game reads no further: a ";" within a line ends the entry too)
  * Consecutive headers without text share the next text. Entries 0-127 describe tile
  * type N: the game shows one variant when the hero looks at a tile. Higher numbers are
  * messages (Message(id, ...) in room scripts). Texts contain "\" + line break where
@@ -31,11 +31,12 @@ export function parseTexts(text: string): Texts {
     const start = header.index + header[0].length + 1;
     const end = headers.at(i + 1)?.index ?? text.length;
     const body = text.slice(start, end).trimEnd();
+    // the game's fetch (0x438850) ends the entry at the first ";", also within a line
     const variants =
       body === ""
         ? next
         : body
-            .replace(/;$/, "")
+            .replace(/;[^]*$/, "")
             .split("|")
             .map((v) => v.trim());
     entries.set(Number(header[1]), variants);

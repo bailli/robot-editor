@@ -136,3 +136,16 @@ test("every original entry can be rewritten without changing the others", () => 
     expect(after.get(id)).toEqual(["neu"]);
   }
 });
+
+test("a ';' within a line ends the entry, as the game reads it; such entries write back", () => {
+  // III's diary page 120 and room 180's description go on after a ";" the game stops at
+  const source = game.textSource(1320);
+  assert.ok(source);
+  const entries = parseTexts(source).entries;
+  expect(entries.get(120)?.[0]).toMatch(/Scheint eine Art\nSchimmelpilz zu sein$/);
+  expect(entries.get(1180)?.[0]).toMatch(/welcher zum\nAusgang führt$/);
+  for (const id of [120, 1180]) {
+    const written = withTextEntry(source, id, entries.get(id));
+    expect(parseTexts(written).entries).toEqual(entries);
+  }
+});
