@@ -165,7 +165,7 @@ export const DEALER_CLASS = 0x2c;
 /** Names of actors whose tiles do not say what they are. */
 export const ACTOR_CLASS_NAMES: Readonly<Partial<Record<number, string>>> = {
   [DEALER_CLASS]: "Dealer",
-  0x4a: "Thief", // takes about half of the hero's items (0x41f470)
+  0x4a: "Thief", // walked into, takes up to half and one of the items, not notes (0x41f470)
 };
 
 /**

@@ -53,8 +53,9 @@ export interface NoteText {
   /**
    * "step": read when the hero steps on it, which removes it; "carry": picked up and read
    * from the rucksack, in Junior, I and II without vowels unless the hero carries the
-   * dictionary (class 8, which earns 300 points), in IV a micro-cassette that needs the
-   * recorder (class 0xbf, messages 973/974); "diary": a page added to episode III's diary.
+   * dictionary (class 8; 300 points each time), then leaving the rucksack; in IV a
+   * micro-cassette that stays and needs the recorder (class 0xbf, messages 973/974);
+   * "diary": a page added to episode III's diary.
    */
   read: "step" | "carry" | "diary";
 }

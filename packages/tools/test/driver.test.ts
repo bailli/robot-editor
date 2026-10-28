@@ -324,6 +324,54 @@ async function actorList(d: Driver): Promise<string[]> {
   return list;
 }
 
+/** The rucksack (0x4fe0c0): its capacity, then a word per slot, class | state << 8. */
+const RUCKSACK = 0x4fe0c0;
+
+/** The items in the rucksack (class | state << 8), its empty slots left out. */
+async function rucksack(d: Driver): Promise<number[]> {
+  const bytes = await d.peek(RUCKSACK + 2, 2 * 20);
+  const view = new DataView(bytes.buffer, bytes.byteOffset);
+  return Array.from({ length: 20 }, (_, k) => view.getUint16(2 * k, true)).filter((w) => w);
+}
+
+/** The map cell (class | state << 8) at (x, y). */
+async function mapCell(d: Driver, x: number, y: number): Promise<number> {
+  const b = await d.peek(MAP + 2 * (x + y * ROOM_WIDTH), 2);
+  return b[0] | (b[1] << 8);
+}
+
+/**
+ * Uses the `index`th item of the rucksack: Return opens it (with several items their
+ * actions show at once, for the first), → goes on to the next item, Return is "Benutzen".
+ * What it shows (a note, …) leaves the game clock running: closed with Return here.
+ */
+async function useItem(d: Driver, index: number): Promise<void> {
+  await d.press("return", 100);
+  for (let k = 0; k < index; k++) await d.press("right", 50);
+  await d.press("return", 100);
+  await d.run(60);
+  await d.press("return", 100);
+}
+
+/** Walks right onto each of the cells in `xs` in turn and closes the boxes that brings. */
+async function pickUpAll(d: Driver, xs: readonly number[]): Promise<void> {
+  for (const x of xs) await d.pickUp("right", (h) => h.x >= x);
+}
+
+/**
+ * The thief among the room's actors (kind 0x105 at +0x14): whether it robbed the hero
+ * (+0x10 bit 26, 0x41f470), undefined while there is none.
+ */
+async function thiefRobbed(d: Driver): Promise<boolean | undefined> {
+  for (let p = await d.u32(0x53e9a8), n = 0; p !== 0 && n < 200; n++) {
+    const bytes = await d.peek(p, 0x18);
+    const view = new DataView(bytes.buffer, bytes.byteOffset);
+    if (view.getUint16(0x14, true) === 0x105) return (view.getUint32(0x10, true) & 0x4000000) !== 0;
+    p = view.getUint32(4, true);
+  }
+  return undefined;
+}
+
 /**
  * Episode II's room 115 (drawn over room 15) as the start room, the hero at (21, 9) in
  * the house, with `edit` applied to its cells; the cells where the game's frame differs
@@ -1056,4 +1104,208 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     assert.ok(seen.edited.length > 100, "our render shows no room 15");
     assert.deepEqual(seen.game, [HERO], "the game draws as we do");
   }, 60_000);
+
+  test("episode I: notes are read where they lie or from the rucksack, with the dictionary for 300 points", async () => {
+    const [NOTE, BOOK] = [0x3a, 0x3b]; // classes 15 and 8
+    const start = readEpisodeStart(game.image, 1);
+    const { y } = start;
+    const area = { x0: start.x + 1, x1: start.x + 8, y0: y, y1: y };
+    // message 801 (a way through the room of many eyes): read on the spot, then carried
+    const mod = startRoomMod(game, 1, {}, area, start, (set) => {
+      set(6, y, NOTE | (0x81 << 8));
+      set(8, y, NOTE | (0x01 << 8));
+      set(10, y, BOOK);
+      set(12, y, NOTE | (0x01 << 8));
+    });
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(1);
+        await d.walk("right", (h) => h.x >= 6);
+        await d.run(60);
+        const stepped = { running: await d.running(), boxes: await d.closeBoxes() };
+        const read = await mapCell(d, 6, y);
+        await pickUpAll(d, [8]); // first take: 100 points
+        const carried = await rucksack(d);
+        await useItem(d, 0); // without the dictionary: its vowels are gone
+        const without = { score: await d.score(), rucksack: await rucksack(d) };
+        await pickUpAll(d, [10, 12]); // the dictionary's first take: 1000 points
+        const both = await rucksack(d);
+        await useItem(d, 1);
+        const withBook = { score: await d.score(), rucksack: await rucksack(d) };
+        return { stepped, read, carried, without, both, withBook };
+      }),
+    );
+    assert.deepEqual(seen, {
+      stepped: { running: false, boxes: 1 },
+      read: 0,
+      carried: [0x10f],
+      without: { score: 100, rucksack: [] },
+      both: [8, 0x10f],
+      withBook: { score: 1400, rucksack: [8] },
+    });
+  }, 90_000);
+
+  test("episode IV: a cassette without the recorder stays in the rucksack", async () => {
+    const start = readEpisodeStart(game.image, 4);
+    const area = { x0: start.x + 1, x1: start.x + 4, y0: start.y, y1: start.y };
+    const mod = startRoomMod(game, 4, {}, area, start, (set) => {
+      set(start.x + 2, start.y, 0x3a | (0x01 << 8));
+    });
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(4);
+        await pickUpAll(d, [start.x + 2]);
+        const before = await d.score();
+        await useItem(d, 0); // message 974: no recorder
+        return { rucksack: await rucksack(d), points: (await d.score()) - before };
+      }),
+    );
+    assert.deepEqual(seen, { rucksack: [0x10f], points: 0 });
+  }, 60_000);
+
+  test("episode III: diary pages are read where they lie and marked read", async () => {
+    const start = readEpisodeStart(game.image, 3);
+    const { y } = start;
+    const area = { x0: start.x + 1, x1: start.x + 8, y0: y, y1: y };
+    // pages 2 and 4 of resource 1320 and state 3, which has none
+    const xs = [start.x + 2, start.x + 4, start.x + 6];
+    const mod = startRoomMod(game, 3, {}, area, start, (set) => {
+      [2, 3, 4].forEach((page, k) => {
+        set(xs[k] ?? 0, y, 0x3a | (page << 8));
+      });
+    });
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(3);
+        const boxes = [];
+        for (const x of xs) {
+          await d.walk("right", (h) => h.x >= x);
+          await d.run(50);
+          boxes.push(await d.closeBoxes());
+        }
+        return {
+          boxes,
+          cells: await Promise.all(xs.map((x) => mapCell(d, x, y))),
+          read: [...(await d.peek(0x4fe3c8, 2))],
+          rucksack: await rucksack(d),
+          score: await d.score(),
+        };
+      }),
+    );
+    // the first page: the diary's bonus (event 164, 100 points), then the page
+    assert.deepEqual(seen, {
+      boxes: [2, 0, 1],
+      cells: [0, 0, 0],
+      read: [0x14, 0],
+      rucksack: [0xa4],
+      score: 100,
+    });
+  }, 60_000);
+
+  // a package opened from the rucksack becomes what it holds on the hero's cell
+  test("episode III: a chest with gold opens to gold", async () => {
+    const GOLD = 0x26;
+    const start = readEpisodeStart(game.image, 3);
+    const area = { x0: start.x + 1, x1: start.x + 4, y0: start.y, y1: start.y };
+    const x = start.x + 2;
+    const mod = startRoomMod(game, 3, {}, area, start, (set) => {
+      set(x, start.y, 0x5e | (GOLD << 8));
+    });
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(3);
+        await pickUpAll(d, [x]);
+        const before = await d.score();
+        await d.putDown("use"); // the first opening's bonus box
+        return {
+          cell: await mapCell(d, x, start.y),
+          rucksack: await rucksack(d),
+          points: (await d.score()) - before,
+        };
+      }),
+    );
+    assert.deepEqual(seen, {
+      cell: game.episode(3).classes.classes.get(GOLD)?.id,
+      rucksack: [],
+      points: 1500,
+    });
+  }, 60_000);
+
+  test("episode II: a present with a robot lets it appear, one with a fence kills", async () => {
+    const start = readEpisodeStart(game.image, 2);
+    const area = { x0: start.x + 1, x1: start.x + 4, y0: start.y, y1: start.y };
+    const x = start.x + 2;
+    const open = (inside: number) =>
+      withModExe(
+        game,
+        startRoomMod(game, 2, {}, area, start, (set) => {
+          set(x, start.y, 0x5e | (inside << 8));
+        }),
+        (exe) =>
+          withGame(exe, async (d) => {
+            await d.startEpisode(2);
+            await pickUpAll(d, [x]);
+            await d.press("return", 100);
+            await d.press("return", 100);
+            await d.run(60);
+            const actors = await actorList(d);
+            await d.closeBoxes(); // the opening's bonus
+            await d.run(150);
+            await d.closeBoxes(); // the fence's message 951, once the hero is struck
+            await d.run(400);
+            return { actors: actors.map((a) => a.split(":")[0]), hero: await d.hero() };
+          }),
+      );
+    const robot = await open(0x02);
+    assert.deepEqual(robot.actors, ["2"]);
+    const fence = await open(0x07);
+    assert.deepEqual(fence, { actors: [], hero: start }, "back at the start, a life less");
+  }, 90_000);
+
+  test("episode I: the thief takes some of the hero's items, never notes", async () => {
+    const BOOK = 0x3b;
+    const start = readEpisodeStart(game.image, 1);
+    const { y } = start;
+    const area = { x0: start.x + 1, x1: start.x + 12, y0: y, y1: y };
+    const xs = [6, 7, 8, 9];
+    // walked into, it picks floor(n / 2) + 1 times among the n items (0x41f470)
+    const robbed = (items: readonly number[]) =>
+      withModExe(
+        game,
+        startRoomMod(game, 1, {}, area, start, (set, record) => {
+          items.forEach((item, k) => {
+            set(xs[k] ?? 0, y, item);
+          });
+          // a travelling actor, kind 0x105 (0x85), leaving to (10, 10) of the start room
+          record(16, y, [8, 0, 0, 0, start.room, 0, 10, 10, 0x85]);
+        }),
+        (exe) =>
+          withGame(exe, async (d) => {
+            await d.startEpisode(1);
+            await pickUpAll(d, xs.slice(0, items.length));
+            const before = { rucksack: await rucksack(d), score: await d.score() };
+            await d.until(async () => (await thiefRobbed(d)) === false);
+            await d.run(300); // it walks up to the hero
+            await d.key("right", true);
+            await d.until(async () => (await thiefRobbed(d)) === true, 600);
+            await d.key("right", false);
+            await d.run(60);
+            return {
+              before,
+              rucksack: await rucksack(d),
+              points: (await d.score()) - before.score,
+            };
+          }),
+      );
+    // the same item each time: one goes per pick, but for picks past the last item (the
+    // index is random(0, n), both ends included)
+    const books = await robbed([BOOK, BOOK, BOOK, BOOK]);
+    assert.deepEqual(books.before.rucksack, [8, 8, 8, 8]);
+    const kept = books.rucksack.length;
+    assert.ok(kept >= 1 && kept <= 3, `kept ${String(kept)} of 4`);
+    assert.ok(books.rucksack.every((item) => item === 8));
+    assert.equal(books.points, 10, "event 300: 10 points");
+    const notes = await robbed([0x3a | (0x01 << 8), 0x3a | (0x02 << 8)]);
+    assert.deepEqual([notes.rucksack, notes.points], [[0x10f, 0x20f], 0]);
+  }, 120_000);
 });

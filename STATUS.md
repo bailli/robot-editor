@@ -658,18 +658,35 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   and then gives 300 points; in IV, which has the recorder (class 0xbf), it plays only
   with the recorder (messages 973/974). Every note in the played rooms has its message
   (test); e.g. Junior's 15 notes are messages 801–815, episode II room 105's six notes
-  the file listings 833–842. Not yet tried in the game.
+  the file listings 833–842. **Verified under Wine** (`pnpm test:game`, episode I): a note
+  with bit 7 shows its message when stepped on (the clock stands until Return) and its
+  cell empties; one without is picked up (its first take: 100 points) and "Benutzen"
+  shows it without vowels ("Ds Schrft st nlsrlch!"), with the dictionary carried in full
+  and for 300 points, every note again (two: 600); either way the note leaves the
+  rucksack. In IV a cassette without the recorder shows 974 and stays, without points;
+  with it (seen in screenshots) 973 and it stays too. IV's rucksack groups the cassettes
+  ("Auswählen") and lists each with a code ("19768" for state 1, "CBB4" for 2; not
+  traced).
 - **Diary pages** (episode III, class 164, tile 58): page = entry `state` of resource
   1320 (with the room names; date and title, then the text; 0x416400 → 0x4067b0 →
   episode method +0x40, 0x40b370), which marks bit `state` of 0x4fe3c8 as read; the
-  page goes into the diary (class 164 in the rucksack).
+  page goes into the diary (class 164 in the rucksack). **Verified under Wine**: stepping
+  on a page shows it (the first page brings the diary's bonus before it, event 164, 100
+  points), sets its bit and empties the cell; the diary is one item (state 0), whose only
+  action "Auswählen" lists the pages read by date and title. Only some states have a page
+  (the originals use 1, 2, 4, 6, …, 146, mostly even); a state without one is taken
+  silently and marks nothing.
 - **Packages** (class 109, tile 94: episode II's presents, III's chests, IV's crates;
   `packageContents`): the state is the tile type inside. "Benutzen" from the rucksack
   (0x414150) turns it into that class (0x43a5f0) on the hero's cell (0x433420: as an
   actor where the type is one, e.g. robots in II's "poisoned" presents); an electric
   fence (class 7) kills the hero (message 951). Used: robots, walls, gold, bottles,
   garlic, ammunition, suits, tonic, save clocks, jokers, food, fins, shovels, …
-  From the code and data; not yet tried in the game.
+  **Verified under Wine**: III's chest holding gold (0x26) becomes gold on the hero's
+  cell, II's present holding a robot lets a robot appear (which kills the hero), one
+  holding an electric fence shows 951 and costs a life (the hero starts again). The first
+  opening brings a bonus ("Sieh einer an, das Päckchen läßt sich tatsächlich öffnen!…",
+  1500 points in II and III).
 - **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
   1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
   class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
@@ -801,7 +818,13 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   episode I 0x475c38: 0x100…0x105), else a tile type (its class); the originals use 0x83
   = kind 0x103 = **the dealer** (class 0x2c, buys platinum for points, sells items for
   gold, 0x448440) and 0x85 = kind 0x105 = **the thief** (class 0x4a, tile 0x40 in
-  episodes I/II, "helps poor people": takes about half of the hero's items, 0x41f470).
+  episodes I/II, "helps poor people", 0x41f470: walked into, it picks floor(n / 2) + 1
+  times a random index 0..n among the n items carried, both ends included, so a pick can
+  miss; a picked item goes unless its class is protected (table 0x41f5c0 by class −
+  0x0f: notes, garlic, ammunition, answers, save clocks, cables, pens, corn, 0x49), and
+  if one went, event 300 (I: 10 points, "Vor dem Dieb solltest Du Dich in Zukunft in Acht
+  nehmen") and message 513's "Vielen Dank", else "Oh, Verzeihung". **Verified under
+  Wine**: of four books it took two, 10 points; of two notes none).
   The actor walks towards the hero and stops next to it (no pathfinding; 0x4480d0).
   Once the hero dealt with it (trade, theft) it wanders at random, and stepping into an
   edge wall it vanishes and leaves a teleporter there for 1–2 s (0x420c30, task 0x8a) to
@@ -1442,7 +1465,7 @@ By hand or with the screenshot harness:
 
 Roughly by value for the editor.
 
-1. **Logic records in play** (see logic records above): the thief (not tried), a final
+1. **Logic records in play** (see logic records above): a final
    node waiting for itself (from the code), records in rooms whose objects and records
    exceed the table.
 2. **Actors** (see actors above): the robot-free room and the telephone (code only;
@@ -1479,11 +1502,6 @@ Roughly by value for the editor.
 8. **Not decoded at all:** MUSIC (only its instrument and piece names) and PCXBITMAP
    resources, the obfuscated command strings
    near 0x4828d4 ("Command %s unknown!", probably cheats; two jump ±100 rooms).
-9. **Notes and packages in the game** (see Descriptions above, decoded from code and
-   data only): to try a note with state bit 7 (read on stepping onto it, 800 + state &
-   0x7f), one without (picked up; no vowels without the dictionary, IV: recorder
-   needed), a diary page and a package (its object appears on opening, a robot from
-   one in episode II).
 
 ## Limits and what is shared between episodes
 
