@@ -48,6 +48,11 @@ export class EventsView {
   /** The form's choices: source episode, source entry, target entry. */
   private choice: { episode: number; from: number; of: number; to: number } | undefined;
 
+  /** Forgets the choices (a newly loaded exe or mod). */
+  reset(): void {
+    this.choice = undefined;
+  }
+
   constructor(events: EventsViewEvents) {
     this.events = events;
     this.element.setAttribute("aria-label", "Events");

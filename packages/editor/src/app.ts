@@ -934,6 +934,9 @@ export class App {
   private use(editor: Editor, status: string): void {
     this.editor = editor;
     this.scriptView.dropDrafts();
+    for (const view of [this.tileTypesView, this.eventsView, this.kitsView, this.textsView]) {
+      view.reset();
+    }
     this.recentTiles.clear();
     this.caches.clear();
     this.stopPasting();
@@ -1672,10 +1675,12 @@ export class App {
   }
 
   undo(): void {
+    if (this.refuseWhileBusy()) return;
     this.revisit(this.editor?.undo());
   }
 
   redo(): void {
+    if (this.refuseWhileBusy()) return;
     this.revisit(this.editor?.redo());
   }
 
@@ -1763,6 +1768,10 @@ export class App {
       this.setDark(this.darkToggle.checked);
     });
     this.episodeSelect.addEventListener("change", () => {
+      if (this.refuseWhileBusy()) {
+        this.episodeSelect.value = String(this.episode);
+        return;
+      }
       this.showEpisode(Number(this.episodeSelect.value));
     });
     this.tileInput.addEventListener("change", () => {
@@ -2276,6 +2285,7 @@ export class App {
     this.alienShapes.clear();
     this.robotSprites.clear();
     this.thumbnails.clear();
+    this.clipImage = undefined;
     this.showEpisode(this.episode, this.roomId);
     this.refreshButtons();
   }
@@ -2391,6 +2401,13 @@ export class App {
       }
     })();
     return this.work;
+  }
+
+  /** Whether slow work is under way: undo, redo and episode changes wait for it. */
+  private refuseWhileBusy(): boolean {
+    if (!this.sidePanel.element.inert) return false;
+    this.setStatus("Wait for the work under way to finish", true);
+    return true;
   }
 
   /** Resolves once the side panel's slow work is done (busy). */
@@ -2616,6 +2633,7 @@ export class App {
       roomKey(room),
       backdrop ? roomKey(backdrop) : "",
       cells.palette.map((c) => c.join()).join(),
+      editor.episodeFlags(this.episode), // the robots' colours
     ].join(" ");
     const known = cache.get(id);
     if (known?.key === key) return known.canvas;
@@ -3030,7 +3048,14 @@ function saveHistory(history: readonly { episode: number; room: number }[]): voi
 function loadHistory(): { episode: number; room: number }[] {
   try {
     const saved: unknown = JSON.parse(sessionStorage.getItem(HISTORY_KEY) ?? "[]");
-    return Array.isArray(saved) ? (saved as { episode: number; room: number }[]) : [];
+    if (!Array.isArray(saved)) return [];
+    return saved.filter(
+      (e): e is { episode: number; room: number } =>
+        typeof e === "object" &&
+        e !== null &&
+        Number.isInteger((e as { episode?: unknown }).episode) &&
+        Number.isInteger((e as { room?: unknown }).room),
+    );
   } catch {
     return [];
   }

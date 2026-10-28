@@ -421,3 +421,43 @@ test("slow copies lock the side panel until they are done, saying what runs", as
   expect(app.editor?.tileTypeCopies(0)).toHaveLength(4);
   app.undo();
 });
+
+test("undo, redo and episode changes wait while the side panel's work runs", async () => {
+  app.showEpisode(0, 43);
+  const editor = defined(app.editor, "editor");
+  editor.beginStroke(0, 43, "base");
+  editor.paint(0, 0x0105);
+  editor.endStroke();
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const types = page.getByRole("region", { name: "Tile types" });
+  await userEvent.selectOptions(types.getByLabelText("From episode"), "II");
+  await userEvent.selectOptions(types.getByLabelText("Type"), String(0x51));
+  // a click of our own: the work starts after the next frame
+  (types.getByRole("button", { name: "Copy" }).element() as HTMLElement).click();
+  expect(app.sidePanel.element.inert).toBe(true);
+  app.undo();
+  const select = document.querySelector<HTMLSelectElement>('select[aria-label="Episode"]');
+  if (!select) throw new Error("no episode select");
+  select.value = "1";
+  select.dispatchEvent(new Event("change"));
+  expect(select.value).toBe("0");
+  await app.idle();
+  expect(app.episode).toBe(0);
+  expect(editor.tileTypeCopies(0)).toHaveLength(1);
+  expect(editor.room(0, 43).base[0]).toBe(0x0105);
+});
+
+test("the map's thumbnails are drawn again when the episode's flags change", () => {
+  app.showEpisode(0, 43);
+  const editor = defined(app.editor, "editor");
+  const thumbnail = (id: number) =>
+    (app as unknown as { thumbnail(id: number): unknown }).thumbnail(id);
+  const first = thumbnail(43);
+  expect(thumbnail(43)).toBe(first);
+  const cache = (app as unknown as { thumbnails: Map<number, Map<number, { key: string }>> })
+    .thumbnails;
+  const key = cache.get(0)?.get(43)?.key;
+  editor.setEpisodeFlags(0, 43, editor.episodeFlags(0) ^ 0x20);
+  thumbnail(43);
+  expect(cache.get(0)?.get(43)?.key).not.toBe(key);
+});

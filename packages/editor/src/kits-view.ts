@@ -40,6 +40,12 @@ export class KitsView {
     this.element.setAttribute("aria-label", "Kits");
   }
 
+  /** Forgets the choices (a newly loaded exe or mod). */
+  reset(): void {
+    this.chosen.clear();
+    this.chosenEpisode = -1;
+  }
+
   show(context: KitsContext): void {
     this.context = context;
     if (context.episode !== this.chosenEpisode) {
@@ -68,7 +74,8 @@ export class KitsView {
     box.dataset["key"] = kit.key;
     // the default plan holds as many events as fit: the most that can be chosen
     const fit = context.plan(kit);
-    const chosen = this.chosen.get(kit.key);
+    // ids that are not lacking (any more) are dropped
+    const chosen = this.chosen.get(kit.key)?.filter((id) => fit.lacking.includes(id));
     const plan = chosen ? context.plan(kit, chosen) : fit;
     box.append(element("h4", undefined, `${kit.name} from ${name(kit.from)}`));
     const line = (key: string, text: string) => {

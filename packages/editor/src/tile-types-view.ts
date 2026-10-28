@@ -49,6 +49,11 @@ export class TileTypesView {
   /** The form's choices: source episode, source type, target type. */
   private choice: { episode: number; from: number; of: number; to: number } | undefined;
 
+  /** Forgets the choices (a newly loaded exe or mod). */
+  reset(): void {
+    this.choice = undefined;
+  }
+
   constructor(events: TileTypesViewEvents) {
     this.events = events;
     this.element.setAttribute("aria-label", "Tile types");
