@@ -489,7 +489,9 @@ Files in `packages/formats/src`:
   IV. The rule is the episode vtable's +0x00 (which room, for drawing, 0x401af0) and
   +0x04 (loading the room with it, 0x432820: 0x439130, IV 0x40d780) together
   (`episode-methods.ts`, `readBackdropRule`, `withBackdropRule`; `classes.backdropRule`, which
-  `backdropRoom` follows). **Verified under Wine** (`pnpm test:game`): II with both
+  `backdropRoom` follows). Methods that are neither known pair (a `code` change) give
+  `undefined`: the episode loads, no backdrop is drawn and the Episode tab's checkbox is
+  disabled. **Verified under Wine** (`pnpm test:game`): II with both
   pointers switched to IV's draws a room 244 (a copy of 115) over 144, as our render
   does but for 144's type 0x4d (a renderer gap); with only +0x00 switched it still drew 44. Drawing the room (0x401af0, 0x401ba0) loads that room's map from the scene and
   draws its cell wherever the room's own cell is of class 99, so the house's interior

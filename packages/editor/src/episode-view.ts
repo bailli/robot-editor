@@ -39,8 +39,9 @@ export interface EpisodeContext {
   originalRucksack: number;
   flags: number;
   originalFlags: number;
-  backdrop: BackdropRule;
-  originalBackdrop: BackdropRule;
+  /** undefined: the episode's methods are none of the known rules. */
+  backdrop: BackdropRule | undefined;
+  originalBackdrop: BackdropRule | undefined;
   diagonal: boolean;
   originalDiagonal: boolean;
   /** The shown room. */
@@ -59,10 +60,12 @@ function ruleRow(
   title: string,
   [checked, original]: readonly [boolean, boolean],
   change: (on: boolean) => void,
+  disabled = false,
 ): HTMLElement {
   const box = element("input");
   box.type = "checkbox";
   box.checked = checked;
+  box.disabled = disabled;
   box.addEventListener("change", () => {
     change(box.checked);
   });
@@ -241,6 +244,8 @@ export class EpisodeView {
       (on) => {
         this.events.backdrop(on ? "minus100" : "mod100");
       },
+      // the episode's methods are none of the known pairs (a code change): nothing to toggle
+      context.backdrop === undefined,
     );
     return [
       element("h3", undefined, "Rules"),

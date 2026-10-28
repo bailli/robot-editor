@@ -120,8 +120,11 @@ export interface EpisodeClasses {
    * dword): logic records name an actor by an index into it (see recordActorKind).
    */
   actorKinds: readonly number[];
-  /** Which room the episode draws behind a room with a backdrop (episode-methods.ts). */
-  backdropRule: BackdropRule;
+  /**
+   * Which room the episode draws behind a room with a backdrop (episode-methods.ts);
+   * undefined when its methods are none of the known ones: no backdrop is drawn.
+   */
+  backdropRule: BackdropRule | undefined;
 }
 
 const CLASS_TABLES: readonly number[] = [0x479ad8, 0x475838, 0x476e00, 0x477ca0, 0x478c40];

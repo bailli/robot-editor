@@ -1162,7 +1162,7 @@ export class Editor {
   }
 
   /** Which room the episode draws behind a room with a backdrop, as edited (backdrop.ts). */
-  backdropRule(episode: number): BackdropRule {
+  backdropRule(episode: number): BackdropRule | undefined {
     return this.backdropRules.get(episode) ?? readBackdropRule(this.game.image, episode);
   }
 
@@ -1170,7 +1170,7 @@ export class Editor {
   setBackdropRule(episode: number, room: number, rule: BackdropRule): Edit | undefined {
     this.endStroke();
     const before = this.backdropRule(episode);
-    if (before === rule) return undefined;
+    if (before === undefined || before === rule) return undefined;
     return this.commitEpisode({ episode, room, backdrop: { before, after: rule } });
   }
 

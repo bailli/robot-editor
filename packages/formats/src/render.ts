@@ -408,6 +408,7 @@ export function backdropRoom(
   classes: EpisodeClasses,
 ): Room | undefined {
   if (!BACKDROP_MARKS.some((i) => showsBackdrop(room, i, classes))) return undefined;
+  if (classes.backdropRule === undefined) return undefined;
   const id = backdropRoomId(classes.backdropRule, room.id);
   return rooms.find((r) => r.id === id);
 }

@@ -29,16 +29,15 @@ const METHODS: Readonly<Record<BackdropRule, readonly [number, number]>> = {
 
 const vtable = (episode: number) => forEpisode(EPISODE_VTABLES, episode);
 
-export function readBackdropRule(image: PeImage, episode: number): BackdropRule {
+/**
+ * The episode's backdrop rule, or undefined when its vtable holds methods other than the
+ * two known pairs (a `code` change can put them there): no backdrop is drawn then.
+ */
+export function readBackdropRule(image: PeImage, episode: number): BackdropRule | undefined {
   const bytes = readVa(image, vtable(episode), 8);
   const view = new DataView(bytes.buffer, bytes.byteOffset, 8);
   const [first, second] = [view.getUint32(0, true), view.getUint32(4, true)];
-  const rule = BACKDROP_RULES.find((r) => METHODS[r][0] === first && METHODS[r][1] === second);
-  if (!rule) {
-    const found = [first, second].map((m) => `0x${m.toString(16)}`).join(", ");
-    throw new Error(`episode ${episode}: unexpected backdrop methods ${found}`);
-  }
-  return rule;
+  return BACKDROP_RULES.find((r) => METHODS[r][0] === first && METHODS[r][1] === second);
 }
 
 /** A copy of the exe whose episode draws backdrops by `rule`. */

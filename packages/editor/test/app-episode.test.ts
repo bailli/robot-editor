@@ -2,15 +2,20 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 
 import {
+  EPISODE_VTABLES,
+  NO_CHANGES,
   ROOM_WIDTH,
   SCREEN_WIDTH,
   TILE_HEIGHT,
   TILE_WIDTH,
+  applyMod,
+  emptyMod,
   parseMod,
   readDealer,
+  readVa,
 } from "@robot/formats";
 
-import { app, clickCell, fireAt, game, useApp } from "./app-setup.ts";
+import { app, bytes, clickCell, fireAt, game, useApp } from "./app-setup.ts";
 import { defined } from "./game.ts";
 
 useApp();
@@ -27,6 +32,19 @@ const tab = (name: string) => app.sidePanel.state(name);
 const status = () => document.querySelector(".status")?.textContent;
 const dealer = () => page.getByRole("region", { name: "Dealer" });
 const price = (n: number) => dealer().getByLabelText(`Price of good ${n}`, { exact: true });
+
+test("an episode whose backdrop methods are unknown loads; its backdrop checkbox is disabled", async () => {
+  const va = EPISODE_VTABLES[0] ?? 0;
+  const expectBytes = readVa(game.image, va, 4).slice();
+  const code = [{ va, expect: expectBytes, bytes: Uint8Array.of(0, 0x10, 0x40, 0) }];
+  const odd = applyMod(game.image, { ...emptyMod(bytes), changes: { ...NO_CHANGES, code } });
+  app.load(odd);
+  app.showEpisode(0, 1);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  await expect.element(page.getByRole("checkbox", { name: /room 100 below/ })).toBeDisabled();
+  expect(app.editor?.backdropRule(0)).toBeUndefined();
+  expect(app.editor?.setBackdropRule(0, 1, "minus100")).toBeUndefined();
+});
 
 test("the Episode tab edits the dealer's goods, undoably; the mod keeps them", async () => {
   const original = defined(readDealer(game.image, 1));

@@ -9,6 +9,7 @@ import {
   withBackdropRule,
   withDiagonalMoves,
 } from "../src/episode-methods.ts";
+import { EPISODE_VTABLES, fileOffset } from "../src/episode.ts";
 import { EPISODES, Game } from "../src/game.ts";
 import { parsePe } from "../src/pe.ts";
 import { backdropRoom } from "../src/render.ts";
@@ -38,6 +39,19 @@ test("the rule changes in the vtable only; the renderer follows the exe", () => 
   const rooms = game.episode(2).rooms;
   expect(backdropRoom(room, rooms, game.episode(2).classes)?.id).toBe(44);
   expect(backdropRoom(room, rooms, readEpisodeClasses(patched, 2))?.id).toBe(144);
+});
+
+test("an unknown pair of backdrop methods leaves the episode loading, drawing no backdrop", () => {
+  // what a `code` change can leave in the vtable: neither pair
+  const odd = game.image.data.slice();
+  const at = fileOffset(game.image, EPISODE_VTABLES[2] ?? 0, 8);
+  new DataView(odd.buffer).setUint32(at, 0x401000, true);
+  const image = parsePe(odd);
+  expect(readBackdropRule(image, 2)).toBeUndefined();
+  const classes = new Game(odd).episode(2).classes;
+  expect(classes.backdropRule).toBeUndefined();
+  const room = { ...game.room(2, 115), id: 244 };
+  expect(backdropRoom(room, game.episode(2).rooms, classes)).toBeUndefined();
 });
 
 test("diagonal moves: only III and IV; switched in the vtable", () => {
