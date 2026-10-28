@@ -645,6 +645,24 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   knows no operations beyond those our compiler emits (opcodes 0x01–0x09, 0x0e/0x0f,
   0x41–0x43, operators 0x80–0x8e and 0x91–0x96), so `while`, `break` or compound
   assignments, if the original language had them, compiled to the same forms.
+- **Episode IV's ending** is started by its start room's script (room 53, "Der
+  Landeplatz"): `SetWArea(13, 18, 1, 1)`, and on entering that cell with StationBOff
+  == 6 it replaces the lamps (class 233) at (22, 18) and (25, 21) with O_WALL2 and calls
+  `SetObj(116, 0, 30, 0)`. Tile 116 (class 0xdc) is James Blond's helicopter, an actor
+  (factory 0x44e0b0, constructor 0x4468a0, 3×2 cells, drawn with `_Bond`): SetObj
+  creates an actor through the factory whatever the mode, and 0x433420 enters it in the
+  per-cell table only inside the map, so at row 30 it starts below the screen. A tile
+  116 in the map does nothing (its room-load method 0x43ec50 only returns), so only a
+  script starts the ending, from any room and on any condition. The rest is fixed in its
+  tick (0x446920, from the code only): it waits for the hero standing on (13, 18),
+  freezes him, plays `FANF2` and opens the `Das Ende` window with text 1970, whose
+  markers `#1`…`#3` (0x446de0) start its phases, each after the one before has
+  finished: #1 it flies in (y one step towards 15, while y is 11–19 x up to 11, so from
+  x ≤ 11 it lands at (11, 15); `HELI`, `HELILAND`), #2 James Blond (class 0xec) at
+  (13, 17) in the map (`BOND`), #3 Blond goes, the hero steps to (13, 17) and is hidden,
+  the helicopter rises and flies off north-east (`DIDADA`). The removed lamps lie inside
+  the window, which grows from about (28, 16) to (18, 11); they would blink through it
+  (a guess from the window's arguments, 0x43e880). Not tried in the game.
 - `pnpm robot script E ROOM` shows a script and its disassembly; with a source file and
   an output exe it writes the script into the room (`withRoomScript`).
 
@@ -879,7 +897,7 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   map; in Junior, I and II the registry option `AltShapes` (bit 4 of 0x4c5d88, off by
   default) replaces a list of types (0x4757a0, 0x476d68, 0x479a70) with the shapes of
   SHAPES 1003 (Junior) or 1903 (I, II), 0x43b220; IV draws class 0xdc (tile 0x74, in no
-  room) with `_Bond`. `_Dealer`, `_Android` and `_Hero1` in 1003 are never looked up.
+  room; the ending's helicopter, see room scripts) with `_Bond`. `_Dealer`, `_Android` and `_Hero1` in 1003 are never looked up.
   **Verified with the driver** (`pnpm test:game`, episode III's start room with robots,
   turtles, boars, snakes and a native, rows 0, 3 and 5, stacked robots): the game's actor
   list (class +0x16, sprite +0x28) is the order and the sprites `roomActors` and
@@ -1634,6 +1652,8 @@ Roughly by value for the editor.
 | 0x42f910, 0x42f3a0           | registration: checksum of name and episode value; licensee name set            |
 | 0x407ec0, 0x42c820, 0x410050 | script Wizzard; the word KILLHIM; place the wizard's door (registered only)    |
 | 0x44a831                     | the bus: BusWest, or BusEast (≥ 100 only registered, else room 53)             |
+| 0x407160, 0x433420           | script SetObj; place a value (an actor if its class has a factory)             |
+| 0x446920, 0x446de0           | episode IV's ending: the helicopter's tick; text 1970's `#n` markers           |
 
 ## Gotchas
 
