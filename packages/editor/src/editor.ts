@@ -522,11 +522,7 @@ export class Editor {
    */
   freeTileTypes(episode: number): number[] {
     const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
-    const used = new Set<number>();
-    for (const room of this.rooms(episode)) {
-      for (const layer of [room.base, room.overlay])
-        for (const cell of layer) used.add(cell & 0xff);
-    }
+    const used = new Set(this.rooms(episode).flatMap((room) => [...roomTypes(room)]));
     return freeTileTypes(this.pristine.image, episode).filter(
       (type) => copied.has(type) || (!used.has(type) && !FIXED_TYPES.includes(type)),
     );
@@ -611,7 +607,7 @@ export class Editor {
     if (source === undefined) {
       if (!old) return undefined;
       const rooms = this.rooms(episode)
-        .filter((r) => [...r.base, ...r.overlay].some((cell) => (cell & 0xff) === to))
+        .filter((r) => roomTypes(r).has(to))
         .map((r) => r.id);
       if (rooms.length > 0)
         throw new RangeError(`rooms ${rooms.join(", ")} use type 0x${to.toString(16)}`);
@@ -2160,6 +2156,16 @@ export class Editor {
     rooms[i] = copy;
     return copy;
   }
+}
+
+/** The tile types a room holds: in its map and in its records' cells (recordCellOffsets). */
+function roomTypes(room: Room): Set<number> {
+  const types = new Set<number>();
+  for (const layer of [room.base, room.overlay]) for (const cell of layer) types.add(cell & 0xff);
+  for (const { data } of room.records) {
+    for (const at of recordCellOffsets(data[0])) types.add(data[at]);
+  }
+  return types;
 }
 
 const before = (change: CellChange) => change.before;

@@ -866,6 +866,19 @@ describe("Editor and tile types from other episodes", () => {
     expect(editor.saveMod().changes.rooms.map((c) => c.id)).toEqual([41, 42]);
   });
 
+  test("a type a record's cell holds is not free", () => {
+    expect(new Editor(game).freeTileTypes(0)).toEqual(expect.arrayContaining([0x50, 0x51]));
+    // an oracle's object (offset 8) and a teleporter's cell (offset 2) in Junior's room
+    const room = game.episode(0).rooms[0];
+    const oracle = Uint8Array.of(12, 0, 0, 0, 0, 0, 0, 0, 0x50, 0);
+    const teleporter = Uint8Array.of(13, 0, 0x51, 0, 0, 0, 0, 0, 0, 0);
+    const records = [...room.records, { slot: 200, data: oracle }, { slot: 201, data: teleporter }];
+    const rooms = game.episode(0).rooms.map((r) => (r === room ? { ...r, records } : r));
+    const free = new Editor(new Game(game.withScene(0, rooms))).freeTileTypes(0);
+    expect(free).not.toContain(0x50);
+    expect(free).not.toContain(0x51);
+  });
+
   test("text entries edited before a copy stay; the copy's description comes along", () => {
     const editor = new Editor(game);
     editor.setRoomName(1, 44, "DER GANG");
