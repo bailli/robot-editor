@@ -1139,6 +1139,13 @@ Supported:
   type copy). Refused: a text the source lacks, an entry from 1800 on (event texts come
   with their events). A text written in the editor wins over its copy (saveMod drops
   the copy). Copies into other resources (III's 1320) are kept from a mod but not listed
+- code patches (tab Episode, `code-view.ts`; mod kind `code`, all episodes): the opened
+  mod's byte writes by address (`Editor.codePatches`): section, the bytes the exe holds
+  there and those written, and a warning where edits made here write over some of them
+  (the start, rucksack, flags, backdrop rule, moves and dealer come later, kinds 4 and
+  7–11); each removable (× → `Editor.removeCode`, one undo step making a new base).
+  Not written in the editor: they come from a mod file, whose `expect` the exe must
+  hold, else the mod does not open
 - kits (tab Episode, `kits-view.ts`; `kits.ts`: `KITS`, `planKit`, `kitChanges`): oracles
   (II's tangram 0x50 and oracle 0x51, events 262–271) and circuits (I's letter 0x25,
   gate 0x42, bulb 0x43, stairs 0x3d; event 293). Per kit what adding it to the shown
@@ -1279,7 +1286,8 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
-- **Next:** the proxy as an in-memory loader; the `code` kind in the editor. Both
+- **Next:** the proxy as an in-memory loader. The `code` kind is listed in the editor
+  (Episode tab, removable; not written there). Both
   pilots are kits in the Episode tab now ("Add oracles", "Add circuits", each with
   "Place example"); a copied event takes its sound where the episode has the piece
   (mod kind `events`, `sound`). Sounds the episode lacks would need MUSIC pieces copied,
@@ -1369,13 +1377,13 @@ points, sound? }` → `withEventEntries`, after the tile types (it may override 
   `applyPatch` and `applyMod`; `sha256.ts` (synchronous, for the browser too);
   `serializeRoom`/`parseRoom` in `scene.ts`. On the command line
   `robot mod apply MOD OUT.exe`, later `robot mod compile MOD OUT.patch` for the proxy.
-- **The editor** works on two images: the **base** (pristine + kinds 1–2 and the text
-  copies: the tile types, events and text copies, which it edits by making a new base
-  (`BaseChanges`; events copied with their texts), and code, which it does not edit) and
-  the **edited** state on top (kinds 3–9: the dealers, rooms, texts, the start, the
+- **The editor** works on two images: the **base** (pristine + kinds 1–3 and the text
+  copies: the tile types, events, code and text copies, which it edits by making a new
+  base (`BaseChanges`; events copied with their texts; code only taken out)) and
+  the **edited** state on top (kinds 4–11: the dealers, rooms, texts, the start, the
   rucksack, the flags, the backdrop rule and diagonal moves). Opening takes an exe and, optionally, a
-  mod; "Save mod" writes the tile types, events and text copies as edited, code as loaded plus kinds
-  3–9 as the difference between the edited state and the base (dealers, starts,
+  mod; "Save mod" writes the tile types, events, code and text copies as edited plus kinds
+  4–11 as the difference between the edited state and the base (dealers, starts,
   rucksacks, flags, backdrop rules and moves that differ, rooms that
   differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
   written in the editor replaces its copy in `copyTexts`. "Save exe" and "Test in
@@ -1392,7 +1400,7 @@ points, sound? }` → `withEventEntries`, after the tile types (it may override 
 - **Decided 2026-10-27:** whole rooms (no cell diffs); no editor UI for `tileTypes`
   and code at first (the file and the command line); English texts later. The start,
   then the tile types got their UI the same day (Episode tab), events copied from other
-  episodes on 2026-10-28.
+  episodes on 2026-10-28, the code list (no writing of code) the same day.
   Open: the patch file's format for the proxy (only when the loader is built).
 
 ## Trying edits in the game

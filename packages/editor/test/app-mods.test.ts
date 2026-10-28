@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 
-import { type Mod, NO_CHANGES, emptyMod, modJson, parseMod } from "@robot/formats";
+import {
+  type Mod,
+  NO_CHANGES,
+  emptyMod,
+  modJson,
+  parseMod,
+  readEpisodeStart,
+  readVa,
+} from "@robot/formats";
 
 import { app, bytes, game, useApp } from "./app-setup.ts";
 
@@ -66,4 +74,24 @@ test("a broken mod or one for another exe changes nothing", () => {
   }).toThrow();
   expect(status()).toBe("Cannot open other.json: base: the mod is for another exe");
   expect(app.editor).toBe(before);
+});
+
+test("the Episode tab lists the mod's code; × takes a patch out", async () => {
+  // III's start method: the hero's x (c6 05 09 e3 4f 00 xx)
+  const va = 0x40b466;
+  const [x = 0] = readVa(game.image, va, 1);
+  const mod: Mod = {
+    ...emptyMod(bytes, "code"),
+    changes: { ...NO_CHANGES, code: [{ va, expect: Uint8Array.of(x), bytes: Uint8Array.of(5) }] },
+  };
+  app.loadMod(modJson(mod), "code.robotmod.json");
+  app.showEpisode(3, readEpisodeStart(game.image, 3).room);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const code = page.getByRole("region", { name: "Code patches" });
+  const was = x.toString(16).padStart(2, "0");
+  await expect.element(code.getByText(`0x40b466 (.text): ${was} → 05`)).toBeVisible();
+  await code.getByRole("button", { name: "×" }).click();
+  await expect.element(code.getByText("The mod patches no code.")).toBeVisible();
+  expect(status()).toBe("The code at 0x40b466 is as the exe has it again");
+  expect(app.editor?.saveMod().changes.code).toEqual([]);
 });

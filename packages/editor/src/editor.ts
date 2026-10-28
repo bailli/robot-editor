@@ -1,6 +1,7 @@
 import {
   BACKDROP_CLASS,
   type BackdropRule,
+  type CodeChange,
   type CopyTextsChange,
   DIRECTIONS,
   DOOR_IN_CLASS,
@@ -24,7 +25,6 @@ import {
   MAX_ROOMS,
   MAX_RUCKSACK,
   type Mod,
-  type ModChanges,
   ModError,
   NAMED_ROOMS,
   NO_CHANGES,
@@ -66,6 +66,7 @@ import {
   readEpisodeStart,
   readEventTable,
   readRucksack,
+  readVa,
   recordCell,
   recordCellOffsets,
   roomChanges,
@@ -181,12 +182,22 @@ export interface TileTypeCopy {
 
 /**
  * What the base adds to the exe as loaded (Editor): tile types copied from other
- * episodes, event table entries (mod kind events) and text entries copied (copyTexts).
+ * episodes, event table entries (mod kind events), the mod's code and text entries
+ * copied (copyTexts).
  */
 export interface BaseChanges {
   copies: readonly TileTypeCopy[];
   events: readonly EventChange[];
+  code: readonly CodeChange[];
   copyTexts: readonly CopyTextsChange[];
+}
+
+/** A code change of the mod (kind code) as the view lists it. */
+export interface CodePatch extends CodeChange {
+  /** The section it lies in, e.g. ".text". */
+  section: string;
+  /** How many of its bytes edits made here (start, flags, …) write over. */
+  overwritten: number;
 }
 
 /** An event table entry the mod sets (kind events), and where its text comes from. */
@@ -387,9 +398,9 @@ const inRoom = (index: number) => Number.isInteger(index) && index >= 0 && index
  * Logic cells (type 0x7f) point to the room's logic records: painting skips them; records
  * are added, changed and removed with the record operations, each one undo step.
  *
- * With a mod (mod.ts), the editor works on its base: the pristine exe with the changes
- * it does not edit (code) and the tile types, event entries and text copies applied;
- * copying tile types or events makes a new base. The mod's rooms, texts,
+ * With a mod (mod.ts), the editor works on its base: the pristine exe with the tile
+ * types, event entries, code and text copies applied; copying tile types or events, or
+ * removing code, makes a new base. The mod's rooms, texts,
  * dealers, starts, rucksacks and flags are where editing starts; saveMod gives them
  * back with the edits, as the differences to the base.
  */
@@ -418,8 +429,8 @@ export class Editor {
   readonly pristine: Game;
   /** The loaded mod's name, author, description and the changes the editor keeps. */
   private readonly mod: Omit<Mod, "base">;
-  /** Tile types, event entries and text copies: what the base adds to the pristine exe. */
-  private changes: BaseChanges = { copies: [], events: [], copyTexts: [] };
+  /** Tile types, event entries, code and text copies: what the base adds to the pristine exe. */
+  private changes: BaseChanges = { copies: [], events: [], code: [], copyTexts: [] };
 
   constructor(game: Game, mod?: Mod) {
     this.pristine = game;
@@ -431,12 +442,11 @@ export class Editor {
     const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
     const { rucksack, flags, backdrop, moves } = mod.changes;
     if (mod.base !== this.pristineHash) throw new ModError("base: the mod is for another exe");
-    const kept: ModChanges = { ...NO_CHANGES, code };
-    this.mod = { ...mod, changes: kept };
+    this.mod = { ...mod, changes: NO_CHANGES };
     const copies = tileTypes.flatMap(({ episode, from, types }) =>
       types.map(([to, of]) => ({ episode, from, to, of })),
     );
-    this.changes = { copies, events, copyTexts };
+    this.changes = { copies, events, code, copyTexts };
     this.base = this.baseWith(this.changes);
     for (const episode of new Set(rooms.map((c) => c.episode))) {
       const set = rooms.filter((c) => c.episode === episode);
@@ -470,10 +480,9 @@ export class Editor {
   }
 
   /** The base with these changes (the pristine exe if there is nothing to apply). */
-  private baseWith({ copies, events, copyTexts }: BaseChanges): Game {
+  private baseWith({ copies, events, code, copyTexts }: BaseChanges): Game {
     const tileTypes = tileTypeChanges(copies);
-    const changes = { ...this.mod.changes, tileTypes, events, copyTexts };
-    const { code } = changes;
+    const changes = { ...this.mod.changes, tileTypes, events, code, copyTexts };
     if ([tileTypes, events, code, copyTexts].every((list) => list.length === 0))
       return this.pristine;
     return new Game(
@@ -875,10 +884,45 @@ export class Editor {
       c.types.map(([to, of]) => ({ episode, to, from: c.from, of })),
     );
     return this.rebase(episode, room, {
+      ...this.changes,
       copies: [...this.changes.copies, ...copies],
       events: [...this.changes.events, ...changes.events],
       copyTexts,
     });
+  }
+
+  /**
+   * The mod's code changes (kind code, all episodes), by address, with the section each
+   * lies in and how many of its bytes the edits made here write over (they come later).
+   */
+  codePatches(): CodePatch[] {
+    const { code } = this.changes;
+    if (code.length === 0) return [];
+    const { image } = this.game;
+    const edited = parsePe(this.withSettings(image.data));
+    return code
+      .map((c) => {
+        const rva = c.va - image.imageBase;
+        const section = image.sections.find(
+          (s) => rva >= s.virtualAddress && rva < s.virtualAddress + s.rawSize,
+        );
+        const now = readVa(edited, c.va, c.bytes.length);
+        const overwritten = c.bytes.filter((b, k) => now[k] !== b).length;
+        return { ...c, section: section?.name ?? "", overwritten };
+      })
+      .sort((a, b) => a.va - b.va);
+  }
+
+  /**
+   * Takes the mod's code change at `va` out (the exe's own bytes there again); one undo
+   * step (shown in room `room` of `episode`) that makes a new base (rebase), undefined if
+   * the mod has none there.
+   */
+  removeCode(episode: number, room: number, va: number): Edit | undefined {
+    this.endStroke();
+    const code = this.changes.code.filter((c) => c.va !== va);
+    if (code.length === this.changes.code.length) return undefined;
+    return this.rebase(episode, room, { ...this.changes, code });
   }
 
   rooms(episode: number): readonly Room[] {
@@ -1857,6 +1901,7 @@ export class Editor {
         ...this.mod.changes,
         tileTypes: tileTypeChanges(this.changes.copies),
         events: this.changes.events,
+        code: this.changes.code,
         dealer,
         copyTexts,
         texts,
@@ -1900,6 +1945,11 @@ export class Editor {
     for (const [id, text] of this.texts) {
       if (text !== this.game.textSource(id)) exe = new Game(exe).withText(id, text);
     }
+    return this.withSettings(exe);
+  }
+
+  /** `exe` with the edited dealers, starts, rucksacks, flags, backdrop rules and moves. */
+  private withSettings(exe: Uint8Array): Uint8Array {
     for (const [episode, dealer] of this.dealers) {
       if (this.isDealerEdited(episode)) exe = withDealer(parsePe(exe), episode, dealer);
     }

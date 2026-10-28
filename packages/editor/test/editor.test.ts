@@ -30,6 +30,7 @@ import {
   readEventTable,
   readOracleSymbols,
   readRucksack,
+  readVa,
   roomCircuit,
   roomCompiledScript,
   roomScript,
@@ -673,6 +674,42 @@ describe("Editor and mods", () => {
     const { copyTexts, texts } = editor.saveMod().changes;
     expect(copyTexts).toEqual([{ resource: 1110, from: 1210, entries: [[331, 331]] }]);
     expect(texts.map((c) => c.entry)).toEqual([1042, 1044]);
+  });
+
+  test("the mod's code: listed, written over by edits here, taken out as one step", () => {
+    // III's start method: the hero's x (c6 05 09 e3 4f 00 xx); III's event entry 16's points
+    const startX = 0x40b460 + 6;
+    const points = 0x4780d8 + 12 * 16 + 4;
+    const code = [
+      { va: points, expect: readVa(game.image, points, 4), bytes: Uint8Array.of(1, 2, 0, 0) },
+      { va: startX, expect: readVa(game.image, startX, 1), bytes: Uint8Array.of(5) },
+    ];
+    const mod: Mod = { ...emptyMod(game.image.data, "code"), changes: { ...NO_CHANGES, code } };
+    const editor = new Editor(game, mod);
+    expect(modJson(editor.saveMod())).toBe(modJson(mod));
+    const start = readEpisodeStart(game.image, 3);
+    expect(readEpisodeStart(editor.game.image, 3)).toEqual({ ...start, x: 5 });
+    expect(editor.codePatches().map((p) => [p.va, p.section, p.overwritten])).toEqual([
+      [startX, ".text", 0],
+      [points, ".data", 0],
+    ]);
+    // a start set here writes the same byte
+    editor.setStart(3, { ...start, x: 7 });
+    expect(editor.codePatches()[0]?.overwritten).toBe(1);
+    editor.undo();
+    expect(editor.codePatches()[0]?.overwritten).toBe(0);
+    const edit = editor.removeCode(3, start.room, startX);
+    expect(edit?.room).toBe(start.room);
+    expect(editor.removeCode(3, start.room, startX)).toBeUndefined();
+    expect(editor.codePatches().map((p) => p.va)).toEqual([points]);
+    expect(readEpisodeStart(editor.game.image, 3)).toEqual(start);
+    expect(editor.saveMod().changes.code).toEqual([code[0]]);
+    editor.removeCode(3, start.room, points);
+    expect(editor.game).toBe(game);
+    editor.undo();
+    editor.undo();
+    expect(editor.codePatches()).toHaveLength(2);
+    expect(readEpisodeStart(editor.game.image, 3).x).toBe(5);
   });
 
   test("a mod for another exe is refused", () => {

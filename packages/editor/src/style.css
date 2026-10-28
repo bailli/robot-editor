@@ -1447,6 +1447,20 @@ canvas.cell.text-tile {
   padding: 1px 6px;
 }
 
+.code-patches .dealer-good {
+  flex-wrap: wrap;
+}
+
+.code-patches .dealer-name {
+  font-family: ui-monospace, monospace;
+}
+
+.code-overwritten {
+  flex-basis: 100%;
+  color: var(--error);
+  font-size: 12px;
+}
+
 .start-bar,
 .dealer-bar {
   display: flex;

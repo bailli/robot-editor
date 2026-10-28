@@ -72,6 +72,7 @@ import {
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
 import { CircuitView } from "./circuit-view.ts";
+import { CodeView } from "./code-view.ts";
 import { confirmDialog } from "./confirm-dialog.ts";
 import { DealerView } from "./dealer-view.ts";
 import {
@@ -620,6 +621,16 @@ export class App {
       );
     },
   });
+  readonly codeView = new CodeView({
+    remove: (va) => {
+      const at = `0x${va.toString(16)}`;
+      void this.busy(`Removing the code at ${at}…`, () => {
+        if (!this.need().removeCode(this.episode, this.roomId, va)) return;
+        this.gameChanged();
+        this.setStatus(`The code at ${at} is as the exe has it again`);
+      });
+    },
+  });
   readonly kitsView = new KitsView({
     add: (kit, events) => {
       const name = EPISODE_NAMES[this.episode] ?? "";
@@ -710,6 +721,7 @@ export class App {
           this.eventsView.element,
           this.textsView.element,
           this.dealerView.element,
+          this.codeView.element,
         ),
       },
     ],
@@ -2443,6 +2455,7 @@ export class App {
         });
       },
     });
+    this.codeView.show(editor.codePatches());
     const dealer = editor.dealer(this.episode);
     const dealerEdited = editor.isDealerEdited(this.episode);
     const settingsEdited =
