@@ -119,10 +119,23 @@ def stop_process(process):
         process.wait()
 
 
-def free_display():
+def start_xvfb():
+    """Xvfb on a free display from :90 on, once it listens: the process and the display.
+    Another one taking the display first (between looking and starting) makes ours end,
+    and the next display is tried."""
     for n in range(90, 120):
-        if not os.path.exists(f"/tmp/.X11-unix/X{n}") and not os.path.exists(f"/tmp/.X{n}-lock"):
-            return f":{n}"
+        if os.path.exists(f"/tmp/.X11-unix/X{n}") or os.path.exists(f"/tmp/.X{n}-lock"):
+            continue
+        xvfb = subprocess.Popen(["Xvfb", f":{n}", "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        deadline = time.time() + 10
+        while xvfb.poll() is None:
+            if os.path.exists(f"/tmp/.X11-unix/X{n}"):
+                return xvfb, f":{n}"
+            if time.time() > deadline:
+                stop_process(xvfb)
+                raise RuntimeError("Xvfb did not start")
+            time.sleep(0.05)
     raise RuntimeError("no free X display")
 
 
@@ -187,12 +200,9 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
     for d in screenshot_dir():
         shutil.rmtree(d)  # screenshots and saves, also those of games played with `play`
     shutil.copyfile(exe, os.path.join(GAME_DIR, "GameOfRobot.exe"))
-    display = free_display()
-    xvfb = subprocess.Popen(["Xvfb", display, "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    xvfb, display = start_xvfb()
     game = None
     try:
-        time.sleep(1)
         # A Wine virtual desktop activates the game window like Windows would (Xvfb has no
         # window manager).
         game = subprocess.Popen(["wine", "explorer", "/desktop=robot,1024x768", "C:\\robot\\GameOfRobot.exe"],
@@ -327,10 +337,7 @@ def serve(exe=EXE, port=None):
     os.makedirs(DRIVE_DIR, exist_ok=True)
     shutil.copyfile(exe, os.path.join(DRIVE_DIR, "GameOfRobot.exe"))
     shutil.copyfile(PROXY, os.path.join(DRIVE_DIR, "ddraw.dll"))
-    display = free_display()
-    xvfb = subprocess.Popen(["Xvfb", display, "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    game = None
+    xvfb = game = None
 
     def stop(*_):
         raise SystemExit(0)
@@ -349,7 +356,7 @@ def serve(exe=EXE, port=None):
 
         threading.Thread(target=watch, daemon=True).start()
     try:
-        time.sleep(1)
+        xvfb, display = start_xvfb()
         port = port or free_port()
         token = os.urandom(8).hex()
         game = subprocess.Popen(["wine", "explorer", "/desktop=robot,1024x768", "C:\\robot-drive\\GameOfRobot.exe"],
@@ -366,7 +373,8 @@ def serve(exe=EXE, port=None):
         # A signal now (the driver ends us as the game ends) must not cut this short.
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        run("wineserver", "-k", check=False)
+        if game:  # not before: it would end a game of `play` for nothing
+            run("wineserver", "-k", check=False)
         stop_process(game)
         stop_process(xvfb)
 
