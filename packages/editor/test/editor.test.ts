@@ -5,6 +5,7 @@ import {
   LOGIC_CELL,
   type Mod,
   NO_CHANGES,
+  ORACLE_CLASS,
   ORACLE_VANISHES_EAST,
   ORACLE_VANISHES_NORTH,
   ROOM_CELLS,
@@ -865,6 +866,91 @@ describe("Editor and events from other episodes", () => {
     expect(() => editor.copyEvent(4, shown, 198, { from: 3, of: 155 })).toThrow(
       /has event 263 already \(entry 197\)/,
     );
+  });
+});
+
+describe("Editor and texts from other episodes", () => {
+  const ivRoom = readEpisodeStart(game.image, 4).room;
+
+  test("II's oracle hint in Junior: a new base, one undo step, saved into exe and mod", () => {
+    const editor = new Editor(game);
+    expect(game.texts(1010)?.entries.has(331)).toBe(false);
+    const edit = editor.setTextCopies(0, 43, [{ to: 331, source: { from: 2, of: 331 } }]);
+    expect(edit?.room).toBe(43);
+    expect(
+      editor.setTextCopies(0, 43, [{ to: 331, source: { from: 2, of: 331 } }]),
+    ).toBeUndefined();
+    expect(editor.textCopies(0)).toEqual([{ to: 331, from: 2, of: 331 }]);
+    expect(editor.game.texts(1010)?.entries.get(331)).toEqual(game.texts(1210)?.entries.get(331));
+    const mod = editor.saveMod();
+    expect(mod.changes.copyTexts).toEqual([{ resource: 1010, from: 1210, entries: [[331, 331]] }]);
+    expect(mod.changes.texts).toEqual([]);
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    const opened = new Editor(game, mod);
+    expect(opened.textCopies(0)).toEqual(editor.textCopies(0));
+    expect(modJson(opened.saveMod())).toBe(modJson(mod));
+    // another source for the entry replaces the copy; undefined takes it back
+    editor.setTextCopies(0, 43, [{ to: 331, source: { from: 2, of: 334 } }]);
+    expect(editor.textCopies(0)).toEqual([{ to: 331, from: 2, of: 334 }]);
+    editor.setTextCopies(0, 43, [{ to: 331, source: undefined }]);
+    expect(editor.textCopies(0)).toEqual([]);
+    expect(editor.game).toBe(game);
+    editor.undo();
+    editor.undo();
+    expect(editor.textCopies(0)).toEqual([{ to: 331, from: 2, of: 331 }]);
+    editor.undo();
+    expect(editor.game).toBe(game);
+  });
+
+  test("a copied oracle brings the texts its class shows, all in one step", () => {
+    const editor = new Editor(game);
+    expect(game.episode(2).classes.classes.get(0x51)?.id).toBe(ORACLE_CLASS);
+    editor.setTileType(0, 43, 0x51, { from: 2, of: 0x51 });
+    const [copy] = editor.tileTypeCopies(0);
+    // II's hints and its death message; Junior has none of them
+    const texts = editor.classTextsToCopy(defined(copy));
+    expect(texts).toEqual([331, 332, 334, 339, 945]);
+    editor.setTextCopies(
+      0,
+      43,
+      texts.map((n) => ({ to: n, source: { from: 2, of: n } })),
+    );
+    expect(editor.textCopies(0).map((c) => c.to)).toEqual(texts);
+    expect(editor.classTextsToCopy(defined(copy))).toEqual([]);
+    editor.undo();
+    expect(editor.textCopies(0)).toEqual([]);
+    // a class without such texts: nothing to copy along
+    editor.setTileType(3, 41, 0x59, { from: 1, of: 0x42 });
+    expect(editor.classTextsToCopy(defined(editor.tileTypeCopies(3)[0]))).toEqual([]);
+  });
+
+  test("event texts are not listed here and stay when a text copy goes", () => {
+    const editor = new Editor(game);
+    editor.copyEvent(4, ivRoom, 197, { from: 2, of: 135 });
+    editor.setTextCopies(4, ivRoom, [{ to: 945, source: { from: 2, of: 945 } }]);
+    expect(editor.textCopies(4)).toEqual([{ to: 945, from: 2, of: 945 }]);
+    editor.setTextCopies(4, ivRoom, [{ to: 945, source: undefined }]);
+    expect(editor.saveMod().changes.copyTexts).toEqual([
+      { resource: 1410, from: 1210, entries: [[1997, 1935]] },
+    ]);
+  });
+
+  test("refused: the same episode, an event text, a text the source lacks", () => {
+    const editor = new Editor(game);
+    const copy = (to: number, from: number, of: number) =>
+      editor.setTextCopies(0, 43, [{ to, source: { from, of } }]);
+    expect(() => copy(331, 0, 331)).toThrow(/another episode/);
+    expect(() => copy(1990, 2, 331)).toThrow(/event texts/);
+    // II has no hint 330
+    expect(() => copy(330, 2, 330)).toThrow(/no text 330/);
+    // a refused copy among several changes nothing
+    expect(() =>
+      editor.setTextCopies(0, 43, [
+        { to: 331, source: { from: 2, of: 331 } },
+        { to: 330, source: { from: 2, of: 330 } },
+      ]),
+    ).toThrow(RangeError);
+    expect(editor.textCopies(0)).toEqual([]);
   });
 });
 

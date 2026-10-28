@@ -1102,7 +1102,9 @@ Supported:
   copy already, which it then replaces); "Copy". Each one undo step, which makes a new
   base (`Editor.setTileType`): text entries edited before stay as they are, the copied
   description comes along; refused: a copy of a copy, a type without a class, a type
-  an edited dealer then lacks. The tiles, names and drawings follow at once. **Tried in
+  an edited dealer then lacks. The tiles, names and drawings follow at once. A copy
+  whose class shows texts of its own (`classTexts`, so far the oracle: hints 330 + n and 945) that the episode lacks gets "Texts", which copies those its source has (II's
+  oracle: 331, 332, 334, 339, 945) in one undo step. **Tried in
   the game** (by hand): Junior's book copied to IV and placed next to the start, taken:
   its first-take box came and its points were added
 - events from other episodes (tab Episode, `events-view.ts`; mod kinds `events` and
@@ -1116,6 +1118,14 @@ Supported:
   copy; refused: an id the table has already, an entry that is not spare. Not copied:
   the sound (the target's sound table line stays). II's oracle events 263 and 266 into
   IV's 197 and 198 save as the mod the oracle game test uses (verified under Wine)
+- texts from other episodes (tab Episode, `texts-view.ts`; mod kind `copyTexts` into the
+  episode's texts, `textsId`): the copies (entry ← episode and entry, the text's start),
+  each removable (×); a form: the episode, an entry of its texts as loaded (number),
+  the entry it goes to (below 1800, the same number by default), what it says and what
+  it replaces; "Copy" (`Editor.setTextCopies`, one undo step, a new base like a tile
+  type copy). Refused: a text the source lacks, an entry from 1800 on (event texts come
+  with their events). A text written in the editor wins over its copy (saveMod drops
+  the copy). Copies into other resources (III's 1320) are kept from a mod but not listed
 - the episode's settings (tab Episode, `episode-view.ts`): the rucksack's capacity
   (1–250); the rules, episode flags as checkboxes: oracles vanish after north, after
   east (0x4000, 0x8000), doors into buildings open without the key (0x80000), robots
@@ -1191,8 +1201,8 @@ stands, decided 2026-10-27; details in the sections named.
   table line (I's sound only where the episode has that MUSIC piece, else its own:
   III has no FANFA2, so its GATE takes nothing) and the first take (event table entry
   n, its text 1800 + n, in III in resource 1320). Not covered: other texts a class
-  shows (the oracle's hints and messages), English texts, code that checks the
-  episode.
+  shows (the oracle's hints and messages: the editor offers them, `classTexts`), English
+  texts, code that checks the episode.
 - **Cross-episode classes in general:** free tile types per episode (no class): Junior
   69 (0x39–0x7d), I 47, II **none**, III 18, IV 15. Some of them lie in rooms anyway
   (cells without a class): Junior 0x39 (room 51, 12 cells), I 0x53 (room 14), III 0x11
@@ -1219,9 +1229,9 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
-- **Next:** the proxy as an in-memory loader; editing the mod's other kinds (code,
-  text copies other than an event's) in the editor. Events copied from other episodes
-  have their UI (Episode tab).
+- **Next:** the proxy as an in-memory loader; the `code` kind in the editor; an event's
+  sound line with its copy. Events and texts copied from other episodes have their UI
+  (Episode tab), so the oracle pilot in IV can be made in the editor alone.
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,

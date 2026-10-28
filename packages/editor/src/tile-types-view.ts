@@ -6,6 +6,8 @@ import { patchChildren } from "./patch.ts";
 export interface TileTypesViewEvents {
   /** Makes `to` a copy of `of` from episode `from`, or removes it (Editor.setTileType). */
   copy(to: number, source: { from: number; of: number } | undefined): void;
+  /** Copies texts of the copy's source episode its class shows (Editor.setTextCopies). */
+  copyTexts(copy: TileTypeCopy, entries: readonly number[]): void;
   /** A canvas showing tile type `type` of episode `episode` (state 0), in its palette. */
   preview(episode: number, type: number): HTMLCanvasElement;
 }
@@ -25,6 +27,8 @@ export interface TileTypesContext {
   free: readonly number[];
   /** The types of an episode that can be copied, with their names. */
   sources: (episode: number) => readonly SourceType[];
+  /** The texts a copy's class shows that the episode lacks (Editor.classTextsToCopy). */
+  classTexts: (copy: TileTypeCopy) => readonly number[];
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -106,7 +110,23 @@ export class TileTypesView {
         this.events.copy(Number(row.dataset["key"]), undefined);
       });
       remove.classList.add("danger");
-      row.append(this.events.preview(episode, c.to), text, remove);
+      row.append(this.events.preview(episode, c.to), text);
+      const texts = context.classTexts(c);
+      if (texts.length > 0) {
+        row.append(
+          button(
+            "Texts",
+            `Copy the texts its class shows from ${name(c.from)}: ${texts.join(", ")}`,
+            () => {
+              // the copy as shown now: a kept button keeps its listener
+              const now = this.context;
+              const copy = now?.copies.find((k) => k.to === Number(row.dataset["key"]));
+              if (now && copy) this.events.copyTexts(copy, now.classTexts(copy));
+            },
+          ),
+        );
+      }
+      row.append(remove);
       list.append(row);
     }
     const nodes: Node[] = [element("h3", undefined, "Tile types from other episodes")];
@@ -121,7 +141,7 @@ export class TileTypesView {
       element(
         "p",
         "hint",
-        "Copied: the class (what it does), the shape, the description, the sound and the first take with its points and text. Not copied: other texts the class shows (an oracle’s hints and messages), English texts, code that checks the episode; the shape keeps its colour numbers, drawn in this episode’s palette. A type rooms use stays a copy.",
+        "Copied: the class (what it does), the shape, the description, the sound and the first take with its points and text. Other texts the class shows (an oracle’s hints and death message) come with “Texts”. Not copied: English texts, code that checks the episode; the shape keeps its colour numbers, drawn in this episode’s palette. A type rooms use stays a copy.",
       ),
     );
     return nodes;

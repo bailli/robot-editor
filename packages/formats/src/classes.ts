@@ -187,6 +187,24 @@ export interface ClassEntry {
   extra: number;
 }
 
+/** The oracles' class (tile 0x51 in episodes II and III). */
+export const ORACLE_CLASS = 0x60;
+
+/**
+ * Entries of the episode's texts (textsId) a class shows beyond its description and
+ * first take, by class id: the oracle its hints (message 330 + n, n from its record,
+ * walked into eastwards) and its death message 945 (southwards). Known from the code
+ * and tried in the game; other classes' messages exist in every episode or are not traced.
+ */
+const CLASS_TEXTS: ReadonlyMap<number, readonly number[]> = new Map([
+  [ORACLE_CLASS, [...Array.from({ length: 16 }, (_, n) => 330 + n), 945]],
+]);
+
+/** The text entries class `id` shows beyond its description and first take (CLASS_TEXTS). */
+export function classTexts(id: number): readonly number[] {
+  return CLASS_TEXTS.get(id) ?? [];
+}
+
 /** The shared empty class object (class 0) that unused tile types point to. */
 export const EMPTY_CLASS_OBJECT = 0x4c777c;
 /** The second dword of unused entries. */

@@ -42,6 +42,7 @@ import {
   applyMod,
   backdropRoom,
   checkMod,
+  classTexts,
   dealerCapacity,
   encodeCp437,
   eventTableLength,
@@ -72,6 +73,7 @@ import {
   sha256,
   spareEventEntries,
   textChanges,
+  textsId,
   withBackdropRule,
   withDealer,
   withDiagonalMoves,
@@ -185,6 +187,60 @@ export interface EventEntry extends EventChange {
 export interface EventSource {
   from: number;
   of: number;
+}
+
+/** A text entry of an episode copied from another episode's texts (mod kind copyTexts). */
+export interface TextCopy {
+  /** The entry of the episode's texts (textsId). */
+  to: number;
+  /** The episode and entry of its texts it copies. */
+  from: number;
+  of: number;
+}
+
+/** An entry of another episode's texts to copy. */
+export interface TextSource {
+  from: number;
+  of: number;
+}
+
+/**
+ * The copies into the episode's texts (textsId) below the event texts, by entry, that
+ * come from another episode's texts.
+ */
+function textCopiesOf(copyTexts: readonly CopyTextsChange[], episode: number): TextCopy[] {
+  const resource = textsId(episode);
+  return copyTexts
+    .filter((c) => c.resource === resource)
+    .flatMap((c) => {
+      const from = EPISODES.find((e) => textsId(e) === c.from);
+      if (from === undefined) return [];
+      return c.entries.filter(([to]) => to < EVENT_TEXT).map(([to, of]) => ({ to, from, of }));
+    })
+    .sort((a, b) => a.to - b.to);
+}
+
+/**
+ * copyTexts with entry `to` of `resource` a copy of entry `of` of resource `from`, or
+ * with `source` undefined a copy of nothing (whichever resource it came from).
+ */
+function withTextCopy(
+  copyTexts: readonly CopyTextsChange[],
+  resource: number,
+  to: number,
+  source: { from: number; of: number } | undefined,
+): CopyTextsChange[] {
+  const out = copyTexts
+    .map((c) =>
+      c.resource === resource ? { ...c, entries: c.entries.filter(([t]) => t !== to) } : c,
+    )
+    .filter((c) => c.entries.length > 0);
+  if (!source) return out;
+  const pair: [number, number] = [to, source.of];
+  const group = out.findIndex((c) => c.resource === resource && c.from === source.from);
+  if (group < 0) out.push({ resource, from: source.from, entries: [pair] });
+  else out[group] = { ...out[group], entries: [...out[group].entries, pair] };
+  return out;
 }
 
 /** The tile types a copy can never go to or come from: empty floor and logic cells. */
@@ -642,11 +698,7 @@ export class Editor {
     const resource = eventTextsId(episode);
     const text = EVENT_TEXT + entry;
     // the entry's text copy goes, whichever resource it came from
-    const copyTexts = this.changes.copyTexts
-      .map((c) =>
-        c.resource === resource ? { ...c, entries: c.entries.filter(([to]) => to !== text) } : c,
-      )
-      .filter((c) => c.entries.length > 0);
+    const copyTexts = withTextCopy(this.changes.copyTexts, resource, text, undefined);
     if (source === undefined) {
       if (!old) return undefined;
       return this.rebase(episode, room, { ...this.changes, events: others, copyTexts });
@@ -662,14 +714,73 @@ export class Editor {
       : old?.text === undefined;
     if (old?.id === id && old.points === points && sameText) return undefined;
     const events = [...others, { episode, entry, id, points }];
-    if (hasText) {
-      const pair: [number, number] = [text, of];
-      const group = copyTexts.find((c) => c.resource === resource && c.from === from);
-      if (group)
-        copyTexts[copyTexts.indexOf(group)] = { ...group, entries: [...group.entries, pair] };
-      else copyTexts.push({ resource, from, entries: [pair] });
+    return this.rebase(episode, room, {
+      ...this.changes,
+      events,
+      copyTexts: hasText ? withTextCopy(copyTexts, resource, text, { from, of }) : copyTexts,
+    });
+  }
+
+  /**
+   * The episode's text entries copied from other episodes' texts (copyTexts into its
+   * textsId, below the event texts), by entry. Copies into other resources (an event's
+   * text: eventEntries) are kept but not listed.
+   */
+  textCopies(episode: number): TextCopy[] {
+    return textCopiesOf(this.changes.copyTexts, episode);
+  }
+
+  /** Why entry `to` of the episode's texts cannot be a copy of `source`, undefined if it can. */
+  textProblem(episode: number, to: number, source: TextSource): string | undefined {
+    const { from, of } = source;
+    if (from === episode) return "a copy comes from another episode";
+    if (!Number.isInteger(to) || to < 0 || to >= EVENT_TEXT)
+      return `entry ${to} is not one below ${EVENT_TEXT} (event texts come with their events)`;
+    if (this.pristine.texts(textsId(from))?.entries.has(of) !== true)
+      return `episode ${from} has no text ${of}`;
+    return undefined;
+  }
+
+  /**
+   * Makes entries of the episode's texts copies of other episodes' (`source`), or with
+   * `source` undefined takes an entry's copy back; one undo step that makes a new base
+   * (rebase), undefined if nothing changes. Throws a RangeError where a copy cannot be
+   * made (textProblem). A text entry written in the editor stays and wins (saveMod).
+   */
+  setTextCopies(
+    episode: number,
+    room: number,
+    copies: readonly { to: number; source: TextSource | undefined }[],
+  ): Edit | undefined {
+    this.endStroke();
+    const resource = textsId(episode);
+    let copyTexts: readonly CopyTextsChange[] = this.changes.copyTexts;
+    for (const { to, source } of copies) {
+      if (source) {
+        const problem = this.textProblem(episode, to, source);
+        if (problem) throw new RangeError(problem);
+      }
+      copyTexts = withTextCopy(
+        copyTexts,
+        resource,
+        to,
+        source && { from: textsId(source.from), of: source.of },
+      );
     }
-    return this.rebase(episode, room, { ...this.changes, events, copyTexts });
+    const key = (list: readonly TextCopy[]) => list.map((c) => `${c.to} ${c.from} ${c.of}`).join();
+    if (key(textCopiesOf(copyTexts, episode)) === key(this.textCopies(episode))) return undefined;
+    return this.rebase(episode, room, { ...this.changes, copyTexts });
+  }
+
+  /**
+   * The texts the class of a copied tile type shows (classTexts) that its episode has
+   * and the copy's episode lacks (as edited): what to copy along.
+   */
+  classTextsToCopy(copy: TileTypeCopy): number[] {
+    const id = this.pristine.episode(copy.from).classes.classes.get(copy.of)?.id ?? 0;
+    const source = this.pristine.texts(textsId(copy.from))?.entries;
+    const here = this.textEntries(textsId(copy.episode))?.entries;
+    return classTexts(id).filter((n) => source?.has(n) === true && here?.has(n) !== true);
   }
 
   rooms(episode: number): readonly Room[] {
@@ -1702,6 +1813,11 @@ export class Editor {
       if (this.isDiagonalEdited(episode)) exe = withDiagonalMoves(parsePe(exe), episode, diagonal);
     }
     return exe;
+  }
+
+  /** An entry of a text resource as edited (its variants), undefined if it has none. */
+  textEntry(id: number, entry: number): readonly string[] | undefined {
+    return this.textEntries(id)?.entries.get(entry);
   }
 
   /** The parsed entries of a text resource as edited. */

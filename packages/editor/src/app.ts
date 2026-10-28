@@ -67,6 +67,7 @@ import {
   scriptDoc,
   scriptFunctionDoc,
   scriptTextVariants,
+  textsId,
 } from "@robot/formats";
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
@@ -84,6 +85,7 @@ import {
   MAX_RECORD_SLOTS,
   MAX_ROOM_ID,
   type NewRoomContent,
+  type TextSource,
   areaBetween,
   areaCells,
   clipArea,
@@ -110,6 +112,7 @@ import {
 import { type ScriptName, ScriptView } from "./script-view.ts";
 import { type SettingsContext, SettingsView } from "./settings-view.ts";
 import { SidePanel } from "./side-panel.ts";
+import { TextsView } from "./texts-view.ts";
 import { TileNames } from "./tile-info.ts";
 import { TileTypesView } from "./tile-types-view.ts";
 
@@ -576,6 +579,12 @@ export class App {
           : `Type ${hex(to)} is free again`,
       );
     },
+    copyTexts: (copy, entries) => {
+      this.copyTexts(
+        entries.map((n) => ({ to: n, source: { from: copy.from, of: n } })),
+        `Texts ${entries.join(", ")} of ${EPISODE_NAMES[copy.from] ?? ""} copied`,
+      );
+    },
     preview: (episode, type) => {
       if (episode === this.episode) return this.cellPreview(type);
       const preview = cellCanvas(this.sourceCache(episode), type);
@@ -597,6 +606,16 @@ export class App {
         source
           ? `Entry ${entry} is now entry ${source.of} of ${EPISODE_NAMES[source.from] ?? ""}`
           : `Entry ${entry} is as the exe has it again`,
+      );
+    },
+  });
+  readonly textsView = new TextsView({
+    copy: (to, source) => {
+      this.copyTexts(
+        [{ to, source }],
+        source
+          ? `Text ${to} is now text ${source.of} of ${EPISODE_NAMES[source.from] ?? ""}`
+          : `Text ${to} is as the exe has it again`,
       );
     },
   });
@@ -653,6 +672,7 @@ export class App {
           this.episodeView.element,
           this.tileTypesView.element,
           this.eventsView.element,
+          this.textsView.element,
           this.dealerView.element,
         ),
       },
@@ -2266,6 +2286,22 @@ export class App {
     this.setStatus(`The episode now starts in room ${start.room} at (${start.x}, ${start.y})`);
   }
 
+  /** Copies text entries of other episodes into the shown one's (one undo step). */
+  private copyTexts(
+    copies: readonly { to: number; source: TextSource | undefined }[],
+    done: string,
+  ): void {
+    try {
+      if (!this.need().setTextCopies(this.episode, this.roomId, copies)) return;
+    } catch (error) {
+      this.setStatus(`Cannot copy the text: ${message(error)}`, true);
+      this.refreshEpisodeTab();
+      return;
+    }
+    this.gameChanged();
+    this.setStatus(done);
+  }
+
   /** The Episode tab: where the episode starts, its dealer and the rooms he appears in. */
   private refreshEpisodeTab(): void {
     const editor = this.need();
@@ -2297,6 +2333,16 @@ export class App {
           const names = this.source(from).names;
           return { type, name: names.info(type).name ?? names.summary(type).slice(0, 40) };
         }),
+      classTexts: (copy) => editor.classTextsToCopy(copy),
+    });
+    const line = (text: string | undefined) =>
+      text === undefined ? undefined : displayText(text).replace(/\s+/g, " ");
+    this.textsView.show({
+      episode: this.episode,
+      names: EPISODE_NAMES,
+      copies: editor.textCopies(this.episode),
+      source: (from, entry) => line(editor.pristine.texts(textsId(from))?.entries.get(entry)?.[0]),
+      current: (entry) => line(editor.textEntry(textsId(this.episode), entry)?.[0]),
     });
     this.eventsView.show({
       episode: this.episode,

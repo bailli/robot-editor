@@ -467,3 +467,44 @@ test("the Episode tab copies events of other episodes to spare entries, undoably
   await expect.element(events.getByRole("button", { name: "Copy" })).toBeDisabled();
   await expect.element(events.getByText("0 spare")).toBeVisible();
 });
+
+test("the Episode tab copies texts of other episodes, a copied class's in one go", async () => {
+  app.showEpisode(0, 43);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const types = page.getByRole("region", { name: "Tile types" });
+  const texts = page.getByRole("region", { name: "Texts" });
+  await expect.element(texts.getByText(/has no texts of other episodes/)).toBeVisible();
+  // II's oracle in Junior: its hints and death message come with "Texts"
+  await userEvent.selectOptions(types.getByLabelText("From episode"), "II");
+  await userEvent.selectOptions(types.getByLabelText("Type"), String(0x51));
+  await types.getByRole("button", { name: "Copy" }).click();
+  await types.getByRole("button", { name: "Texts" }).click();
+  expect(app.editor?.textCopies(0).map((c) => c.to)).toEqual([331, 332, 334, 339, 945]);
+  expect(status()).toMatch(/Texts 331, 332, 334, 339, 945 of .* copied/);
+  await expect.element(types.getByRole("button", { name: "Texts" })).not.toBeInTheDocument();
+  await expect.element(texts.getByText(/^945 ← II: /)).toBeVisible();
+  // one undo step
+  app.undo();
+  expect(app.editor?.textCopies(0)).toEqual([]);
+  // the form: a text of II at another number, with what it would say
+  await userEvent.selectOptions(texts.getByLabelText("From episode"), "II");
+  await userEvent.fill(texts.getByLabelText("Text", { exact: true }), "331");
+  await userEvent.keyboard("{Enter}");
+  await expect.element(texts.getByLabelText("To text")).toHaveValue(331);
+  await userEvent.fill(texts.getByLabelText("To text"), "340");
+  await userEvent.keyboard("{Enter}");
+  await texts.getByRole("button", { name: "Copy" }).click();
+  expect(app.editor?.textCopies(0)).toEqual([{ to: 340, from: 2, of: 331 }]);
+  const saved = parseMod(app.saveMod() ?? "");
+  expect(saved.changes.copyTexts).toEqual([{ resource: 1010, from: 1210, entries: [[340, 331]] }]);
+  // a text II lacks cannot be copied
+  await userEvent.fill(texts.getByLabelText("Text", { exact: true }), "330");
+  await userEvent.keyboard("{Enter}");
+  await expect.element(texts.getByRole("button", { name: "Copy" })).toBeDisabled();
+  await texts.getByRole("button", { name: "×" }).click();
+  expect(app.editor?.textCopies(0)).toEqual([]);
+  app.undo();
+  app.undo();
+  app.undo();
+  expect(app.editor?.game).toBe(app.editor?.pristine);
+});
