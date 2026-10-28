@@ -7,6 +7,8 @@
  * the bitset 0x4fe324), adds the points and shows text 1800 + n with the bonus (text
  * 516, "Bonus : %ld Punkte !"). Scripts award entries with Enigma(n).
  */
+import { TILE_TYPES } from "./classes.ts";
+import { forEpisode, patchAt } from "./episode.ts";
 import { type PeImage, readVa } from "./pe.ts";
 
 /** Per episode (0 = Junior): the table and its number of entries. */
@@ -28,9 +30,7 @@ export interface GameEvent {
 }
 
 function eventTable(episode: number): readonly [address: number, entries: number] {
-  const table = Number.isInteger(episode) && episode >= 0 ? TABLES.at(episode) : undefined;
-  if (!table) throw new RangeError(`no episode ${episode}`);
-  return table;
+  return forEpisode(TABLES, episode);
 }
 
 /** The number of entries in the episode's event table (fixed by its constructor). */
@@ -46,7 +46,7 @@ export const FIRST_EVENT_ID = 256;
 export const EVENT_IDS_END = 0x188;
 
 /** Entries from 128 on: game events, the rest of the table belongs to tile types. */
-export const FIRST_EVENT_ENTRY = 128;
+export const FIRST_EVENT_ENTRY = TILE_TYPES;
 
 /**
  * Per episode (0 = Junior): the entries the game never uses, which a new event can take
@@ -82,18 +82,16 @@ export function withEventEntries(
   entries: ReadonlyMap<number, GameEvent>,
 ): Uint8Array {
   const [address, count] = eventTable(episode);
-  const out = image.data.slice();
-  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
-  const at = readVa(image, address, count * ENTRY_SIZE).byteOffset - image.data.byteOffset;
-  for (const [n, { id, points }] of entries) {
-    if (!Number.isInteger(n) || n < 0 || n >= count) throw new RangeError(`no entry ${n}`);
-    for (const value of [id, points]) {
-      if (!Number.isInteger(value) || value < -0x80000000 || value > 0x7fffffff) {
-        throw new RangeError(`${value} is no 32-bit value`);
+  return patchAt(image, address, count * ENTRY_SIZE, (view, at) => {
+    for (const [n, { id, points }] of entries) {
+      if (!Number.isInteger(n) || n < 0 || n >= count) throw new RangeError(`no entry ${n}`);
+      for (const value of [id, points]) {
+        if (!Number.isInteger(value) || value < -0x80000000 || value > 0x7fffffff) {
+          throw new RangeError(`${value} is no 32-bit value`);
+        }
       }
+      view.setInt32(at + n * ENTRY_SIZE, id, true);
+      view.setInt32(at + n * ENTRY_SIZE + 4, points, true);
     }
-    view.setInt32(at + n * ENTRY_SIZE, id, true);
-    view.setInt32(at + n * ENTRY_SIZE + 4, points, true);
-  }
-  return out;
+  });
 }

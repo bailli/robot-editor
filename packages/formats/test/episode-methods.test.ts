@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 
 import { readEpisodeClasses } from "../src/classes.ts";
 import {
+  type BackdropRule,
   backdropRoomId,
   readBackdropRule,
   readDiagonalMoves,
@@ -52,4 +53,8 @@ test("diagonal moves: only III and IV; switched in the vtable", () => {
   expect(readDiagonalMoves(parsePe(withDiagonalMoves(patched, 0, false)), 0)).toBe(false);
   const changed = patched.data.reduce((n, b, i) => n + Number(b !== game.image.data[i]), 0);
   expect(changed).toBeLessThanOrEqual(4);
+});
+
+test("withBackdropRule throws a RangeError for an unknown rule", () => {
+  expect(() => withBackdropRule(game.image, 2, "nope" as BackdropRule)).toThrow(RangeError);
 });

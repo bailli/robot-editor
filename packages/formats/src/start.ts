@@ -19,13 +19,11 @@
  * weight matters. With its second argument set, 0x42c010 skips the weight (a slot is
  * still needed).
  */
-import { type PeImage, parsePe, readVa } from "./pe.ts";
+import { u32le } from "./bytes.ts";
+import { EPISODE_VTABLES, forEpisode, patchAt } from "./episode.ts";
+import { type PeImage, readVa } from "./pe.ts";
 import { ROOM_HEIGHT, ROOM_WIDTH } from "./scene.ts";
 
-/** The episodes' vtables (0 = Junior). */
-export const EPISODE_VTABLES: readonly number[] = [
-  0x466cd8, 0x466458, 0x4665a8, 0x466b08, 0x466c38,
-];
 const START_METHOD = 0x54;
 
 const CODE = [
@@ -49,29 +47,25 @@ export interface EpisodeStart {
   y: number;
 }
 
-/** The start method's code (checked against the expected instructions). */
-function startCode(image: PeImage, episode: number): Uint8Array {
-  if (!Number.isInteger(episode) || episode < 0 || episode >= EPISODE_VTABLES.length) {
-    throw new RangeError(`no episode ${episode}`);
-  }
-  const vtable = EPISODE_VTABLES[episode];
-  const pointer = readVa(image, vtable + START_METHOD, 4);
-  const method = new DataView(pointer.buffer, pointer.byteOffset).getUint32(0, true);
-  const code = readVa(image, method, CODE.length);
+/** The start method's address and code (checked against the expected instructions). */
+function startCode(image: PeImage, episode: number): { va: number; code: Uint8Array } {
+  const vtable = forEpisode(EPISODE_VTABLES, episode);
+  const va = u32le(readVa(image, vtable + START_METHOD, 4));
+  const code = readVa(image, va, CODE.length);
   if (CODE.some((b, i) => b >= 0 && code[i] !== b)) {
-    throw new Error(`episode ${episode}: unexpected start method at 0x${method.toString(16)}`);
+    throw new Error(`episode ${episode}: unexpected start method at 0x${va.toString(16)}`);
   }
-  return code;
+  return { va, code };
 }
 
 export function readEpisodeStart(image: PeImage, episode: number): EpisodeStart {
-  const code = startCode(image, episode);
+  const { code } = startCode(image, episode);
   return { room: code[ROOM_AT] | (code[ROOM_AT + 1] << 8), x: code[X_AT], y: code[Y_AT] };
 }
 
 /** The rucksack's capacity: its slots, and the weight it holds is below it. */
 export function readRucksack(image: PeImage, episode: number): number {
-  const code = startCode(image, episode);
+  const { code } = startCode(image, episode);
   return code[RUCKSACK_AT] | (code[RUCKSACK_AT + 1] << 8);
 }
 
@@ -79,12 +73,10 @@ export function readRucksack(image: PeImage, episode: number): number {
 export function withRucksack(image: PeImage, episode: number, capacity: number): Uint8Array {
   if (!Number.isInteger(capacity) || capacity < 1 || capacity > MAX_RUCKSACK)
     throw new RangeError(`a rucksack holds 1 to ${MAX_RUCKSACK}`);
-  const code = startCode(image, episode);
-  const out = image.data.slice();
-  const at = code.byteOffset - image.data.byteOffset;
-  out[at + RUCKSACK_AT] = capacity & 0xff;
-  out[at + RUCKSACK_AT + 1] = capacity >> 8;
-  return out;
+  const { va } = startCode(image, episode);
+  return patchAt(image, va, CODE.length, (view, at) => {
+    view.setUint16(at + RUCKSACK_AT, capacity, true);
+  });
 }
 
 /** A copy of the exe whose episode starts in `start.room` with the hero at (x, y). */
@@ -100,13 +92,10 @@ export function withEpisodeStart(image: PeImage, episode: number, start: Episode
     y >= ROOM_HEIGHT
   )
     throw new RangeError(`cell (${x}, ${y}) outside the room`);
-  const code = startCode(image, episode);
-  const out = image.data.slice();
-  const at = code.byteOffset - image.data.byteOffset;
-  out[at + X_AT] = x;
-  out[at + Y_AT] = y;
-  out[at + ROOM_AT] = room & 0xff;
-  out[at + ROOM_AT + 1] = room >> 8;
-  parsePe(out);
-  return out;
+  const { va } = startCode(image, episode);
+  return patchAt(image, va, CODE.length, (view, at) => {
+    view.setUint8(at + X_AT, x);
+    view.setUint8(at + Y_AT, y);
+    view.setUint16(at + ROOM_AT, room, true);
+  });
 }

@@ -56,3 +56,8 @@ export class ByteReader {
     return out;
   }
 }
+
+/** The little-endian dword of `bytes` at `at`. */
+export function u32le(bytes: Uint8Array, at = 0): number {
+  return new DataView(bytes.buffer, bytes.byteOffset + at, 4).getUint32(0, true);
+}

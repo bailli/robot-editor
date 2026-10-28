@@ -17,10 +17,11 @@
  * A package (class 0x6d) keeps a class in its state too, turned into its tile type when
  * offered (0x448565), as packages hold their contents at run time.
  */
+import { u32le } from "./bytes.ts";
 import type { EpisodeClasses } from "./classes.ts";
 import { PACKAGE_CLASS } from "./describe.ts";
-import { type PeImage, parsePe, readVa } from "./pe.ts";
-import { EPISODE_VTABLES } from "./start.ts";
+import { EPISODE_VTABLES, fileOffset, forEpisode, patchAt } from "./episode.ts";
+import { type PeImage, readVa } from "./pe.ts";
 
 const GOODS_METHOD = 0x10;
 const CODE = [
@@ -67,6 +68,8 @@ export interface Dealer {
 }
 
 interface GoodsMethod {
+  /** The method's address. */
+  va: number;
   /** The method's code (a view into the image). */
   code: Uint8Array;
   table: number;
@@ -74,21 +77,21 @@ interface GoodsMethod {
   most: number;
 }
 
-const u32 = (bytes: Uint8Array, at: number) =>
-  new DataView(bytes.buffer, bytes.byteOffset + at, 4).getUint32(0, true);
-
 /** The episode's goods method, undefined if it hands out no table (episode III). */
 function goodsMethod(image: PeImage, episode: number): GoodsMethod | undefined {
-  if (!Number.isInteger(episode) || episode < 0 || episode >= EPISODE_VTABLES.length) {
-    throw new RangeError(`no episode ${episode}`);
-  }
-  const method = u32(readVa(image, EPISODE_VTABLES[episode] + GOODS_METHOD, 4), 0);
+  const method = u32le(readVa(image, forEpisode(EPISODE_VTABLES, episode) + GOODS_METHOD, 4));
   const code = readVa(image, method, CODE.length);
   if (CODE.some((b, i) => b >= 0 && code[i] !== b)) {
     // the base method: xor eax, eax instead of a table
     return undefined;
   }
-  return { code, table: u32(code, TABLE_AT), count: u32(code, COUNT_AT), most: u32(code, MOST_AT) };
+  return {
+    va: method,
+    code,
+    table: u32le(code, TABLE_AT),
+    count: u32le(code, COUNT_AT),
+    most: u32le(code, MOST_AT),
+  };
 }
 
 /** The episode's dealer goods, undefined if the episode has no dealer (episode III). */
@@ -185,20 +188,16 @@ export function withDealer(
   const capacity = dealerCapacity(image, episode);
   const problem = dealerProblem(dealer, capacity, classes);
   if (!method || problem) throw new RangeError(problem ?? "the episode has no dealer");
-  const out = image.data.slice();
-  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
-  const at = method.code.byteOffset - image.data.byteOffset;
-  view.setUint32(at + COUNT_AT, dealer.goods.length, true);
-  view.setUint32(at + MOST_AT, dealer.most, true);
-  const table = readVa(image, method.table, capacity * ENTRY_SIZE);
-  const tableAt = table.byteOffset - image.data.byteOffset;
-  for (const [n, { classId, state, price }] of dealer.goods.entries()) {
-    view.setUint8(tableAt + n * ENTRY_SIZE, classId);
-    view.setUint8(tableAt + n * ENTRY_SIZE + 1, state);
-    view.setUint16(tableAt + n * ENTRY_SIZE + 2, price, true);
-  }
-  parsePe(out);
-  return out;
+  return patchAt(image, method.va, CODE.length, (view, at) => {
+    view.setUint32(at + COUNT_AT, dealer.goods.length, true);
+    view.setUint32(at + MOST_AT, dealer.most, true);
+    const tableAt = fileOffset(image, method.table, capacity * ENTRY_SIZE);
+    for (const [n, { classId, state, price }] of dealer.goods.entries()) {
+      view.setUint8(tableAt + n * ENTRY_SIZE, classId);
+      view.setUint8(tableAt + n * ENTRY_SIZE + 1, state);
+      view.setUint16(tableAt + n * ENTRY_SIZE + 2, price, true);
+    }
+  });
 }
 
 export function sameDealer(a: Dealer | undefined, b: Dealer | undefined): boolean {

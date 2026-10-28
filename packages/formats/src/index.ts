@@ -215,7 +215,6 @@ export {
   withTextEntry,
 } from "./texts.ts";
 export {
-  EPISODE_VTABLES,
   MAX_RUCKSACK,
   readEpisodeStart,
   readRucksack,
@@ -223,6 +222,7 @@ export {
   withRucksack,
 } from "./start.ts";
 export type { EpisodeStart } from "./start.ts";
+export { EPISODE_VTABLES } from "./episode.ts";
 export {
   BACKDROP_RULES,
   type BackdropRule,

@@ -1,4 +1,6 @@
+import { u32le } from "./bytes.ts";
 import { type BackdropRule, readBackdropRule } from "./episode-methods.ts";
+import { forEpisode, patchAt } from "./episode.ts";
 import { type PeImage, readVa } from "./pe.ts";
 
 /**
@@ -10,6 +12,9 @@ import { type PeImage, readVa } from "./pe.ts";
  * imm32 imm32). vtable +0x00 returns the class id, +0x08 prepares a map cell for drawing:
  * its address identifies how the cell is drawn (see FrameMethod and render.ts).
  */
+
+/** The tile types of an episode (the entries of its class table). */
+export const TILE_TYPES = 128;
 
 /** Addresses of the vtable +0x08 methods the renderer knows. */
 export const FrameMethod = {
@@ -115,7 +120,7 @@ export interface EpisodeClasses {
    * dword): logic records name an actor by an index into it (see recordActorKind).
    */
   actorKinds: readonly number[];
-  /** Which room the episode draws behind a room with a backdrop (backdrop.ts). */
+  /** Which room the episode draws behind a room with a backdrop (episode-methods.ts). */
   backdropRule: BackdropRule;
 }
 
@@ -128,7 +133,6 @@ const UNDERLAY_TABLES: readonly (number | undefined)[] = [
   0x466c08,
 ];
 const UNDERLAY_ENTRIES = 23;
-const TYPES = 128;
 const TERRAIN_PATTERNS = 0x47f238;
 const MASKED_PATTERNS = 0x47f20c;
 const FONT = 0x481170;
@@ -147,8 +151,7 @@ function u16s(bytes: Uint8Array): number[] {
 }
 
 function u32(exe: PeImage, va: number): number {
-  const b = readVa(exe, va, 4);
-  return new DataView(b.buffer, b.byteOffset, 4).getUint32(0, true);
+  return u32le(readVa(exe, va, 4));
 }
 
 /** Class object -> vtable, from every `mov dword ptr [object], vtable` in the image. */
@@ -211,15 +214,13 @@ export const EMPTY_CLASS_OBJECT = 0x4c777c;
 const EMPTY_EXTRA = 0x33;
 
 function classTable(episode: number): number {
-  const table = Number.isInteger(episode) && episode >= 0 ? CLASS_TABLES.at(episode) : undefined;
-  if (table === undefined) throw new RangeError(`no episode ${episode}`);
-  return table;
+  return forEpisode(CLASS_TABLES, episode);
 }
 
 /** The episode's class table, entry t for tile type t (128 entries). */
 export function readClassTable(exe: PeImage, episode: number): ClassEntry[] {
   const table = classTable(episode);
-  return Array.from({ length: TYPES }, (_, type) => ({
+  return Array.from({ length: TILE_TYPES }, (_, type) => ({
     object: u32(exe, table + 8 * type),
     extra: u32(exe, table + 8 * type + 4),
   }));
@@ -248,22 +249,20 @@ export function withClassEntries(
 ): Uint8Array {
   const table = classTable(episode);
   const objects = vtables(exe);
-  const out = exe.data.slice();
-  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
-  const at = readVa(exe, table, 8 * TYPES).byteOffset - exe.data.byteOffset;
-  for (const [type, entry] of entries) {
-    if (!Number.isInteger(type) || type < 0 || type >= TYPES) {
-      throw new RangeError(`tile type ${type}`);
+  return patchAt(exe, table, 8 * TILE_TYPES, (view, at) => {
+    for (const [type, entry] of entries) {
+      if (!Number.isInteger(type) || type < 0 || type >= TILE_TYPES) {
+        throw new RangeError(`tile type ${type}`);
+      }
+      const { object, extra } = entry ?? { object: EMPTY_CLASS_OBJECT, extra: EMPTY_EXTRA };
+      if (!objects.has(object)) throw new RangeError(`0x${object.toString(16)} is no class object`);
+      if (!Number.isInteger(extra) || extra < 0 || extra > 0xffffffff) {
+        throw new RangeError(`extra ${extra}`);
+      }
+      view.setUint32(at + 8 * type, object, true);
+      view.setUint32(at + 8 * type + 4, extra, true);
     }
-    const { object, extra } = entry ?? { object: EMPTY_CLASS_OBJECT, extra: EMPTY_EXTRA };
-    if (!objects.has(object)) throw new RangeError(`0x${object.toString(16)} is no class object`);
-    if (!Number.isInteger(extra) || extra < 0 || extra > 0xffffffff) {
-      throw new RangeError(`extra ${extra}`);
-    }
-    view.setUint32(at + 8 * type, object, true);
-    view.setUint32(at + 8 * type + 4, extra, true);
-  }
-  return out;
+  });
 }
 
 export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasses {
@@ -271,7 +270,7 @@ export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasse
   const vts = vtables(exe);
   const classes = new Map<number, ObjectClass>();
   const typeOfClass = new Map<number, number>();
-  for (let type = 0; type < TYPES; type++) {
+  for (let type = 0; type < TILE_TYPES; type++) {
     const vtable = vts.get(u32(exe, table + 8 * type));
     if (vtable === undefined) continue;
     const id = classId(exe, vtable);

@@ -26,6 +26,7 @@
  * array per kind; code and flags as hex strings, the dealer's goods as [class, state, price], rooms
  * as base64 of serializeRoom (null removes).
  */
+import { TILE_TYPES } from "./classes.ts";
 import { type Dealer, dealerProblem, withDealer } from "./dealer.ts";
 import { withEpisodeFlags } from "./episode-flags.ts";
 import {
@@ -34,15 +35,17 @@ import {
   withBackdropRule,
   withDiagonalMoves,
 } from "./episode-methods.ts";
+import { fileOffset } from "./episode.ts";
 import {
   EVENT_IDS_END,
+  FIRST_EVENT_ENTRY,
   FIRST_EVENT_ID,
   eventTableLength,
   readEventTable,
   withEventEntries,
 } from "./events.ts";
 import { EPISODES, Game } from "./game.ts";
-import { DIRECTORY_RESOURCE, type PeImage, parsePe, readVa } from "./pe.ts";
+import { DIRECTORY_RESOURCE, type PeImage, parsePe } from "./pe.ts";
 import { findResource, readResources, replaceResource } from "./resources.ts";
 import {
   ROOM_HEIGHT,
@@ -59,7 +62,6 @@ import { parseTexts, textEntryProblem, withTextEntry } from "./texts.ts";
 export const MOD_FORMAT = 1;
 /** Room ids have 10 bits (records and exits hold them so). */
 const MAX_ROOM_ID = 0x3ff;
-const TYPES = 128;
 
 export interface TileTypesChange {
   episode: number;
@@ -262,7 +264,11 @@ export function checkMod(mod: Mod): void {
     need(c.from !== c.episode, where, "copies from its own episode");
     need(c.types.length > 0, where, "no types");
     for (const [to, of] of c.types) {
-      need(isInt(to, 0, TYPES - 1) && isInt(of, 0, TYPES - 1), where, `types ${to}, ${of}`);
+      need(
+        isInt(to, 0, TILE_TYPES - 1) && isInt(of, 0, TILE_TYPES - 1),
+        where,
+        `types ${to}, ${of}`,
+      );
       once(`type ${c.episode} ${to}`, `${where} (type ${to})`);
     }
   });
@@ -271,7 +277,7 @@ export function checkMod(mod: Mod): void {
     episodeOk(c.episode, where);
     need(isInt(c.entry, 0, eventTableLength(c.episode) - 1), where, "no such entry");
     const ids =
-      c.entry < TYPES
+      c.entry < FIRST_EVENT_ENTRY
         ? isInt(c.id, 0, EVENT_IDS_END - 1)
         : c.id === 0 || isInt(c.id, FIRST_EVENT_ID, EVENT_IDS_END - 1);
     need(ids, where, `id ${c.id} (from entry 128 on 0 or ${FIRST_EVENT_ID}-${EVENT_IDS_END - 1})`);
@@ -365,11 +371,6 @@ export function checkMod(mod: Mod): void {
 
 // --- applying -----------------------------------------------------------------------
 
-/** File offset of `length` bytes at `va` (they must be initialised data). */
-function offsetOf(image: PeImage, va: number, length: number): number {
-  return readVa(image, va, length).byteOffset - image.data.byteOffset;
-}
-
 const hex = (bytes: Uint8Array) =>
   Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -443,7 +444,7 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
     // an id maps to one entry (the constructor's last one would win)
     const seen = new Map<number, number>();
     readEventTable(game.image, episode).forEach(({ id }, n) => {
-      if (n < TYPES || id === 0) return;
+      if (n < FIRST_EVENT_ENTRY || id === 0) return;
       const other = seen.get(id);
       need(
         other === undefined,
@@ -466,7 +467,7 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
       const where = `code[${i}] at 0x${c.va.toString(16)}`;
       let at = 0;
       try {
-        at = offsetOf(game.image, c.va, c.bytes.length);
+        at = fileOffset(game.image, c.va, c.bytes.length);
       } catch {
         need(false, where, "no initialised data there");
       }
@@ -635,7 +636,7 @@ export function compileMod(image: PeImage, mod: Mod): ModPatch {
 /** `image` with the patch applied: the exe a mod makes (see applyMod). */
 export function applyPatch(image: PeImage, patch: ModPatch): Uint8Array {
   let data: Uint8Array = image.data.slice();
-  for (const { va, bytes } of patch.writes) data.set(bytes, offsetOf(image, va, bytes.length));
+  for (const { va, bytes } of patch.writes) data.set(bytes, fileOffset(image, va, bytes.length));
   for (const { type, name, language, data: content } of patch.resources) {
     const current = parsePe(data);
     const resource = findResource(readResources(current), type, name, language);

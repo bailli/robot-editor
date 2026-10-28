@@ -17,7 +17,8 @@
  * in need no key (0x413daa, only III's).
  * withEpisodeFlags changes the constant.
  */
-import { type PeImage, parsePe, readVa } from "./pe.ts";
+import { forEpisode, patchAt } from "./episode.ts";
+import { type PeImage, readVa } from "./pe.ts";
 
 /** Robots keep their `_Aliens` sprite's colours instead of three random ones (0x445c4b). */
 export const ROBOTS_KEEP_COLOURS = 0x20;
@@ -41,20 +42,18 @@ const FLAGS_CODE: readonly (readonly [va: number, opcode: readonly number[]])[] 
   [0x40d472, [0x0d]],
 ];
 
-/** The constructor's imm32 (checked against the expected instruction). */
-function flagsCode(image: PeImage, episode: number): Uint8Array {
-  const found = Number.isInteger(episode) && episode >= 0 ? FLAGS_CODE.at(episode) : undefined;
-  if (!found) throw new RangeError(`no episode ${episode}`);
-  const [va, opcode] = found;
+/** The constructor's imm32 and its address (checked against the expected instruction). */
+function flagsCode(image: PeImage, episode: number): { va: number; imm: Uint8Array } {
+  const [va, opcode] = forEpisode(FLAGS_CODE, episode);
   const code = readVa(image, va, opcode.length + 4);
   if (opcode.some((b, i) => code[i] !== b)) {
     throw new Error(`episode ${episode}: unexpected constructor at 0x${va.toString(16)}`);
   }
-  return code.subarray(opcode.length);
+  return { va: va + opcode.length, imm: code.subarray(opcode.length) };
 }
 
 export function readEpisodeFlags(image: PeImage, episode: number): number {
-  const imm = flagsCode(image, episode);
+  const { imm } = flagsCode(image, episode);
   return new DataView(imm.buffer, imm.byteOffset, 4).getUint32(0, true);
 }
 
@@ -62,10 +61,8 @@ export function readEpisodeFlags(image: PeImage, episode: number): number {
 export function withEpisodeFlags(image: PeImage, episode: number, flags: number): Uint8Array {
   if (!Number.isInteger(flags) || flags < 0 || flags > 0xffffffff)
     throw new RangeError(`flags ${flags}`);
-  const imm = flagsCode(image, episode);
-  const out = image.data.slice();
-  const at = imm.byteOffset - image.data.byteOffset;
-  new DataView(out.buffer, out.byteOffset).setUint32(at, flags, true);
-  parsePe(out);
-  return out;
+  const { va } = flagsCode(image, episode);
+  return patchAt(image, va, 4, (view, at) => {
+    view.setUint32(at, flags, true);
+  });
 }

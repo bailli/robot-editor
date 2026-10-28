@@ -15,8 +15,8 @@
  * it. (Flag 0x20000000 does the same for steering while a current carries the hero,
  * 0x4274fc; III and IV set it.)
  */
-import { type PeImage, parsePe, readVa } from "./pe.ts";
-import { EPISODE_VTABLES } from "./start.ts";
+import { EPISODE_VTABLES, forEpisode, patchAt } from "./episode.ts";
+import { type PeImage, readVa } from "./pe.ts";
 
 export type BackdropRule = "mod100" | "minus100";
 export const BACKDROP_RULES: readonly BackdropRule[] = ["mod100", "minus100"];
@@ -27,11 +27,7 @@ const METHODS: Readonly<Record<BackdropRule, readonly [number, number]>> = {
   minus100: [0x40d4a0, 0x40d780],
 };
 
-function vtable(episode: number): number {
-  const va = Number.isInteger(episode) && episode >= 0 ? EPISODE_VTABLES.at(episode) : undefined;
-  if (va === undefined) throw new RangeError(`no episode ${episode}`);
-  return va;
-}
+const vtable = (episode: number) => forEpisode(EPISODE_VTABLES, episode);
 
 export function readBackdropRule(image: PeImage, episode: number): BackdropRule {
   const bytes = readVa(image, vtable(episode), 8);
@@ -47,14 +43,12 @@ export function readBackdropRule(image: PeImage, episode: number): BackdropRule 
 
 /** A copy of the exe whose episode draws backdrops by `rule`. */
 export function withBackdropRule(image: PeImage, episode: number, rule: BackdropRule): Uint8Array {
-  const bytes = readVa(image, vtable(episode), 8);
-  const out = image.data.slice();
-  const at = bytes.byteOffset - image.data.byteOffset;
-  const view = new DataView(out.buffer, out.byteOffset);
-  view.setUint32(at, METHODS[rule][0], true);
-  view.setUint32(at + 4, METHODS[rule][1], true);
-  parsePe(out);
-  return out;
+  if (!BACKDROP_RULES.includes(rule)) throw new RangeError(`no backdrop rule ${rule}`);
+  const methods = METHODS[rule];
+  return patchAt(image, vtable(episode), 8, (view, at) => {
+    view.setUint32(at, methods[0], true);
+    view.setUint32(at + 4, methods[1], true);
+  });
 }
 
 /** The methods at vtable +0x1c: without and with diagonal moves. */
@@ -72,12 +66,9 @@ export function readDiagonalMoves(image: PeImage, episode: number): boolean {
 
 /** A copy of the exe whose hero walks diagonally in the episode, or not. */
 export function withDiagonalMoves(image: PeImage, episode: number, diagonal: boolean): Uint8Array {
-  const bytes = readVa(image, vtable(episode) + STEP_SLOT, 4);
-  const out = image.data.slice();
-  const at = bytes.byteOffset - image.data.byteOffset;
-  new DataView(out.buffer, out.byteOffset).setUint32(at, STEP_METHODS[diagonal ? 1 : 0], true);
-  parsePe(out);
-  return out;
+  return patchAt(image, vtable(episode) + STEP_SLOT, 4, (view, at) => {
+    view.setUint32(at, STEP_METHODS[diagonal ? 1 : 0], true);
+  });
 }
 
 /** The backdrop's room id for a room id (0x409d30, 0x40d4a0). */
