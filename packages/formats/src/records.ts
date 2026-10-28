@@ -97,6 +97,15 @@ import type { LogicRecord } from "./scene.ts";
 
 /** The tangram pieces oracles' symbols are laid with (class 0x5f, episodes II and III). */
 export const TANGRAM_TILE = 0x50;
+export const TANGRAM_CLASS = 0x5f;
+
+/**
+ * The tile type of the tangram pieces in an episode with these classes: TANGRAM_TILE in
+ * II and III, wherever a copy put them elsewhere (IV's kit: 0x48); TANGRAM_TILE without.
+ */
+export function tangramTile(classes?: EpisodeClasses): number {
+  return classes?.typeOfClass.get(TANGRAM_CLASS) ?? TANGRAM_TILE;
+}
 const ORACLE_SYMBOLS = 0x47be54;
 const SYMBOL_COUNT = 10;
 
@@ -247,7 +256,7 @@ export function describeRecord(
     oracle: () => {
       const symbol = symbols?.[d[3] & 15];
       const pieces = symbol
-        ? `its symbol, tangram pieces ${symbol.map((s) => hex(TANGRAM_TILE | (s << 8))).join(" ")} ` +
+        ? `its symbol, tangram pieces ${symbol.map((s) => hex(tangramTile(classes) | (s << 8))).join(" ")} ` +
           `in a 2×2 block (top left to bottom right),`
         : "its symbol";
       return (

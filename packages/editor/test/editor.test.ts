@@ -13,6 +13,7 @@ import {
   ROOM_WIDTH,
   applyMod,
   compileScript,
+  describeRecord,
   emptyMod,
   findResource,
   kitChanges,
@@ -35,6 +36,7 @@ import {
   roomSettings,
   serializeRoom,
   sha256,
+  tangramTile,
 } from "@robot/formats";
 
 import {
@@ -1084,6 +1086,15 @@ describe("Editor and kit examples", () => {
     expect(oracle.data[3]).toBe(1);
     const target = defined(oracle.data[4]) | (defined(oracle.data[5]) << 8);
     expect([target & 0x3ff, target >> 10, oracle.data[6]]).toEqual([ivRoom, 5, 7]);
+    // its symbol is told in the episode's tangram pieces (IV's copy at 0x48), as the
+    // Record tab draws it
+    const classes = editor.game.episode(4).classes;
+    expect(tangramTile(classes)).toBe(tangram);
+    const pieces = symbol.map((s) => `0x${(tangram | (s << 8)).toString(16).padStart(4, "0")}`);
+    expect(describeRecord(oracle, classes, readOracleSymbols(game.image)).summary).toContain(
+      `tangram pieces ${pieces.join(" ")}`,
+    );
+    expect(tangramTile(game.episode(2).classes)).toBe(0x50);
     // in episode II, whose oracles are its own, symbol 1 as well (hint 331)
     expect(new Editor(game).kitExample(2, 43, kit("oracles"))?.records[0]?.data[3]).toBe(1);
   });

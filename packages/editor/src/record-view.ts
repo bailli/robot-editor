@@ -1,9 +1,9 @@
 import {
   type EpisodeClasses,
   type LogicRecord,
-  TANGRAM_TILE,
   describeRecord,
   recordActorKind,
+  tangramTile,
   teleporterCondition,
 } from "@robot/formats";
 
@@ -440,7 +440,8 @@ export class RecordView {
     if (symbol) {
       const block = element("span", "oracle-symbol");
       block.title = "Lay these tangram pieces as a 2×2 block anywhere in the room";
-      block.append(...symbol.map((s) => this.events.preview(TANGRAM_TILE | (s << 8))));
+      const tangram = tangramTile(classes);
+      block.append(...symbol.map((s) => this.events.preview(tangram | (s << 8))));
       fields.push(labelled("Symbol", block));
     }
 

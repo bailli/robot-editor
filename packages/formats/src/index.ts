@@ -258,11 +258,13 @@ export {
 } from "./describe.ts";
 export type { CellDescription, NoteText } from "./describe.ts";
 export {
+  TANGRAM_CLASS,
   TANGRAM_TILE,
   describeRecord,
   readOracleSymbols,
   movedRecord,
   recordCellOffsets,
+  tangramTile,
   teleporterCondition,
 } from "./records.ts";
 export {
