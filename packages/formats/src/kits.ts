@@ -181,8 +181,9 @@ function unusedFreeTypes(game: Game, episode: number): number[] {
 }
 
 /**
- * The mod changes a plan makes (tileTypes, events with the kit episode's points, the
- * texts and the events' texts as copyTexts), for a mod or the editor to merge.
+ * The mod changes a plan makes (tileTypes, events with the kit episode's points and
+ * sounds where the episode has their pieces, the texts and the events' texts as
+ * copyTexts), for a mod or the editor to merge.
  */
 export function kitChanges(
   source: Game,
@@ -205,12 +206,16 @@ export function kitChanges(
   add(eventTextsId(episode), eventTextsId(kit.from), copies);
   return {
     tileTypes: plan.types.length > 0 ? [{ episode, from: kit.from, types: plan.types }] : [],
-    events: plan.events.map(({ entry, of, id }) => ({
-      episode,
-      entry,
-      id,
-      points: table[of]?.points ?? 0,
-    })),
+    events: plan.events.map(({ entry, of, id }) => {
+      const sound = source.copiedSound(episode, kit.from, of);
+      return {
+        episode,
+        entry,
+        id,
+        points: table[of]?.points ?? 0,
+        ...(sound === undefined ? {} : { sound }),
+      };
+    }),
     copyTexts,
   };
 }

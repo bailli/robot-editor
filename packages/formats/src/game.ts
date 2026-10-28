@@ -240,16 +240,51 @@ export class Game {
     let sounds = game.textSource(soundsId(episode)) ?? "";
     for (const [to, of] of pairs) {
       const [, sound, note] = soundLine(sourceSounds, of);
-      const [found, own] = soundLine(sounds, to);
-      const kept = pieces.has(sound.replace(/^!/, "")) ? sound : own;
-      const line = `${to}:${kept}${note ? ` ;${note}` : ""}`;
-      // the game reads the lines by number (0x4389b0), in any order
-      sounds = found
-        ? sounds.replace(new RegExp(`^${to}:.*$`, "m"), line)
-        : `${sounds.trimEnd()}\n${line}\n`;
+      const own = soundLine(sounds, to)[1];
+      sounds = withSoundLine(sounds, to, pieces.has(sound.replace(/^!/, "")) ? sound : own, note);
     }
     return game.withText(soundsId(episode), sounds);
   }
+
+  /** The sound of line n of the episode's sound table (event table entry n), "" if none. */
+  sound(episode: number, n: number): string {
+    return soundLine(this.textSource(soundsId(episode)) ?? "", n)[1];
+  }
+
+  /**
+   * The sound a copy of entry `of` of episode `from` takes into `episode`: undefined where
+   * the entry has none or `episode` lacks its piece (its own line stays, as withTileTypes
+   * keeps it).
+   */
+  copiedSound(episode: number, from: number, of: number): string | undefined {
+    const sound = this.sound(from, of);
+    return sound && this.musicPieces(episode).includes(sound.replace(/^!/, "")) ? sound : undefined;
+  }
+
+  /**
+   * A copy of the exe whose sound table for `episode` gives entries their sounds (`sounds`:
+   * entry -> a MUSIC piece of the episode, `!` before it sets bit 7); the lines keep their
+   * notes. Throws a RangeError for a piece the episode lacks.
+   */
+  withSounds(episode: number, sounds: ReadonlyMap<number, string>): Uint8Array {
+    const pieces = new Set(this.musicPieces(episode));
+    let text = this.textSource(soundsId(episode)) ?? "";
+    for (const [n, sound] of sounds) {
+      if (!Number.isInteger(n) || n < 0) throw new RangeError(`no line ${n}`);
+      if (!pieces.has(sound.replace(/^!/, "")))
+        throw new RangeError(`episode ${episode} has no piece ${sound.replace(/^!/, "")}`);
+      text = withSoundLine(text, n, sound, soundLine(text, n)[2]);
+    }
+    return this.withText(soundsId(episode), text);
+  }
+}
+
+/** A sound table with line n set to `sound` and `note`, appended where it is missing. */
+function withSoundLine(text: string, n: number, sound: string, note: string): string {
+  const [found] = soundLine(text, n);
+  const line = `${n}:${sound}${note ? ` ;${note}` : ""}`;
+  // the game reads the lines by number (0x4389b0), in any order
+  return found ? text.replace(new RegExp(`^${n}:.*$`, "m"), line) : `${text.trimEnd()}\n${line}\n`;
 }
 
 /** Line n of a sound table: [line, sound, note] (empty where missing). */

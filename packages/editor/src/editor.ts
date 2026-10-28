@@ -714,10 +714,10 @@ export class Editor {
 
   /**
    * Makes entry `entry` of the episode's event table entry `source.of` of episode
-   * `source.from` (its id and points, mod kind events, and its text, copyTexts), or with
-   * `source` undefined takes the mod's change of the entry back, and its text copy; one
-   * undo step that makes a new base (rebase). Throws a RangeError where the copy cannot
-   * be made (eventProblem).
+   * `source.from` (its id, points and sound where the episode has its piece, mod kind
+   * events, and its text, copyTexts), or with `source` undefined takes the mod's change
+   * of the entry back, and its text copy; one undo step that makes a new base (rebase).
+   * Throws a RangeError where the copy cannot be made (eventProblem).
    */
   copyEvent(
     episode: number,
@@ -739,14 +739,16 @@ export class Editor {
     const problem = this.eventProblem(episode, entry, source);
     if (problem) throw new RangeError(problem);
     const { id, points } = readEventTable(this.pristine.image, source.from)[source.of];
+    const sound = this.pristine.copiedSound(episode, source.from, source.of);
     const from = eventTextsId(source.from);
     const of = EVENT_TEXT + source.of;
     const hasText = this.pristine.texts(from)?.entries.has(of) === true;
     const sameText = hasText
       ? old?.text?.from === source.from && old.text.of === source.of
       : old?.text === undefined;
-    if (old?.id === id && old.points === points && sameText) return undefined;
-    const events = [...others, { episode, entry, id, points }];
+    if (old?.id === id && old.points === points && old.sound === sound && sameText)
+      return undefined;
+    const events = [...others, { episode, entry, id, points, ...(sound ? { sound } : {}) }];
     return this.rebase(episode, room, {
       ...this.changes,
       events,

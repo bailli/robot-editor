@@ -4,7 +4,7 @@
  * A mod is a set of keyed changes, each key at most once, applied in a fixed order of
  * kinds (a later kind wins over an earlier one):
  *   1. tileTypes  (episode, target type)  tile types from another episode (withTileTypes)
- *   2. events     (episode, entry)        an event table entry's id and points
+ *   2. events     (episode, entry)        an event table entry's id, points and sound
  *   3. code       (address)               bytes written where the exe holds `expect`
  *   4. dealer     (episode)               the dealer's goods and how many shown (withDealer)
  *   5. copyTexts  (resource, entry)       a text entry copied from another one of the exe
@@ -68,6 +68,11 @@ export interface EventChange {
   /** From entry 128 on 0 (none) or FIRST_EVENT_ID to EVENT_IDS_END - 1, once per table. */
   id: number;
   points: number;
+  /**
+   * Its sound, line `entry` of the sound table (Game.withSounds): a MUSIC piece of the
+   * episode, `!` before it sets bit 7. Without it the line stays.
+   */
+  sound?: string;
 }
 
 export interface CodeChange {
@@ -253,6 +258,11 @@ export function checkMod(mod: Mod): void {
         : c.id === 0 || isInt(c.id, FIRST_EVENT_ID, EVENT_IDS_END - 1);
     need(ids, where, `id ${c.id} (from entry 128 on 0 or ${FIRST_EVENT_ID}-${EVENT_IDS_END - 1})`);
     need(isInt(c.points, -0x80000000, 0x7fffffff), where, `points ${c.points}`);
+    need(
+      c.sound === undefined || /^!?[^\s;!][^\s;]*$/.test(c.sound),
+      where,
+      `sound ${JSON.stringify(c.sound)} (a piece's name)`,
+    );
     once(`event ${c.episode} ${c.entry}`, where);
   });
   const ranges: [number, number, string][] = [];
@@ -423,6 +433,17 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
       );
       seen.set(id, n);
     });
+    const sounds = entries.flatMap((c) =>
+      c.sound === undefined ? [] : [[c.entry, c.sound] as const],
+    );
+    if (sounds.length > 0) {
+      try {
+        game = new Game(game.withSounds(episode, new Map(sounds)));
+      } catch (error) {
+        if (error instanceof RangeError) need(false, `events (episode ${episode})`, error.message);
+        throw error;
+      }
+    }
   }
   if (changes.code.length > 0) {
     const out = game.image.data.slice();
@@ -671,6 +692,7 @@ export function modJson(mod: Mod): string {
         entry: c.entry,
         id: c.id,
         points: c.points,
+        ...(c.sound === undefined ? {} : { sound: c.sound }),
       })),
       code: code.map((c) => ({
         va: `0x${c.va.toString(16)}`,
@@ -772,6 +794,7 @@ export function parseMod(text: string): Mod {
         entry: int(o["entry"], `${w}.entry`),
         id: int(o["id"], `${w}.id`),
         points: int(o["points"], `${w}.points`),
+        ...(o["sound"] === undefined ? {} : { sound: string(o["sound"], `${w}.sound`) }),
       })),
       code: list("code", (o, w) => {
         const va = string(o["va"], `${w}.va`);

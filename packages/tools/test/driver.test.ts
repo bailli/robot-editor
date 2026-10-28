@@ -500,6 +500,36 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     }, 60_000);
   }
 
+  test("episode IV: an event copied with its sound has it in the game's event table", async () => {
+    // I's thief bribe (entry 130, event 258) into IV's spare entry 197, as copyEvent does
+    const sound = game.copiedSound(4, 1, 130);
+    assert.equal(sound, "!THIEFIRI");
+    const mod: Mod = {
+      ...emptyMod(game.image.data),
+      changes: {
+        ...NO_CHANGES,
+        events: [{ episode: 4, entry: 197, id: 258, points: 5000, sound }],
+      },
+    };
+    // entry n +8: the piece's number from 1, bit 7 for "!" (0x4389b0); 133 is IV's own !PUTOUTFI
+    const sounds = (d: Driver) => Promise.all([133, 197].map((n) => d.u32(0x479068 + 12 * n + 8)));
+    const before = await withGame(undefined, async (d) => {
+      await d.startEpisode(4);
+      return sounds(d);
+    });
+    const after = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(4);
+        return sounds(d);
+      }),
+    );
+    const piece = (name: string) => 0x80 | (game.musicPieces(4).indexOf(name) + 1);
+    const own = piece("PUTOUTFI");
+    assert.deepEqual(after, [own, piece("THIEFIRI")]);
+    assert.equal(before[0], own);
+    assert.notEqual(before[1], after[1]);
+  }, 60_000);
+
   for (const episode of [4, 0]) {
     test(`episode ${String(episode)}: the oracle example sends the hero below its symbol`, async () => {
       // the example at (6, 14): symbol (6..7, 14..15), oracle (9, 15), target (6, 16)

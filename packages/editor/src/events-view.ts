@@ -100,11 +100,12 @@ export class EventsView {
       const text = element(
         "span",
         "dealer-name",
-        `${e.entry}${source}: event ${e.id}, ${points(e.points)}`,
+        `${e.entry}${source}: event ${e.id}, ${points(e.points)}${e.sound ? `, ${e.sound}` : ""}`,
       );
+      const sound = e.sound ? ` and sound ${e.sound}` : "";
       text.title = e.text
-        ? `Entry ${e.entry} is entry ${e.text.of} of ${name(e.text.from)}: its event, points and text`
-        : `The mod sets entry ${e.entry}: event ${e.id}, ${points(e.points)}`;
+        ? `Entry ${e.entry} is entry ${e.text.of} of ${name(e.text.from)}: its event, points, text${sound}`
+        : `The mod sets entry ${e.entry}: event ${e.id}, ${points(e.points)}${sound}`;
       // read when clicked: a kept button keeps its listener (patchChildren)
       const remove = button("×", `Entry ${e.entry} as the exe has it again`, () => {
         this.events.copy(Number(row.dataset["key"]), undefined);
@@ -125,7 +126,7 @@ export class EventsView {
       element(
         "p",
         "hint",
-        "The game’s code raises events by number, each once per game (its points, its text in the bonus box): e.g. oracles 262–271, a lit circuit node 293. An episode whose table lacks the number gives nothing. A copy takes over an entry the game never uses (Junior and I: 190, IV: 197–200; II and III have none) with the event’s number, points and text; not its sound. Scripts award an entry with Enigma(n).",
+        "The game’s code raises events by number, each once per game (its points, its text in the bonus box): e.g. oracles 262–271, a lit circuit node 293. An episode whose table lacks the number gives nothing. A copy takes over an entry the game never uses (Junior and I: 190, IV: 197–200; II and III have none) with the event’s number, points and text, and its sound where this episode has that piece of music (else the entry’s own stays). Scripts award an entry with Enigma(n).",
       ),
     );
     return nodes;

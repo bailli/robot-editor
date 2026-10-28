@@ -71,11 +71,11 @@ const changes: ModChanges = {
     },
   ],
   // IV's unused entries 197 and 198 become oracle events 263 and 266; the GATE's first
-  // take that tileTypes copied gives 250 points instead of 100
+  // take that tileTypes copied gives 250 points instead of 100, with III's hiss
   events: [
     { episode: 4, entry: 198, id: 266, points: 3500 },
     { episode: 4, entry: 197, id: 263, points: 3500 },
-    { episode: 3, entry: 0x59, id: 76, points: 250 },
+    { episode: 3, entry: 0x59, id: 76, points: 250, sound: "!ZISCH" },
   ],
   code: [],
   dealer: [{ episode: 1, ...dealer1 }],
@@ -131,6 +131,7 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   // what the same edits make when done by hand
   let direct = new Game(game.withTileTypes(3, 1, new Map(changes.tileTypes[0]?.types)));
   direct = new Game(withEventEntries(direct.image, 3, new Map([[0x59, { id: 76, points: 250 }]])));
+  direct = new Game(direct.withSounds(3, new Map([[0x59, "!ZISCH"]])));
   const oracleEvents = new Map([
     [197, { id: 263, points: 3500 }],
     [198, { id: 266, points: 3500 }],
@@ -165,6 +166,9 @@ test("a mod applies its changes as the editing functions do, in the order of kin
 
   expect(modded.episode(3).classes.typeOfClass.get(76)).toBe(0x59);
   expect(readEventTable(modded.image, 3)[0x59]).toEqual({ id: 76, points: 250 });
+  // the sound line keeps the name tileTypes copied
+  expect(modded.sound(3, 0x59)).toBe("!ZISCH");
+  expect(modded.objectNames(3).get(0x59)).toBe("GATE");
   expect(readEventTable(modded.image, 4).slice(197, 199)).toEqual([...oracleEvents.values()]);
   expect(modded.episodeTexts(3)?.entries.get(0x59)).toEqual(["Ein Gatter."]);
   for (const entry of [331, 334, 945]) {
@@ -255,6 +259,7 @@ test("the file: saving again gives the same file, in key order", () => {
   expect(json).toContain("[945, 945]");
   expect(json).toContain("[32, 0, 99]");
   expect(json).toContain('"flags": "0x4801e946"');
+  expect(json).toContain('"sound": "!ZISCH"');
   // the mod carries no text of the game's own
   expect(json).not.toContain(game.texts(1210)?.entries.get(945)?.[0]?.slice(0, 20));
   // texts keep their brackets and spaces
@@ -287,6 +292,10 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { events: [{ episode: 4, entry: 197, id: 392, points: 0 }] },
     { events: [{ episode: 4, entry: 197, id: 256, points: 0 }] },
     { events: [{ episode: 4, entry: 197, id: 263, points: 2 ** 31 }] },
+    // no piece's name; a piece IV lacks (checked when applied)
+    { events: [{ episode: 4, entry: 197, id: 263, points: 0, sound: "!" }] },
+    { events: [{ episode: 4, entry: 197, id: 263, points: 0, sound: "A B" }] },
+    { events: [{ episode: 4, entry: 197, id: 263, points: 0, sound: "!ORACLE" }] },
     // no dealer in III; more goods than I's table holds; too few shown; no item
     { dealer: [{ episode: 3, ...dealer1 }] },
     { dealer: [{ episode: 1, goods: Array(28).fill(dealer1.goods[0]), most: 6 }] },

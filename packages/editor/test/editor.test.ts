@@ -848,6 +848,34 @@ describe("Editor and events from other episodes", () => {
     expect(editor.game).toBe(game);
   });
 
+  test("a copy takes its sound where the episode has the piece; × gives the line back", () => {
+    const editor = new Editor(game);
+    // I's thief bribe (entry 130, event 258) sounds !THIEFIRI; IV has the piece, no line 197
+    editor.copyEvent(4, shown, 197, { from: 1, of: 130 });
+    expect(editor.eventEntries(4)).toEqual([
+      {
+        episode: 4,
+        entry: 197,
+        id: 258,
+        points: 5000,
+        sound: "!THIEFIRI",
+        text: { from: 1, of: 130 },
+      },
+    ]);
+    expect(editor.game.sound(4, 197)).toBe("!THIEFIRI");
+    const mod = editor.saveMod();
+    expect(mod.changes.events).toEqual([
+      { episode: 4, entry: 197, id: 258, points: 5000, sound: "!THIEFIRI" },
+    ]);
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    // II's oracle event: IV lacks !ORACLE, the line stays as the exe has it
+    editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
+    expect(editor.eventEntries(4)[0]?.sound).toBeUndefined();
+    expect(editor.game.sound(4, 197)).toBe("");
+    editor.copyEvent(4, shown, 197, undefined);
+    expect(editor.game).toBe(game);
+  });
+
   test("text entries edited before a copy stay", () => {
     const editor = new Editor(game);
     editor.setRoomName(4, shown, "DER ANFANG");

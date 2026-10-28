@@ -85,3 +85,35 @@ test("withTileTypes adds a sound line the episode lacks", () => {
   const saved = new Game(game.withTileTypes(3, 1, new Map([[0x73, 0x25]])));
   assert.match(saved.textSource(1306) ?? "", /^115:!KLINGELI ;O_LETTER$/m);
 });
+
+test("withSounds: an entry's sound, its note kept, a missing line added", () => {
+  // IV's 133 is E_PUT_OUT_FIRE; 197 has no line
+  assert.equal(game.sound(4, 133), "!PUTOUTFI");
+  assert.equal(game.sound(4, 197), "");
+  const saved = new Game(
+    game.withSounds(
+      4,
+      new Map([
+        [133, "BEEPER"],
+        [197, "!THIEFIRI"],
+      ]),
+    ),
+  );
+  const text = saved.textSource(1406) ?? "";
+  assert.match(text, /^133:BEEPER ;E_PUT_OUT_FIRE$/m);
+  assert.match(text, /^197:!THIEFIRI$/m);
+  assert.equal(saved.sound(4, 197), "!THIEFIRI");
+  assert.throws(() => game.withSounds(4, new Map([[197, "!ORACLE"]])), /no piece ORACLE/);
+});
+
+test("copiedSound: the source's sound where the episode has its piece", () => {
+  // I's thief bribe (entry 130) sounds !THIEFIRI, which IV has and Junior lacks
+  assert.equal(game.copiedSound(4, 1, 130), "!THIEFIRI");
+  assert.equal(game.copiedSound(0, 1, 130), undefined);
+  // II's oracles and I's lit node: their pieces are only in II and III, I and II
+  assert.equal(game.copiedSound(3, 2, 135), "!ORACLE");
+  for (const e of [0, 1, 4]) assert.equal(game.copiedSound(e, 2, 135), undefined);
+  assert.equal(game.copiedSound(4, 1, 165), undefined);
+  // IV's 139 has an empty line
+  assert.equal(game.copiedSound(1, 4, 139), undefined);
+});

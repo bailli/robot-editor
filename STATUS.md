@@ -164,7 +164,9 @@ Files in `packages/formats/src`:
   them line by line by number (0x4389b0: `;` ends the line, the number before `:` must
   be positive and is not checked against the table's length; the order does not
   matter): the sound (a MUSIC piece of the episode; a leading `!` sets bit 7) goes into
-  event table entry N +8 (see events). Every name is a piece of its episode's MUSIC
+  event table entry N +8 (see events): the piece's number from 1 in the MUSIC list, bit 7
+  for `!` (**verified under Wine** with the driver: IV's 133 `!PUTOUTFI`, and a line 197
+  a mod adds). Every name is a piece of its episode's MUSIC
   (IV: one odd line).
 - **Where resources come from** (opener 0x430d20, used by all resource reads; read from
   the code, not tried in the game): first a loose file, then the exe, then
@@ -1121,8 +1123,10 @@ Supported:
   (`spareEventEntries`: Junior and I 190, IV 197–200, II and III none; the first no
   copy has); "Copy" sets the entry's id and points and copies text 1800 + n
   (`Editor.copyEvent`). Each one undo step, which makes a new base like a tile type
-  copy; refused: an id the table has already, an entry that is not spare. Not copied:
-  the sound (the target's sound table line stays). II's oracle events 263 and 266 into
+  copy; refused: an id the table has already, an entry that is not spare. The sound
+  (its sound table line, `Game.copiedSound`) comes along where the episode has the
+  piece, else the target's line stays (I's thief bribe `!THIEFIRI` into IV, **verified
+  under Wine**: the game's entry holds it). II's oracle events 263 and 266 into
   IV's 197 and 198 save as the mod the oracle game test uses (verified under Wine)
 - texts from other episodes (tab Episode, `texts-view.ts`; mod kind `copyTexts` into the
   episode's texts, `textsId`): the copies (entry ← episode and entry, the text's start),
@@ -1143,7 +1147,9 @@ Supported:
   the mod does not set yet (`Editor.kitPlan`). Where they do not all fit (IV: four
   entries for ten oracle symbols) checkboxes pick which (the first ones by default),
   the rest give no points; kits share the spare entries (IV's oracles and circuits
-  together). "Add oracles" / "Add circuits" (`Editor.addKit`) is one undo step making a
+  together). Events take their sound as a copy does, but no kit target has the piece
+  (`!ORACLE`: II and III; the lit node's `!BULBON`: I and II), so the target's line stays
+  (none in IV, `!FANFARE` in Junior's and I's 190). "Add oracles" / "Add circuits" (`Editor.addKit`) is one undo step making a
   new base; the parts then show in the lists of tile types, events and texts, each
   removable there. **Verified under Wine** (`pnpm test:game`, the circuit and oracle
   game tests now build their mods with `planKit` and `kitChanges`): circuits in III
@@ -1270,9 +1276,11 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
-- **Next:** the proxy as an in-memory loader; the `code` kind in the editor; an event's
-  sound line with its copy. Both pilots are kits in the Episode tab now ("Add oracles",
-  "Add circuits", each with "Place example").
+- **Next:** the proxy as an in-memory loader; the `code` kind in the editor. Both
+  pilots are kits in the Episode tab now ("Add oracles", "Add circuits", each with
+  "Place example"); a copied event takes its sound where the episode has the piece
+  (mod kind `events`, `sound`). Sounds the episode lacks would need MUSIC pieces copied,
+  and MUSIC is not decoded.
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
@@ -1292,11 +1300,13 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
   one (a text change beats the description `tileTypes` copied). Within a kind the
   changes apply in key order, the file's, so the result does not depend on the order
   they were made in (new text entries, sound lines and shapes are appended). Later
-  kinds as needed: sound table lines of events, shapes of the mod's own.
+  kinds as needed: shapes of the mod's own.
   1. `tileTypes` (key: episode, target type): `{ episode, from, types: [[to, of], …] }`
      → `Game.withTileTypes`. `events` (key: episode, entry): `{ episode, entry, id,
-points }` → `withEventEntries`, after the tile types (it may override a copied
-     first take). From entry 128 on the id is 0 or 256–391: the constructor maps id →
+points, sound? }` → `withEventEntries`, after the tile types (it may override a
+     copied first take); `sound` (a MUSIC piece of the episode, `!` before it for bit 7)
+     sets line `entry` of the sound table, its note kept (`Game.withSounds`; refused for
+     a piece the episode lacks), without it the line stays. From entry 128 on the id is 0 or 256–391: the constructor maps id →
      entry in 0x4c70e0 (0x43b4bf, shared with class → type below 256, 0x188 long, no
      bounds check); applying refuses two entries with one id. The tables are full
      (Junior and I: entry 190 free, nothing else), so a new event takes over an entry
