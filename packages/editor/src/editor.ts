@@ -1765,6 +1765,7 @@ export class Editor {
 
   /** Replaces the data of the record in `slot`. */
   setRecord(episode: number, roomId: number, slot: number, data: Uint8Array): Edit | undefined {
+    this.endStroke();
     const room = this.room(episode, roomId);
     const i = room.records.findIndex((r) => r.slot === slot);
     if (i < 0) return undefined;

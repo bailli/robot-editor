@@ -169,6 +169,21 @@ describe("Editor records", () => {
     expect(editor.setRecord(2, 55, teleporter.slot, teleporter.data)).toBeUndefined(); // no change
   });
 
+  test("changing a record ends the stroke in progress", () => {
+    const editor = new Editor(game);
+    editor.beginStroke(1, 43, "base");
+    editor.paint(free, 0x0105);
+    const data = teleporter.data.slice();
+    data[6] = 9;
+    editor.setRecord(2, 55, teleporter.slot, data);
+    // two undo steps: the record edit is not mixed into the stroke
+    editor.undo();
+    expect(editor.isEdited(2, 55)).toBe(false);
+    expect(editor.isEdited(1, 43)).toBe(true);
+    editor.undo();
+    expect(editor.isEdited(1, 43)).toBe(false);
+  });
+
   test("a new record shows the cell it replaces", () => {
     const editor = new Editor(game);
     const slot = defined(editor.addRecord(1, 43, "base", free, 13), "slot");
