@@ -30,7 +30,7 @@ waits in its main loop for the first step; a driver (packages/tools/src/driver.t
 connects to 127.0.0.1:PORT, steps the game, presses keys and reads memory. The port is
 a free one unless --port is given; the proxy's `hello` names TOKEN, so a game of another
 checkout listening on the same port is not taken for this one. It stops when the game
-ends or on SIGTERM/SIGINT.
+ends, on SIGTERM/SIGINT, or when its stdin is a pipe (a driver's) that closes.
 
 Requires Wine (WineHQ packages install to /opt/wine-stable), Xvfb and xdotool. `shot`
 and `serve` run the game silently (Wine's audio drivers are disabled for them).
@@ -43,8 +43,10 @@ import os
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
+import threading
 import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -102,6 +104,19 @@ def sandbox():
     z = os.path.join(PREFIX, "dosdevices", "z:")
     if os.path.islink(z):
         os.unlink(z)
+
+
+def stop_process(process):
+    """Ends a process we started (if any), killing it when it does not end by itself."""
+    if process is None:
+        return
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
 
 
 def free_display():
@@ -251,9 +266,8 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
     finally:
         if not keep:
             run("wineserver", "-k", check=False)
-            if game:
-                game.wait(timeout=10)
-            xvfb.terminate()
+            stop_process(game)
+            stop_process(xvfb)
 
 
 PLAY_DIR = os.path.join(PREFIX, "drive_c", "robot-play")
@@ -323,6 +337,14 @@ def serve(exe=EXE, port=None):
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+    mode = os.fstat(sys.stdin.fileno()).st_mode
+    if stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode):
+        # a driver's pipe: when it closes (the driver ended, also by a crash), so do we
+        def watch():
+            sys.stdin.buffer.read()
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        threading.Thread(target=watch, daemon=True).start()
     try:
         time.sleep(1)
         port = port or free_port()
@@ -342,10 +364,8 @@ def serve(exe=EXE, port=None):
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         run("wineserver", "-k", check=False)
-        if game:
-            game.wait(timeout=10)
-        xvfb.terminate()
-        xvfb.wait(timeout=10)
+        stop_process(game)
+        stop_process(xvfb)
 
 
 def main():

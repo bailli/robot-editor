@@ -68,7 +68,11 @@ const HERO = 0x53e9ac;
 const SCORE = 0x4fe098;
 
 function parseStatus(answer: string): Status {
-  const field = (name: string) => Number(new RegExp(`${name}=(\\d+)`).exec(answer)?.[1]);
+  const field = (name: string) => {
+    const value = new RegExp(`${name}=(\\d+)`).exec(answer)?.[1];
+    if (value === undefined) throw new Error(`no ${name} in the proxy's status: ${answer}`);
+    return Number(value);
+  };
   return { tick: field("tick"), ms: field("ms"), steps: field("steps"), frames: field("frames") };
 }
 
@@ -120,7 +124,13 @@ export class Driver {
     const args = ["-I", HARNESS, "serve"];
     if (options.port !== undefined) args.push("--port", String(options.port));
     if (options.exe) args.push("--exe", options.exe);
-    const server = spawn("python3", args, { stdio: ["ignore", "pipe", "inherit"] });
+    // stdin a pipe: serve ends with the game when it closes, also if this process dies
+    const server = spawn("python3", args, { stdio: ["pipe", "pipe", "inherit"] });
+    const exited = new Promise<void>((resolve) => {
+      server.once("exit", () => {
+        resolve();
+      });
+    });
     // ready PORT DISPLAY TOKEN
     const ready = new Promise<{ port: number; token: string }>((resolve, reject) => {
       server.on("exit", (code) => {
@@ -136,6 +146,7 @@ export class Driver {
       return await Driver.connect(port, token, server);
     } catch (error) {
       server.kill();
+      await exited; // its cleanup done, the next start finds no game of this one
       throw error;
     }
   }
@@ -224,7 +235,13 @@ export class Driver {
 
   async peek(address: number, length: number): Promise<Uint8Array> {
     const hex = await this.command(`peek ${address.toString(16)} ${String(length)}`);
-    return new Uint8Array(Buffer.from(hex, "hex"));
+    const bytes = new Uint8Array(Buffer.from(hex, "hex"));
+    if (bytes.length !== length) {
+      throw new Error(
+        `peek 0x${address.toString(16)}: ${String(bytes.length)} of ${String(length)} bytes`,
+      );
+    }
+    return bytes;
   }
 
   async poke(address: number, bytes: Uint8Array): Promise<void> {
