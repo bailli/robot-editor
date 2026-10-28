@@ -4,7 +4,7 @@ import { test } from "vitest";
 
 import { readClassTable } from "../src/classes.ts";
 import { readEventTable } from "../src/events.ts";
-import { EPISODES, Game, eventTextsId, roomNamesId } from "../src/game.ts";
+import { EPISODES, Game, eventTextsId, roomNamesId, withSoundLine } from "../src/game.ts";
 import { withTextEntry } from "../src/texts.ts";
 import { assertBytesEqual, exe } from "./data.ts";
 
@@ -116,4 +116,10 @@ test("copiedSound: the source's sound where the episode has its piece", () => {
   assert.equal(game.copiedSound(4, 1, 165), undefined);
   // IV's 139 has an empty line
   assert.equal(game.copiedSound(1, 4, 139), undefined);
+});
+
+test("withSoundLine takes the note literally, $ patterns included", () => {
+  const table = "1:A ;x\n2:B ;y\n";
+  assert.equal(withSoundLine(table, 2, "C", "$& $1 $$"), "1:A ;x\n2:C ;$& $1 $$\n");
+  assert.equal(withSoundLine(table, 3, "D", "$&"), "1:A ;x\n2:B ;y\n3:D ;$&\n");
 });

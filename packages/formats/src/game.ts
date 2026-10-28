@@ -280,11 +280,13 @@ export class Game {
 }
 
 /** A sound table with line n set to `sound` and `note`, appended where it is missing. */
-function withSoundLine(text: string, n: number, sound: string, note: string): string {
+export function withSoundLine(text: string, n: number, sound: string, note: string): string {
   const [found] = soundLine(text, n);
   const line = `${n}:${sound}${note ? ` ;${note}` : ""}`;
   // the game reads the lines by number (0x4389b0), in any order
-  return found ? text.replace(new RegExp(`^${n}:.*$`, "m"), line) : `${text.trimEnd()}\n${line}\n`;
+  return found
+    ? text.replace(new RegExp(`^${n}:.*$`, "m"), () => line)
+    : `${text.trimEnd()}\n${line}\n`;
 }
 
 /** Line n of a sound table: [line, sound, note] (empty where missing). */
