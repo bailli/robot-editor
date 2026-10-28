@@ -94,7 +94,8 @@ async function cellsOfClass(d: Driver, classId: number, cells: number[]): Promis
 
 /**
  * A mod for `episode` whose start room (made calm, cells x0..x1, y0..y1 cleared) gets
- * what `fill` puts there, the hero starting at (x, y). `fill` adds records with `record`.
+ * what `fill` puts there, the hero starting at (x, y). `fill` adds records with `record`
+ * and overlay cells with `stack`.
  */
 function startRoomMod(
   game: Game,
@@ -102,7 +103,11 @@ function startRoomMod(
   changes: Partial<ModChanges>,
   area: { x0: number; x1: number; y0: number; y1: number },
   hero: { x: number; y: number },
-  fill: (set: (x: number, y: number, cell: number) => void, record: RecordAdder) => void,
+  fill: (
+    set: (x: number, y: number, cell: number) => void,
+    record: RecordAdder,
+    stack: (x: number, y: number, cell: number) => void,
+  ) => void,
 ): Mod {
   const id = readEpisodeStart(game.image, episode).room;
   const room = calmRoom(game.room(episode, id), game.episode(episode).classes);
@@ -117,13 +122,19 @@ function startRoomMod(
   const set = (x: number, y: number, cell: number) => {
     base[x + y * ROOM_WIDTH] = cell;
   };
-  fill(set, (x, y, data) => {
-    let slot = 0;
-    while (used.has(slot)) slot++;
-    used.add(slot);
-    records.push({ slot, data: Uint8Array.from({ length: 10 }, (_, k) => data[k] ?? 0) });
-    set(x, y, LOGIC_CELL | (slot << 8));
-  });
+  fill(
+    set,
+    (x, y, data) => {
+      let slot = 0;
+      while (used.has(slot)) slot++;
+      used.add(slot);
+      records.push({ slot, data: Uint8Array.from({ length: 10 }, (_, k) => data[k] ?? 0) });
+      set(x, y, LOGIC_CELL | (slot << 8));
+    },
+    (x, y, cell) => {
+      overlay[x + y * ROOM_WIDTH] = cell;
+    },
+  );
   return {
     ...emptyMod(game.image.data),
     changes: {
@@ -268,9 +279,13 @@ function exampleMod(
     changes,
     { x0: 2, x1: 16, y0: 12, y1: 20 },
     hero,
-    (set, record) => {
+    (set, record, stack) => {
+      const xy = (k: number) => [at.x + (k % example.w), at.y + Math.floor(k / example.w)] as const;
       example.base.forEach((cell, k) => {
-        set(at.x + (k % example.w), at.y + Math.floor(k / example.w), cell);
+        set(...xy(k), cell);
+      });
+      example.overlay.forEach((cell, k) => {
+        stack(...xy(k), cell);
       });
       for (const r of example.records)
         record(at.x + r.x, at.y + r.y, [...movedRecord(r.data, area, { room, ...at })]);

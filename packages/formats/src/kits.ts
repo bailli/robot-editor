@@ -216,15 +216,17 @@ export function kitChanges(
 }
 
 /**
- * A small working setup of a kit's feature, to place in a room: the base layer's cells
- * row by row (0: empty floor; logic cells where `records` lie) and the records, whose
- * positions (a node's stairs, an oracle's target) are as if the example's top left cell
- * were (0, 0) of room `room`.
+ * A small working setup of a kit's feature, to place in a room: both layers' cells row
+ * by row (base: 0, empty floor, but logic cells where `records` lie; the pieces in the
+ * overlay, so the floor under them can be painted, as the game stacks overlay objects
+ * on their base cell) and the records, whose positions (a node's stairs, an oracle's
+ * target) are as if the example's top left cell were (0, 0) of room `room`.
  */
 export interface KitExample {
   w: number;
   h: number;
   base: number[];
+  overlay: number[];
   records: { x: number; y: number; data: Uint8Array }[];
 }
 
@@ -260,7 +262,8 @@ export function kitExample(
     if (letter === undefined || gate === undefined) return undefined;
     const w = 7;
     const base = Array.from({ length: 3 * w }, () => 0);
-    const put = (x: number, y: number, value: number) => (base[x + y * w] = value);
+    const overlay = base.slice();
+    const put = (x: number, y: number, value: number) => (overlay[x + y * w] = value);
     put(0, 0, cell(0, ONE));
     put(0, 2, cell(0, ZERO));
     put(1, 0, cell(1, CORNER_DOWN));
@@ -268,10 +271,10 @@ export function kitExample(
     put(1, 2, cell(1, CORNER_UP));
     put(2, 1, cell(1, OR));
     put(3, 2, cell(1, WIRE_ACROSS)); // its place is (3, 1)
-    put(4, 1, LOGIC_CELL);
+    base[4 + w] = LOGIC_CELL;
     // a node: stairs down at (6, 1) once lit
     const node = Uint8Array.from([11, 0, 0, 0, 6, 1, 0, 0, 0, 0]);
-    return { w, h: 3, base, records: [{ x: 4, y: 1, data: node }] };
+    return { w, h: 3, base, overlay, records: [{ x: 4, y: 1, data: node }] };
   }
   if (kit.key === "oracles") {
     const [tangram, oracle] = types;
@@ -282,12 +285,13 @@ export function kitExample(
     const pieces = readOracleSymbols(game.image)[n];
     const w = 4;
     const base = Array.from({ length: 3 * w }, () => 0);
-    pieces.forEach((state, k) => (base[(k % 2) + Math.floor(k / 2) * w] = cell(0, state)));
+    const overlay = base.slice();
+    pieces.forEach((state, k) => (overlay[(k % 2) + Math.floor(k / 2) * w] = cell(0, state)));
     base[3 + w] = LOGIC_CELL;
     // sends to (0, 2), below the block: room | x << 10, y
     const target = room;
     const data = Uint8Array.from([12, 0, oracle, n, target & 0xff, target >> 8, 2, 0, 0, 0]);
-    return { w, h: 3, base, records: [{ x: 3, y: 1, data }] };
+    return { w, h: 3, base, overlay, records: [{ x: 3, y: 1, data }] };
   }
   return undefined;
 }

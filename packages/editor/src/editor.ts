@@ -849,7 +849,7 @@ export class Editor {
       base[x + y * w] = LOGIC_CELL | (slot << 8);
       return { slot, data };
     });
-    const overlay = new Uint16Array(w * h);
+    const overlay = Uint16Array.from(example.overlay);
     return { episode, w, h, base, overlay, records, origin: { room, x: 0, y: 0 } };
   }
 

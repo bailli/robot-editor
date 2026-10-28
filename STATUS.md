@@ -1153,7 +1153,10 @@ Supported:
   on to a node with its stairs two cells east, the wire missing and lying below its gap;
   oracles (4 × 3) the tangram block laid as a symbol (the first whose event has an entry
   and whose hint exists: symbol 1 with II's texts), the oracle east of it sending the
-  hero below the block. **Verified under Wine**: in III, IV and Junior the wire taken and
+  hero below the block. The pieces (letters, gate pieces, the loose wire, the tangram
+  block) lie in the overlay, only the node and the oracle (logic cells) in the base, so
+  the floor under them can be painted (the game stacks overlay objects on their base
+  cell). **Verified under Wine**: in III, IV and Junior the wire taken and
   used in the gap ("Benutzen") lights the node and places its stairs (with the wire's
   first take and, but in III, 4000 points); in IV and Junior the laid symbol is found and
   walked into northwards the oracle sends the hero below it (3500 points)

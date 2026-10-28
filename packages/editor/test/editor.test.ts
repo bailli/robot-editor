@@ -1055,9 +1055,12 @@ describe("Editor and kit examples", () => {
       editor.room(3, 41).records.find((r) => r.data[0] === 11 && r.data[4] === 26),
     );
     expect([...record.data.slice(4, 7)]).toEqual([26, 11, 0]);
+    // the pieces lie in the overlay, the floor under them is empty and can be painted
+    expect(editor.room(3, 41).base[at(23, 12)]).toBe(0);
     // the wire lies below its gap; put there, the node is lit
-    const wire = defined(editor.room(3, 41).base[at(23, 12)]);
-    editor.beginStroke(3, 41, "base");
+    const wire = defined(editor.room(3, 41).overlay[at(23, 12)]);
+    expect(wire & 0xff).toBe(0x0f);
+    editor.beginStroke(3, 41, "overlay");
     editor.paint(at(23, 11), wire);
     editor.endStroke();
     const lit = nodes(editor, 3, 41).find((n) => n.cell === at(24, 11));
@@ -1079,7 +1082,7 @@ describe("Editor and kit examples", () => {
     // symbol 1: its event (263) has an entry, its hint 331 came with the kit
     const symbol = defined(readOracleSymbols(game.image)[1]);
     const tangram = defined(editor.tileTypeCopies(4).find((c) => c.of === 0x50)).to;
-    expect([at(5, 5), at(6, 5), at(5, 6), at(6, 6)].map((i) => room.base[i])).toEqual(
+    expect([at(5, 5), at(6, 5), at(5, 6), at(6, 6)].map((i) => room.overlay[i])).toEqual(
       symbol.map((state) => tangram | (state << 8)),
     );
     const oracle = defined(room.records.find((r) => r.data[0] === 12));
