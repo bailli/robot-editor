@@ -17,6 +17,8 @@ import {
   FIRST_EVENT_ENTRY,
   GRID_STEP,
   Game,
+  type Kit,
+  type KitPlan,
   LOGIC_CELL,
   type LogicRecord,
   MAX_ROOMS,
@@ -49,9 +51,11 @@ import {
   eventTextsId,
   exitMode,
   freeTileTypes,
+  kitChanges,
   nameRoom,
   parsePe,
   parseTexts,
+  planKit,
   readBackdropRule,
   readDealer,
   readDiagonalMoves,
@@ -781,6 +785,50 @@ export class Editor {
     const source = this.pristine.texts(textsId(copy.from))?.entries;
     const here = this.textEntries(textsId(copy.episode))?.entries;
     return classTexts(id).filter((n) => source?.has(n) === true && here?.has(n) !== true);
+  }
+
+  /**
+   * What adding `kit` to the episode does as it is now (planKit): free types are those
+   * no copy has yet, spare event entries those the mod does not set, texts as edited.
+   * `events`: the lacking events to give entries (default as many as fit).
+   */
+  kitPlan(episode: number, kit: Kit, events?: readonly number[]): KitPlan {
+    const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
+    const set = new Set(this.eventEntries(episode).map((e) => e.entry));
+    const texts = this.textEntries(textsId(episode))?.entries;
+    return planKit(this.game, episode, kit, {
+      source: this.pristine,
+      free: this.freeTileTypes(episode).filter((t) => !copied.has(t)),
+      spare: spareEventEntries(episode).filter((n) => !set.has(n)),
+      hasText: (n) => texts?.has(n) === true,
+      ...(events ? { events } : {}),
+    });
+  }
+
+  /**
+   * Adds `kit` to the episode (kitPlan: tile types, texts, events and their texts) as
+   * one undo step that makes a new base (rebase); undefined if it has nothing to add.
+   * Throws a RangeError where the plan has a problem.
+   */
+  addKit(episode: number, room: number, kit: Kit, events?: readonly number[]): Edit | undefined {
+    this.endStroke();
+    const plan = this.kitPlan(episode, kit, events);
+    if (plan.problem) throw new RangeError(plan.problem);
+    if (plan.types.length + plan.texts.length + plan.events.length === 0) return undefined;
+    const changes = kitChanges(this.pristine, episode, kit, plan);
+    let copyTexts: readonly CopyTextsChange[] = this.changes.copyTexts;
+    for (const c of changes.copyTexts) {
+      for (const [to, of] of c.entries)
+        copyTexts = withTextCopy(copyTexts, c.resource, to, { from: c.from, of });
+    }
+    const copies = changes.tileTypes.flatMap((c) =>
+      c.types.map(([to, of]) => ({ episode, to, from: c.from, of })),
+    );
+    return this.rebase(episode, room, {
+      copies: [...this.changes.copies, ...copies],
+      events: [...this.changes.events, ...changes.events],
+      copyTexts,
+    });
   }
 
   rooms(episode: number): readonly Room[] {

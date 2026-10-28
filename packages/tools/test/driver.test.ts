@@ -8,8 +8,11 @@ import { describe, test } from "vitest";
 
 import {
   type BackdropRule,
-  type EventChange,
+  EVENT_TEXT,
   Game,
+  KITS,
+  type Kit,
+  type KitPlan,
   LOGIC_CELL,
   type LogicRecord,
   type Mod,
@@ -25,14 +28,16 @@ import {
   backdropRoom,
   emptyMod,
   eventTextsId,
+  kitChanges,
+  planKit,
   readEpisodeFlags,
   readEpisodeStart,
+  readEventTable,
   renderRoom,
   robotSprite,
   robotSpriteCount,
   roomActors,
   roomCircuit,
-  textsId,
   withExitMode,
   withRoomScript,
 } from "@robot/formats";
@@ -144,32 +149,40 @@ function startRoomMod(
 
 type RecordAdder = (x: number, y: number, data: number[]) => void;
 
+/** A kit of formats' KITS. */
+function kit(key: string): Kit {
+  const found = KITS.find((k) => k.key === key);
+  assert.ok(found, key);
+  return found;
+}
+
+/** The type a kit's plan copies `of` to. */
+function kitType(plan: KitPlan, of: number): number {
+  const to = plan.types.find(([, o]) => o === of)?.[0];
+  assert.ok(to !== undefined, `the plan copies no type 0x${of.toString(16)}`);
+  return to;
+}
+
 /**
- * Episode I's circuit pieces (LETTER, GATE, BULB, and STAIRS where the episode has
- * none) at free tile types of `episode`, and three circuits in its start room, west of
- * a spare piece the hero takes: AND, XOR then NOT, NAND, each of 1 and 1, the node's
- * stairs east of it at x = 12; the hero starts at (2, 16). Returns the mod and the rows
- * whose nodes the circuit lights.
+ * The circuits kit in `episode` (episode I's LETTER, GATE, BULB, and STAIRS where the
+ * episode has none, event 293 where it fits) and three circuits in its start room, west
+ * of a spare piece the hero takes: AND, XOR then NOT, NAND, each of 1 and 1, the node's
+ * stairs east of it at x = 12; the hero starts at (2, 16). Returns the mod, the rows
+ * whose nodes the circuit lights and the gate piece's type.
  */
-function circuitsMod(
-  game: Game,
-  episode: number,
-  types: { letter: number; gate: number; bulb: number; stairs?: number },
-): { mod: Mod; lit: number[] } {
-  const pairs: [number, number][] = [
-    [types.letter, 0x25],
-    [types.gate, 0x42],
-    [types.bulb, 0x43],
-  ];
-  if (types.stairs !== undefined) pairs.push([types.stairs, 0x3d]);
-  const tileTypes = [{ episode, from: 1, types: pairs }];
-  const one = types.letter | (0x31 << 8);
-  const piece = (state: number) => types.gate | (state << 8);
+function circuitsMod(game: Game, episode: number): { mod: Mod; lit: number[]; gate: number } {
+  const circuits = kit("circuits");
+  const plan = planKit(game, episode, circuits);
+  assert.equal(plan.problem, undefined);
+  const letter = kitType(plan, 0x25);
+  const gate = kitType(plan, 0x42);
+  const one = letter | (0x31 << 8);
+  const piece = (state: number) => gate | (state << 8);
   const [AND, NAND, XOR, NOT, ACROSS] = [1, 3, 4, 9, 0x0a];
   const mod = startRoomMod(
     game,
     episode,
-    { tileTypes },
+    kitChanges(game, episode, circuits, plan),
     { x0: 1, x1: 14, y0: 11, y1: 24 },
     { x: 2, y: 16 },
     (set, record) => {
@@ -198,49 +211,36 @@ function circuitsMod(
   const lit = roomCircuit(room, classes).nodes.flatMap((n) =>
     n.signal === 1 ? [Math.floor(n.cell / ROOM_WIDTH)] : [],
   );
-  return { mod, lit };
+  return { mod, lit, gate };
 }
 
 /**
- * Episode II's tangram and oracle at free tile types of `episode`, its hint and death
- * texts (copyTexts), and two oracles with their symbols found in the start room: north
- * of the hero's start (4, 16) one that sends him to (10, 16), at (12, 16) one that shows
- * hint 331 when walked into eastwards. `events` and `eventTexts` ([to, of] from II's
- * texts) add what the episode's event table lacks.
+ * The oracles kit in `episode` (episode II's tangram and oracle, their hints and death
+ * text, the events of the symbols `events` where the episode lacks them, with their
+ * texts) and two oracles with their symbols found in the start room: north of the
+ * hero's start (4, 16) one that sends him to (10, 16), at (12, 16) one that shows hint
+ * 331 when walked into eastwards. Returns the mod and whether the events come with a
+ * text (a bonus box).
  */
 function oraclesMod(
   game: Game,
   episode: number,
-  [tangram, oracle]: readonly [number, number],
-  events: readonly EventChange[] = [],
-  eventTexts: readonly (readonly [number, number])[] = [],
-): Mod {
+  events?: readonly number[],
+): { mod: Mod; box: boolean } {
+  const oracles = kit("oracles");
+  const plan = planKit(game, episode, oracles, events ? { events } : {});
+  assert.equal(plan.problem, undefined);
+  const oracle = kitType(plan, 0x51);
   const room = readEpisodeStart(game.image, episode).room;
   const target = room | (10 << 10);
-  const copyTexts =
-    episode === 2 || episode === 3
-      ? []
-      : [
-          {
-            resource: textsId(episode),
-            from: textsId(2),
-            entries: [...[331, 334, 945].map((n) => [n, n] as const), ...eventTexts],
-          },
-        ];
-  const tileTypes = [
-    {
-      episode,
-      from: 2,
-      types: [
-        [tangram, 0x50],
-        [oracle, 0x51],
-      ] as const,
-    },
-  ];
-  return startRoomMod(
+  const changes = kitChanges(game, episode, oracles, plan);
+  const box = changes.copyTexts.some((c) =>
+    c.entries.some(([to]) => to >= EVENT_TEXT && c.resource === eventTextsId(episode)),
+  );
+  const mod = startRoomMod(
     game,
     episode,
-    { tileTypes, copyTexts, events },
+    changes,
     { x0: 2, x1: 12, y0: 12, y1: 18 },
     { x: 4, y: 16 },
     (_, record) => {
@@ -250,6 +250,7 @@ function oraclesMod(
       record(12, 16, oracleRecord(1));
     },
   );
+  return { mod, box };
 }
 
 /** Writes the mod's exe to a temporary directory for `use`. */
@@ -392,56 +393,54 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     }
   }, 60_000);
 
+  // the circuits kit; a lit node is event 293: 4000 points in Junior (its own entry)
+  // and IV (a spare entry the kit gives it), none in III (no entry left)
   const CIRCUITS = [
-    { episode: 3, types: { letter: 0x40, gate: 0x59, bulb: 0x43 } },
-    { episode: 4, types: { letter: 0x6d, gate: 0x6e, bulb: 0x6f } },
+    { episode: 3, nodePoints: 0 },
+    { episode: 4, nodePoints: 4000 },
     // Junior has no stairs: they come along from episode I
-    { episode: 0, types: { letter: 0x40, gate: 0x42, bulb: 0x43, stairs: 0x3d } },
+    { episode: 0, nodePoints: 4000 },
   ];
-  for (const { episode, types } of CIRCUITS) {
-    test(`episode ${String(episode)} with episode I's circuit pieces: taking one lights the nodes`, async () => {
-      const { mod, lit } = circuitsMod(game, episode, types);
+  for (const { episode, nodePoints } of CIRCUITS) {
+    test(`episode ${String(episode)} with the circuits kit: taking a piece lights the nodes`, async () => {
+      const { mod, lit, gate } = circuitsMod(game, episode);
       assert.deepEqual(lit, [14, 18], "AND and NOT XOR give 1, NAND 0");
+      // the piece's first take, as the kit copied it from episode I
+      const firstTake = readEventTable(new Game(applyMod(game.image, mod)).image, episode)[gate];
+      assert.ok(firstTake);
       const stairsCells = [14, 18, 22].map((y) => 12 + y * ROOM_WIDTH);
-      const stairs = await withModExe(game, mod, (exe) =>
+      const seen = await withModExe(game, mod, (exe) =>
         withGame(exe, async (d) => {
           await d.startEpisode(episode);
           assert.deepEqual(await cellsOfClass(d, STAIRS_CLASS, stairsCells), [], "none before");
+          const before = await d.score();
           await walk(d, "right", (h) => h.x >= 4); // takes the spare piece
-          return cellsOfClass(d, STAIRS_CLASS, stairsCells);
+          await d.run(60);
+          return {
+            stairs: await cellsOfClass(d, STAIRS_CLASS, stairsCells),
+            points: (await d.score()) - before,
+          };
         }),
       );
       assert.deepEqual(
-        stairs,
+        seen.stairs,
         lit.map((y) => 12 + y * ROOM_WIDTH),
       );
+      assert.equal(seen.points, firstTake.points + nodePoints);
     }, 60_000);
   }
 
-  const ORACLES = [
-    { episode: 0, types: [0x50, 0x51] },
-    { episode: 1, types: [0x50, 0x51] },
-    // IV's table has no oracle events: its unused entries 197 and 198 become those of
-    // the two oracles (262 + symbol), with II's texts for them
-    {
-      episode: 4,
-      types: [0x70, 0x71],
-      events: [
-        { episode: 4, entry: 197, id: 263, points: 3500 },
-        { episode: 4, entry: 198, id: 266, points: 3500 },
-      ],
-      eventTexts: [
-        [1997, 1935],
-        [1998, 1938],
-      ],
-    },
-  ] as const;
-  for (const { episode, types, ...more } of ORACLES) {
+  // the oracles kit; IV's table has no oracle events: the kit gives two of its spare
+  // entries those of the two oracles (262 + symbol), with II's texts for them
+  const ORACLES: readonly { episode: number; events?: readonly number[] }[] = [
+    { episode: 0 },
+    { episode: 1 },
+    { episode: 4, events: [263, 266] },
+  ];
+  for (const { episode, events } of ORACLES) {
     const points = 3500;
-    test(`episode ${String(episode)} with episode II's oracles: north sends, east hints`, async () => {
-      const events = "events" in more ? more.events : [];
-      const eventTexts = "eventTexts" in more ? more.eventTexts : [];
-      const mod = oraclesMod(game, episode, types, events, eventTexts);
+    test(`episode ${String(episode)} with the oracles kit: north sends, east hints`, async () => {
+      const { mod, box } = oraclesMod(game, episode, events);
       const seen = await withModExe(game, mod, (exe) =>
         withGame(exe, async (d) => {
           const room = (await d.startEpisode(episode)).room;
@@ -449,7 +448,7 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
           await d.run(200);
           // the bonus box with the event's text, where the mod brings one: the oracle
           // sends the hero once it is closed
-          if (eventTexts.length > 0) await d.press("return", 200);
+          if (box) await d.press("return", 200);
           const sent = await d.hero();
           const afterNorth = await d.score();
           await walk(d, "right", (h) => h.x >= 11);
@@ -544,7 +543,7 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
   for (const vanish of [false, true]) {
     test(`Junior's oracles ${vanish ? "vanish with II's flags" : "stay"} after north and east`, async () => {
       const oracles = ORACLE_VANISHES_NORTH | ORACLE_VANISHES_EAST;
-      const mod = oraclesMod(game, 0, [0x50, 0x51]);
+      const { mod } = oraclesMod(game, 0);
       const flags = readEpisodeFlags(game.image, 0) | (vanish ? oracles : 0);
       const cells = [at(4, 15), at(12, 16)];
       const seen = await withModExe(

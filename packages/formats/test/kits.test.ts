@@ -1,0 +1,108 @@
+import { expect, test } from "vitest";
+
+import { Game } from "../src/game.ts";
+import { KITS, kitChanges, planKit } from "../src/kits.ts";
+import { exe } from "./data.ts";
+
+const game = new Game(exe());
+const kit = (key: string) => {
+  const found = KITS.find((k) => k.key === key);
+  if (!found) throw new Error(key);
+  return found;
+};
+const [oracles, circuits] = [kit("oracles"), kit("circuits")];
+
+test("oracles: II's tangram and oracle, their texts; IV's events in its spare entries", () => {
+  // Junior has the oracles' events 262-271, not their texts
+  expect(planKit(game, 0, oracles)).toEqual({
+    types: [
+      [0x50, 0x50],
+      [0x51, 0x51],
+    ],
+    present: [],
+    texts: [331, 332, 334, 339, 945],
+    events: [],
+    lacking: [],
+    without: [],
+  });
+  // II and III have them
+  expect(planKit(game, 3, oracles)).toMatchObject({ types: [], present: [0x50, 0x51] });
+  // IV lacks all ten events and has four spare entries: the first four, or those chosen
+  const iv = planKit(game, 4, oracles);
+  expect(iv.types).toEqual([
+    [0x48, 0x50],
+    [0x6d, 0x51],
+  ]);
+  expect(iv.events.map((e) => [e.entry, e.id])).toEqual([
+    [197, 262],
+    [198, 263],
+    [199, 264],
+    [200, 265],
+  ]);
+  expect(iv.without).toEqual([266, 267, 268, 269, 270, 271]);
+  const chosen = planKit(game, 4, oracles, { events: [263, 266] });
+  // as the game test's mod, which gave 3500 points and II's texts under Wine
+  expect(kitChanges(game, 4, oracles, chosen)).toEqual({
+    tileTypes: [
+      {
+        episode: 4,
+        from: 2,
+        types: [
+          [0x48, 0x50],
+          [0x6d, 0x51],
+        ],
+      },
+    ],
+    events: [
+      { episode: 4, entry: 197, id: 263, points: 3500 },
+      { episode: 4, entry: 198, id: 266, points: 3500 },
+    ],
+    copyTexts: [
+      {
+        resource: 1410,
+        from: 1210,
+        entries: [
+          [331, 331],
+          [332, 332],
+          [334, 334],
+          [339, 339],
+          [945, 945],
+          [1997, 1935],
+          [1998, 1938],
+        ],
+      },
+    ],
+  });
+  expect(planKit(game, 4, oracles, { events: [262, 263, 264, 265, 266] }).problem).toMatch(
+    /5 events chosen, 4 spare entries left/,
+  );
+  expect(planKit(game, 0, oracles, { events: [262] }).problem).toMatch(/has event 262 already/);
+});
+
+test("circuits: I's pieces, stairs only where the episode has none; event 293 where it fits", () => {
+  expect(planKit(game, 0, circuits).types).toEqual([
+    [0x3a, 0x25],
+    [0x42, 0x42],
+    [0x43, 0x43],
+    [0x3d, 0x3d],
+  ]);
+  // III has stairs and no spare entry: its nodes give no points
+  expect(planKit(game, 3, circuits)).toMatchObject({
+    types: [
+      [0x0e, 0x25],
+      [0x0f, 0x42],
+      [0x43, 0x43],
+    ],
+    present: [0x3d],
+    events: [],
+    without: [293],
+  });
+  const iv = planKit(game, 4, circuits);
+  expect(kitChanges(game, 4, circuits, iv).events).toEqual([
+    { episode: 4, entry: 197, id: 293, points: 4000 },
+  ]);
+  // I and II have circuits
+  for (const e of [1, 2]) expect(planKit(game, e, circuits).types).toEqual([]);
+  // too few free types
+  expect(planKit(game, 0, circuits, { free: [0x40] }).problem).toMatch(/4 free tile types needed/);
+});

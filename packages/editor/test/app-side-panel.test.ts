@@ -508,3 +508,38 @@ test("the Episode tab copies texts of other episodes, a copied class's in one go
   app.undo();
   expect(app.editor?.game).toBe(app.editor?.pristine);
 });
+
+test("the Episode tab adds kits: oracles with the symbols picked, then circuits", async () => {
+  const start = app.editor?.start(4).room ?? 0;
+  app.showEpisode(4, start);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const kits = page.getByRole("region", { name: "Kits" });
+  // four spare entries for ten symbols: the first four are ticked, a fifth cannot be
+  const symbol = (n: number) => kits.getByRole("checkbox", { name: `symbol ${n} (${262 + n})` });
+  await expect.element(symbol(3)).toBeChecked();
+  await expect.element(symbol(4)).toBeDisabled();
+  for (const n of [0, 2, 3]) await symbol(n).click();
+  await symbol(4).click();
+  await kits.getByRole("button", { name: "Add oracles" }).click();
+  expect(app.editor?.eventEntries(4).map((e) => [e.entry, e.id])).toEqual([
+    [197, 263],
+    [198, 266],
+  ]);
+  expect(app.editor?.tileTypeCopies(4).map((c) => c.of)).toEqual([0x50, 0x51]);
+  expect(status()).toMatch(/Oracles of .* added to/);
+  // the parts are in the lists below
+  const types = page.getByRole("region", { name: "Tile types" });
+  await expect.element(types.getByText(/0x6d ← II 0x51/)).toBeVisible();
+  // circuits take the next spare entry
+  await expect.element(kits.getByText("Events: 293 in entry 199")).toBeVisible();
+  await kits.getByRole("button", { name: "Add circuits" }).click();
+  expect(app.editor?.eventEntries(4).map((e) => e.id)).toEqual([263, 266, 293]);
+  // one undo step each
+  app.undo();
+  app.undo();
+  expect(app.editor?.game).toBe(app.editor?.pristine);
+  // II has both
+  app.showEpisode(2, 43);
+  await expect.element(kits.getByText("Robot II has oracles already.")).toBeVisible();
+  await expect.element(kits.getByText("Robot II has circuits already.")).toBeVisible();
+});

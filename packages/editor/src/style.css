@@ -1509,3 +1509,35 @@ button.link {
   content: " ✎";
   color: var(--edited);
 }
+
+/* Episode tab: the kits (kits-view.ts) */
+.kit {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.kit h4 {
+  font-size: 13px;
+  margin: 0;
+}
+
+.kit-line {
+  margin: 0;
+}
+
+.kit-events {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 8px;
+}
+
+.kit-events .record-label {
+  grid-column: 1 / -1;
+}
+
+.kit-event {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

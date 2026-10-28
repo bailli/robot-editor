@@ -97,6 +97,7 @@ import { EpisodeView } from "./episode-view.ts";
 import { EventsView } from "./events-view.ts";
 import { type Connections, ExitsView, connections, fixedExit, leadsTo } from "./exits-view.ts";
 import { showHelp } from "./help-dialog.ts";
+import { KitsView } from "./kits-view.ts";
 import { MapView } from "./map-view.ts";
 import { type NewRoomCheck, NewRoomDialog } from "./new-room-dialog.ts";
 import { RecordView } from "./record-view.ts";
@@ -609,6 +610,20 @@ export class App {
       );
     },
   });
+  readonly kitsView = new KitsView({
+    add: (kit, events) => {
+      const name = EPISODE_NAMES[this.episode] ?? "";
+      try {
+        if (!this.need().addKit(this.episode, this.roomId, kit, events)) return;
+      } catch (error) {
+        this.setStatus(`Cannot add the ${kit.name.toLowerCase()}: ${message(error)}`, true);
+        this.refreshEpisodeTab();
+        return;
+      }
+      this.gameChanged();
+      this.setStatus(`${kit.name} of ${EPISODE_NAMES[kit.from] ?? ""} added to ${name}`);
+    },
+  });
   readonly textsView = new TextsView({
     copy: (to, source) => {
       this.copyTexts(
@@ -670,6 +685,7 @@ export class App {
           "div",
           {},
           this.episodeView.element,
+          this.kitsView.element,
           this.tileTypesView.element,
           this.eventsView.element,
           this.textsView.element,
@@ -2322,6 +2338,11 @@ export class App {
       originalBackdrop: readBackdropRule(image, this.episode),
       room: this.roomId,
       label: (room) => `Go to ${this.roomLabel(this.episode, room)}`,
+    });
+    this.kitsView.show({
+      episode: this.episode,
+      names: EPISODE_NAMES,
+      plan: (kit, events) => editor.kitPlan(this.episode, kit, events),
     });
     this.tileTypesView.show({
       episode: this.episode,

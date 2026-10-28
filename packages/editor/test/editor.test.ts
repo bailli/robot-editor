@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   Game,
+  KITS,
   LOGIC_CELL,
   type Mod,
   NO_CHANGES,
@@ -13,9 +14,11 @@ import {
   compileScript,
   emptyMod,
   findResource,
+  kitChanges,
   modJson,
   parseMod,
   parsePe,
+  planKit,
   readBackdropRule,
   readDealer,
   readDiagonalMoves,
@@ -951,6 +954,65 @@ describe("Editor and texts from other episodes", () => {
       ]),
     ).toThrow(RangeError);
     expect(editor.textCopies(0)).toEqual([]);
+  });
+});
+
+describe("Editor and kits", () => {
+  const ivRoom = readEpisodeStart(game.image, 4).room;
+  const kit = (key: string) => defined(KITS.find((k) => k.key === key));
+
+  test("oracles in IV: types, texts, chosen events and their texts in one undo step", () => {
+    const editor = new Editor(game);
+    const oracles = kit("oracles");
+    const edit = editor.addKit(4, ivRoom, oracles, [263, 266]);
+    expect(edit?.room).toBe(ivRoom);
+    expect(editor.tileTypeCopies(4).map((c) => [c.to, c.of])).toEqual([
+      [0x48, 0x50],
+      [0x6d, 0x51],
+    ]);
+    expect(editor.eventEntries(4).map((e) => [e.entry, e.id, e.points])).toEqual([
+      [197, 263, 3500],
+      [198, 266, 3500],
+    ]);
+    expect(editor.textCopies(4).map((c) => c.to)).toEqual([331, 332, 334, 339, 945]);
+    const mod = editor.saveMod();
+    expect(mod.changes).toMatchObject(
+      kitChanges(game, 4, oracles, planKit(game, 4, oracles, { events: [263, 266] })),
+    );
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    // nothing left but events without an entry: two spare entries remain
+    const after = editor.kitPlan(4, oracles);
+    expect(after).toMatchObject({ types: [], texts: [], present: [0x50, 0x51] });
+    expect(after.events.map((e) => e.entry)).toEqual([199, 200]);
+    // the circuits take the next spare entry for their event 293
+    editor.addKit(4, ivRoom, kit("circuits"));
+    expect(editor.eventEntries(4).map((e) => e.id)).toEqual([263, 266, 293]);
+    expect(editor.kitPlan(4, oracles).events.map((e) => e.entry)).toEqual([200]);
+    editor.undo();
+    editor.undo();
+    expect(editor.game).toBe(game);
+    expect(editor.saveMod().changes).toMatchObject({ tileTypes: [], events: [], copyTexts: [] });
+  });
+
+  test("a type copied by hand stays; the kit adds the rest and the class's texts", () => {
+    const editor = new Editor(game);
+    editor.setTileType(0, 43, 0x51, { from: 2, of: 0x51 });
+    const plan = editor.kitPlan(0, kit("oracles"));
+    expect(plan.types).toEqual([[0x50, 0x50]]);
+    expect(plan.texts).toEqual([331, 332, 334, 339, 945]);
+    editor.addKit(0, 43, kit("oracles"));
+    expect(editor.tileTypeCopies(0).map((c) => c.to)).toEqual([0x50, 0x51]);
+    expect(editor.addKit(0, 43, kit("oracles"))).toBeUndefined();
+  });
+
+  test("refused: a plan with a problem; nothing to add where the episode has the feature", () => {
+    const editor = new Editor(game);
+    expect(() => editor.addKit(4, ivRoom, kit("oracles"), [262, 263, 264, 265, 266])).toThrow(
+      /spare entries/,
+    );
+    expect(editor.addKit(2, 43, kit("oracles"))).toBeUndefined();
+    expect(editor.addKit(1, 43, kit("circuits"))).toBeUndefined();
+    expect(editor.dirty).toBe(false);
   });
 });
 

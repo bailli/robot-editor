@@ -370,3 +370,5 @@ export type {
   TileTypesChange,
 } from "./mod.ts";
 export { sha256 } from "./sha256.ts";
+export { KITS, kitChanges, planKit } from "./kits.ts";
+export type { Kit, KitOptions, KitPlan } from "./kits.ts";

@@ -66,34 +66,35 @@ for episodes I–IV.
 
 Files in `packages/formats/src`:
 
-| File                         | What it covers                                                                                |
-| ---------------------------- | --------------------------------------------------------------------------------------------- |
-| `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc`  |
-| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression (decoder and encoder), CP437                                        |
-| `texts.ts`                   | text resources: tile descriptions, messages, object names; setting an entry                   |
-| `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                    |
-| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects: reader and writer), shape tables and frames             |
-| `palette.ts`                 | the 16-colour palettes per episode                                                            |
-| `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font     |
-| `render.ts`                  | drawing cells and rooms like the game                                                         |
-| `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                 |
-| `describe.ts`                | the description the game shows for a cell                                                     |
-| `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                      |
-| `room-tags.ts`               | a room's darkness, points for the first visit, music and episode III flags; changing them     |
-| `music.ts`                   | MUSIC resources: the names of their pieces                                                    |
-| `start.ts`                   | the room and cell an episode starts in, the rucksack's capacity, and patching them            |
-| `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them         |
-| `episode-methods.ts`         | rules by the episode vtable's methods: the backdrop room (mod 100, − 100), diagonal moves     |
-| `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants      |
-| `script-docs.ts`             | what the script functions and variables do, how scripts and events run                        |
-| `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on              |
-| `records.ts`                 | what logic records do                                                                         |
-| `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                |
-| `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`); patching them    |
-| `dealer.ts`                  | the dealer's goods per episode: classes, prices, how many shown; patching them                |
-| `mod.ts`, `sha256.ts`        | mods: keyed changes to the pristine exe, their JSON file, compiled to a patch and applied     |
-| `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts) |
-| `game.ts`                    | `Game`: loads an exe, episodes lazily, saves scenes, texts, tile types from other episodes    |
+| File                         | What it covers                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc`     |
+| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression (decoder and encoder), CP437                                           |
+| `texts.ts`                   | text resources: tile descriptions, messages, object names; setting an entry                      |
+| `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                       |
+| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects: reader and writer), shape tables and frames                |
+| `palette.ts`                 | the 16-colour palettes per episode                                                               |
+| `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font        |
+| `render.ts`                  | drawing cells and rooms like the game                                                            |
+| `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                    |
+| `describe.ts`                | the description the game shows for a cell                                                        |
+| `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                         |
+| `room-tags.ts`               | a room's darkness, points for the first visit, music and episode III flags; changing them        |
+| `music.ts`                   | MUSIC resources: the names of their pieces                                                       |
+| `start.ts`                   | the room and cell an episode starts in, the rucksack's capacity, and patching them               |
+| `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them            |
+| `episode-methods.ts`         | rules by the episode vtable's methods: the backdrop room (mod 100, − 100), diagonal moves        |
+| `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants         |
+| `script-docs.ts`             | what the script functions and variables do, how scripts and events run                           |
+| `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on                 |
+| `records.ts`                 | what logic records do                                                                            |
+| `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                   |
+| `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`); patching them       |
+| `dealer.ts`                  | the dealer's goods per episode: classes, prices, how many shown; patching them                   |
+| `mod.ts`, `sha256.ts`        | mods: keyed changes to the pristine exe, their JSON file, compiled to a patch and applied        |
+| `kits.ts`                    | kits: an episode's feature (oracles, circuits) planned into another as tile types, texts, events |
+| `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts)    |
+| `game.ts`                    | `Game`: loads an exe, episodes lazily, saves scenes, texts, tile types from other episodes       |
 
 ## What is decoded and verified
 
@@ -1126,6 +1127,22 @@ Supported:
   type copy). Refused: a text the source lacks, an entry from 1800 on (event texts come
   with their events). A text written in the editor wins over its copy (saveMod drops
   the copy). Copies into other resources (III's 1320) are kept from a mod but not listed
+- kits (tab Episode, `kits-view.ts`; `kits.ts`: `KITS`, `planKit`, `kitChanges`): oracles
+  (II's tangram 0x50 and oracle 0x51, events 262–271) and circuits (I's letter 0x25,
+  gate 0x42, bulb 0x43, stairs 0x3d; event 293). Per kit what adding it to the shown
+  episode copies: the types whose class the episode lacks (stairs only to Junior; II
+  and III have oracles, I and II circuits: "has … already"), each at the same number
+  where free, else the first free type no copy has; the texts the kit's classes show
+  that the episode lacks (`classTexts`, for classes it does not have by itself, so a
+  type copied by hand still gets them); the events its table lacks, in spare entries
+  the mod does not set yet (`Editor.kitPlan`). Where they do not all fit (IV: four
+  entries for ten oracle symbols) checkboxes pick which (the first ones by default),
+  the rest give no points; kits share the spare entries (IV's oracles and circuits
+  together). "Add oracles" / "Add circuits" (`Editor.addKit`) is one undo step making a
+  new base; the parts then show in the lists of tile types, events and texts, each
+  removable there. **Verified under Wine** (`pnpm test:game`, the circuit and oracle
+  game tests now build their mods with `planKit` and `kitChanges`): circuits in III
+  (types 0x0e, 0x0f, 0x43), IV and Junior, oracles in Junior, I and IV
 - the episode's settings (tab Episode, `episode-view.ts`): the rucksack's capacity
   (1–250); the rules, episode flags as checkboxes: oracles vanish after north, after
   east (0x4000, 0x8000), doors into buildings open without the key (0x80000), robots
@@ -1215,7 +1232,9 @@ stands, decided 2026-10-27; details in the sections named.
   Junior has **no stairs class** (I's 0x3d as a fourth type works), IV has them. Their
   code checks no episode. Lighting nodes is event 293 (0x125): 4000 points and "Na also,
   wieder etwas gelernt…" in I and II, 4000 points without a text in Junior, nothing in
-  III and IV (no entry; seen in the game: the event's bit is set, no points). **Oracles**
+  III and IV (no entry; seen in the game: the event's bit is set, no points); with I's
+  entry copied to IV's spare entry 197 (the circuits kit) IV gives the 4000 points too
+  (**verified under Wine**: taking the piece adds its first take and 4000). **Oracles**
   need 2 types (tangram, oracle; I has 0x50 and 0x51 free), their texts (`copyTexts`;
   Junior, I and IV have nothing at 331, 334, 945) and, for their 3500 points, events
   262–271: Junior, I, II and III have them, **IV not** (no points there, seen in the
@@ -1229,9 +1248,10 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
-- **Next:** the proxy as an in-memory loader; the `code` kind in the editor; an event's
-  sound line with its copy. Events and texts copied from other episodes have their UI
-  (Episode tab), so the oracle pilot in IV can be made in the editor alone.
+- **Next:** "place an example" for the kits (a working oracle with its symbol laid out,
+  a small circuit with its stairs, next to the start in the shown room); the proxy as
+  an in-memory loader; the `code` kind in the editor; an event's sound line with its
+  copy. Both pilots are kits in the Episode tab now ("Add oracles", "Add circuits").
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
