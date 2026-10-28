@@ -184,7 +184,14 @@ interface Trace {
   end?: CircuitEnd;
 }
 
-/** Any trace longer than this loops (the game would hang); it cannot in practice. */
+/** The water classes: stairs are never placed on their cells. */
+const WATER_CLASSES: readonly number[] = [55, 82];
+
+/**
+ * Any trace longer than this loops (the game would hang). The game's own callers go
+ * only west or vertically and leave the map, but traceCircuit is exported and with
+ * (dx, dy) = (0, 0) a wire stands still: the guard stays.
+ */
 const MAX_STEPS = ROOM_CELLS * 4;
 
 /**
@@ -365,7 +372,7 @@ export function roomCircuit(room: Room, classes: EpisodeClasses): RoomCircuit {
       const spot = node.stairs.cell;
       const there = value(spot) ?? 0;
       const id = there & 0xff;
-      if (id === 55 || id === 82) {
+      if (WATER_CLASSES.includes(id)) {
         problems.push({
           cell: spot,
           severity: "warning",
