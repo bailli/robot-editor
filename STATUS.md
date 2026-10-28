@@ -1351,7 +1351,9 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
      the sound table, its note kept (`Game.withSounds`; refused for a piece the episode
      lacks), without it the line stays. From entry 128 on the id is 0 or 256–391: the
      constructor maps id → entry in 0x4c70e0 (0x43b4bf, shared with class → type below
-     256, 0x188 long, no bounds check); applying refuses two entries with one id. The
+     256, 0x188 long, no bounds check); a tile type's entry (below 128) has an id of 0–255 in all
+     originals (mostly its class id) and the mod format takes only those, so it never shares
+     a key with an event; applying refuses two entries with one id from 256 on. The
      tables are full (Junior and I: entry 190 free, nothing else), so a new event takes
      over an entry the episode never uses: IV's 197–200 (ids 388–391, no note, text or
      points; IV's scripts award 180–196, no code raises those ids). III has no such

@@ -74,7 +74,11 @@ export interface EventChange {
   episode: number;
   /** The entry: a tile type below 128 (its first take), an event from 128 on. */
   entry: number;
-  /** From entry 128 on 0 (none) or FIRST_EVENT_ID to EVENT_IDS_END - 1, once per table. */
+  /**
+   * From entry 128 on 0 (none) or FIRST_EVENT_ID to EVENT_IDS_END - 1, once per table; a
+   * tile type's entry below FIRST_EVENT_ID (the originals': at most 255, mostly its
+   * class id), which cannot collide with an event's.
+   */
   id: number;
   points: number;
   /**
@@ -291,9 +295,15 @@ export function checkMod(mod: Mod): void {
     need(isInt(c.entry, 0, eventTableLength(c.episode) - 1), where, "no such entry");
     const ids =
       c.entry < FIRST_EVENT_ENTRY
-        ? isInt(c.id, 0, EVENT_IDS_END - 1)
+        ? isInt(c.id, 0, FIRST_EVENT_ID - 1)
         : c.id === 0 || isInt(c.id, FIRST_EVENT_ID, EVENT_IDS_END - 1);
-    need(ids, where, `id ${c.id} (from entry 128 on 0 or ${FIRST_EVENT_ID}-${EVENT_IDS_END - 1})`);
+    need(
+      ids,
+      where,
+      c.entry < FIRST_EVENT_ENTRY
+        ? `id ${c.id} (a tile type's entry has 0-${FIRST_EVENT_ID - 1}, as the game's: from ${FIRST_EVENT_ID} on ids belong to events)`
+        : `id ${c.id} (from entry 128 on 0 or ${FIRST_EVENT_ID}-${EVENT_IDS_END - 1})`,
+    );
     need(isInt(c.points, -0x80000000, 0x7fffffff), where, `points ${c.points}`);
     need(
       c.sound === undefined || /^!?[^\s;!][^\s;]*$/.test(c.sound),
@@ -457,7 +467,7 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
     // an id maps to one entry (the constructor's last one would win)
     const seen = new Map<number, number>();
     readEventTable(game.image, episode).forEach(({ id }, n) => {
-      if (n < FIRST_EVENT_ENTRY || id === 0) return;
+      if (id < FIRST_EVENT_ID) return; // class ids and 0 share no key with events
       const other = seen.get(id);
       need(
         other === undefined,

@@ -321,6 +321,14 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { events: [{ episode: 4, entry: 197, id: 100, points: 0 }] },
     { events: [{ episode: 4, entry: 197, id: 392, points: 0 }] },
     { events: [{ episode: 4, entry: 197, id: 256, points: 0 }] },
+    // a tile type's entry takes no event id (the constructor's id -> entry map is shared)
+    { events: [{ episode: 4, entry: 5, id: 263, points: 0 }] },
+    {
+      events: [
+        { episode: 4, entry: 197, id: 263, points: 0 },
+        { episode: 4, entry: 198, id: 263, points: 0 },
+      ],
+    },
     { events: [{ episode: 4, entry: 197, id: 263, points: 2 ** 31 }] },
     // no piece's name; a piece IV lacks (checked when applied)
     { events: [{ episode: 4, entry: 197, id: 263, points: 0, sound: "!" }] },
