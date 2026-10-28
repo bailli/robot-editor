@@ -515,15 +515,36 @@ export class Editor {
 
   /**
    * The tiles to paint with in a layer: those of the base's rooms (tilesOf) and the
-   * tile types copied from other episodes, in every state their shape has a frame for.
+   * tile types copied from other episodes, in every state their shape has a frame for
+   * and every state their type has in the rooms of the episode they come from.
    */
   tiles(episode: number, layer: Layer): number[] {
     const { rooms, objects } = this.game.episode(episode);
-    const copied = this.tileTypeCopies(episode).flatMap(({ to }) =>
-      Array.from({ length: Math.max(1, objects[to]?.frames.length ?? 0) }, (_, k) => to | (k << 8)),
-    );
+    const copied = this.tileTypeCopies(episode).flatMap(({ to, from, of }) => [
+      ...Array.from(
+        { length: Math.max(1, objects[to]?.frames.length ?? 0) },
+        (_, k) => to | (k << 8),
+      ),
+      // states that are no frame, e.g. a letter's character (0x30 "0", 0x31 "1")
+      ...this.sourceTiles(from, layer)
+        .filter((cell) => (cell & 0xff) === of)
+        .map((cell) => to | (cell & 0xff00)),
+    ]);
     return [...new Set([...tilesOf(rooms, layer), ...copied])].sort(byTile);
   }
+
+  /** The tiles of an episode's rooms as loaded (tilesOf), where copied types come from. */
+  private sourceTiles(episode: number, layer: Layer): readonly number[] {
+    const key = `${episode} ${layer}`;
+    let tiles = this.sourceTileCache.get(key);
+    if (!tiles) {
+      tiles = tilesOf(this.pristine.episode(episode).rooms, layer);
+      this.sourceTileCache.set(key, tiles);
+    }
+    return tiles;
+  }
+
+  private readonly sourceTileCache = new Map<string, readonly number[]>();
 
   /** Why `copy` cannot be made, undefined if it can. */
   tileTypeProblem(copy: TileTypeCopy): string | undefined {

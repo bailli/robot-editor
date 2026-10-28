@@ -1005,6 +1005,19 @@ describe("Editor and kits", () => {
     expect(editor.addKit(0, 43, kit("oracles"))).toBeUndefined();
   });
 
+  test("copied types offer the states their episode's rooms use: letters 0 and 1", () => {
+    const editor = new Editor(game);
+    editor.addKit(3, 41, kit("circuits"));
+    // episode I's letter 0x25 is III's 0x0e, its gate 0x42 III's 0x0f
+    const tiles = editor.tiles(3, "base");
+    expect(tiles).toContain(0x0e | (0x30 << 8));
+    expect(tiles).toContain(0x0e | (0x31 << 8));
+    const gates = (cells: readonly number[], type: number) =>
+      cells.filter((c) => (c & 0xff) === type).map((c) => c >> 8);
+    for (const state of gates(tilesOf(game.episode(1).rooms, "base"), 0x42))
+      expect(gates(tiles, 0x0f)).toContain(state);
+  });
+
   test("refused: a plan with a problem; nothing to add where the episode has the feature", () => {
     const editor = new Editor(game);
     expect(() => editor.addKit(4, ivRoom, kit("oracles"), [262, 263, 264, 265, 266])).toThrow(

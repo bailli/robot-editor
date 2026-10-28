@@ -1103,7 +1103,9 @@ Supported:
   copy already, which it then replaces); "Copy". Each one undo step, which makes a new
   base (`Editor.setTileType`): text entries edited before stay as they are, the copied
   description comes along; refused: a copy of a copy, a type without a class, a type
-  an edited dealer then lacks. The tiles, names and drawings follow at once. A copy
+  an edited dealer then lacks. The tiles, names and drawings follow at once; the tile
+  list offers a copy in each state its shape has a frame for and each state its type has
+  in the source episode's rooms (a letter's state is its character: I's 0 and 1, A–Z). A copy
   whose class shows texts of its own (`classTexts`, so far the oracle: hints 330 + n and 945) that the episode lacks gets "Texts", which copies those its source has (II's
   oracle: 331, 332, 334, 339, 945) in one undo step. **Tried in
   the game** (by hand): Junior's book copied to IV and placed next to the start, taken:
