@@ -24,6 +24,7 @@ import {
   ModError,
   NO_CHANGES,
   applyMod,
+  applyPatch,
   compileMod,
   emptyMod,
   modJson,
@@ -220,7 +221,11 @@ test("compiled: byte writes in the tables and the start method, whole resources"
     "SCENE/1304",
     "SHAPES/1302",
   ]);
-  expect(compileMod(game.image, mod({}))).toEqual({ writes: [], resources: [] });
+  expect(compileMod(game.image, mod({}))).toEqual({
+    base: mod({}).base,
+    writes: [],
+    resources: [],
+  });
 });
 
 test("code changes write where the exe holds what they expect", () => {
@@ -272,6 +277,12 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
   expect(() => applyMod(new Game(other).image, mod({}))).toThrow(
     /base: the mod is for another exe/,
   );
+  // a compiled patch carries its base too: written onto another exe it is refused
+  const patch = compileMod(game.image, mod(changes));
+  expect(() => applyPatch(new Game(other).image, patch)).toThrow(
+    /base: the patch is for another exe/,
+  );
+  expect(new Game(applyPatch(game.image, patch)).image.data.length).toBeGreaterThan(0);
   const twice = { ...changes, start: [...changes.start, ...changes.start] };
   expect(() => applyMod(game.image, mod(twice))).toThrow(/start\[1\].*changed twice/);
   const bad: Partial<ModChanges>[] = [

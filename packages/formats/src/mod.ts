@@ -184,6 +184,8 @@ export interface PatchResource {
 
 /** A mod compiled against the pristine exe (compileMod). */
 export interface ModPatch {
+  /** The sha256 of the pristine exe it was compiled against; applyPatch refuses any other. */
+  base: string;
   writes: PatchWrite[];
   resources: PatchResource[];
 }
@@ -630,11 +632,12 @@ export function compileMod(image: PeImage, mod: Mod): ModPatch {
     const old = findResource(pristine, type, name, language);
     return old && sameBytes(old.data, data) ? [] : [{ type, name, language, data }];
   });
-  return { writes, resources };
+  return { base: mod.base, writes, resources };
 }
 
 /** `image` with the patch applied: the exe a mod makes (see applyMod). */
 export function applyPatch(image: PeImage, patch: ModPatch): Uint8Array {
+  need(sha256(image.data) === patch.base, "base", "the patch is for another exe");
   let data: Uint8Array = image.data.slice();
   for (const { va, bytes } of patch.writes) data.set(bytes, fileOffset(image, va, bytes.length));
   for (const { type, name, language, data: content } of patch.resources) {

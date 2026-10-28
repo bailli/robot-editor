@@ -1396,7 +1396,8 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
   `SizeofResource`, `LoadResource` and `LockResource` (imported; every resource read
   goes through the opener 0x430d20) to serve the replaced resources. The compiled patch
   holds whole original resources, so it stays on the user's machine; only the mod is
-  shared. The game reads its own file only for its date (0x4058c0, `GetFileTime`, for
+  shared. The patch carries the base's sha256 (`ModPatch.base`)
+  and `applyPatch` refuses any other exe, so a patch is never written onto the wrong one. The game reads its own file only for its date (0x4058c0, `GetFileTime`, for
   system info) and version info (0x428b20, `GetFileVersionInfoA`), neither of which a
   mod changes; its other `CreateFileA` calls open loose resource files, savegames and
   screenshots by name.
