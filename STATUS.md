@@ -1307,6 +1307,24 @@ Supported:
 
 Not supported (yet):
 
+- **editing texts freely:** the editor writes only room names and their descriptions,
+  and copies entries from other episodes (tab Episode). Any other entry (tile
+  descriptions 0–127, messages such as the notes' 800 + n, the oracle's hints, event
+  texts 1800 + n, III's diary pages in 1320) can't be written or added, even though the
+  mod format can hold it (`texts`, `withTextEntry`). Missing: a list of an episode's
+  entries (search, the tiles drawn in them), editing the variants, adding entries at a
+  free number, and the form the game needs (`;` ends an entry, `\` breaks a line, `_`,
+  colour codes, `@` tiles, CRUNCHED and its line feeds)
+- **compound cell types:** some classes keep data of their own in the state (high
+  byte), but the editor treats it like any other state. Tiles are painted in the states
+  the episode's rooms use or the shape has frames for, and any other state only as a
+  hex value; the hover line tells what the cell holds. Affected: packages (the tile type
+  inside), notes (message 800 + (state & 0x7f), bit 7 note or old writing/cassette),
+  diary pages (the page in 1320), expert fields (state × 10,000 points) and letters (the
+  character). Missing: a control for that data when painting or inspecting such a cell
+  (a package's content picked from the tiles; a note's message picked or written, which
+  needs the free text editing above; the points as a number); the states that are only
+  frames would then no longer have to be listed one by one
 - painting over logic cells (use the inspector or the area tools); records are edited
   field by field
 - painting exit tiles is plain painting (0x0017 in the base layer)
