@@ -143,7 +143,8 @@ await d.close();
 - `pnpm format` – apply Prettier
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, format check,
-`pnpm test:without-game` and the editor's build on every push to `main` and every pull request, and publishes the
+`pnpm test:without-game`, the editor's build, the proxy DLL's build (MinGW) and a syntax
+check of `harness.py` on every push to `main` and every pull request, and publishes the
 editor's static build from `main` on GitHub Pages at https://bailli.github.io/robot-editor/
 (Settings → Pages → Source: GitHub Actions).
 

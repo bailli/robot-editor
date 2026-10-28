@@ -47,7 +47,7 @@ for episodes I–IV.
   needs saying (not a longer subject), **no attribution footer**; linear history
   (`merge.ff=only`, rebase on pull), never merge commits. Identity: bailli. **Never push**: only the user pushes to `origin` (GitHub).
 - **CI:** `.github/workflows/ci.yml` (typecheck, lint, format, `test:without-game`, editor
-  build) deploys `packages/editor/dist` to GitHub Pages from `main`.
+  build, proxy build, `harness.py` compiled) deploys `packages/editor/dist` to GitHub Pages from `main`.
 - **No game data in the repository:** `reference/` (the installer and exe), `resources/`,
   `shots/`, `.wine/`, `renders/` etc. are ignored. Snapshots store hashes, not content.
 - **Wine:** the project prefix `.wine/` is sandboxed (no links into `$HOME`, no `Z:`).

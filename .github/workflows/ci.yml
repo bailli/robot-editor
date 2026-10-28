@@ -32,6 +32,10 @@ jobs:
       - run: pnpm format:check
       - run: pnpm test:without-game
       - run: pnpm --filter @robot/editor build
+      # the driver's side, which needs the game to run: at least it builds and parses
+      - run: sudo apt-get install -y --no-install-recommends gcc-mingw-w64-i686
+      - run: pnpm proxy
+      - run: python3 -m py_compile tools/wine/harness.py
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: packages/editor/dist
