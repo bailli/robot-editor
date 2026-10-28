@@ -739,6 +739,9 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
   bit 0 in the scan) waits until every scanned node is on, **itself included**, then
   places its stairs (event 0x127; bit 1 remembers it) and takes them away when one goes
   off. The gates' outputs match the truth tables in the GATE tile's own texts (test).
+  **Verified under Wine** (`pnpm test:game`, episode I's start room): every gate (OR,
+  AND, NOR, NAND, XOR, the four with an inverted input) under all four inputs and NOT
+  under both, 38 circuits whose nodes the game lights as `roomCircuit` does.
   In the originals every node is open: the hero builds the circuits from pieces lying in
   the room (I 128: spare pieces in racks, a final node behind an electric fence that
   pieces can be laid over; II 142: `1` and `0` legs that meet where a gate's inputs half
@@ -1427,10 +1430,9 @@ By hand or with the screenshot harness:
 
 Roughly by value for the editor.
 
-1. **Logic records in play** (see logic records above): the thief (not tried), circuits
-   with OR, NOR and the inverted-input gates (AND, NAND, XOR and NOT tried; the code and
-   the GATE texts agree on all of them), a final node waiting for itself (from the
-   code), records in rooms whose objects and records exceed the table.
+1. **Logic records in play** (see logic records above): the thief (not tried), a final
+   node waiting for itself (from the code), records in rooms whose objects and records
+   exceed the table.
 2. **Actors** (see actors above): the robot-free room and the telephone (code only;
    what the Ghostbusters' second call stores), RandObj's empty cell (code only).
 3. **Scripts** (see room scripts above): what `Phone`'s n limits (still

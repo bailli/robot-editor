@@ -8,11 +8,14 @@ import { describe, test } from "vitest";
 
 import {
   type BackdropRule,
+  CIRCUIT_PIECES,
   EVENT_TEXT,
+  GATE_CLASS,
   Game,
   KITS,
   type Kit,
   type KitPlan,
+  LETTER_CLASS,
   LOGIC_CELL,
   type LogicRecord,
   type Mod,
@@ -499,6 +502,84 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
       assert.equal(seen.score, wire.points + nodePoints);
     }, 60_000);
   }
+
+  test("episode I: every gate and NOT give their truth table", async () => {
+    const { classes } = game.episode(1);
+    const type = (classId: number) => {
+      const found = classes.typeOfClass.get(classId);
+      assert.ok(found !== undefined);
+      return found;
+    };
+    const [letter, gate] = [type(LETTER_CLASS), type(GATE_CLASS)];
+    const piece = (state: number) => gate | (state << 8);
+    const bit = (b: number) => letter | ((0x30 + b) << 8);
+    // a gate under each pair of inputs (A, B), NOT under each input; 7 circuits a row
+    interface Circuit {
+      state: number;
+      a: number;
+      b?: number;
+      out: number;
+    }
+    const circuits = CIRCUIT_PIECES.flatMap((p): Circuit[] => {
+      const { output } = p;
+      if (output) {
+        return [0, 1, 2, 3].map((k) => {
+          const [a, b] = [k >> 1, k & 1];
+          return { state: p.state, a, b, out: output(a, b) };
+        });
+      }
+      return p.kind === "not" ? [0, 1].map((a) => ({ state: p.state, a, out: a ? 0 : 1 })) : [];
+    }).map((c, k) => ({ ...c, x: 2 + 5 * (k % 7), y: 3 + 3 * Math.floor(k / 7) }));
+    assert.equal(circuits.length, 38);
+    const mod = startRoomMod(
+      game,
+      1,
+      {},
+      { x0: 1, x1: 38, y0: 1, y1: 27 },
+      { x: 2, y: 24 },
+      (set, record) => {
+        for (const { state, a, b, x, y } of circuits) {
+          if (b === undefined) set(x + 1, y, bit(a));
+          else {
+            // A above the inputs half, B below; the node at x + 3, its stairs east of it
+            set(x, y - 1, bit(a));
+            set(x, y + 1, bit(b));
+            set(x + 1, y - 1, piece(0x0c));
+            set(x + 1, y + 1, piece(0x0d));
+            set(x + 1, y, piece(0x0e));
+          }
+          set(x + 2, y, piece(state));
+          record(x + 3, y, [11, 0, 0, 0, x + 4, y]);
+        }
+        set(4, 24, piece(0x0a)); // the spare piece the hero takes
+      },
+    );
+    const stairsCells = circuits.map(({ x, y }) => x + 4 + y * ROOM_WIDTH);
+    const lit = circuits.flatMap((c, k) => (c.out ? [stairsCells[k] ?? -1] : []));
+    // our model agrees with the truth tables
+    const room = mod.changes.rooms[0]?.room;
+    assert.ok(room);
+    const nodes = roomCircuit(room, classes).nodes;
+    assert.deepEqual(
+      nodes.filter((n) => n.signal === 1).map((n) => n.cell + 1),
+      lit,
+    );
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(1);
+        assert.deepEqual(await cellsOfClass(d, STAIRS_CLASS, stairsCells), [], "none before");
+        await d.walk("right", (h) => h.x >= 4); // takes the spare piece
+        await d.run(60);
+        return cellsOfClass(d, STAIRS_CLASS, stairsCells);
+      }),
+    );
+    const name = (cell: number) => {
+      const c = circuits[stairsCells.indexOf(cell)];
+      const p = CIRCUIT_PIECES.find((q) => q.state === c.state);
+      return `${p?.name ?? ""} ${c.a}${c.b ?? ""}`;
+    };
+    assert.deepEqual(seen.map(name), lit.map(name));
+  }, 60_000);
 
   test("episode IV: an event copied with its sound has it in the game's event table", async () => {
     // I's thief bribe (entry 130, event 258) into IV's spare entry 197, as copyEvent does
