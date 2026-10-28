@@ -154,7 +154,9 @@ Files in `packages/formats/src`:
   inside the box (episode I's 27 "RING-PLATZ" and 74, episode III's 43, 48, 66, 76).
   `\` breaks lines, the game wraps the rest; it fetches at most 999 characters
   (0x438850, the banner's 1000-byte buffer). New descriptions take episode III's `!`
-  form there and the empty line elsewhere. **Verified under Wine:** a new description
+  form there and the empty line elsewhere. Our wrapping (78 columns) never
+  leaves a line starting with digits and a colon (the text writer refuses those): no break
+  before such a word, a space before a paragraph that starts with one. **Verified under Wine:** a new description
   for episode I room 43 (empty line, two paragraphs) and III room 41 (`!`, name in the
   title bar) show in the banner as written, wrapped anew.
 - **MUSIC** (`1E05`, `music.ts`): "MUC1" at 0x1a, the number of instruments (u32 at

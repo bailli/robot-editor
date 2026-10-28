@@ -9,7 +9,7 @@ import {
   roomTextLength,
   splitRoomText,
 } from "../src/room-names.ts";
-import { parseTexts } from "../src/texts.ts";
+import { parseTexts, textEntryProblem } from "../src/texts.ts";
 import { exe, sha256 } from "./data.ts";
 
 const game = new Game(exe());
@@ -122,4 +122,24 @@ test("descriptions follow the name, in the entry's form or the episode's", () =>
   // wrapped like the originals, not before a line that would read as a header
   const long = roomDescriptionText(`${"Wort ".repeat(15)}12:00 Uhr`, 4, "Der Strand");
   expect(long.split("\n").map((l) => l.length)).toEqual([11, 1, 80, 3]);
+});
+
+test("a description never gets a line that starts like a text entry's header", () => {
+  const filler = `${"wort ".repeat(15)}ab`; // 77 characters: "12:" would start the next line
+  for (const description of [
+    "12: Der Weg",
+    `${filler} 12: der Rest`,
+    `${filler} :-) und mehr\n7: sieben`,
+  ]) {
+    for (const [episode, old] of [
+      [1, "DER START"],
+      [3, "Der Strand"],
+    ] as const) {
+      const text = roomDescriptionText(description, episode, old);
+      expect(textEntryProblem(text)).toBeUndefined();
+      expect(parseRoomName(text).description?.replace(/\s+/g, " ")).toContain(
+        description.split("\n")[0]?.slice(0, 3),
+      );
+    }
+  }
 });

@@ -210,16 +210,26 @@ function styledName(name: string, style: "stars" | "underlined" | "plain"): stri
   return style === "stars" ? `*** ${name} ***` : name;
 }
 
+/** What a text entry's line must not start with (textEntryProblem). */
+const HEADER_LIKE = /^\d*:/;
+
 /**
  * A line broken into lines of at most DESCRIPTION_WIDTH characters at spaces; never
- * before a word that would start a line like a text entry's header ("12:").
+ * before a word that would start a line like a text entry's header ("12:"); a paragraph
+ * starting with one gets a space before it.
  */
 function wrap(line: string): string {
   let out = "";
   let width = 0;
   for (const word of line.split(" ").filter(Boolean)) {
-    if (width === 0) out += word;
-    else if (width + 1 + word.length > DESCRIPTION_WIDTH && !/^\d*:/.test(word)) {
+    if (width === 0) {
+      // the first line starts the paragraph, which must not look like a header either
+      if (HEADER_LIKE.test(word)) {
+        out += " ";
+        width++;
+      }
+      out += word;
+    } else if (width + 1 + word.length > DESCRIPTION_WIDTH && !HEADER_LIKE.test(word)) {
       out += `\n${word}`;
       width = 0;
     } else {
