@@ -816,6 +816,25 @@ describe("Editor and tile types from other episodes", () => {
     expect(editor.game.episode(3).classes.classes.get(0x59)?.id).toBe(76);
   });
 
+  test("rooms painted after a copy are copies too: the loaded game stays, the mod keeps them", () => {
+    const editor = new Editor(game);
+    const cell = (id: number) => game.room(3, id).base[100];
+    const [before41, before42] = [cell(41), cell(42)];
+    const paintIn = (id: number) => {
+      editor.beginStroke(3, id, "base");
+      editor.paint(100, 0);
+      editor.endStroke();
+    };
+    paintIn(41);
+    editor.setTileType(3, 41, 0x59, { from: 1, of: 0x42 });
+    paintIn(42);
+    expect([cell(41), cell(42)]).toEqual([before41, before42]);
+    // a new base again, which has the loaded game's rooms
+    editor.setTileType(3, 41, 0x59, undefined);
+    expect(editor.isEdited(3, 42)).toBe(true);
+    expect(editor.saveMod().changes.rooms.map((c) => c.id)).toEqual([41, 42]);
+  });
+
   test("text entries edited before a copy stay; the copy's description comes along", () => {
     const editor = new Editor(game);
     editor.setRoomName(1, 44, "DER GANG");

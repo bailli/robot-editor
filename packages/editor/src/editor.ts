@@ -409,6 +409,11 @@ const inRoom = (index: number) => Number.isInteger(index) && index >= 0 && index
  */
 export class Editor {
   private readonly edited = new Map<number, Room[]>();
+  /**
+   * Rooms the editor made and may change in place: copies and added rooms. Any other
+   * room belongs to a base (the pristine exe's or one a rebase made) and is copied first.
+   */
+  private readonly owned = new WeakSet<Room>();
   /** Edited text resources by id, and the last one parsed. */
   private readonly texts = new Map<number, string>();
   private readonly parsed = new Map<number, { source: string; texts: Texts }>();
@@ -2086,7 +2091,10 @@ export class Editor {
     const present = value === after ? edit.added : edit.removed;
     if (edit.added || edit.removed) {
       const rooms = this.writableList(edit.episode).filter((r) => r.id !== edit.room);
-      if (present) rooms.push(present);
+      if (present) {
+        this.owned.add(present);
+        rooms.push(present);
+      }
       this.edited.set(
         edit.episode,
         rooms.sort((a, b) => a.id - b.id),
@@ -2133,7 +2141,7 @@ export class Editor {
     const i = rooms.findIndex((r) => r.id === id);
     if (i < 0) throw new Error(`episode ${episode} has no room ${id}`);
     const room = rooms[i];
-    if (room !== this.original(episode, id)) return room;
+    if (this.owned.has(room)) return room;
     const copy = {
       ...room,
       base: room.base.slice(),
@@ -2141,6 +2149,7 @@ export class Editor {
       records: [...room.records],
       tags: [...room.tags],
     };
+    this.owned.add(copy);
     rooms[i] = copy;
     return copy;
   }
