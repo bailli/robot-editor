@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { createReadStream, existsSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { playwright } from "@vitest/browser-playwright";
@@ -9,7 +10,6 @@ import { defineConfig } from "vitest/config";
 const ROOT = new URL("../../", import.meta.url);
 const REFERENCE_EXE = new URL("reference/GameOfRobot.exe", ROOT);
 const HARNESS = new URL("tools/wine/harness.py", ROOT);
-const PLAY_EXE = new URL(".wine/play.exe", ROOT);
 const MAX_EXE_BYTES = 8 << 20; // the game's exe has about 2 MB
 /** How long the harness has to refuse playing before the game counts as started. */
 const PLAY_REFUSAL_MS = 1000;
@@ -43,14 +43,13 @@ function playInWine(): Plugin {
     apply: "serve",
     configureServer(server) {
       server.middlewares.use("/play", (req, res) => {
-        const episode = Number(
-          new URL(req.url ?? "", "http://localhost").searchParams.get("episode"),
-        );
+        const param = new URL(req.url ?? "", "http://localhost").searchParams.get("episode");
+        const episode = Number(param);
         const fail = (status: number, text: string) => {
           res.statusCode = status;
           res.end(text);
         };
-        if (req.method !== "POST" || !Number.isInteger(episode) || episode < 0 || episode > 4) {
+        if (req.method !== "POST" || !/^[0-4]$/.test(param ?? "")) {
           fail(400, "POST an exe to /play?episode=0..4");
           return;
         }
@@ -67,15 +66,24 @@ function playInWine(): Plugin {
         let size = 0;
         req.on("data", (chunk: Buffer) => {
           size += chunk.length;
-          if (size > MAX_EXE_BYTES) {
-            fail(413, "not the game's exe: too large");
-            req.destroy();
-          } else chunks.push(chunk);
+          if (size <= MAX_EXE_BYTES) chunks.push(chunk); // the rest is read and dropped
         });
         req.on("end", () => {
-          writeFileSync(PLAY_EXE, Buffer.concat(chunks));
+          const bytes = Buffer.concat(chunks);
+          if (size > MAX_EXE_BYTES) {
+            fail(413, "not the game's exe: too large");
+            return;
+          }
+          if (bytes.subarray(0, 2).toString("latin1") !== "MZ") {
+            fail(400, "not the game's exe: no MZ header");
+            return;
+          }
+          // a file per request: the harness copies it into the game's folder, while an
+          // earlier one may still be copying its own
+          const exe = fileURLToPath(new URL(`.wine/play-${randomUUID()}.exe`, ROOT));
+          writeFileSync(exe, bytes);
           const args = ["-I", fileURLToPath(HARNESS), "play", String(episode)];
-          const game = spawn("python3", [...args, "--exe", fileURLToPath(PLAY_EXE)], {
+          const game = spawn("python3", [...args, "--exe", exe], {
             detached: true,
             stdio: ["ignore", "ignore", "pipe"],
           });
@@ -95,9 +103,11 @@ function playInWine(): Plugin {
             fail(500, text);
           };
           game.on("error", (error) => {
+            rmSync(exe, { force: true });
             failed(error.message);
           });
           game.on("exit", (code) => {
+            rmSync(exe, { force: true });
             if (code !== 0) failed(errors.trim() || `the harness ended with code ${String(code)}`);
           });
           game.unref();
