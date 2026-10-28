@@ -48,7 +48,7 @@
 #define DD_WIDTH 640            /* its frame buffer (display +0x4c), rows 4-byte aligned */
 #define DD_HEIGHT 348           /* of its 400 rows, those presented (0x402365) */
 #define MAX_FRAME (640 * 400)
-#define STALL_MS 3000 /* `run` gives up when the game does not get idle for this long */
+#define STALL_MS 3000 /* `run` gives up when the game takes no step for this long */
 
 typedef char(__cdecl *StepFn)(void *);
 typedef HRESULT(__attribute__((thiscall)) * PresentFn)(BYTE *, RECT *);
@@ -184,6 +184,15 @@ static BOOL CALLBACK pick_window(HWND hwnd, LPARAM unused) {
   return FALSE;
 }
 
+/* Takes one granted step, if any: never below 0, also while `run` takes the rest back. */
+static BOOL take_step(void) {
+  for (;;) {
+    LONG left = budget;
+    if (left <= 0) return FALSE;
+    if (InterlockedCompareExchange(&budget, left - 1, left) == left) return TRUE;
+  }
+}
+
 /* In place of the main loop's call of 0x4016a0: wait for a granted step, then let the
  * game run one step of virtual time. Returning 0 (nothing to draw) lets the loop
  * dispatch pending messages first. The main loop draws after a step and comes back
@@ -202,23 +211,26 @@ static char __cdecl step(void *app) {
     LONG seen = posted; /* read before looking: all those messages are queued */
     MSG msg;
     if (PeekMessageA(&msg, NULL, 0, 0, PM_NOREMOVE)) return 0;
-    if (budget > 0) break;
+    if (take_step()) break;
     idle_steps = steps;
     idle_posted = seen;
     SetEvent(idle);
     MsgWaitForMultipleObjects(1, &wake, FALSE, INFINITE, QS_ALLINPUT);
   }
-  InterlockedDecrement(&budget);
   now_ms += step_ms;
   steps++;
   fire_timers();
   return original_step(app);
 }
 
-/* Waits until the game is idle after `steps` steps (and everything posted so far). */
+/* Waits until the game is idle after `steps` steps (and everything posted so far); false
+ * once it takes no step for STALL_MS (a long run that keeps stepping is no stall). */
 static BOOL settle(DWORD target) {
+  DWORD seen = steps;
   while (!((LONG)(steps - target) >= 0 && idle_steps == steps && idle_posted == posted)) {
-    if (WaitForSingleObject(idle, STALL_MS) == WAIT_TIMEOUT) return FALSE;
+    if (WaitForSingleObject(idle, STALL_MS) != WAIT_TIMEOUT) continue;
+    if (steps == seen) return FALSE;
+    seen = steps;
   }
   return TRUE;
 }
