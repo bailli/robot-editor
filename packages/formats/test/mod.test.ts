@@ -323,6 +323,12 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { copyTexts: [{ resource: 1010, from: 1210, entries: [[331, 9999]] }] },
     { copyTexts: [{ resource: 1010, from: 1299, entries: [[331, 331]] }] },
     { copyTexts: [{ resource: 1010, from: 1010, entries: [[1, 1]] }] },
+    // more than a CRUNCHED resource holds (checked when applied)
+    {
+      texts: [
+        { resource: 1310, entry: 5000, variants: [Array(400).fill("x".repeat(200)).join("\n")] },
+      ],
+    },
     {
       code: [
         { va: 0x40b460, expect: new Uint8Array(4), bytes: new Uint8Array(4) },

@@ -44,7 +44,14 @@ import {
 import { EPISODES, Game } from "./game.ts";
 import { DIRECTORY_RESOURCE, type PeImage, parsePe, readVa } from "./pe.ts";
 import { findResource, readResources, replaceResource } from "./resources.ts";
-import { ROOM_HEIGHT, ROOM_WIDTH, type Room, parseRoom, serializeRoom } from "./scene.ts";
+import {
+  ROOM_HEIGHT,
+  ROOM_WIDTH,
+  type Room,
+  SceneFormatError,
+  parseRoom,
+  serializeRoom,
+} from "./scene.ts";
 import { sha256 } from "./sha256.ts";
 import { type EpisodeStart, MAX_RUCKSACK, withEpisodeStart, withRucksack } from "./start.ts";
 import { parseTexts, textEntryProblem, withTextEntry } from "./texts.ts";
@@ -209,6 +216,17 @@ const isInt = (v: number, min: number, max: number) => Number.isInteger(v) && v 
 
 function need(ok: boolean, where: string, message: string): asserts ok {
   if (!ok) throw new ModError(`${where}: ${message}`);
+}
+
+/** What `make` gives; its refusals (RangeError, SceneFormatError) as a ModError at `where`. */
+function refusing<T>(where: string, make: () => T): T {
+  try {
+    return make();
+  } catch (error) {
+    if (error instanceof RangeError || error instanceof SceneFormatError)
+      need(false, where, error.message);
+    throw error;
+  }
 }
 
 function episodeOk(episode: number, where: string): void {
@@ -414,7 +432,8 @@ function canonical(changes: ModChanges): ModChanges {
 function build(image: PeImage, changes: ModChanges): Uint8Array {
   let game = new Game(image.data);
   for (const c of changes.tileTypes) {
-    game = new Game(game.withTileTypes(c.episode, c.from, new Map(c.types)));
+    const where = `tileTypes (episode ${c.episode} from ${c.from})`;
+    game = new Game(refusing(where, () => game.withTileTypes(c.episode, c.from, new Map(c.types))));
   }
   for (const episode of new Set(changes.events.map((c) => c.episode))) {
     const entries = changes.events.filter((c) => c.episode === episode);
@@ -437,12 +456,8 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
       c.sound === undefined ? [] : [[c.entry, c.sound] as const],
     );
     if (sounds.length > 0) {
-      try {
-        game = new Game(game.withSounds(episode, new Map(sounds)));
-      } catch (error) {
-        if (error instanceof RangeError) need(false, `events (episode ${episode})`, error.message);
-        throw error;
-      }
+      const where = `events (episode ${episode})`;
+      game = new Game(refusing(where, () => game.withSounds(episode, new Map(sounds))));
     }
   }
   if (changes.code.length > 0) {
@@ -462,12 +477,9 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
     game = new Game(out);
   }
   for (const c of changes.dealer) {
-    try {
-      game = new Game(withDealer(game.image, c.episode, c, game.episode(c.episode).classes));
-    } catch (error) {
-      if (error instanceof RangeError) need(false, `dealer (episode ${c.episode})`, error.message);
-      throw error;
-    }
+    const { classes } = game.episode(c.episode);
+    const where = `dealer (episode ${c.episode})`;
+    game = new Game(refusing(where, () => withDealer(game.image, c.episode, c, classes)));
   }
   // copies read the texts before any is changed, then go with the others in key order
   const copied = changes.copyTexts.flatMap((c, i) => {
@@ -489,11 +501,13 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
     const text = game.textSource(resource);
     need(text !== undefined, `texts (${resource})`, "no such text resource");
     const set = texts.filter((t) => t.resource === resource);
-    game = new Game(game.withText(resource, withTextChanges(text, set)));
+    const where = `texts (${resource})`;
+    game = new Game(refusing(where, () => game.withText(resource, withTextChanges(text, set))));
   }
   for (const episode of new Set(changes.rooms.map((c) => c.episode))) {
     const set = changes.rooms.filter((r) => r.episode === episode);
-    game = new Game(game.withScene(episode, withRoomChanges(game.episode(episode).rooms, set)));
+    const rooms = withRoomChanges(game.episode(episode).rooms, set);
+    game = new Game(refusing(`rooms (episode ${episode})`, () => game.withScene(episode, rooms)));
   }
   let data = game.image.data;
   for (const { episode, ...start } of changes.start) {
