@@ -1,4 +1,6 @@
+import { element } from "./dom.ts";
 import type { CodePatch } from "./editor.ts";
+import { hexBytes, plural } from "./format.ts";
 import { patchChildren } from "./patch.ts";
 
 export interface CodeViewEvents {
@@ -17,26 +19,7 @@ export interface CodeContext {
   problem(va: number, bytes: Uint8Array): string | undefined;
 }
 
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
 const address = (va: number) => `0x${va.toString(16)}`;
-
-/** Bytes as hex, the first `most` of them ("…" after). */
-function hex(bytes: Uint8Array, most = Infinity): string {
-  const shown = [...bytes.subarray(0, most)].map((b) => b.toString(16).padStart(2, "0"));
-  return `${shown.join(" ")}${bytes.length > most ? " …" : ""}`;
-}
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** An address typed in hex ("0x40b466" or "40b466"), undefined if it is none. */
 export function parseAddress(text: string): number | undefined {
@@ -138,9 +121,9 @@ export class CodeView {
       const text = element(
         "span",
         "dealer-name",
-        `${address(p.va)}${where}: ${hex(p.expect, 6)} → ${hex(p.bytes, 6)}`,
+        `${address(p.va)}${where}: ${hexBytes(p.expect, 6)} → ${hexBytes(p.bytes, 6)}`,
       );
-      text.title = `${plural(p.bytes.length, "byte")} at ${address(p.va)}${where}\nthe exe: ${hex(p.expect)}\nthe mod: ${hex(p.bytes)}`;
+      text.title = `${plural(p.bytes.length, "byte")} at ${address(p.va)}${where}\nthe exe: ${hexBytes(p.expect)}\nthe mod: ${hexBytes(p.bytes)}`;
       // read when clicked: a kept button keeps its listener (patchChildren)
       const remove = element("button", "danger", "×");
       remove.type = "button";
@@ -178,7 +161,7 @@ export class CodeView {
     const held = va === undefined ? undefined : this.context?.read(va, length);
     let text = "Address and bytes in hex";
     if (va !== undefined) {
-      text = held ? `The exe holds ${hex(held, 8)}` : `No code or data at ${address(va)}`;
+      text = held ? `The exe holds ${hexBytes(held, 8)}` : `No code or data at ${address(va)}`;
     }
     if (this.bytes.value.trim() && !parseBytes(this.bytes.value)) text = "Bytes: hex pairs";
     if (typed?.problem) text = `Cannot patch: ${typed.problem}`;

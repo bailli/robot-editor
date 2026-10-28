@@ -1,5 +1,6 @@
 import { EPISODES } from "@robot/formats";
 
+import { button, element, select } from "./dom.ts";
 import type { EventEntry, EventSource } from "./editor.ts";
 import { patchChildren } from "./patch.ts";
 
@@ -26,37 +27,6 @@ export interface EventsContext {
   targets: readonly number[];
   /** The events of an episode that can be copied (Editor.sourceEvents). */
   sources: (episode: number) => readonly SourceEvent[];
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-function button(text: string, title: string, click: () => void): HTMLButtonElement {
-  const b = element("button", undefined, text);
-  b.type = "button";
-  b.title = title;
-  b.addEventListener("click", click);
-  return b;
-}
-
-function select(label: string, options: readonly [string, string][], value: string) {
-  const s = element("select", "record-field tile-type-field");
-  s.setAttribute("aria-label", label);
-  for (const [v, text] of options) {
-    const o = element("option", undefined, text);
-    o.value = v;
-    s.append(o);
-  }
-  s.value = value;
-  return s;
 }
 
 /** The episodes in the form and the list, short. */

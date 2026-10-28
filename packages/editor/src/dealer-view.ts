@@ -7,6 +7,8 @@ import {
   sameDealer,
 } from "@robot/formats";
 
+import { button, element } from "./dom.ts";
+import { hex } from "./format.ts";
 import { patchChildren } from "./patch.ts";
 
 export interface DealerViewEvents {
@@ -41,27 +43,6 @@ export interface DealerContext {
   /** Rooms with a dealer record (a travelling actor that is the dealer). */
   rooms: readonly number[];
 }
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-function button(text: string, title: string, click: () => void): HTMLButtonElement {
-  const b = element("button", undefined, text);
-  b.type = "button";
-  b.title = title;
-  b.addEventListener("click", click);
-  return b;
-}
-
-const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 
 /**
  * The Episode tab's dealer: the goods every dealer of the episode sells, their prices and

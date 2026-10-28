@@ -7,6 +7,8 @@ import {
   teleporterCondition,
 } from "@robot/formats";
 
+import { element } from "./dom.ts";
+import { hex } from "./format.ts";
 import { patchChildren } from "./patch.ts";
 
 /** The record types of oracles and teleporters. */
@@ -357,19 +359,6 @@ export interface RecordViewEvents {
   /** The name of an actor kind (0x100 + n). */
   actor: ActorName;
 }
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-const hex = (value: number, digits = 4) => `0x${value.toString(16).padStart(digits, "0")}`;
 
 /** A field's number: decimal, or hex with 0x (cells: always hex); NaN for anything else. */
 function parseNumber(text: string, kind: Field["kind"]): number {

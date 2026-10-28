@@ -1,5 +1,6 @@
 import { CIRCUIT_PIECES, type CircuitNode, ROOM_WIDTH, type RoomCircuit } from "@robot/formats";
 
+import { element } from "./dom.ts";
 import { patchChildren } from "./patch.ts";
 
 export interface CircuitViewEvents {
@@ -32,17 +33,6 @@ export interface CircuitContext {
 }
 
 const where = (cell: number) => `(${cell % ROOM_WIDTH}, ${Math.floor(cell / ROOM_WIDTH)})`;
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 /** What a node's stairs are, for people. */
 function stairsText(node: CircuitNode, context: CircuitContext): string | undefined {

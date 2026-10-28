@@ -1,5 +1,7 @@
 import { KITS, type Kit, type KitPlan } from "@robot/formats";
 
+import { element } from "./dom.ts";
+import { hex2 } from "./format.ts";
 import { patchChildren } from "./patch.ts";
 
 export interface KitsViewEvents {
@@ -18,19 +20,6 @@ export interface KitsContext {
   /** Whether the episode has all the kit's types, so its example can be placed. */
   hasExample: (kit: Kit) => boolean;
 }
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-const hex = (type: number) => `0x${type.toString(16).padStart(2, "0")}`;
 
 /**
  * The Episode tab's kits (formats' KITS): per kit what adding it to the shown episode
@@ -87,7 +76,7 @@ export class KitsView {
       p.dataset["key"] = key;
       return p;
     };
-    const typeName = (of: number) => kit.types.find(([t]) => t === of)?.[1] ?? hex(of);
+    const typeName = (of: number) => kit.types.find(([t]) => t === of)?.[1] ?? hex2(of);
     const label = (id: number) => (kit.eventLabel ? `${kit.eventLabel(id)} (${id})` : String(id));
     const own = plan.present.length === kit.types.length && plan.lacking.length === 0;
     if (own && plan.texts.length === 0) {
@@ -95,7 +84,7 @@ export class KitsView {
       box.append(this.exampleBar(context, kit));
       return box;
     }
-    const types = plan.types.map(([to, of]) => `${hex(to)} ← ${typeName(of)}`);
+    const types = plan.types.map(([to, of]) => `${hex2(to)} ← ${typeName(of)}`);
     const present = plan.present.map(typeName);
     box.append(
       line(

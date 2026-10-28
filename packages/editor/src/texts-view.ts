@@ -1,5 +1,6 @@
 import { EPISODES, EVENT_TEXT } from "@robot/formats";
 
+import { button, element } from "./dom.ts";
 import type { TextCopy, TextSource } from "./editor.ts";
 import { patchChildren } from "./patch.ts";
 
@@ -17,25 +18,6 @@ export interface TextsContext {
   source: (episode: number, entry: number) => string | undefined;
   /** An entry of the shown episode's texts as edited, on one line. */
   current: (entry: number) => string | undefined;
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-function button(text: string, title: string, click: () => void): HTMLButtonElement {
-  const b = element("button", undefined, text);
-  b.type = "button";
-  b.title = title;
-  b.addEventListener("click", click);
-  return b;
 }
 
 function numberField(label: string, value: number): HTMLInputElement {

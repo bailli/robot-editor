@@ -97,6 +97,7 @@ import {
 import { EpisodeView } from "./episode-view.ts";
 import { EventsView } from "./events-view.ts";
 import { type Connections, ExitsView, connections, fixedExit, leadsTo } from "./exits-view.ts";
+import { hex, plural } from "./format.ts";
 import { showHelp } from "./help-dialog.ts";
 import { KitsView } from "./kits-view.ts";
 import { MapView } from "./map-view.ts";
@@ -154,8 +155,6 @@ const ARROWS: Readonly<Partial<Record<string, Direction>>> = {
   ArrowLeft: "west",
   ArrowRight: "east",
 };
-
-const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 
 export type Tool = "paint" | "fill" | "select" | "inspect";
 
@@ -3022,8 +3021,6 @@ const DRAFT_NOTE = "\nscript draft not applied";
 const capitalize = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 /** "1 node", "3 nodes". */
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
-
 /** A button of the Area tools, named "<label> area" for screen readers. */
 function areaButton(label: string, title: string): HTMLButtonElement {
   return h("button", { title, "aria-label": `${label} area` }, label);

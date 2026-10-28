@@ -1,6 +1,8 @@
 import { EPISODES } from "@robot/formats";
 
+import { button, element, select } from "./dom.ts";
 import type { TileTypeCopy } from "./editor.ts";
+import { hex2 } from "./format.ts";
 import { patchChildren } from "./patch.ts";
 
 export interface TileTypesViewEvents {
@@ -31,42 +33,9 @@ export interface TileTypesContext {
   classTexts: (copy: TileTypeCopy) => readonly number[];
 }
 
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-function button(text: string, title: string, click: () => void): HTMLButtonElement {
-  const b = element("button", undefined, text);
-  b.type = "button";
-  b.title = title;
-  b.addEventListener("click", click);
-  return b;
-}
-
-function select(label: string, options: readonly [string, string][], value: string) {
-  const s = element("select", "record-field tile-type-field");
-  s.setAttribute("aria-label", label);
-  for (const [v, text] of options) {
-    const o = element("option", undefined, text);
-    o.value = v;
-    s.append(o);
-  }
-  s.value = value;
-  return s;
-}
-
 /** The episodes in the form and the list, short. */
 const SHORT_NAMES: readonly string[] = ["Junior", "I", "II", "III", "IV"];
 const short = (episode: number) => SHORT_NAMES[episode] ?? String(episode);
-
-const hex = (type: number) => `0x${type.toString(16).padStart(2, "0")}`;
 
 /**
  * The Episode tab's tile types from other episodes (mod kind tileTypes): the copies, each
@@ -102,11 +71,11 @@ export class TileTypesView {
       const text = element(
         "span",
         "dealer-name",
-        `${hex(c.to)} ← ${short(c.from)} ${hex(c.of)} ${source}`,
+        `${hex2(c.to)} ← ${short(c.from)} ${hex2(c.of)} ${source}`,
       );
-      text.title = `Type ${hex(c.to)} is type ${hex(c.of)} of ${name(c.from)}: its class, shape, description, sound and first take`;
+      text.title = `Type ${hex2(c.to)} is type ${hex2(c.of)} of ${name(c.from)}: its class, shape, description, sound and first take`;
       // read when clicked: a kept button keeps its listener (patchChildren)
-      const remove = button("×", `Make type ${hex(c.to)} free again`, () => {
+      const remove = button("×", `Make type ${hex2(c.to)} free again`, () => {
         this.events.copy(Number(row.dataset["key"]), undefined);
       });
       remove.classList.add("danger");
@@ -175,14 +144,14 @@ export class TileTypesView {
     );
     const of = select(
       "Type",
-      sources.map((s) => [String(s.type), `${hex(s.type)} ${s.name}`]),
+      sources.map((s) => [String(s.type), `${hex2(s.type)} ${s.name}`]),
       String(choice.of),
     );
     const to = select(
       "To type",
       context.free.map((t) => [
         String(t),
-        `${hex(t)}${context.copies.some((c) => c.to === t) ? " (replaces its copy)" : ""}`,
+        `${hex2(t)}${context.copies.some((c) => c.to === t) ? " (replaces its copy)" : ""}`,
       ]),
       String(choice.to),
     );

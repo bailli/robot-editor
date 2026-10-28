@@ -10,6 +10,7 @@ import {
   TELEPORT_POINT_CLEARED,
 } from "@robot/formats";
 
+import { button, element } from "./dom.ts";
 import { patchChildren } from "./patch.ts";
 
 export interface EpisodeViewEvents {
@@ -46,25 +47,6 @@ export interface EpisodeContext {
   room: number;
   /** "Go to room 43 – DER START" */
   label: (room: number) => string;
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-function button(text: string, title: string, click: () => void): HTMLButtonElement {
-  const b = element("button", undefined, text);
-  b.type = "button";
-  b.title = title;
-  b.addEventListener("click", click);
-  return b;
 }
 
 const cell = (start: EpisodeStart) => `(${start.x}, ${start.y})`;

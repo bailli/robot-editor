@@ -13,6 +13,8 @@ import {
   textPieces,
 } from "@robot/formats";
 
+import { hex } from "./format.ts";
+
 export interface TileInfo {
   /** The object's script name (O_KEY -> "Key"), for the tiles that have one. */
   name: string | undefined;
@@ -27,8 +29,6 @@ export interface TileInfo {
   /** Whether the game picks one of several descriptions. */
   random: boolean;
 }
-
-const hex = (value: number) => `0x${value.toString(16).padStart(4, "0")}`;
 
 /** Names and descriptions of an episode's cells, as the game picks them. */
 export class TileNames {
