@@ -77,7 +77,7 @@ export interface EventChange {
 
 export interface CodeChange {
   va: number;
-  /** What the pristine exe holds there; the change is refused otherwise. */
+  /** What the exe holds there as kinds 1-2 leave it; the change is refused otherwise. */
   expect: Uint8Array;
   bytes: Uint8Array;
 }

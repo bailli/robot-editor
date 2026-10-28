@@ -712,6 +712,37 @@ describe("Editor and mods", () => {
     expect(readEpisodeStart(editor.game.image, 3).x).toBe(5);
   });
 
+  test("code written here: what the base holds expected; refused where it cannot go", () => {
+    const editor = new Editor(game);
+    const start = readEpisodeStart(game.image, 3);
+    const startX = 0x40b460 + 6;
+    expect(editor.codeBytes(startX, 1)).toEqual(readVa(game.image, startX, 1));
+    expect(editor.codeBytes(0x10, 1)).toBeUndefined();
+    editor.addCode(3, start.room, startX, Uint8Array.of(5));
+    expect(readEpisodeStart(editor.game.image, 3).x).toBe(5);
+    const [patch] = editor.saveMod().changes.code;
+    expect(patch).toEqual({
+      va: startX,
+      expect: readVa(game.image, startX, 1),
+      bytes: Uint8Array.of(5),
+    });
+    expect(editor.codePatches().map((p) => p.section)).toEqual([".text"]);
+    // the resources, no bytes, an overlap, what the exe holds already
+    const rsrc = game.image.sections.find((s) => s.name === ".rsrc");
+    if (!rsrc) throw new Error("no .rsrc");
+    expect(
+      editor.codeProblem(game.image.imageBase + rsrc.virtualAddress, Uint8Array.of(1)),
+    ).toMatch(/no code or data/);
+    expect(editor.codeProblem(startX, new Uint8Array())).toBe("no bytes");
+    expect(editor.codeProblem(startX - 1, Uint8Array.of(1, 2))).toMatch(/patch at 0x40b466 covers/);
+    const held = readVa(game.image, startX + 1, 2);
+    expect(editor.codeProblem(startX + 1, held)).toMatch(/holds these bytes .* already/);
+    expect(() => editor.addCode(3, start.room, startX, Uint8Array.of(6))).toThrow(RangeError);
+    editor.undo();
+    expect(editor.game).toBe(game);
+    expect(editor.codePatches()).toEqual([]);
+  });
+
   test("a mod for another exe is refused", () => {
     const editor = new Editor(game);
     paint(editor, free, 0x0105);

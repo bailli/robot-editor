@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 
 import {
   type Mod,
@@ -89,9 +89,36 @@ test("the Episode tab lists the mod's code; × takes a patch out", async () => {
   await page.getByRole("tab", { name: "Episode" }).click();
   const code = page.getByRole("region", { name: "Code patches" });
   const was = x.toString(16).padStart(2, "0");
+  // open, as the mod has a patch
   await expect.element(code.getByText(`0x40b466 (.text): ${was} → 05`)).toBeVisible();
   await code.getByRole("button", { name: "×" }).click();
-  await expect.element(code.getByText("The mod patches no code.")).toBeVisible();
+  await expect.element(code.getByText(/0x40b466 \(\.text\)/)).not.toBeInTheDocument();
   expect(status()).toBe("The code at 0x40b466 is as the exe has it again");
   expect(app.editor?.saveMod().changes.code).toEqual([]);
+});
+
+test("without code patches the section stays folded; its form writes one", async () => {
+  app.showEpisode(3, readEpisodeStart(game.image, 3).room);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const code = page.getByRole("region", { name: "Code patches" });
+  await expect.element(code.getByText("Code patches")).toBeVisible();
+  expect(document.querySelector<HTMLDetailsElement>(".code-view")?.open).toBe(false);
+  await code.getByText("Code patches").click();
+  const address = code.getByRole("textbox", { name: "Address" });
+  await userEvent.fill(address, "0x40b466");
+  const [x = 0] = readVa(game.image, 0x40b466, 1);
+  const was = x.toString(16).padStart(2, "0");
+  await expect.element(code.getByText(`The exe holds ${was}`)).toBeVisible();
+  const patch = code.getByRole("button", { name: "Patch" });
+  await expect.element(patch).toBeDisabled();
+  await userEvent.fill(code.getByRole("textbox", { name: "Bytes" }), was);
+  await expect.element(code.getByText(/Cannot patch: the exe holds these bytes/)).toBeVisible();
+  await expect.element(patch).toBeDisabled();
+  await userEvent.fill(code.getByRole("textbox", { name: "Bytes" }), "05");
+  await patch.click();
+  await expect.element(code.getByText(`0x40b466 (.text): ${was} → 05`)).toBeVisible();
+  expect(status()).toBe("1 byte written at 0x40b466");
+  expect(readEpisodeStart(app.editor?.game.image ?? game.image, 3).x).toBe(5);
+  // now it covers the byte
+  await expect.element(code.getByText(/Cannot patch: the patch at 0x40b466/)).toBeVisible();
 });

@@ -192,6 +192,9 @@ export interface BaseChanges {
   copyTexts: readonly CopyTextsChange[];
 }
 
+/** The most bytes a code change written in the editor has (addCode). */
+export const MAX_CODE_BYTES = 4096;
+
 /** A code change of the mod (kind code) as the view lists it. */
 export interface CodePatch extends CodeChange {
   /** The section it lies in, e.g. ".text". */
@@ -922,6 +925,51 @@ export class Editor {
     this.endStroke();
     const code = this.changes.code.filter((c) => c.va !== va);
     if (code.length === this.changes.code.length) return undefined;
+    return this.rebase(episode, room, { ...this.changes, code });
+  }
+
+  /**
+   * The bytes the base holds at `va` (what a new code change there expects: kinds 1-2
+   * applied, no code over it), undefined outside initialised code and data.
+   */
+  codeBytes(va: number, length: number): Uint8Array | undefined {
+    const { image } = this.game;
+    const rva = va - image.imageBase;
+    const section = image.sections.find(
+      (s) => rva >= s.virtualAddress && rva + length <= s.virtualAddress + s.rawSize,
+    );
+    if (!section || section.name === ".rsrc" || length < 1) return undefined;
+    return readVa(image, va, length);
+  }
+
+  /** Why `bytes` cannot be written at `va` (addCode), undefined if they can. */
+  codeProblem(va: number, bytes: Uint8Array): string | undefined {
+    if (bytes.length === 0) return "no bytes";
+    if (bytes.length > MAX_CODE_BYTES) return `more than ${MAX_CODE_BYTES} bytes`;
+    if (!Number.isInteger(va) || va < 0 || va > 0xffffffff) return "no address";
+    const at = `0x${va.toString(16)}`;
+    const now = this.codeBytes(va, bytes.length);
+    if (!now)
+      return `no code or data of the exe at ${at}–0x${(va + bytes.length - 1).toString(16)}`;
+    const other = this.changes.code.find(
+      (c) => c.va < va + bytes.length && va < c.va + c.bytes.length,
+    );
+    if (other) return `the patch at 0x${other.va.toString(16)} covers some of these bytes`;
+    if (now.every((b, k) => b === bytes[k])) return `the exe holds these bytes at ${at} already`;
+    return undefined;
+  }
+
+  /**
+   * Writes `bytes` at `va` as a code change of the mod (kind code), expecting what the
+   * base holds there; one undo step (shown in room `room` of `episode`) that makes a new
+   * base (rebase). Throws a RangeError where it cannot (codeProblem).
+   */
+  addCode(episode: number, room: number, va: number, bytes: Uint8Array): Edit {
+    this.endStroke();
+    const problem = this.codeProblem(va, bytes);
+    if (problem) throw new RangeError(problem);
+    const expect = this.codeBytes(va, bytes.length) ?? new Uint8Array();
+    const code = [...this.changes.code, { va, expect, bytes: bytes.slice() }];
     return this.rebase(episode, room, { ...this.changes, code });
   }
 

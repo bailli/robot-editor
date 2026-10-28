@@ -622,6 +622,20 @@ export class App {
     },
   });
   readonly codeView = new CodeView({
+    add: (va, bytes) => {
+      const at = `0x${va.toString(16)}`;
+      void this.busy(`Patching the code at ${at}…`, () => {
+        try {
+          this.need().addCode(this.episode, this.roomId, va, bytes);
+        } catch (error) {
+          this.setStatus(`Cannot patch the code: ${message(error)}`, true);
+          this.refreshEpisodeTab();
+          return;
+        }
+        this.gameChanged();
+        this.setStatus(`${plural(bytes.length, "byte")} written at ${at}`);
+      });
+    },
     remove: (va) => {
       const at = `0x${va.toString(16)}`;
       void this.busy(`Removing the code at ${at}…`, () => {
@@ -2455,7 +2469,11 @@ export class App {
         });
       },
     });
-    this.codeView.show(editor.codePatches());
+    this.codeView.show({
+      patches: editor.codePatches(),
+      read: (va, length) => editor.codeBytes(va, length),
+      problem: (va, bytes) => editor.codeProblem(va, bytes),
+    });
     const dealer = editor.dealer(this.episode);
     const dealerEdited = editor.isDealerEdited(this.episode);
     const settingsEdited =
