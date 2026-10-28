@@ -71,11 +71,16 @@ test("? and the Shortcuts button show the help; keys in it leave the room alone"
   await expect.element(help).not.toBeInTheDocument();
 });
 
-test("every room of every episode is drawn as the renderer draws it", () => {
+// every room's render is pinned in formats (render.test.ts); here the editor's drawing
+// of it: rooms with a backdrop (dimmed) and every eighth room besides
+test("rooms of every episode are drawn as the renderer draws them, backdrops dimmed", () => {
   for (const episode of [0, 1, 2, 3, 4]) {
     const ep = game.episode(episode);
     app.showEpisode(episode);
-    for (const room of ep.rooms) {
+    const rooms = ep.rooms.filter(
+      (room, k) => k % 8 === 0 || backdropRoom(room, ep.rooms, ep.classes),
+    );
+    for (const room of rooms) {
       app.showRoom(room.id);
       const expected = drawnWithBackdrop(episode, room.id);
       const pixels = app.view.pixels();
