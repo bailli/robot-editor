@@ -1157,6 +1157,11 @@ Supported:
   used in the gap ("Benutzen") lights the node and places its stairs (with the wire's
   first take and, but in III, 4000 points); in IV and Junior the laid symbol is found and
   walked into northwards the oracle sends the hero below it (3500 points)
+- copying tile types, events and texts and adding kits make a new base (applyMod over
+  the whole exe: 0.3–0.6 s, then the redraw): meanwhile the side panel is locked (inert,
+  dimmed) with what runs in the status line ("Adding the circuits…"); clicks made
+  meanwhile are dropped (`App.busy`, `App.idle()` for tests). Undo and redo of such a
+  step take a moment too and are not locked
 - the episode's settings (tab Episode, `episode-view.ts`): the rucksack's capacity
   (1–250); the rules, episode flags as checkboxes: oracles vanish after north, after
   east (0x4000, 0x8000), doors into buildings open without the key (0x80000), robots

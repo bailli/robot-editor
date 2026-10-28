@@ -385,6 +385,7 @@ test("the Episode tab copies tile types of other episodes, undoably; the mod kee
   // the same number, free in Junior
   await expect.element(types.getByLabelText("To type")).toHaveValue(String(0x51));
   await types.getByRole("button", { name: "Copy" }).click();
+  await app.idle();
   expect(app.editor?.tileTypeCopies(0)).toEqual([{ episode: 0, to: 0x51, from: 2, of: 0x51 }]);
   expect(app.editor?.game.episode(0).classes.classes.get(0x51)?.id).toBe(
     game.episode(2).classes.classes.get(0x51)?.id,
@@ -401,6 +402,7 @@ test("the Episode tab copies tile types of other episodes, undoably; the mod kee
   expect(saved.changes.tileTypes).toEqual([{ episode: 0, from: 2, types: [[0x51, 0x51]] }]);
   // removed with ×, back with undo, gone with another
   await types.getByRole("button", { name: "×" }).click();
+  await app.idle();
   expect(app.editor?.tileTypeCopies(0)).toEqual([]);
   app.undo();
   expect(app.editor?.tileTypeCopies(0)).toHaveLength(1);
@@ -420,6 +422,7 @@ test("the copy form's target: the same number where free, else the first type no
   await userEvent.selectOptions(types.getByLabelText("Type"), String(0x01));
   await expect.element(to).toHaveValue(String(0x3a));
   await types.getByRole("button", { name: "Copy" }).click();
+  await app.idle();
   await userEvent.selectOptions(types.getByLabelText("Type"), String(0x02));
   await expect.element(to).toHaveValue(String(0x3b));
   await userEvent.selectOptions(types.getByLabelText("Type"), String(0x50));
@@ -438,6 +441,7 @@ test("the Episode tab copies events of other episodes to spare entries, undoably
   await userEvent.selectOptions(events.getByLabelText("Event"), "135");
   await expect.element(events.getByLabelText("To entry")).toHaveValue("197");
   await events.getByRole("button", { name: "Copy" }).click();
+  await app.idle();
   expect(app.editor?.eventEntries(4)).toEqual([
     { episode: 4, entry: 197, id: 263, points: 3500, text: { from: 2, of: 135 } },
   ]);
@@ -456,6 +460,7 @@ test("the Episode tab copies events of other episodes to spare entries, undoably
   ]);
   // removed with ×, back with undo, gone with another
   await events.getByRole("button", { name: "×" }).click();
+  await app.idle();
   expect(app.editor?.eventEntries(4)).toEqual([]);
   app.undo();
   expect(app.editor?.eventEntries(4)).toHaveLength(1);
@@ -478,7 +483,9 @@ test("the Episode tab copies texts of other episodes, a copied class's in one go
   await userEvent.selectOptions(types.getByLabelText("From episode"), "II");
   await userEvent.selectOptions(types.getByLabelText("Type"), String(0x51));
   await types.getByRole("button", { name: "Copy" }).click();
+  await app.idle();
   await types.getByRole("button", { name: "Texts" }).click();
+  await app.idle();
   expect(app.editor?.textCopies(0).map((c) => c.to)).toEqual([331, 332, 334, 339, 945]);
   expect(status()).toMatch(/Texts 331, 332, 334, 339, 945 of .* copied/);
   await expect.element(types.getByRole("button", { name: "Texts" })).not.toBeInTheDocument();
@@ -494,6 +501,7 @@ test("the Episode tab copies texts of other episodes, a copied class's in one go
   await userEvent.fill(texts.getByLabelText("To text"), "340");
   await userEvent.keyboard("{Enter}");
   await texts.getByRole("button", { name: "Copy" }).click();
+  await app.idle();
   expect(app.editor?.textCopies(0)).toEqual([{ to: 340, from: 2, of: 331 }]);
   const saved = parseMod(app.saveMod() ?? "");
   expect(saved.changes.copyTexts).toEqual([{ resource: 1010, from: 1210, entries: [[340, 331]] }]);
@@ -502,6 +510,7 @@ test("the Episode tab copies texts of other episodes, a copied class's in one go
   await userEvent.keyboard("{Enter}");
   await expect.element(texts.getByRole("button", { name: "Copy" })).toBeDisabled();
   await texts.getByRole("button", { name: "×" }).click();
+  await app.idle();
   expect(app.editor?.textCopies(0)).toEqual([]);
   app.undo();
   app.undo();
@@ -521,6 +530,7 @@ test("the Episode tab adds kits: oracles with the symbols picked, then circuits"
   for (const n of [0, 2, 3]) await symbol(n).click();
   await symbol(4).click();
   await kits.getByRole("button", { name: "Add oracles" }).click();
+  await app.idle();
   expect(app.editor?.eventEntries(4).map((e) => [e.entry, e.id])).toEqual([
     [197, 263],
     [198, 266],
@@ -533,6 +543,7 @@ test("the Episode tab adds kits: oracles with the symbols picked, then circuits"
   // circuits take the next spare entry
   await expect.element(kits.getByText("Events: 293 in entry 199")).toBeVisible();
   await kits.getByRole("button", { name: "Add circuits" }).click();
+  await app.idle();
   expect(app.editor?.eventEntries(4).map((e) => e.id)).toEqual([263, 266, 293]);
   // one undo step each
   app.undo();
@@ -554,6 +565,7 @@ test("a kit's example is placed like a paste, once the episode has the kit", asy
   await expect.element(circuits.nth(1)).toBeDisabled();
   await expect.element(circuits.nth(0)).toBeEnabled();
   await page.getByRole("button", { name: "Add circuits" }).click();
+  await app.idle();
   await circuits.nth(1).click();
   expect(app.pasting).toBe(true);
   const target = 10 * ROOM_WIDTH + 20;
@@ -569,4 +581,21 @@ test("a kit's example is placed like a paste, once the episode has the kit", asy
   app.undo();
   app.undo();
   expect(app.editor?.game).toBe(app.editor?.pristine);
+});
+
+test("slow copies lock the side panel until they are done, saying what runs", async () => {
+  app.showEpisode(0, 43);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const panel = app.sidePanel.element;
+  // a DOM click runs the handler at once: the panel is locked before the work starts
+  defined(page.getByRole("button", { name: "Add circuits" }).element() as HTMLElement).click();
+  expect(panel.inert).toBe(true);
+  expect(panel.classList.contains("busy")).toBe(true);
+  expect(status()).toBe("Adding the circuits…");
+  await app.idle();
+  expect(panel.inert).toBe(false);
+  expect(panel.classList.contains("busy")).toBe(false);
+  expect(status()).toMatch(/Circuits of .* added to/);
+  expect(app.editor?.tileTypeCopies(0)).toHaveLength(4);
+  app.undo();
 });

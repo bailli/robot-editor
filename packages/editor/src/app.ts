@@ -566,18 +566,23 @@ export class App {
   });
   readonly tileTypesView = new TileTypesView({
     copy: (to, source) => {
-      try {
-        this.need().setTileType(this.episode, this.roomId, to, source);
-      } catch (error) {
-        this.setStatus(`Cannot copy the tile type: ${message(error)}`, true);
-        this.refreshEpisodeTab();
-        return;
-      }
-      this.gameChanged();
-      this.setStatus(
-        source
-          ? `Type ${hex(to)} is now type ${hex(source.of)} of ${EPISODE_NAMES[source.from] ?? ""}`
-          : `Type ${hex(to)} is free again`,
+      void this.busy(
+        source ? `Copying type ${hex(source.of)}…` : `Freeing type ${hex(to)}…`,
+        () => {
+          try {
+            this.need().setTileType(this.episode, this.roomId, to, source);
+          } catch (error) {
+            this.setStatus(`Cannot copy the tile type: ${message(error)}`, true);
+            this.refreshEpisodeTab();
+            return;
+          }
+          this.gameChanged();
+          this.setStatus(
+            source
+              ? `Type ${hex(to)} is now type ${hex(source.of)} of ${EPISODE_NAMES[source.from] ?? ""}`
+              : `Type ${hex(to)} is free again`,
+          );
+        },
       );
     },
     copyTexts: (copy, entries) => {
@@ -595,33 +600,40 @@ export class App {
   });
   readonly eventsView = new EventsView({
     copy: (entry, source) => {
-      try {
-        this.need().copyEvent(this.episode, this.roomId, entry, source);
-      } catch (error) {
-        this.setStatus(`Cannot copy the event: ${message(error)}`, true);
-        this.refreshEpisodeTab();
-        return;
-      }
-      this.gameChanged();
-      this.setStatus(
-        source
-          ? `Entry ${entry} is now entry ${source.of} of ${EPISODE_NAMES[source.from] ?? ""}`
-          : `Entry ${entry} is as the exe has it again`,
+      void this.busy(
+        source ? `Copying event entry ${source.of}…` : `Resetting entry ${entry}…`,
+        () => {
+          try {
+            this.need().copyEvent(this.episode, this.roomId, entry, source);
+          } catch (error) {
+            this.setStatus(`Cannot copy the event: ${message(error)}`, true);
+            this.refreshEpisodeTab();
+            return;
+          }
+          this.gameChanged();
+          this.setStatus(
+            source
+              ? `Entry ${entry} is now entry ${source.of} of ${EPISODE_NAMES[source.from] ?? ""}`
+              : `Entry ${entry} is as the exe has it again`,
+          );
+        },
       );
     },
   });
   readonly kitsView = new KitsView({
     add: (kit, events) => {
       const name = EPISODE_NAMES[this.episode] ?? "";
-      try {
-        if (!this.need().addKit(this.episode, this.roomId, kit, events)) return;
-      } catch (error) {
-        this.setStatus(`Cannot add the ${kit.name.toLowerCase()}: ${message(error)}`, true);
-        this.refreshEpisodeTab();
-        return;
-      }
-      this.gameChanged();
-      this.setStatus(`${kit.name} of ${EPISODE_NAMES[kit.from] ?? ""} added to ${name}`);
+      void this.busy(`Adding the ${kit.name.toLowerCase()}…`, () => {
+        try {
+          if (!this.need().addKit(this.episode, this.roomId, kit, events)) return;
+        } catch (error) {
+          this.setStatus(`Cannot add the ${kit.name.toLowerCase()}: ${message(error)}`, true);
+          this.refreshEpisodeTab();
+          return;
+        }
+        this.gameChanged();
+        this.setStatus(`${kit.name} of ${EPISODE_NAMES[kit.from] ?? ""} added to ${name}`);
+      });
     },
     example: (kit) => {
       const clip = this.need().kitExample(this.episode, this.roomId, kit);
@@ -2315,15 +2327,56 @@ export class App {
     copies: readonly { to: number; source: TextSource | undefined }[],
     done: string,
   ): void {
-    try {
-      if (!this.need().setTextCopies(this.episode, this.roomId, copies)) return;
-    } catch (error) {
-      this.setStatus(`Cannot copy the text: ${message(error)}`, true);
-      this.refreshEpisodeTab();
-      return;
-    }
-    this.gameChanged();
-    this.setStatus(done);
+    void this.busy("Copying texts…", () => {
+      try {
+        if (!this.need().setTextCopies(this.episode, this.roomId, copies)) return;
+      } catch (error) {
+        this.setStatus(`Cannot copy the text: ${message(error)}`, true);
+        this.refreshEpisodeTab();
+        return;
+      }
+      this.gameChanged();
+      this.setStatus(done);
+    });
+  }
+
+  /** The side panel's slow work under way (busy); resolved once it is done. */
+  private work: Promise<void> = Promise.resolve();
+
+  /**
+   * Runs slow work (a new base: tile types, events, texts and kits copied take a
+   * second) with the side panel locked (inert) and dimmed and `what` in the status
+   * line, which the browser paints first. The panel unlocks only in a later task, so
+   * clicks made while the work ran land on it locked and are dropped. While locked,
+   * another call does nothing.
+   */
+  private busy(what: string, work: () => void): Promise<void> {
+    const panel = this.sidePanel.element;
+    if (panel.inert) return this.work;
+    panel.inert = true;
+    panel.classList.add("busy");
+    this.setStatus(what);
+    const task = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+    this.work = (async () => {
+      // after the next frame (or a moment, where frames do not come: a hidden page)
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => void task().then(resolve));
+        setTimeout(resolve, 100);
+      });
+      try {
+        work();
+      } finally {
+        await task();
+        panel.inert = false;
+        panel.classList.remove("busy");
+      }
+    })();
+    return this.work;
+  }
+
+  /** Resolves once the side panel's slow work is done (busy). */
+  idle(): Promise<void> {
+    return this.work;
   }
 
   /** The Episode tab: where the episode starts, its dealer and the rooms he appears in. */

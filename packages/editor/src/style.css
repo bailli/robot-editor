@@ -1541,3 +1541,9 @@ button.link {
   align-items: center;
   gap: 4px;
 }
+
+/* slow work under way (App.busy): the side panel is locked */
+.side-panel.busy {
+  opacity: 0.6;
+  cursor: progress;
+}
