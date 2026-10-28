@@ -341,7 +341,10 @@ def serve(exe=EXE, port=None):
     if stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode):
         # a driver's pipe: when it closes (the driver ended, also by a crash), so do we
         def watch():
-            sys.stdin.buffer.read()
+            # os.read, not sys.stdin: a thread blocked in the buffered reader makes Python
+            # abort at exit (it cannot take the reader's lock)
+            while os.read(0, 4096):
+                pass
             os.kill(os.getpid(), signal.SIGTERM)
 
         threading.Thread(target=watch, daemon=True).start()
