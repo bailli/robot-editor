@@ -253,7 +253,9 @@ Files in `packages/formats/src`:
   in and out (room changes), expert fields (the score). An overlay object (the game's
   type 1 record) is asked first, the base only if it lets him on; a teleporter with a
   condition depends on the rucksack, one with byte 1 bit 0 always takes him, otherwise
-  the cell a record shows decides.
+  the cell a record shows decides. Rated is the room as entered: what the player changes
+  is left out, e.g. in III trees cut down with the axe give wood for bridges over water
+  or, for a while, over lava (known from playing, not traced in the code).
 - **The driver** (`driver.ts`, the proxy `tools/wine/proxy/proxy.c`, started by
   `harness.py serve`): the proxy replaces the system ddraw.dll next to the exe
   (`WINEDLLOVERRIDES=ddraw=n,b`; it forwards every export, as Wine's DxDiag, the game's
