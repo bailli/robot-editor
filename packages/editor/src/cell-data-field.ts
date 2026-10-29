@@ -35,6 +35,8 @@ export interface CellDataFieldEvents {
    * and a right-click paints with them (useTile).
    */
   tile?: () => number;
+  /** The first note message without a text that no note shows (Editor.freeNoteMessage). */
+  freeMessage(): number | undefined;
   /** Makes a tile the one painted with. */
   useTile?: (value: number) => void;
 }
@@ -183,9 +185,25 @@ export class CellDataField {
     stepLabel.title =
       "Drawn as a note and read on the spot; otherwise the hero picks it up (old writing, in IV a cassette)";
     const edit = this.editButton();
+    const create = button(
+      "New",
+      "Take the first message from 800 on that has no text and no note shows, and write it",
+      () => {
+        const free = this.events.freeMessage();
+        if (free === undefined) {
+          this.events.refused(
+            `every message from ${FIRST_NOTE_MESSAGE} to ${LAST_NOTE_MESSAGE} has a text or a note`,
+          );
+          return;
+        }
+        this.set({ kind: "note", message: free, read: step.checked ? "step" : "carry" });
+        this.events.editText(textsId(this.episode), free);
+      },
+    );
+    create.setAttribute("aria-label", "New message");
     return {
       kind: "note",
-      nodes: [row("Message", message, edit.button), stepLabel],
+      nodes: [row("Message", message, edit.button, create), stepLabel],
       update: (data) => {
         if (data.kind !== "note") return;
         message.value = String(data.message);

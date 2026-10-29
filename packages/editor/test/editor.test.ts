@@ -38,6 +38,7 @@ import {
   serializeRoom,
   sha256,
   tangramTile,
+  textsId,
 } from "@robot/formats";
 
 import {
@@ -179,6 +180,23 @@ test("the palette offers one tile per look of a class that keeps data in its sta
     ["3a", "903a"],
     ["93a", "8f3a"],
   ]);
+});
+
+test("a new note message: the first from 800 on without a text that no note shows", () => {
+  const editor = new Editor(game);
+  const free = defined(editor.freeNoteMessage(1));
+  expect(free).toBeGreaterThanOrEqual(800);
+  expect(editor.textEntry(textsId(1), free)).toBeUndefined();
+  for (let m = 800; m < free; m++) expect(editor.textEntry(textsId(1), m)).toBeDefined();
+  // written, it is taken
+  editor.setText(1, 43, textsId(1), free, ["Ein neuer Zettel."]);
+  const next = defined(editor.freeNoteMessage(1));
+  expect(next).toBeGreaterThan(free);
+  // shown by a note, it is taken too (its text still to be written)
+  editor.beginStroke(1, 43, "overlay");
+  editor.paint(0, 0x3a | ((next - 800) << 8));
+  editor.endStroke();
+  expect(defined(editor.freeNoteMessage(1))).toBeGreaterThan(next);
 });
 
 describe("Editor records", () => {

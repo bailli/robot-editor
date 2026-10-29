@@ -1888,6 +1888,7 @@ export class App {
         this.editText(resource, entry);
       },
       preview: (value) => this.tileCanvas(value),
+      freeMessage: () => this.need().freeNoteMessage(this.episode),
       typeName: (type) => {
         const summary = this.names().summary(type);
         return summary.length > 40 ? `${summary.slice(0, 39)}…` : summary;

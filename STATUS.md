@@ -784,7 +784,8 @@ From the code only; no ending has been played through or tried in the game.
   cell, II's present holding a robot lets a robot appear (which kills the hero), one
   holding an electric fence shows 951 and costs a life (the hero starts again). The first
   opening brings a bonus ("Sieh einer an, das Päckchen läßt sich tatsächlich öffnen!…",
-  1500 points in II and III).
+  1500 points in II and III). Packages with contents changed in the editor were tried
+  in the game by the user (2026-10-29): they give what the editor put inside.
 - **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
   1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
   class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
@@ -1185,14 +1186,16 @@ Supported:
   contents (a tile type with a class; an electric fence is flagged), a note's message
   (800–927) and whether it is read when stepped on (bit 7), a diary page, an expert
   field's points (steps of 10,000 up to 2,550,000) and a letter's character (printable
-  ASCII; bit 7 kept). A field under the current tile sets it for painting, one in the
-  Record tab changes the selected cell (base and overlay, one undo step; a click on a
-  package's contents puts the current tile's type inside, a right-click paints with them);
-  ✎ opens a note's message or a diary page in the Texts tab. The current tile's preview
-  and the recent tiles draw a package's contents small in its corner (the room view draws
-  the package as the game does). The palette offers these classes in one tile per look
-  (rendered pixels: one package, one expert field, a note and old writing, each letter)
-  instead of every state the rooms use
+  ASCII; bit 7 kept). A field under the current tile sets it
+  for painting, one in the Record tab changes the selected cell (base and overlay, one
+  undo step; a click on a package's contents puts the current tile's type inside, a
+  right-click paints with them); ✎ opens a note's message or a diary page in the Texts tab
+  (an entry not there yet is created when written), "New" takes the first message from 800
+  on that has no text and no note shows (`Editor.freeNoteMessage`) and opens it there. The
+  current tile's preview and the recent tiles draw a package's contents small in its
+  corner (the room view draws the package as the game does). The palette offers these
+  classes in one tile per look (rendered pixels: one package, one expert field, a note and
+  old writing, each letter) instead of every state the rooms use
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
   inspector with the record's fields per type (cells with previews: click takes the
   current tile, right-click paints with the cell; target room with

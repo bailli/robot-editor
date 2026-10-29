@@ -65,6 +65,14 @@ test("the current tile's preview draws what a package holds on it", () => {
   expect(held()).toHaveLength(0);
 });
 
+test("New takes a note message without a text and opens it in the Texts tab", async () => {
+  app.setTile(0x813a);
+  const free = defined(defined(app.editor).freeNoteMessage(1));
+  await tiles().getByRole("button", { name: "New message" }).click();
+  expect(app.tile).toBe(0x3a | ((0x80 | (free - 800)) << 8)); // still read on the spot
+  expect(app.textsView.opened).toEqual({ resource: textsId(1), entry: free });
+});
+
 test("other tiles have no data", async () => {
   app.setTile(0x0000);
   await expect.element(tiles().getByRole("spinbutton")).not.toBeInTheDocument();

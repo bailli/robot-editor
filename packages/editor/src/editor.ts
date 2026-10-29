@@ -16,10 +16,12 @@ import {
   type EventChange,
   type ExitMode,
   FIRST_EVENT_ENTRY,
+  FIRST_NOTE_MESSAGE,
   GRID_STEP,
   Game,
   type Kit,
   type KitPlan,
+  LAST_NOTE_MESSAGE,
   LOGIC_CELL,
   type LogicRecord,
   MAX_ROOMS,
@@ -2200,6 +2202,27 @@ export class Editor {
   /** An entry of a text resource as edited (its variants), undefined if it has none. */
   textEntry(id: number, entry: number): readonly string[] | undefined {
     return this.textEntries(id)?.entries.get(entry);
+  }
+
+  /**
+   * The first note message (800–927) of an episode that has no text and that no note in
+   * its rooms shows, undefined if there is none.
+   */
+  freeNoteMessage(episode: number): number | undefined {
+    const texts = this.textEntries(textsId(episode))?.entries;
+    const { classes } = this.game.episode(episode);
+    const used = new Set(
+      this.rooms(episode).flatMap((room) =>
+        [...room.base, ...room.overlay].flatMap((cell) => {
+          const data = cellData(cell, classes);
+          return data?.kind === "note" ? [data.message] : [];
+        }),
+      ),
+    );
+    for (let message = FIRST_NOTE_MESSAGE; message <= LAST_NOTE_MESSAGE; message++) {
+      if (!texts?.has(message) && !used.has(message)) return message;
+    }
+    return undefined;
   }
 
   /** The parsed entries of a text resource as edited, undefined if the exe has none. */
