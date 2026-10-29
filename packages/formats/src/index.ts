@@ -249,17 +249,22 @@ export type { TextPiece, Texts } from "./texts.ts";
 export {
   DIARY_PAGE_CLASS,
   EXPERT_CLASS,
+  FIRST_NOTE_MESSAGE,
+  LAST_NOTE_MESSAGE,
   NOTE_CLASS,
   NO_DESCRIPTION,
   PACKAGE_CLASS,
+  POINTS_PER_STATE,
+  cellData,
   describeCell,
   descriptionTexts,
   knowsDescribeMethod,
   noteText,
   packageContents,
   requiredPoints,
+  withCellData,
 } from "./describe.ts";
-export type { CellDescription, NoteText } from "./describe.ts";
+export type { CellData, CellDescription, NoteText } from "./describe.ts";
 export {
   TANGRAM_CLASS,
   TANGRAM_TILE,

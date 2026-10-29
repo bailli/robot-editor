@@ -1,3 +1,4 @@
+import { LETTER_CLASS } from "./circuits.ts";
 import type { EpisodeClasses } from "./classes.ts";
 import { TELEPORTER_RECORD } from "./exits.ts";
 import { LOGIC_CELL, type Room } from "./scene.ts";
@@ -29,15 +30,8 @@ export const NO_DESCRIPTION = 510;
 
 /** The "expert" field (class 66, tile 0x32 in episodes I, II and IV). */
 export const EXPERT_CLASS = 66;
-
-/**
- * The points the hero needs to cross a cell, if it is an expert field: its state × 10,000
- * (0x4264f0: score / 10000 ≥ state; else message 508, "Du brauchst mindestens %ld
- * Punkte…").
- */
-export function requiredPoints(cell: number, classes: EpisodeClasses): number | undefined {
-  return classes.classes.get(cell & 0xff)?.id === EXPERT_CLASS ? (cell >> 8) * 10000 : undefined;
-}
+/** Points per unit of an expert field's state. */
+export const POINTS_PER_STATE = 10000;
 
 /** Notes (Junior type 15; episodes I, II and IV type 58). */
 export const NOTE_CLASS = 15;
@@ -45,6 +39,103 @@ export const NOTE_CLASS = 15;
 export const DIARY_PAGE_CLASS = 164;
 /** Packages (type 94): episode II's presents, III's chests, IV's crates. */
 export const PACKAGE_CLASS = 109;
+/** The first note message: a note shows message FIRST_NOTE_MESSAGE + (state & 0x7f). */
+export const FIRST_NOTE_MESSAGE = 800;
+/** The last note message there can be. */
+export const LAST_NOTE_MESSAGE = FIRST_NOTE_MESSAGE + 0x7f;
+
+/**
+ * What a cell keeps in its state besides how it looks:
+ * - package: the tile type inside (see packageContents)
+ * - note: its message, read when stepped on or carried (see noteText)
+ * - diary: the page, an entry of resource 1320 (see noteText)
+ * - expert: the points the hero needs to cross it (see requiredPoints)
+ * - letter: the character, drawn with glyph `code & 0x7f` of the game font (bit 7 is
+ *   set on one of episode I's letters, meaning unknown)
+ */
+export type CellData =
+  | { kind: "package"; type: number }
+  | { kind: "note"; message: number; read: "step" | "carry" }
+  | { kind: "diary"; page: number }
+  | { kind: "expert"; points: number }
+  | { kind: "letter"; code: number };
+
+/** The data a cell keeps in its state (CellData), undefined for other classes. */
+export function cellData(cell: number, classes: EpisodeClasses): CellData | undefined {
+  const state = cell >> 8;
+  switch (classes.classes.get(cell & 0xff)?.id ?? 0) {
+    case PACKAGE_CLASS:
+      return { kind: "package", type: state };
+    case NOTE_CLASS:
+      return {
+        kind: "note",
+        message: FIRST_NOTE_MESSAGE + (state & 0x7f),
+        read: state & 0x80 ? "step" : "carry",
+      };
+    case DIARY_PAGE_CLASS:
+      return { kind: "diary", page: state };
+    case EXPERT_CLASS:
+      return { kind: "expert", points: state * POINTS_PER_STATE };
+    case LETTER_CLASS:
+      return { kind: "letter", code: state };
+    default:
+      return undefined;
+  }
+}
+
+/** The state that holds `data`; throws a RangeError where no state can. */
+function dataState(data: CellData): number {
+  const byte = (value: number, what: string) => {
+    if (!Number.isInteger(value) || value < 0 || value > 0xff)
+      throw new RangeError(`${what} ${value} does not fit in a state (0–255)`);
+    return value;
+  };
+  switch (data.kind) {
+    case "package":
+      return byte(data.type, "tile type");
+    case "note":
+      if (
+        !Number.isInteger(data.message) ||
+        data.message < FIRST_NOTE_MESSAGE ||
+        data.message > LAST_NOTE_MESSAGE
+      )
+        throw new RangeError(
+          `a note shows a message from ${FIRST_NOTE_MESSAGE} to ${LAST_NOTE_MESSAGE}, not ${data.message}`,
+        );
+      return (data.message - FIRST_NOTE_MESSAGE) | (data.read === "step" ? 0x80 : 0);
+    case "diary":
+      return byte(data.page, "page");
+    case "expert":
+      if (data.points % POINTS_PER_STATE !== 0)
+        throw new RangeError(`points go in steps of ${POINTS_PER_STATE}, not ${data.points}`);
+      return byte(data.points / POINTS_PER_STATE, "points / 10,000");
+    case "letter":
+      return byte(data.code, "character");
+  }
+}
+
+/**
+ * `cell` holding `data` in its state (the class byte stays); throws a RangeError where no
+ * state can hold it or the cell's class keeps other data.
+ */
+export function withCellData(cell: number, data: CellData, classes: EpisodeClasses): number {
+  const kind = cellData(cell, classes)?.kind;
+  if (kind !== data.kind)
+    throw new RangeError(
+      `cell 0x${cell.toString(16)} holds ${kind ?? "no data"}, not ${data.kind}`,
+    );
+  return (cell & 0xff) | (dataState(data) << 8);
+}
+
+/**
+ * The points the hero needs to cross a cell, if it is an expert field: its state × 10,000
+ * (0x4264f0: score / 10000 ≥ state; else message 508, "Du brauchst mindestens %ld
+ * Punkte…").
+ */
+export function requiredPoints(cell: number, classes: EpisodeClasses): number | undefined {
+  const data = cellData(cell, classes);
+  return data?.kind === "expert" ? data.points : undefined;
+}
 
 /** What a note or diary page says (see noteText). */
 export interface NoteText {
@@ -68,11 +159,9 @@ export interface NoteText {
  * 0x40b370) and mark it read (bit `state` of 0x4fe3c8).
  */
 export function noteText(cell: number, classes: EpisodeClasses): NoteText | undefined {
-  const id = classes.classes.get(cell & 0xff)?.id;
-  const state = cell >> 8;
-  if (id === DIARY_PAGE_CLASS) return { text: state, read: "diary" };
-  if (id !== NOTE_CLASS) return undefined;
-  return { text: 800 + (state & 0x7f), read: state & 0x80 ? "step" : "carry" };
+  const data = cellData(cell, classes);
+  if (data?.kind === "diary") return { text: data.page, read: "diary" };
+  return data?.kind === "note" ? { text: data.message, read: data.read } : undefined;
 }
 
 /**
@@ -81,7 +170,8 @@ export function noteText(cell: number, classes: EpisodeClasses): NoteText | unde
  * an electric fence (class 7) kills the hero (message 951). 0x414150.
  */
 export function packageContents(cell: number, classes: EpisodeClasses): number | undefined {
-  return classes.classes.get(cell & 0xff)?.id === PACKAGE_CLASS ? cell >> 8 : undefined;
+  const data = cellData(cell, classes);
+  return data?.kind === "package" ? data.type : undefined;
 }
 
 type Rule = (state: number, episode: number) => number | readonly number[] | "random";

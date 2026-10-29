@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 import { expect, test } from "vitest";
 
 import {
+  cellData,
   describeCell,
   descriptionTexts,
   knowsDescribeMethod,
   noteText,
   packageContents,
   requiredPoints,
+  withCellData,
 } from "../src/describe.ts";
 import { EPISODES, Game, roomNamesId } from "../src/game.ts";
 import { displayText } from "../src/texts.ts";
@@ -122,4 +124,54 @@ test("packages hold the tile type in their state", () => {
       }
     }
   }
+});
+
+test("the data a cell keeps in its state", () => {
+  expect(cellData(0x695e, game.episode(3).classes)).toEqual({ kind: "package", type: 0x69 });
+  expect(cellData(0x8e0f, game.episode(0).classes)).toEqual({
+    kind: "note",
+    message: 814,
+    read: "step",
+  });
+  expect(cellData(0x043a, game.episode(3).classes)).toEqual({ kind: "diary", page: 4 });
+  expect(cellData(0x0c32, game.episode(1).classes)).toEqual({ kind: "expert", points: 120000 });
+  expect(cellData(0x4125, game.episode(1).classes)).toEqual({ kind: "letter", code: 0x41 });
+  expect(cellData(0x0132, game.episode(0).classes)).toBeUndefined();
+  // every cell of the game reads back as it was
+  for (const episode of EPISODES) {
+    const { rooms, classes } = game.episode(episode);
+    for (const room of rooms) {
+      for (const cell of new Set([...room.base, ...room.overlay])) {
+        const data = cellData(cell, classes);
+        if (data) expect(withCellData(cell, data, classes)).toBe(cell);
+      }
+    }
+  }
+});
+
+test("data is written into the state", () => {
+  const ii = game.episode(2).classes;
+  expect(withCellData(0x025e, { kind: "package", type: 0x13 }, ii)).toBe(0x135e);
+  expect(withCellData(0x013a, { kind: "note", message: 927, read: "step" }, ii)).toBe(0xff3a);
+  expect(withCellData(0x8f3a, { kind: "note", message: 800, read: "carry" }, ii)).toBe(0x003a);
+  expect(withCellData(0x0132, { kind: "expert", points: 2550000 }, ii)).toBe(0xff32);
+  expect(withCellData(0x4125, { kind: "letter", code: 0x3f }, ii)).toBe(0x3f25);
+  const iii = game.episode(3).classes;
+  expect(withCellData(0x043a, { kind: "diary", page: 0x92 }, iii)).toBe(0x923a);
+});
+
+test("data no state can hold is refused", () => {
+  const ii = game.episode(2).classes;
+  const refused = (cell: number, data: Parameters<typeof withCellData>[1]) => {
+    expect(() => withCellData(cell, data, ii)).toThrow(RangeError);
+  };
+  refused(0x013a, { kind: "note", message: 799, read: "carry" });
+  refused(0x013a, { kind: "note", message: 928, read: "carry" });
+  refused(0x0132, { kind: "expert", points: 15000 });
+  refused(0x0132, { kind: "expert", points: 2560000 });
+  refused(0x025e, { kind: "package", type: 0x100 });
+  refused(0x4125, { kind: "letter", code: -1 });
+  // the class keeps other data, or none
+  refused(0x025e, { kind: "expert", points: 10000 });
+  refused(0x0000, { kind: "letter", code: 0x41 });
 });
