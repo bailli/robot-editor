@@ -14,6 +14,14 @@ export interface TextsViewEvents {
   write(resource: number, entry: number, variants: readonly string[] | undefined): boolean;
   /** The picture of a tile the game draws in a text (`@14`). */
   preview(value: number): Node;
+  /** Shows side panel tab `tab` again (where a jump came from, see TextsView.jump). */
+  back(tab: string): void;
+}
+
+/** Where a jump to an entry came from: the side panel's tab and its label. */
+export interface TextOrigin {
+  tab: string;
+  label: string;
 }
 
 /** A text resource of the episode the tab lists. */
@@ -111,6 +119,8 @@ export class TextsView {
    * draft started from: a draft not typed in follows the entry (undo, redo).
    */
   private open: OpenEntry | undefined;
+  /** Where the open entry was jumped to from (jump). */
+  private from: TextOrigin | undefined;
   /** The copy form's choices: source episode, source entry, target entry. */
   private choice: { episode: number; from: number; of: number; to: number } | undefined;
 
@@ -125,6 +135,7 @@ export class TextsView {
     this.resource = undefined;
     this.search = "";
     this.open = undefined;
+    this.from = undefined;
   }
 
   /** Whether an entry is open (else the list is shown). */
@@ -143,18 +154,41 @@ export class TextsView {
     const variants = this.context ? this.state({ resource, entry })?.variants : undefined;
     this.open = { resource, entry, draft: variants ? [...variants] : [""], basis: variants };
     this.resource = resource;
+    this.from = undefined;
     this.refresh();
+  }
+
+  /**
+   * Opens an entry from elsewhere in the editor, with a way back to `from` (none: the
+   * tab itself). False while another entry's draft is not applied: that one stays open.
+   */
+  jump(resource: number, entry: number, from: TextOrigin | undefined): boolean {
+    const open = this.open;
+    const same = open?.resource === resource && open.entry === entry;
+    if (!same && this.drafting) return false;
+    if (!same) this.openEntry(resource, entry);
+    this.from = from;
+    this.refresh();
+    return true;
+  }
+
+  /** The entry open, if one is. */
+  get opened(): { resource: number; entry: number } | undefined {
+    const open = this.open;
+    return open && { resource: open.resource, entry: open.entry };
   }
 
   /** Back to the list, the draft dropped. */
   close(): void {
     this.open = undefined;
+    this.from = undefined;
     this.refresh();
   }
 
   show(context: TextsContext): void {
     if (this.context?.episode !== context.episode) {
       this.open = undefined;
+      this.from = undefined;
       this.resource = undefined;
     }
     this.context = context;
@@ -282,6 +316,19 @@ export class TextsView {
     const bar = element("div", "start-bar");
     bar.dataset["key"] = "back";
     bar.append(back);
+    const from = this.from;
+    if (from) {
+      const to = button(
+        `← ${from.label}`,
+        `Back to the ${from.label} tab, the text kept open`,
+        () => {
+          if (this.from) this.events.back(this.from.tab);
+        },
+      );
+      // keyed by where it leads: a kept button keeps its listener
+      to.dataset["key"] = from.tab;
+      bar.append(to);
+    }
     const nodes: Node[] = [bar, element("h3", undefined, `Text ${entry}`), note("role", role)];
     nodes.push(note("origin", origin(state, context.names)));
 

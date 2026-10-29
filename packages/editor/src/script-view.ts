@@ -41,6 +41,12 @@ export interface ScriptViewEvents {
   names(): readonly ScriptName[];
   /** Editing began or ended, or the draft changed (see ScriptView.drafting). */
   drafted?(): void;
+  /**
+   * Ctrl+click on a number that is argument `index` of a call to `fn` (`args` as for
+   * argument): opens what it names, e.g. a message's text; false if it names nothing
+   * to open.
+   */
+  follow?(fn: string, index: number, args: readonly (number | undefined)[]): boolean;
 }
 
 /** A name of the game: a function (one per argument count), a variable or a constant. */
@@ -66,6 +72,8 @@ interface Shown {
   title?: string;
   /** For function names: the call. */
   call?: ScriptCall;
+  /** For numbers that are a whole argument of a call: which one. */
+  argument?: { fn: string; index: number; args: (number | undefined)[] };
 }
 
 /** The arguments of the call whose "(" is code[open], as numbers where they are one. */
@@ -134,8 +142,10 @@ export function markUp(source: string, events: ScriptViewEvents): Shown[] {
         (text(start - 1) === "(" || text(start - 1) === ",") &&
         (text(i + 1) === ")" || text(i + 1) === ",");
       if (frame?.fn && whole) {
-        const title = events.argument(frame.fn, frame.arg, callArguments(code, frame.open));
+        const args = callArguments(code, frame.open);
+        const title = events.argument(frame.fn, frame.arg, args);
         if (title) shown.title = title;
+        shown.argument = { fn: frame.fn, index: frame.arg, args };
       }
     }
     return shown;
@@ -527,6 +537,21 @@ export class ScriptView {
           },
           mouseleave: () => {
             this.events.hover(undefined, []);
+          },
+          // Ctrl+click on an argument: what it names, e.g. a message's text
+          mousedown: (event, view) => {
+            if (!(event.ctrlKey || event.metaKey) || !this.events.follow) return false;
+            const at = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            if (at === null) return false;
+            const argument = view.state
+              .field(field)
+              .shown.find(
+                (s) => s.piece.at <= at && at <= s.piece.at + s.piece.text.length,
+              )?.argument;
+            if (!argument) return false;
+            if (!this.events.follow(argument.fn, argument.index, argument.args)) return false;
+            event.preventDefault();
+            return true;
           },
         }),
         EditorView.editorAttributes.of({ class: "script-source" }),

@@ -356,6 +356,8 @@ export interface RecordViewEvents {
   useTile(value: number): void;
   /** The episode's text `id` as one paragraph, undefined if it has none. */
   text(id: number): string | undefined;
+  /** Opens the episode's text `id` for writing (the Texts tab). */
+  editText(id: number): void;
   /** The name of an actor kind (0x100 + n). */
   actor: ActorName;
 }
@@ -495,6 +497,24 @@ export class RecordView {
     );
   }
 
+  /** Text `id` as the game shows it, and a button that opens it for writing. */
+  private textNodes(id: number): HTMLElement[] {
+    const text = this.events.text(id);
+    const shown = element("span", "record-text", text ?? "(none in this episode)");
+    shown.title = text === undefined ? `text ${id}` : `text ${id}: ${text}`;
+    const edit = element("button", "text-jump", "✎");
+    edit.type = "button";
+    edit.title = `Write text ${id} (the Texts tab)`;
+    edit.setAttribute("aria-label", `Write text ${id}`);
+    // read when clicked: a kept button keeps its listener (patchChildren)
+    edit.dataset["text"] = String(id);
+    edit.addEventListener("click", (event) => {
+      event.preventDefault(); // inside the label: do not focus the input
+      this.events.editText(Number(edit.dataset["text"]));
+    });
+    return [shown, edit];
+  }
+
   private field(field: Field): HTMLElement {
     const data = this.data;
     const value = field.get(data);
@@ -532,11 +552,8 @@ export class RecordView {
     if (field.shown) {
       // set by other fields: the value as text, with what it names
       const shown = element("span", "record-value", String(value));
-      const text = textId === undefined ? undefined : this.events.text(textId);
-      const named = element("span", "record-text", text ?? "(none in this episode)");
-      named.title =
-        text === undefined ? `text ${String(textId)}` : `text ${String(textId)}: ${text}`;
-      return labelled(field.label, shown, field.hint, named);
+      const named = textId === undefined ? [] : this.textNodes(textId);
+      return labelled(field.label, shown, field.hint, ...named);
     }
     const input = element("input", "record-field");
     input.setAttribute("aria-label", field.label);
@@ -569,13 +586,7 @@ export class RecordView {
       });
       extras.push(preview);
     }
-    if (textId !== undefined) {
-      // the text the field names, as the game shows it
-      const text = this.events.text(textId);
-      const shown = element("span", "record-text", text ?? "(none in this episode)");
-      shown.title = text === undefined ? `text ${textId}` : `text ${textId}: ${text}`;
-      extras.push(shown);
-    }
+    if (textId !== undefined) extras.push(...this.textNodes(textId));
     if (field.kind === "room" && value !== 0) {
       const go = element("button", undefined, "Go");
       go.addEventListener("click", () => {

@@ -1684,3 +1684,9 @@ button.link {
 .texts-view .error {
   color: var(--error);
 }
+
+/* a button that opens a text in the Texts tab */
+.text-jump {
+  flex: none;
+  padding: 0 5px;
+}

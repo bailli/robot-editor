@@ -2,6 +2,7 @@ import {
   ACTOR_CLASS_NAMES,
   type EpisodeClasses,
   type Game,
+  NO_DESCRIPTION,
   type Room,
   describeCell,
   descriptionTexts,
@@ -29,6 +30,14 @@ export interface TileInfo {
   texts: string[];
   /** Whether the game picks one of several descriptions. */
   random: boolean;
+}
+
+/** A text entry a cell shows (TileNames.cellTexts). */
+export interface CellText {
+  resource: number;
+  entry: number;
+  /** What it is to the cell, e.g. "description". */
+  what: string;
 }
 
 /** Names and descriptions of an episode's cells, as the game picks them. */
@@ -97,6 +106,30 @@ export class TileNames {
       diary: `Diary page ${note.text}:`,
     }[note.read];
     return [`${how} ${displayText(text)}`];
+  }
+
+  /**
+   * The text entries a cell shows, by resource: its description (the entry its class
+   * describes it with; without one the game shows NO_DESCRIPTION), a note's message or
+   * a diary page. `room` describes logic cells by their records.
+   */
+  cellTexts(value: number, room?: Room): CellText[] {
+    const texts: CellText[] = [];
+    const ownTexts = textsId(this.episode);
+    const description = describeCell(value, this.classes, this.episode, room);
+    if (description) {
+      const has = this.entries(ownTexts)?.has(description.text) === true;
+      texts.push({
+        resource: ownTexts,
+        entry: description.text,
+        what: has ? "description" : `description (none: text ${NO_DESCRIPTION} shows)`,
+      });
+    }
+    const note = noteText(value, this.classes);
+    if (note?.read === "diary")
+      texts.push({ resource: roomNamesId(this.episode), entry: note.text, what: "diary page" });
+    else if (note) texts.push({ resource: ownTexts, entry: note.text, what: "message" });
+    return texts;
   }
 
   /** A tooltip: value, name and the descriptions. */

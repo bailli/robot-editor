@@ -1239,7 +1239,13 @@ Supported:
   the game reads a line break as a space); refused (`textWriteProblem`): `|`, `;`, a line
   starting like a header, characters outside CP437, empty variants, room texts longer
   than the game reads (999). Room names, descriptions, tile descriptions, notes, hints
-  and script hovers show the texts as written
+  and script hovers show the texts as written. **Jumps** open an entry in the tab from
+  where it is shown (`App.editText`; "← <tab>" goes back, the entry kept open; refused
+  while another entry's draft is not applied): ✎ next to a record's text (an oracle's
+  hint, a teleporter's message), "Texts of the cell" in the Record tab (the selected
+  cell's description, a note's message, a diary page, base and overlay;
+  `TileNames.cellTexts`), Ctrl+click on a script's text or Enigma number, ✎ on an event
+  copied from another episode (its text 1800 + n)
 - texts from other episodes (tab Texts, below the entries; mod kind `copyTexts` into the
   episode's texts, `textsId`): the copies (entry ← episode and entry, the text's start),
   each removable (×); a form: the episode, an entry of its texts as loaded (number),

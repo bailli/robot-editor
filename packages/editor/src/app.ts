@@ -332,6 +332,12 @@ export class App {
       "Click a magenta cell, or any cell with the Inspect tool, to see its logic record here (Escape: back to this list).",
     ),
   );
+  /** The texts the selected cell shows, each opened for writing with a click. */
+  private readonly cellTexts = h("section", {
+    class: "record-view cell-texts",
+    "aria-label": "Texts of the cell",
+    hidden: true,
+  });
   private mapShown = false;
   private actors: RoomActor[] = [];
   /** Each episode's `_Aliens` sprites that have frames (robots take them in turn). */
@@ -462,6 +468,11 @@ export class App {
   readonly scriptView = new ScriptView({
     explain: (name) => this.explain(name),
     argument: (fn, index, args) => this.explainArgument(fn, index, args),
+    follow: (fn, index, args) => {
+      const text = this.argumentText(fn, index, args);
+      if (text) this.editText(text.resource, text.entry);
+      return text !== undefined;
+    },
     compile: (source) => {
       const game = this.need().game;
       const options = {
@@ -523,6 +534,9 @@ export class App {
       const texts = this.need().textEntry(textsId(this.episode), id);
       const tile = (v: number) => this.names().tileName(v);
       return texts?.map((t) => displayText(t, tile)).join(" – or – ");
+    },
+    editText: (id) => {
+      this.editText(textsId(this.episode), id);
     },
     actor: (kind) =>
       actorKindName(kind, this.episode) ?? `no known actor (kind 0x${kind.toString(16)})`,
@@ -619,6 +633,9 @@ export class App {
         },
       );
     },
+    editText: (entry) => {
+      this.editText(eventTextsId(this.episode), EVENT_TEXT + entry);
+    },
   });
   readonly codeView = new CodeView({
     add: (va, bytes) => {
@@ -669,6 +686,9 @@ export class App {
     },
     write: (resource, entry, variants) => this.writeText(resource, entry, variants),
     preview: (value) => this.cellPreview(value),
+    back: (tab) => {
+      this.sidePanel.show(tab);
+    },
   });
   /** Per episode of the exe as loaded: its cells and names, for the types to copy. */
   private readonly sourceCaches = new Map<number, { cells: CellCache; names: TileNames }>();
@@ -890,7 +910,7 @@ export class App {
       this.newRoomDialog.element,
     );
     this.roomPane.append(this.exitsView.element, this.cellInfo, this.cellText);
-    this.recordTab.append(this.recordView.element);
+    this.recordTab.append(this.recordView.element, this.cellTexts);
     this.mapButton.textContent = "Map";
     this.mapView.element.hidden = true;
     this.wire();
@@ -2093,6 +2113,7 @@ export class App {
       this.refreshCircuit();
       // painted tile types are no longer free, copies in use cannot go
       this.refreshEpisodeTab();
+      if (this.selected) this.showCellTexts(this.selected.index);
     }
   }
 
@@ -2250,6 +2271,9 @@ export class App {
       }),
     );
     const selected = this.selected;
+    // what the selected cell shows (painting changes it)
+    if (selected) this.showCellTexts(selected.index);
+    else this.cellTexts.hidden = true;
     const value = selected ? (room[selected.layer][selected.index] ?? 0) : 0;
     const record =
       selected && (value & 0xff) === LOGIC_CELL
@@ -2617,6 +2641,63 @@ export class App {
     this.afterTextEdit();
     this.setStatus(variants ? `Text ${entry} written` : `Text ${entry} removed`);
     return true;
+  }
+
+  /** The texts the cell at `index` shows, base and overlay, with a way to write each. */
+  private showCellTexts(index: number): void {
+    const room = this.need().room(this.episode, this.roomId);
+    const rows = (["base", "overlay"] as const).flatMap((layer) => {
+      const value = room[layer][index] ?? 0;
+      if (layer === "overlay" && value === 0) return [];
+      const name = this.names().info(value, room).name;
+      return this.names()
+        .cellTexts(value, room)
+        .map(({ resource, entry, what }) => {
+          const text = this.need().textEntry(resource, entry)?.[0];
+          const shown = text === undefined ? "" : displayText(text).replace(/\s+/g, " ");
+          const label = `${layer === "base" ? "Base" : "Overlay"} ${hex(value)}${name ? ` ${name}` : ""}: ${what}, text ${entry}`;
+          const edit = h(
+            "button",
+            {
+              type: "button",
+              class: "text-jump",
+              title: `Write text ${entry} (the Texts tab)`,
+              "aria-label": `Write text ${entry}`,
+              click: () => {
+                this.editText(resource, entry);
+              },
+            },
+            "✎",
+          );
+          return h(
+            "div",
+            { class: "record-row" },
+            h("span", { class: "record-text", title: `${label}\n${shown}` }, `${label}: ${shown}`),
+            edit,
+          );
+        });
+    });
+    this.cellTexts.hidden = rows.length === 0;
+    this.cellTexts.replaceChildren(h("h3", {}, "Texts of the cell"), ...rows);
+  }
+
+  /**
+   * Opens an entry of a text resource of the shown episode in the Texts tab, with a way
+   * back to the tab shown now; refused while another entry's draft is not applied.
+   */
+  editText(resource: number, entry: number): void {
+    const tab = this.sidePanel.shown;
+    const from =
+      tab === "texts" ? undefined : { tab, label: tab.charAt(0).toUpperCase() + tab.slice(1) };
+    const jumped = this.textsView.jump(resource, entry, from);
+    this.sidePanel.show("texts");
+    if (!jumped) {
+      const open = this.textsView.opened;
+      this.setStatus(
+        `Text ${open?.entry ?? ""} has changes not applied: Apply or Cancel them first`,
+        true,
+      );
+    }
   }
 
   /** After a text edit: names, descriptions and what tells about them. */
@@ -3012,6 +3093,34 @@ export class App {
 
   /** What a number passed to a script function refers to (a text, a room), if known. */
   private explainArgument(
+    fn: string,
+    index: number,
+    args: readonly (number | undefined)[],
+  ): string | undefined {
+    const explained = this.describeArgument(fn, index, args);
+    if (explained === undefined || !this.argumentText(fn, index, args)) return explained;
+    return `${explained}\n(Ctrl+click: write this text)`;
+  }
+
+  /**
+   * The text entry a script call's argument names: a message's text, the text of an
+   * Enigma entry (1800 + n); undefined for other arguments.
+   */
+  private argumentText(
+    fn: string,
+    index: number,
+    args: readonly (number | undefined)[],
+  ): { resource: number; entry: number } | undefined {
+    const value = args[index];
+    if (value === undefined || value < 0) return undefined;
+    const kind = scriptArgument(fn, index, args.length);
+    if (kind === "text") return { resource: textsId(this.episode), entry: value };
+    if (kind === "enigma" && value < eventTableLength(this.episode))
+      return { resource: eventTextsId(this.episode), entry: EVENT_TEXT + value };
+    return undefined;
+  }
+
+  private describeArgument(
     fn: string,
     index: number,
     args: readonly (number | undefined)[],

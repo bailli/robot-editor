@@ -7,6 +7,8 @@ import { patchChildren } from "./patch.ts";
 export interface EventsViewEvents {
   /** Makes `entry` a copy of `source`, or takes its change back (Editor.copyEvent). */
   copy(entry: number, source: EventSource | undefined): void;
+  /** Opens the text of `entry` (1800 + n) for writing (the Texts tab). */
+  editText(entry: number): void;
 }
 
 /** An event of another episode that can be copied. */
@@ -86,7 +88,11 @@ export class EventsView {
         this.events.copy(Number(row.dataset["key"]), undefined);
       });
       remove.classList.add("danger");
-      row.append(text, remove);
+      const edit = button("✎", `Write the text of entry ${e.entry} (the Texts tab)`, () => {
+        this.events.editText(Number(row.dataset["key"]));
+      });
+      edit.setAttribute("aria-label", `Write the text of entry ${e.entry}`);
+      row.append(text, edit, remove);
       list.append(row);
     }
     const nodes: Node[] = [element("h3", undefined, "Events from other episodes")];

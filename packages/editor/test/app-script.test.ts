@@ -58,7 +58,7 @@ test("the script explains itself and can be edited", async () => {
   const pages = defined(game.episodeTexts(1)?.entries.get(700)).map((t) => displayText(t));
   expect(pages.length).toBe(3);
   expect(number?.getAttribute("title")).toBe(
-    `3 pages, one after another:\n${pages.map((p, i) => `[${i + 1}/3] ${p}`).join("\n\n")}`,
+    `3 pages, one after another:\n${pages.map((p, i) => `[${i + 1}/3] ${p}`).join("\n\n")}\n(Ctrl+click: write this text)`,
   );
   // other edits of the room leave the script as it is shown (scrolled, the info line)
   app.setDark(true);
