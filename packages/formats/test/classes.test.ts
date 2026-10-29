@@ -31,6 +31,7 @@ test("episode 1 classes read from the exe", () => {
     id: 6,
     frameMethod: FrameMethod.WALL,
     touchMethod: 0x420e60,
+    heroTouch: 0x438d00,
     describeMethod: 0x41b160,
     loadMethod: 0x43ec50,
   });

@@ -2,6 +2,7 @@ import {
   type Backing,
   type Colours,
   type Episode,
+  type HeroStep,
   LOGIC_CELL,
   type PlacementArea,
   ROOM_CELLS,
@@ -139,6 +140,8 @@ export class RoomView {
   private highlights: readonly Highlight[] = [];
   private selection: Highlight | undefined;
   private circuit: RoomCircuit | undefined;
+  /** How each cell takes the hero, while shown (heroSteps). */
+  private steps: readonly HeroStep[] | undefined;
   /** Nodes' bulbs as the circuit lights them, while it is shown. */
   private lit = new Map<number, boolean>();
   private floating: { x: number; y: number; image: HTMLCanvasElement } | undefined;
@@ -270,6 +273,15 @@ export class RoomView {
     this.drawMarks();
   }
 
+  /**
+   * Shades the cells that keep the hero off and hatches those he steps on only sometimes
+   * (heroSteps; undefined: none), so the ways through a room stand out.
+   */
+  setWalkable(steps: readonly HeroStep[] | undefined): void {
+    this.steps = steps;
+    this.drawMarks();
+  }
+
   setGrid(on: boolean): void {
     this.grid = on;
     this.drawMarks();
@@ -331,6 +343,7 @@ export class RoomView {
       for (let y = 1; y < ROOM_HEIGHT; y++) g.rect(-1, y * h - 0.5, g.canvas.width + 2, 0);
       g.stroke();
     }
+    if (this.steps) drawSteps(g, this.steps, w, h);
     // actors drawn as themselves: their logic cells get only the frame, not the fill
     const drawn = this.drawActors(g, w, h);
     if (this.room) {
@@ -445,6 +458,33 @@ const START = "rgb(0 170 60)";
 const SIGNAL = { on: "rgb(255 180 0)", off: "rgb(40 110 255)", none: "rgb(140 140 140)" };
 const signalColour = (signal: number) =>
   signal === 1 ? SIGNAL.on : signal === 0 ? SIGNAL.off : SIGNAL.none;
+
+/** Blocking cells darkened, cells that depend hatched in amber, walkable ones left as they are. */
+function drawSteps(g: CanvasRenderingContext2D, steps: readonly HeroStep[], w: number, h: number) {
+  g.fillStyle = "rgb(0 0 0 / 0.6)";
+  steps.forEach((step, i) => {
+    if (step === "block") g.fillRect((i % ROOM_WIDTH) * w, Math.floor(i / ROOM_WIDTH) * h, w, h);
+  });
+  g.save();
+  g.beginPath();
+  steps.forEach((step, i) => {
+    if (step === "depends") g.rect((i % ROOM_WIDTH) * w, Math.floor(i / ROOM_WIDTH) * h, w, h);
+  });
+  g.clip();
+  g.fillStyle = "rgb(255 170 0 / 0.25)";
+  g.fillRect(0, 0, g.canvas.width, g.canvas.height);
+  // stripes across the whole room, so neighbouring cells join up
+  g.strokeStyle = "rgb(255 150 0 / 0.85)";
+  g.lineWidth = 2;
+  g.beginPath();
+  const { width, height } = g.canvas;
+  for (let d = -height; d < width; d += 8) {
+    g.moveTo(d, height);
+    g.lineTo(d + height, 0);
+  }
+  g.stroke();
+  g.restore();
+}
 
 /**
  * A circuit over the room (its nodes' bulbs are lit in the room itself): each traced cell

@@ -43,6 +43,7 @@ import {
   eventTextsId,
   exitMode,
   goodTile,
+  heroSteps,
   modJson,
   nodeBulb,
   parseCompiledScript,
@@ -311,6 +312,8 @@ export class App {
   /** Draws rooms as dark as the game does on entering them (their darkness setting). */
   private readonly darkToggle = h("input", { type: "checkbox" });
   private readonly actorsToggle = h("input", { type: "checkbox", checked: true });
+  /** Shades what keeps the hero off, so the ways through woods and mazes stand out. */
+  private readonly walkableToggle = h("input", { type: "checkbox" });
   private readonly mapButton = h("button", {
     title: "The episode's rooms on their grid, with the exits between them (M)",
     "aria-pressed": "false",
@@ -608,9 +611,10 @@ export class App {
     },
     flags: (flags) => {
       this.editEpisode(() => this.need().setEpisodeFlags(this.episode, this.roomId, flags));
-      // robots' colours follow the flags
+      // robots' colours follow the flags, and where the hero can walk
       this.showTiles();
       this.refreshActors();
+      this.refreshWalkable();
     },
     diagonal: (diagonal) => {
       this.editEpisode(() => this.need().setDiagonalMoves(this.episode, this.roomId, diagonal));
@@ -939,6 +943,15 @@ export class App {
           " Dark",
         ),
         h("label", { title: "Where actors appear (A)" }, this.actorsToggle, " Actors"),
+        h(
+          "label",
+          {
+            title:
+              "Where the hero can walk: cells that keep him off shaded, those he steps on only sometimes (by what he carries, the direction, chance) hatched (W)",
+          },
+          this.walkableToggle,
+          " Walkable",
+        ),
         this.mapButton,
         this.status,
         h("button", { title: "Keyboard and mouse (?)", click: showHelp }, "Shortcuts"),
@@ -1335,6 +1348,7 @@ export class App {
     this.refreshScriptTab();
     this.showSettings(room);
     this.refreshActors();
+    this.refreshWalkable();
     this.refreshCircuit();
     this.refreshEpisodeTab();
     this.refreshRoomList();
@@ -2078,6 +2092,9 @@ export class App {
     this.actorsToggle.addEventListener("change", () => {
       this.refreshActors();
     });
+    this.walkableToggle.addEventListener("change", () => {
+      this.refreshWalkable();
+    });
     this.gridToggle.addEventListener("change", () => {
       this.view.setGrid(this.gridToggle.checked);
     });
@@ -2264,6 +2281,9 @@ export class App {
         } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "a") {
           this.actorsToggle.checked = !this.actorsToggle.checked;
           this.refreshActors();
+        } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "w") {
+          this.walkableToggle.checked = !this.walkableToggle.checked;
+          this.refreshWalkable();
         } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "m") {
           this.setMap(!this.mapShown);
         } else if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "l") {
@@ -3478,6 +3498,19 @@ export class App {
   private updateView(indices: readonly number[]): void {
     const room = this.need().room(this.episode, this.roomId);
     this.view.update(room, indices, this.backdrop(room));
+    this.refreshWalkable();
+  }
+
+  /** Shows where the hero can walk in the shown room, while the Walkable toggle is on. */
+  private refreshWalkable(): void {
+    if (!this.walkableToggle.checked) {
+      this.view.setWalkable(undefined);
+      return;
+    }
+    const editor = this.need();
+    const room = editor.room(this.episode, this.roomId);
+    const { classes } = editor.game.episode(this.episode);
+    this.view.setWalkable(heroSteps(room, classes, editor.episodeFlags(this.episode)));
   }
 
   /** The cells a room is drawn with: as dark as in the game with the Dark toggle on. */

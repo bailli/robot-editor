@@ -78,6 +78,7 @@ Files in `packages/formats/src`:
 | `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font        |
 | `render.ts`                  | drawing cells and rooms like the game                                                            |
 | `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                    |
+| `walkable.ts`                | where the hero can walk: each cell walks, blocks or depends (`heroSteps`)                        |
 | `describe.ts`                | the description the game shows for a cell                                                        |
 | `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                         |
 | `room-tags.ts`               | a room's darkness, points for the first visit, music and episode III flags; changing them        |
@@ -227,6 +228,32 @@ Files in `packages/formats/src`:
   (`pnpm test:game`): PgDn moves Junior's hero 2 cells down and right with III's step
   method, without it not at all; in III Home, End and PgDn move him diagonally, in IV
   PgDn.
+- **Where the hero can walk** (`walkable.ts`, `heroSteps`; from the code only, not tried
+  in the game): every step asks the target cell (0x44c6f0). Tile type 0 lets any actor
+  on; otherwise the class's touch method (vtable +0x0c) calls the handler for the
+  actor's kind from its table (every class dispatches so; the hero's is entry 0,
+  `ObjectClass.heroTouch`). It returns 1 (he moves on), 3 (handled: a door, a jump) or
+  anything else (he stays). In memory the map words hold class | state << 8. 63 hero
+  handlers: 0x41eca0 returns 1 (235 classes), 0x438d00, 0x446f10 (0) and 0x424f90 (2)
+  block, the rest look at the state, the direction, the episode flags, the rucksack,
+  chance or game variables. Decoded: **woods** (class 0x5b, 0x413c50) block, but in
+  states 4 and 5, the ways through them (and 10 with flag 0x20000, only III's), the hero
+  passes only while carrying the hiking boots (item 0x86, SHOE), and then each step only
+  on a coin flip (0x436890(0, 1)); other actors walk them freely. Sand (0x41f9d0) blocks
+  from state 8 on (low nibble). Water (0x427e40) takes him unless NoSwim is set (only
+  episode II's scripts do: rooms 23, 603, 683); with flag 0x4000000 (only III) only in
+  states with bit 0x10; Junior's water (0x427e30) blocks. III's cave walls walk in
+  states 8–15, its temple in 9 (7 and 8 with item 0xef), its finished bridge from 4,
+  its pipes in 0–4 and 10; III's and IV's rock only state 0x28 on a coin flip; IV's
+  rails in 3, 4, 0xc, 0xd, its sliding doors in states ≡ 2 mod 3; house cells (class 98,
+  0x413d30) from state 9 on, see the episode flags; lava, cable ends, electrodes and
+  IV's balls block (some kill). Depending: doors (the key of their colour, 0x422340), arrows and tunnels (the direction),
+  pushable insulators, puzzles and fences (a free cell behind the row; fences kill
+  without item 0x28), stones (an item of class 0x5e matching the state), stairs, doors
+  in and out (room changes), expert fields (the score). An overlay object (the game's
+  type 1 record) is asked first, the base only if it lets him on; a teleporter with a
+  condition depends on the rucksack, one with byte 1 bit 0 always takes him, otherwise
+  the cell a record shows decides.
 - **The driver** (`driver.ts`, the proxy `tools/wine/proxy/proxy.c`, started by
   `harness.py serve`): the proxy replaces the system ddraw.dll next to the exe
   (`WINEDLLOVERRIDES=ddraw=n,b`; it forwards every export, as Wine's DxDiag, the game's
@@ -1057,7 +1084,10 @@ Supported:
   the last 12 tiles painted with (per episode, kept until the page reloads or another
   exe or mod is opened) in a row above the palette; undo/redo
   per stroke; grid (G); Dark (D) draws the room and the map as dark as the game
-  on entering (the darkness setting; scripts and light sources are not modelled)
+  on entering (the darkness setting; scripts and light sources are not modelled);
+  Walkable (W) shades the cells that keep the hero off and hatches those he steps on
+  only sometimes (`heroSteps`: the ways through woods that need the hiking boots, doors,
+  pushable blocks…), so paths through woods and mazes stand out
 - tools Paint (P), Fill (F; the connected cells of the clicked value, 4 neighbours,
   within the selected area if clicked inside it), Select (S; drag a rectangle) and
   Inspect (I; opens the tab of what is at the cell: its logic record, else the actor
@@ -1690,6 +1720,7 @@ Roughly by value for the editor.
 | 0x413d30, 0x4140d0, 0x426880 | door in, door out, stairs                                                      |
 | 0x412ae0, 0x44cc30           | oracle, teleporter (step-on handler 0x44cb60)                                  |
 | 0x44c6f0, 0x42bd40           | may an actor step on a cell (teleporter conditions); count a class carried     |
+| 0x44c9d0, 0x42bcd0           | an actor's step (1 moves, 3 handled); does the hero carry an item word         |
 | 0x42b6f0                     | room load: records 7/8 spawn actors                                            |
 | 0x432fd0, 0x433110           | logic record lookup; a cell's effective value                                  |
 | 0x433230, 0x4331a0           | a cell's top with actors (RandObj: 0 = empty); set the top of a cell           |

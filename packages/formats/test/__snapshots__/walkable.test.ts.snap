@@ -1,0 +1,31 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`how the originals' cells take the hero, per episode 1`] = `
+[
+  {
+    "block": 6856,
+    "depends": 1057,
+    "walk": 7167,
+  },
+  {
+    "block": 26749,
+    "depends": 6919,
+    "walk": 34772,
+  },
+  {
+    "block": 35296,
+    "depends": 4780,
+    "walk": 64324,
+  },
+  {
+    "block": 61621,
+    "depends": 5340,
+    "walk": 33959,
+  },
+  {
+    "block": 65010,
+    "depends": 2906,
+    "walk": 44604,
+  },
+]
+`;

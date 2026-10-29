@@ -52,6 +52,11 @@ export interface ObjectClass {
    * methods mostly pick a handler from a table by the actor's kind (0x100 + n: entry n).
    */
   touchMethod: number;
+  /**
+   * The touch method's handler for the hero (entry 0 of the table it dispatches through
+   * by the actor's kind), undefined if the method does not dispatch so (all do).
+   */
+  heroTouch: number | undefined;
   /** vtable +0x54: picks the description variant (see describe.ts). */
   describeMethod: number;
   /** vtable +0x28: called for each cell when a room is entered (0x42b6f0). */
@@ -281,6 +286,7 @@ export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasse
       id,
       frameMethod: u32(exe, vtable + 8),
       touchMethod: u32(exe, vtable + 0x0c),
+      heroTouch: kindTable(exe, u32(exe, vtable + 0x0c)),
       describeMethod: u32(exe, vtable + 0x54),
       loadMethod: u32(exe, vtable + 0x28),
     });
@@ -304,6 +310,16 @@ export function readEpisodeClasses(exe: PeImage, episode: number): EpisodeClasse
     actorKinds: actorKinds(exe, episode),
     backdropRule: readBackdropRule(exe, episode),
   };
+}
+
+/** push ebp; mov ebp, esp; mov eax, [ebp+8]; push eax; mov edx, [eax]; call [edx*4+table] */
+const KIND_DISPATCH = [0x55, 0x8b, 0xec, 0x8b, 0x45, 0x08, 0x50, 0x8b, 0x10, 0xff, 0x14, 0x95];
+
+/** A touch method's handler for kind 0 (the hero), if it dispatches by the actor's kind. */
+function kindTable(exe: PeImage, method: number): number | undefined {
+  const code = readVa(exe, method, KIND_DISPATCH.length + 4);
+  if (!KIND_DISPATCH.every((byte, i) => code[i] === byte)) return undefined;
+  return u32(exe, u32le(code, KIND_DISPATCH.length));
 }
 
 function actorKinds(exe: PeImage, episode: number): number[] {

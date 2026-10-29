@@ -48,6 +48,7 @@ const HELP: readonly HelpGroup[] = [
       ["G", "Grid"],
       ["D", "Rooms as dark as in the game"],
       ["A", "Actors"],
+      ["W", "Where the hero can walk"],
       ["?", "This help"],
     ],
   },

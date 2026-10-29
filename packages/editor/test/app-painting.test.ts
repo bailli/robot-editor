@@ -2,12 +2,17 @@ import { expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 
 import {
+  LOGIC_CELL,
   ROOM_WIDTH,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
+  TILE_HEIGHT,
+  TILE_WIDTH,
   backdropRoom,
   darkPalette,
   darknessBlock,
+  heroSteps,
+  readEpisodeFlags,
   renderCell,
   renderRoom,
   toRgba,
@@ -49,6 +54,40 @@ test("the Dark toggle draws rooms as dark as the game on entering them", async (
   // the key D toggles it
   await userEvent.keyboard("d");
   expect(firstDifference(app.view.pixels(), drawn(42, 0))).toBe(-1);
+});
+
+test("the Walkable toggle shades what keeps the hero off, W toggles it", async () => {
+  app.showEpisode(2, 55); // woods with ways through them
+  const steps = heroSteps(
+    game.room(2, 55),
+    game.episode(2).classes,
+    readEpisodeFlags(game.image, 2),
+  );
+  const plain = (c: number) => (c & 0xff) !== LOGIC_CELL;
+  const room = game.room(2, 55);
+  // the ways through the woods take him only with the hiking boots: hatched
+  const path = steps.findIndex((s, i) => s === "depends" && plain(room.base[i] ?? 0));
+  const wall = steps.indexOf("block");
+  const shade = (index: number) => {
+    const zoom = app.view.zoom;
+    const x = ((index % ROOM_WIDTH) * TILE_WIDTH + TILE_WIDTH / 2) * zoom;
+    const y = (Math.floor(index / ROOM_WIDTH) * TILE_HEIGHT + 1) * zoom;
+    return app.view.pixelsOfMarks()[(y * SCREEN_WIDTH * zoom + x) * 4 + 3];
+  };
+  expect(shade(wall)).toBe(0);
+  await page.getByRole("checkbox", { name: "Walkable" }).click();
+  expect(shade(wall)).toBe(153); // black at 0.6
+  expect(shade(path)).toBeGreaterThan(0);
+  expect(shade(path)).not.toBe(153);
+  // floor painted on the way takes him: no mark; a wall shades it
+  app.setTile(0);
+  app.paintCell(path);
+  expect(shade(path)).toBe(0);
+  app.setTile(room.base[wall] ?? 0);
+  app.paintCell(path);
+  expect(shade(path)).toBe(153);
+  await userEvent.keyboard("w");
+  expect(shade(wall)).toBe(0);
 });
 
 test("? and the Shortcuts button show the help; keys in it leave the room alone", async () => {
