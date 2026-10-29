@@ -670,6 +670,11 @@ h2 {
   margin: 0;
 }
 
+/* up to 2,550,000 and the spin buttons */
+.record-field.cell-data-points {
+  width: 13ch;
+}
+
 .cell-data-preview {
   display: flex;
   flex: none;

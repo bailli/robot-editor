@@ -184,6 +184,7 @@ export class CellDataField {
 
   private expertControls(): Controls {
     const points = numberInput("Points", 0, 0xff * POINTS_PER_STATE, POINTS_PER_STATE);
+    points.classList.add("cell-data-points");
     points.addEventListener("change", () => {
       this.set({ kind: "expert", points: Number(points.value) });
     });
