@@ -9,6 +9,8 @@ const HELP: readonly HelpGroup[] = [
     title: "Rooms",
     rows: [
       ["← ↑ → ↓", "Go through the room's exit that does not depend on the game state"],
+      ["Page Down", "Go in through a door or down the stairs (room + 100)"],
+      ["Page Up", "Go out through a door or up the stairs (room − 100)"],
       ["Backspace", "Back to the room before (Alt+← / Alt+→: the browser's back and forward)"],
       ["M", "Show or hide the map"],
     ],

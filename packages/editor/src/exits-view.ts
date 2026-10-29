@@ -87,6 +87,13 @@ export function fixedExit(c: Connections, direction: Direction): number {
   return fixed ? fixed.room : c.exits[direction];
 }
 
+/** Where the room's doors and stairs lead: in or down (room + 100), out or up (- 100); 0 if none. */
+export function passageExit(c: Connections, way: "in" | "out"): number {
+  const kinds: readonly PassageKind[] =
+    way === "in" ? ["door in", "stairs down"] : ["door out", "stairs up"];
+  return c.passages.find((p) => kinds.includes(p.kind) && p.room !== 0)?.room ?? 0;
+}
+
 const PASSAGE_KINDS: readonly PassageKind[] = ["door in", "door out", "stairs down", "stairs up"];
 
 const LABELS: Readonly<Record<Direction, readonly [arrow: string, name: string]>> = {

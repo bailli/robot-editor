@@ -31,6 +31,19 @@ test("arrow keys follow the exits that do not depend on the game state", async (
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
 });
 
+test("Page Down and Page Up go through doors and stairs", async () => {
+  app.showEpisode(3, 47); // a hut: its door leads inside, room 147
+  await userEvent.keyboard("{PageUp}"); // no way out: stays
+  await expect.element(page.getByRole("heading", { name: "Robot III – room 47" })).toBeVisible();
+  await userEvent.keyboard("{PageDown}");
+  await expect.element(page.getByRole("heading", { name: "Robot III – room 147" })).toBeVisible();
+  await userEvent.keyboard("{PageUp}");
+  await expect.element(page.getByRole("heading", { name: "Robot III – room 47" })).toBeVisible();
+  app.showRoom(22); // stairs down into the cave, room 122
+  await userEvent.keyboard("{PageDown}");
+  await expect.element(page.getByRole("heading", { name: "Robot III – room 122" })).toBeVisible();
+});
+
 test("teleports are listed with the exits", async () => {
   app.showRoom(36);
   const teleports = document.querySelector(".teleports");

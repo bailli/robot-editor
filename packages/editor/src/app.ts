@@ -105,7 +105,14 @@ import {
 } from "./editor.ts";
 import { EpisodeView } from "./episode-view.ts";
 import { EventsView } from "./events-view.ts";
-import { type Connections, ExitsView, connections, fixedExit, leadsTo } from "./exits-view.ts";
+import {
+  type Connections,
+  ExitsView,
+  connections,
+  fixedExit,
+  leadsTo,
+  passageExit,
+} from "./exits-view.ts";
 import { hex, plural } from "./format.ts";
 import { showHelp } from "./help-dialog.ts";
 import { KitsView } from "./kits-view.ts";
@@ -166,6 +173,9 @@ const ARROWS: Readonly<Partial<Record<string, Direction>>> = {
   ArrowLeft: "west",
   ArrowRight: "east",
 };
+
+/** Page Down goes in through doors or down stairs, Page Up out or up. */
+const PAGES: Readonly<Partial<Record<string, "in" | "out">>> = { PageDown: "in", PageUp: "out" };
 
 export type Tool = "paint" | "fill" | "select" | "inspect";
 
@@ -2240,6 +2250,14 @@ export class App {
           // follow the exit that does not depend on the game state
           event.preventDefault();
           const room = this.connections ? fixedExit(this.connections, direction) : 0;
+          if (room !== 0) this.showRoom(room);
+          return;
+        }
+        const way = PAGES[event.key];
+        if (way && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          // through the room's doors or stairs (each way leads to one room, +/- 100)
+          event.preventDefault();
+          const room = this.connections ? passageExit(this.connections, way) : 0;
           if (room !== 0) this.showRoom(room);
           return;
         }

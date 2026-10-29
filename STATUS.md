@@ -1120,7 +1120,8 @@ Supported:
   orange for an edited dealer; the tooltip says it in words, with the tab's key
 - help (button "Shortcuts", key ?): a dialog listing the keys and mouse buttons
   (`help-dialog.ts`); keys typed in a dialog do not reach the room
-- exits: N/S/W/E targets incl. script changes; arrow keys follow fixed exits; per
+- exits: N/S/W/E targets incl. script changes; arrow keys follow fixed exits, Page
+  Down/Up the doors and stairs in or down (+ 100) and out or up (− 100); per
   direction the exits byte's setting (neighbour / outside / none) can be changed,
   undoably (`withExitMode`)
 - map (button "Map", key M): the episode's rooms as thumbnails on their grid (row =
