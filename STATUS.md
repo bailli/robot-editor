@@ -1196,8 +1196,8 @@ Supported:
   exe" (once a mod is in use "Save mod") is filled while there are unsaved changes;
   questions (deleting a room, discarding changes) use the editor's own dialog, not the
   browser's
-- save: downloads the exe with all edited episodes and texts (warns about unsaved changes
-  on leave)
+- save: downloads the exe with all edited episodes and texts (without a work store, see
+  below, warns about unsaved changes on leave)
 - tile types from other episodes (tab Episode, `tile-types-view.ts`; mod kind
   `tileTypes`): the copies, each with its picture in this episode, removable (×, not
   while rooms use the type); a form: the episode (Junior … IV), a type with a class
@@ -1327,6 +1327,17 @@ Supported:
 - mods (see "The mod format"): "Open mod…" (or dropping a `.json`) opens a mod for the
   loaded exe, "Save mod" downloads the edits as one (named after the opened mod, else
   the exe); with a mod "Save exe" makes the exe from it at any time
+- the work kept in the browser (`work-store.ts`, IndexedDB, never uploaded): the exe last
+  opened and the work on it (the edits as a mod, `Editor.asMod`; whether they are saved;
+  the opened mod's file and the mod as last opened or saved; script drafts not applied),
+  written at most a second after a change and when the page or the window loses focus.
+  A reload, or a new start of the browser, brings it back (`App.start`; not the undo
+  history, the clip or the recent tiles); work that no longer restores is downloaded as
+  `unrestored.robotmod.json`. One tab at a time (Web Locks): another one says so and
+  offers "Open here instead", which stops the first. "Reset…" lists what is kept and
+  offers "Discard changes" (back to the exe as opened or the mod as last opened or
+  saved) and "Forget everything" (the editor starts empty). Without IndexedDB (some
+  private windows) the work lasts as long as the page
 
 Not supported (yet):
 
@@ -1351,7 +1362,6 @@ Not supported (yet):
   (Junior and I also have English ones, which keep the old names, or none for new rooms)
 - copying areas between editor windows or exes (the clip lives in the page)
 - English UI texts / English descriptions (German only; English exists for Junior and I)
-- remembering the last exe or unsaved work across reloads
 - any check that an edited room is still playable
 
 ## Fan episodes: plan and decisions

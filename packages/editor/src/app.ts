@@ -120,12 +120,14 @@ import {
   drawRoom,
   spriteCanvas,
 } from "./room-view.ts";
-import { type ScriptName, ScriptView } from "./script-view.ts";
+import { type ScriptDraft, type ScriptName, ScriptView } from "./script-view.ts";
 import { type SettingsContext, SettingsView } from "./settings-view.ts";
 import { SidePanel } from "./side-panel.ts";
 import { TextsView } from "./texts-view.ts";
 import { TileNames } from "./tile-info.ts";
 import { TileTypesView } from "./tile-types-view.ts";
+import { elsewhereDialog, resetDialog } from "./work-dialog.ts";
+import type { Work, WorkStore } from "./work-store.ts";
 
 type Props = Record<string, string | boolean | ((event: Event) => void)>;
 
@@ -213,7 +215,15 @@ export interface AppOptions {
    * "Test in game" downloads the exe.
    */
   play?: (exe: Uint8Array, episode: number) => Promise<void>;
+  /**
+   * Keeps the exe and the work on it in the browser, brought back by start; one tab at a
+   * time edits. Without it, a reload loses the work (the page asks first).
+   */
+  store?: WorkStore;
 }
+
+/** How soon after a change the work is written to the store, at the latest. */
+const KEEP_DELAY = 1000;
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -240,6 +250,13 @@ export class App {
   private fileName = "GameOfRobot.exe";
   /** The mod being edited (its file name), once one was opened or saved. */
   private modFile: string | undefined;
+  /** The mod as last opened or saved (also as an exe): what discarding changes goes back to. */
+  private savedText: string | undefined;
+  /** Whether this tab keeps its work in the store (it holds the store's lock). */
+  private keeping = false;
+  private keepTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The work last written to the store (not written again while the same). */
+  private keptText: string | undefined;
   private painting = false;
   private lastRoom: string | undefined;
   private lastPainted: number | undefined;
@@ -278,6 +295,15 @@ export class App {
         "Start the game in this room, with all edits: the hero starts at the cell picked with Select or Inspect, else where the episode puts it",
     },
     "Test in game",
+  );
+  private readonly resetButton = h(
+    "button",
+    {
+      hidden: true,
+      title:
+        "What the editor keeps in this browser (the exe and the work on it): discard the unsaved changes or forget it all",
+    },
+    "Reset…",
   );
   private readonly undoButton = h("button", { disabled: true, title: "Ctrl+Z" }, "Undo");
   private readonly redoButton = h("button", { disabled: true, title: "Ctrl+Y" }, "Redo");
@@ -507,6 +533,7 @@ export class App {
       if (!this.editor) return;
       this.refreshScriptTab();
       this.markDrafts();
+      this.scheduleKeep();
     },
   });
   readonly recordView = new RecordView({
@@ -802,6 +829,16 @@ export class App {
       h("p", { class: "hint" }, "The file is read in your browser and never uploaded."),
       h("p", { class: "hint" }, "A mod (.robotmod.json) can be opened once the exe is."),
     );
+    if (options.store) {
+      this.resetButton.hidden = false;
+      this.welcome.append(
+        h(
+          "p",
+          { class: "hint" },
+          "The exe and the work on it are kept in this browser until Reset… forgets them.",
+        ),
+      );
+    }
     this.workspace = h(
       "div",
       { class: "workspace", hidden: true },
@@ -887,6 +924,7 @@ export class App {
         this.openModButton,
         this.modInput,
         this.saveModButton,
+        this.resetButton,
         this.testButton,
         this.undoButton,
         this.redoButton,
@@ -919,6 +957,231 @@ export class App {
   /** Stops listening to the window (keys, history, drops), e.g. before replacing the app. */
   dispose(): void {
     this.listeners.abort();
+    this.stopKeeping();
+    this.options.store?.release();
+  }
+
+  /**
+   * Takes the store (AppOptions) for this tab and brings back the work kept there; when
+   * it keeps no exe, opens the one `fallback` gives (if any). When another tab has the
+   * store, says so and waits until this tab takes it over. Without a store: the fallback.
+   */
+  async start(fallback?: () => Promise<Uint8Array | undefined>): Promise<void> {
+    const store = this.options.store;
+    if (!store) {
+      const bytes = await fallback?.();
+      if (bytes) this.load(bytes);
+      return;
+    }
+    let claimed: boolean;
+    try {
+      claimed = await store.claim(false, () => {
+        this.lose();
+      });
+    } catch (error) {
+      this.setStatus(`Cannot keep the work in this browser: ${message(error)}`, true);
+      return;
+    }
+    if (!claimed) {
+      await elsewhereDialog("The editor is open in another tab, which keeps the work.");
+      await this.takeOver(fallback);
+      return;
+    }
+    this.keeping = true;
+    await this.restore(fallback);
+  }
+
+  /** Takes the store from the tab that has it and brings back the work kept there. */
+  private async takeOver(fallback?: () => Promise<Uint8Array | undefined>): Promise<void> {
+    const store = this.options.store;
+    if (!store) return;
+    await store.claim(true, () => {
+      this.lose();
+    });
+    this.keeping = true;
+    await this.restore(fallback);
+  }
+
+  /** Another tab took the store: this one stops until taking it back. */
+  private lose(): void {
+    this.stopKeeping();
+    void elsewhereDialog("The editor continues in another tab, which keeps the work.").then(() =>
+      this.takeOver(),
+    );
+  }
+
+  /**
+   * Opens the exe kept in the store with the work on it: the edits, whether they were
+   * saved, the opened mod and the script drafts (not the undo history). Work that cannot
+   * be restored (e.g. a mod format the editor no longer reads) is downloaded as a mod.
+   */
+  private async restore(fallback?: () => Promise<Uint8Array | undefined>): Promise<void> {
+    const store = this.options.store;
+    if (!store) return;
+    let exe;
+    let work: Work | undefined;
+    try {
+      exe = await store.exe();
+      work = await store.work();
+    } catch (error) {
+      this.setStatus(`Cannot read the work kept in this browser: ${message(error)}`, true);
+      return;
+    }
+    if (!exe) {
+      const bytes = await fallback?.();
+      if (bytes) this.load(bytes);
+      return;
+    }
+    let game: Game;
+    try {
+      game = new Game(exe.bytes);
+      game.episode(this.episode);
+    } catch (error) {
+      this.setStatus(`Cannot read the kept ${exe.name}: ${message(error)}`, true);
+      return;
+    }
+    let editor = new Editor(game);
+    let status = `${exe.name} restored`;
+    if (work) {
+      try {
+        editor = new Editor(game, parseMod(work.mod));
+        editor.restoreSaved(work.modFile !== undefined, work.dirty);
+        const parts = [
+          ...(work.dirty ? ["unsaved changes"] : []),
+          ...(work.drafts.length > 0 ? [plural(work.drafts.length, "script draft")] : []),
+        ];
+        status = `${work.modFile ?? exe.name} restored`;
+        if (parts.length > 0) status += ` with ${parts.join(" and ")} (undo starts here)`;
+      } catch (error) {
+        const name = "unrestored.robotmod.json";
+        download(new TextEncoder().encode(work.mod), name, "application/json");
+        status = `${exe.name} restored without the work on it (${message(error)}): it is downloaded as ${name}`;
+        work = undefined;
+      }
+    }
+    this.fileName = exe.name;
+    this.modFile = work?.modFile;
+    this.savedText = work?.saved;
+    this.keptText = undefined;
+    this.use(editor, status, work?.drafts);
+  }
+
+  /** Writes the work to the store soon (at the latest KEEP_DELAY after a change). */
+  private scheduleKeep(): void {
+    if (!this.keeping || this.keepTimer !== undefined) return;
+    this.keepTimer = setTimeout(() => {
+      this.keepTimer = undefined;
+      this.keepNow();
+    }, KEEP_DELAY);
+  }
+
+  /** Writes the work to the store now, unless it is the same as written last. */
+  private keepNow(): void {
+    clearTimeout(this.keepTimer);
+    this.keepTimer = undefined;
+    const store = this.options.store;
+    const editor = this.editor;
+    if (!store || !this.keeping || !editor) return;
+    // a stroke under way: written once it ends
+    if (editor.stroking) {
+      this.scheduleKeep();
+      return;
+    }
+    let work: Work;
+    try {
+      work = {
+        mod: modJson(editor.asMod()),
+        modFile: this.modFile,
+        saved: this.savedText,
+        dirty: editor.dirty,
+        drafts: this.scriptView.allDrafts,
+      };
+    } catch (error) {
+      this.setStatus(`Cannot keep the work in this browser: ${message(error)}`, true);
+      return;
+    }
+    const text = JSON.stringify(work);
+    if (text === this.keptText) return;
+    this.keptText = text;
+    store.keepWork(work).catch((error: unknown) => {
+      this.keptText = undefined;
+      this.setStatus(`Cannot keep the work in this browser: ${message(error)}`, true);
+    });
+  }
+
+  private stopKeeping(): void {
+    this.keeping = false;
+    clearTimeout(this.keepTimer);
+    this.keepTimer = undefined;
+  }
+
+  /** The Reset button: says what the store keeps; discards the changes or forgets it all. */
+  async reset(): Promise<void> {
+    if (this.refuseWhileBusy()) return;
+    const editor = this.editor;
+    const drafts = this.scriptView.draftRooms.length;
+    const kept = editor
+      ? [
+          this.fileName,
+          ...(this.modFile === undefined ? [] : [`the mod ${this.modFile}`]),
+          editor.dirty ? "unsaved changes" : "no unsaved changes",
+          ...(drafts > 0 ? [`${plural(drafts, "script draft")} not applied`] : []),
+        ]
+      : ["nothing"];
+    const choice = await resetDialog(kept, editor !== undefined && (editor.dirty || drafts > 0));
+    if (choice === "discard") this.discardChanges();
+    else if (choice === "forget") await this.forget();
+  }
+
+  /** Goes back to the exe as opened, or to the mod as last opened or saved. */
+  discardChanges(): void {
+    const { pristine } = this.need();
+    let editor: Editor;
+    try {
+      editor =
+        this.savedText === undefined
+          ? new Editor(pristine)
+          : new Editor(pristine, parseMod(this.savedText));
+      if (this.savedText !== undefined) editor.restoreSaved(this.modFile !== undefined, false);
+    } catch (error) {
+      this.setStatus(`Cannot discard the changes: ${message(error)}`, true);
+      return;
+    }
+    this.use(editor, "Changes discarded");
+  }
+
+  /** Forgets the exe and the work on it, in the store too: the editor starts empty. */
+  async forget(): Promise<void> {
+    const keeping = this.keeping;
+    this.stopKeeping();
+    try {
+      await this.options.store?.clear();
+    } catch (error) {
+      this.keeping = keeping;
+      this.setStatus(`Cannot forget the work kept in this browser: ${message(error)}`, true);
+      return;
+    }
+    this.keeping = keeping;
+    this.editor = undefined;
+    this.scriptView.dropDrafts();
+    this.fileName = "GameOfRobot.exe";
+    this.modFile = undefined;
+    this.savedText = undefined;
+    this.keptText = undefined;
+    this.welcome.hidden = false;
+    this.workspace.hidden = true;
+    for (const button of [
+      this.saveButton,
+      this.openModButton,
+      this.saveModButton,
+      this.testButton,
+      this.undoButton,
+      this.redoButton,
+    ]) {
+      button.disabled = true;
+      button.classList.remove("primary");
+    }
+    this.setStatus("The exe and the work on it are forgotten");
   }
 
   /** Loads an exe; throws (and shows) what went wrong if it is not the game. */
@@ -934,6 +1197,13 @@ export class App {
     }
     this.fileName = name;
     this.modFile = undefined;
+    this.savedText = undefined;
+    if (this.keeping) {
+      this.keptText = undefined;
+      this.options.store?.keepExe({ bytes, name }).catch((error: unknown) => {
+        this.setStatus(`Cannot keep ${name} in this browser: ${message(error)}`, true);
+      });
+    }
     this.use(editor, `${name} loaded`);
   }
 
@@ -950,6 +1220,7 @@ export class App {
       throw error;
     }
     this.modFile = name;
+    this.savedText = text;
     this.use(editor, `${name} opened`);
   }
 
@@ -961,6 +1232,7 @@ export class App {
       const name = this.modFile ?? this.fileName.replace(/(\.exe)?$/i, ".robotmod.json");
       download(new TextEncoder().encode(text), name, "application/json");
       this.modFile = name;
+      this.savedText = text;
       this.setStatus(`Saved ${name}${this.draftsNote()}`);
       this.refreshButtons();
       return text;
@@ -970,10 +1242,10 @@ export class App {
     }
   }
 
-  /** Shows the editor's state: a newly loaded exe or mod. */
-  private use(editor: Editor, status: string): void {
+  /** Shows the editor's state: a newly loaded exe or mod (restored: with its drafts). */
+  private use(editor: Editor, status: string, drafts?: [string, ScriptDraft][]): void {
     this.editor = editor;
-    this.scriptView.dropDrafts();
+    this.scriptView.dropDrafts(drafts);
     for (const view of [this.tileTypesView, this.eventsView, this.kitsView, this.textsView]) {
       view.reset();
     }
@@ -1728,6 +2000,8 @@ export class App {
     const editor = this.need();
     try {
       const bytes = editor.save();
+      // with a mod, saving means saving the mod (Editor.dirty)
+      if (this.modFile === undefined) this.savedText = modJson(editor.asMod());
       download(bytes, this.fileName);
       this.setStatus(`Saved ${this.fileName}${this.draftsNote()}`);
       this.refreshButtons();
@@ -1754,6 +2028,9 @@ export class App {
       this.modInput.value = "";
     });
     this.saveModButton.addEventListener("click", () => this.saveMod());
+    this.resetButton.addEventListener("click", () => {
+      void this.reset();
+    });
     this.testButton.addEventListener("click", () => {
       void this.testInGame();
     });
@@ -2005,10 +2282,25 @@ export class App {
     window.addEventListener(
       "beforeunload",
       (event) => {
-        if (this.editor?.dirty) event.preventDefault();
+        // with a store the work stays (written on pagehide)
+        if (this.editor?.dirty && !this.options.store) event.preventDefault();
       },
       { signal: this.listeners.signal },
     );
+    // leaving the page or the tab (for another one, which may take the store): written now
+    for (const [target, type] of [
+      [window, "pagehide"],
+      [window, "blur"],
+      [document, "visibilitychange"],
+    ] as const) {
+      target.addEventListener(
+        type,
+        () => {
+          this.keepNow();
+        },
+        { signal: this.listeners.signal },
+      );
+    }
 
     window.addEventListener(
       "dragover",
@@ -3022,6 +3314,7 @@ export class App {
     // unsaved changes: saving is the thing to do, the mod once there is one
     this.saveButton.classList.toggle("primary", editor.dirty && this.modFile === undefined);
     this.saveModButton.classList.toggle("primary", editor.dirty && this.modFile !== undefined);
+    this.scheduleKeep();
   }
 
   /**

@@ -458,10 +458,11 @@ export class Editor {
   private stroke: Edit | undefined;
   /**
    * The last stroke applied when saved as an exe and as a mod (state identity: strokes
-   * are unique). Once there is a mod (opened or saved), saving means saving the mod.
+   * are unique; null: none, the changes were restored unsaved). Once there is a mod
+   * (opened or saved), saving means saving the mod.
    */
-  private savedExe: Edit | undefined;
-  private savedMod: Edit | undefined;
+  private savedExe: Edit | null | undefined;
+  private savedMod: Edit | null | undefined;
   private modded = false;
 
   /** The exe as edited: the loaded one, or with a mod its base (see above). */
@@ -2053,11 +2054,30 @@ export class Editor {
     return edit;
   }
 
+  /** The mod (see asMod), from now on what saving means. */
+  saveMod(): Mod {
+    const mod = this.asMod();
+    this.savedMod = this.undoStack.at(-1);
+    this.modded = true;
+    return mod;
+  }
+
+  /**
+   * After the editor was made from a mod (asMod) of the work kept in the browser
+   * (App.restore): whether a mod was opened or saved then, and whether there were
+   * unsaved changes.
+   */
+  restoreSaved(modded: boolean, dirty: boolean): void {
+    this.modded = modded;
+    this.savedExe = this.savedMod = dirty ? null : undefined;
+  }
+
   /**
    * The mod: the loaded one's changes the editor does not edit, and the rooms and text
    * entries that differ from the base. A text entry written here replaces its copy.
+   * Nothing counts as saved by it (that is saveMod).
    */
-  saveMod(): Mod {
+  asMod(): Mod {
     this.endStroke();
     const rooms = [...this.edited].flatMap(([episode, list]) =>
       roomChanges(episode, this.game.episode(episode).rooms, list),
@@ -2109,8 +2129,6 @@ export class Editor {
       },
     };
     checkMod(mod);
-    this.savedMod = this.undoStack.at(-1);
-    this.modded = true;
     return mod;
   }
 

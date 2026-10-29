@@ -369,6 +369,12 @@ const theme = EditorView.theme({
   },
 });
 
+/** A script being edited: the draft, and the source it started from. */
+export interface ScriptDraft {
+  draft: string;
+  base: string;
+}
+
 /**
  * The room's script: the source marked up (names and numbers explain themselves on
  * hover), the compiled code on request, and an editor that compiles while typing.
@@ -385,7 +391,7 @@ export class ScriptView {
   private draftBase = "";
   private recheck: (() => void) | undefined;
   /** Drafts not applied of the rooms not shown, by room: kept until Apply or Cancel there. */
-  private readonly drafts = new Map<string, { draft: string; base: string }>();
+  private readonly drafts = new Map<string, ScriptDraft>();
   /** The CodeMirror view shown (read-only or the editor). */
   private code: EditorView | undefined;
 
@@ -428,9 +434,21 @@ export class ScriptView {
     return [...this.drafts.keys(), ...(this.drafting ? [this.room] : [])];
   }
 
-  /** Drops every draft (another exe or mod: the rooms are not the same). */
-  dropDrafts(): void {
+  /** The drafts not applied, the shown one included, by room (kept in the browser). */
+  get allDrafts(): [string, ScriptDraft][] {
+    const shown: [string, ScriptDraft][] = this.drafting
+      ? [[this.room, { draft: this.draft, base: this.draftBase }]]
+      : [];
+    return [...this.drafts, ...shown];
+  }
+
+  /**
+   * Drops every draft (another exe or mod: the rooms are not the same), keeping `drafts`
+   * instead (restored work): each comes back when its room is shown.
+   */
+  dropDrafts(drafts: readonly [string, ScriptDraft][] = []): void {
     this.drafts.clear();
+    for (const [room, draft] of drafts) this.drafts.set(room, draft);
     this.editing = false;
     this.room = "";
   }
