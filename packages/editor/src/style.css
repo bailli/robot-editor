@@ -39,9 +39,17 @@
 
 body {
   margin: 0;
-  padding-bottom: var(--status-bar);
   background: var(--bg);
   color: var(--text);
+}
+
+/* the window's height: the bars above and below, the room and the side panel in
+   between, each scrolling on its own */
+.app {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
 }
 
 button,
@@ -223,9 +231,8 @@ h2 {
 
 /* the last message, along the window's bottom edge */
 .status-bar {
-  position: fixed;
-  inset: auto 0 0;
-  z-index: 10;
+  flex: none;
+  margin-top: auto;
   height: var(--status-bar);
   padding: 0 16px;
   display: flex;
@@ -279,11 +286,22 @@ h2 {
 }
 
 .workspace {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(320px, 1fr) var(--side-width, 320px);
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   padding: 16px;
-  align-items: start;
+}
+
+/* the room and the map: the room as high as fits (container units), the map filling it */
+.workspace main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  container-type: size;
 }
 
 .workspace[hidden] {
@@ -301,6 +319,7 @@ h2 {
 
 .workspace.map-mode main {
   min-width: 0;
+  overflow: hidden;
 }
 
 /* the room's title opens it: the episode and Go to room above all the rooms */
@@ -434,6 +453,11 @@ h2 {
 
 .exits-links:empty {
   display: none;
+}
+
+/* the links' row takes from the room's height (.exits-room) */
+.exits:has(> .exits-links:not(:empty)) {
+  --room-around: 120px;
 }
 
 .exits-room {
@@ -1080,10 +1104,11 @@ header button.pressed {
 .map-view {
   --map-room: 152px;
   --map-link: 22px;
+  flex: 1;
+  min-height: 0;
   display: grid;
   gap: 16px;
   overflow: auto;
-  max-height: calc(100vh - 130px - var(--status-bar));
 }
 
 .map-view[hidden] {
@@ -1196,17 +1221,16 @@ header button.pressed {
   border-style: dotted;
 }
 
-/* the room fits the window's height (exits and the hover lines around it) */
+/* the room fits the column's height (its title and the exits around it); a width,
+   as the view's zoom sets the maximum */
 .exits-room {
-  width: 100%;
-  max-width: calc((100vh - 190px - var(--status-bar)) * 640 / 348);
+  width: min(100%, calc((100cqh - var(--room-around, 100px)) * 640 / 348));
   justify-self: center;
 }
 
 .side-panel {
-  position: sticky;
-  top: 16px;
-  height: calc(100vh - 90px - var(--status-bar));
+  position: relative;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   min-width: 0;

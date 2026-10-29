@@ -973,6 +973,7 @@ export class App {
     );
     const width = SidePanel.savedWidth();
     if (width !== undefined) this.workspace.style.setProperty("--side-width", `${width}px`);
+    root.classList.add("app");
     root.append(
       h(
         "header",

@@ -1084,7 +1084,8 @@ Supported:
 - episode and room selection: the room's title opens the room picker (the episode,
   "Go to room" and the episode's rooms, edited ones marked); the status bar along the
   window's bottom has the last message left and the hover line (the cell under the
-  mouse, what the game says about it) right
+  mouse, what the game says about it) right; the page is the window's height, the room
+  (as large as its column allows) and the side panel scroll on their own
 - room drawn exactly as the renderer draws it (cell image cache, per-cell redraws); a
   room with a backdrop (house interiors, see room connections) shows the backdrop room
   slightly dimmed in its class 99 cells, in the view and on the map; painting over its
