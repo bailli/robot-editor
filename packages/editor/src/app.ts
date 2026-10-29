@@ -318,8 +318,16 @@ export class App {
     },
     "Reset…",
   );
-  private readonly undoButton = h("button", { disabled: true, title: "Ctrl+Z" }, "Undo");
-  private readonly redoButton = h("button", { disabled: true, title: "Ctrl+Y" }, "Redo");
+  private readonly undoButton = h(
+    "button",
+    { class: "icon", disabled: true, title: "Undo (Ctrl+Z)", "aria-label": "Undo" },
+    "↶",
+  );
+  private readonly redoButton = h(
+    "button",
+    { class: "icon", disabled: true, title: "Redo (Ctrl+Y)", "aria-label": "Redo" },
+    "↷",
+  );
   private readonly gridToggle = h("input", { type: "checkbox" });
   /** Draws rooms as dark as the game does on entering them (their darkness setting). */
   private readonly darkToggle = h("input", { type: "checkbox" });
@@ -950,49 +958,75 @@ export class App {
         {},
         h("h1", {}, "Robot editor"),
         h(
-          "button",
-          {
-            click: () => {
-              this.fileInput.click();
+          "div",
+          { class: "header-group", role: "group", "aria-label": "File" },
+          h(
+            "button",
+            {
+              click: () => {
+                this.fileInput.click();
+              },
             },
-          },
-          "Open exe…",
+            "Open exe…",
+          ),
+          this.fileInput,
+          this.saveButton,
+          this.openModButton,
+          this.modInput,
+          this.saveModButton,
+          this.resetButton,
         ),
-        this.fileInput,
-        this.saveButton,
-        this.openModButton,
-        this.modInput,
-        this.saveModButton,
-        this.resetButton,
-        this.testButton,
-        this.undoButton,
-        this.redoButton,
-        h("label", {}, this.gridToggle, " Grid"),
         h(
-          "label",
-          {
-            title:
-              "Draw rooms as dark as the game does on entering them (their darkness, tab Room; scripts and lamps can change it in the game) (D)",
-          },
-          this.darkToggle,
-          " Dark",
+          "div",
+          { class: "header-group", role: "group", "aria-label": "Edit" },
+          this.undoButton,
+          this.redoButton,
+          this.testButton,
         ),
-        h("label", { title: "Where actors appear (A)" }, this.actorsToggle, " Actors"),
         h(
-          "label",
-          {
-            title:
-              "Where the hero can walk: cells that keep him off shaded, those he steps on only sometimes (by what he carries, the direction, chance) hatched (W)",
-          },
-          this.walkableToggle,
-          " Walkable",
+          "div",
+          { class: "header-group view-group" },
+          h(
+            "fieldset",
+            { class: "segmented" },
+            h("legend", {}, "View"),
+            h("label", { title: "The cells' borders (G)" }, this.gridToggle, "Grid"),
+            h(
+              "label",
+              {
+                title:
+                  "Draw rooms as dark as the game does on entering them (their darkness, tab Room; scripts and lamps can change it in the game) (D)",
+              },
+              this.darkToggle,
+              "Dark",
+            ),
+            h("label", { title: "Where actors appear (A)" }, this.actorsToggle, "Actors"),
+            h(
+              "label",
+              {
+                title:
+                  "Where the hero can walk: cells that keep him off shaded, those he steps on only sometimes (by what he carries, the direction, chance) hatched (W)",
+              },
+              this.walkableToggle,
+              "Walkable",
+            ),
+          ),
+          this.mapButton,
+          h(
+            "button",
+            {
+              class: "icon",
+              title: "Shortcuts: keyboard and mouse (?)",
+              "aria-label": "Shortcuts",
+              click: showHelp,
+            },
+            "?",
+          ),
         ),
-        this.mapButton,
-        this.status,
-        h("button", { title: "Keyboard and mouse (?)", click: showHelp }, "Shortcuts"),
       ),
       this.welcome,
       this.workspace,
+      h("footer", { class: "status-bar" }, this.status),
       this.newRoomDialog.element,
     );
     this.roomPane.append(this.exitsView.element, this.cellInfo, this.cellText);

@@ -1,5 +1,6 @@
 :root {
   color-scheme: light dark;
+  --status-bar: 26px;
   --bg: #f4f4f2;
   --panel: #ffffff;
   --text: #1d1d1b;
@@ -38,6 +39,7 @@
 
 body {
   margin: 0;
+  padding-bottom: var(--status-bar);
   background: var(--bg);
   color: var(--text);
 }
@@ -177,18 +179,41 @@ kbd {
   color: var(--text);
 }
 
+/* groups of buttons; a narrow window moves whole groups to a second row */
 header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 8px 20px;
   padding: 8px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
 
+.header-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* the view toggles and the help on the right */
+.view-group {
+  margin-left: auto;
+}
+
+/* a sign instead of a word: larger, the button as high as the others */
+button.icon {
+  min-width: 30px;
+  padding-inline: 6px;
+  font-size: 17px;
+  line-height: 19.6px;
+}
+
 h1 {
   font-size: 16px;
-  margin: 0 12px 0 0;
+  margin: 0;
+  white-space: nowrap;
 }
 
 h2 {
@@ -196,8 +221,24 @@ h2 {
   margin: 0 0 8px;
 }
 
+/* the last message, along the window's bottom edge */
+.status-bar {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 10;
+  height: var(--status-bar);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
 .status {
-  margin-left: auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--muted);
 }
 
@@ -274,7 +315,7 @@ h2 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 3px;
-  max-height: calc(100vh - 185px);
+  max-height: calc(100vh - 185px - var(--status-bar));
   overflow-y: auto;
 }
 
@@ -998,7 +1039,7 @@ header button.pressed {
   display: grid;
   gap: 16px;
   overflow: auto;
-  max-height: calc(100vh - 130px);
+  max-height: calc(100vh - 130px - var(--status-bar));
 }
 
 .map-view[hidden] {
@@ -1114,14 +1155,14 @@ header button.pressed {
 /* the room fits the window's height (exits and the hover lines around it) */
 .exits-room {
   width: 100%;
-  max-width: calc((100vh - 230px) * 640 / 348);
+  max-width: calc((100vh - 230px - var(--status-bar)) * 640 / 348);
   justify-self: center;
 }
 
 .side-panel {
   position: sticky;
   top: 16px;
-  height: calc(100vh - 90px);
+  height: calc(100vh - 90px - var(--status-bar));
   display: flex;
   flex-direction: column;
   min-width: 0;
