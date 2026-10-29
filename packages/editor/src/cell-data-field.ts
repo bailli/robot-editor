@@ -250,23 +250,33 @@ export class CellDataField {
     char.setAttribute("aria-label", "Character");
     char.maxLength = 1;
     char.spellcheck = false;
+    const dark = element("input");
+    dark.type = "checkbox";
     let code = 0;
     char.addEventListener("change", () => {
       const typed = char.value.toUpperCase().charCodeAt(0);
-      // the game font's printable glyphs; bit 7 (meaning unknown) stays as it was
+      // the game font's printable glyphs
       if (typed >= 0x20 && typed < 0x7f) this.set({ kind: "letter", code: (code & 0x80) | typed });
       else {
         this.events.refused("a letter is one character, from the space to ~");
         char.value = String.fromCharCode(code & 0x7f);
       }
     });
+    dark.addEventListener("change", () => {
+      this.set({ kind: "letter", code: (code & 0x7f) | (dark.checked ? 0x80 : 0) });
+    });
+    const darkLabel = element("label", "cell-data-check");
+    darkLabel.append(dark, "Black background");
+    darkLabel.title =
+      "State bit 7: the game draws the letter's background in colour 0 (as room 45 of episode I does)";
     return {
       kind: "letter",
-      nodes: [row("Character", char)],
+      nodes: [row("Character", char), darkLabel],
       update: (data) => {
         if (data.kind !== "letter") return;
         code = data.code;
         char.value = String.fromCharCode(code & 0x7f);
+        dark.checked = (code & 0x80) !== 0;
       },
     };
   }

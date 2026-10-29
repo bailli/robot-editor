@@ -786,6 +786,14 @@ From the code only; no ending has been played through or tried in the game.
   opening brings a bonus ("Sieh einer an, das Päckchen läßt sich tatsächlich öffnen!…",
   1500 points in II and III). Packages with contents changed in the editor were tried
   in the game by the user (2026-10-29): they give what the editor put inside.
+- **Letters** (class 59, I's and II's tile 0x25): the state is the character, drawn as
+  glyph `state & 0x7f` of the game font on frame 0 (0x40e8f0). Bit 7 is the only flag:
+  drawing the cell sets the object's colour slot 0 (the background) to 0 and clears the
+  bit; nothing else tests it. Episode I's room 45 uses it for 14 blocks of 3 × 3 "["
+  letters (0xdb25) as decoration. Taking a letter (vtable +0x48, 0x410200; putting one
+  down, 0x40e950, alike) counts only A–Z (a–z folded) into the 26 words at 0x4fe2b6 and
+  returns 0 for any other state, digits and bit-7 letters included; the magic words
+  (0x42ca90) compare the states unmasked. From the code, not tried in the game.
 - **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
   1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
   class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
@@ -1186,7 +1194,7 @@ Supported:
   contents (a tile type with a class; an electric fence is flagged), a note's message
   (800–927) and whether it is read when stepped on (bit 7), a diary page, an expert
   field's points (steps of 10,000 up to 2,550,000) and a letter's character (printable
-  ASCII; bit 7 kept). A field under the current tile sets it
+  ASCII) and whether it is drawn on black (bit 7). A field under the current tile sets it
   for painting, one in the Record tab changes the selected cell (base and overlay, one
   undo step; a click on a package's contents puts the current tile's type inside, a
   right-click paints with them); ✎ opens a note's message or a diary page in the Texts tab
