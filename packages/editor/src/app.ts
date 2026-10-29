@@ -1860,7 +1860,7 @@ export class App {
   setTile(value: number): void {
     this.tile = value;
     this.tileInput.value = hex(value);
-    this.tilePreview.replaceChildren(this.tileCanvas(value));
+    this.tilePreview.replaceChildren(this.tileFigure(value));
     // one inline element: the line clamp (-webkit-box) would put each child on a line
     this.tileText.replaceChildren(
       h(
@@ -2478,7 +2478,7 @@ export class App {
               this.setTile(value);
             },
           },
-          this.tileCanvas(value),
+          this.tileFigure(value),
         ),
       ),
     );
@@ -3459,6 +3459,19 @@ export class App {
    * hatching (invisible in the game, e.g. the marker 0x54 of rooms named after the room
    * 100 below).
    */
+  /**
+   * A tile as tileCanvas draws it; a package with what it holds drawn small in its corner
+   * (the game draws only the package).
+   */
+  private tileFigure(value: number): HTMLElement {
+    const tile = this.tileCanvas(value);
+    const data = cellData(value, this.need().game.episode(this.episode).classes);
+    if (data?.kind !== "package" || data.type === 0) return tile;
+    const held = this.tileCanvas(data.type);
+    held.classList.add("held");
+    return h("span", { class: "tile-holds" }, tile, held);
+  }
+
   private tileCanvas(value: number): HTMLCanvasElement {
     const type = value & 0xff;
     if (this.isRobot(type)) {

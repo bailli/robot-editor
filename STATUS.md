@@ -1187,7 +1187,9 @@ Supported:
   field's points (steps of 10,000 up to 2,550,000) and a letter's character (printable
   ASCII; bit 7 kept). A field under the current tile sets it for painting, one in the
   Record tab changes the selected cell (base and overlay, one undo step); ✎ opens a
-  note's message or a diary page in the Texts tab. The palette offers these classes in
+  note's message or a diary page in the Texts tab. The current tile's preview and the
+  recent tiles draw a package's contents small in its corner (the room view draws the
+  package as the game does). The palette offers these classes in
   one tile per look (rendered pixels: one package, one expert field, a note and old
   writing, each letter) instead of every state the rooms use
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an

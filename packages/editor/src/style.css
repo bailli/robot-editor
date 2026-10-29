@@ -795,6 +795,22 @@ canvas.cell.pickable {
   height: 36px;
 }
 
+/* a package with what it holds drawn small in its corner (tileFigure) */
+.tile-holds {
+  position: relative;
+  display: block;
+  width: fit-content;
+}
+
+.tile-holds canvas.cell.held {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 60%;
+  height: 60%;
+  outline: 1px solid var(--panel);
+}
+
 .tile-grid,
 .tile-recent {
   display: flex;

@@ -54,6 +54,17 @@ test("a note's message and whether it is read on the spot", async () => {
   expect(status()).toMatch(/^Not taken: a note shows a message from 800 to 927/);
 });
 
+test("the current tile's preview draws what a package holds on it", () => {
+  app.showEpisode(2, 1);
+  const held = () => document.querySelectorAll(".tile-preview canvas.held");
+  app.setTile(0x135e);
+  expect(held()).toHaveLength(1);
+  app.setTile(0x005e); // nothing inside
+  expect(held()).toHaveLength(0);
+  app.setTile(0x0013);
+  expect(held()).toHaveLength(0);
+});
+
 test("other tiles have no data", async () => {
   app.setTile(0x0000);
   await expect.element(tiles().getByRole("spinbutton")).not.toBeInTheDocument();
