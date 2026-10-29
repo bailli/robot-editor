@@ -230,16 +230,34 @@ h2 {
   padding: 0 16px;
   display: flex;
   align-items: center;
+  gap: 16px;
   background: var(--panel);
   border-top: 1px solid var(--line);
   font-size: 13px;
 }
 
 .status {
+  flex: 1 1 0;
+  min-width: 8em;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   color: var(--muted);
+}
+
+.cell-status {
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+  max-width: 70%;
+}
+
+.cell-status p {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: pre;
+  text-overflow: ellipsis;
 }
 
 .status.error {
@@ -262,7 +280,7 @@ h2 {
 
 .workspace {
   display: grid;
-  grid-template-columns: 150px minmax(320px, 1fr) var(--side-width, 320px);
+  grid-template-columns: minmax(320px, 1fr) var(--side-width, 320px);
   gap: 16px;
   padding: 16px;
   align-items: start;
@@ -274,7 +292,7 @@ h2 {
 
 /* the map needs the room's and the tiles' width */
 .workspace.map-mode {
-  grid-template-columns: 150px minmax(320px, 1fr);
+  grid-template-columns: minmax(320px, 1fr);
 }
 
 .workspace.map-mode .side-panel {
@@ -285,38 +303,47 @@ h2 {
   min-width: 0;
 }
 
-.rooms {
-  display: flex;
+/* the room's title opens it: the episode and Go to room above all the rooms */
+.room-picker {
+  position: absolute;
+  inset: auto;
+  margin: 0;
+  padding: 8px;
+  display: none;
   flex-direction: column;
   gap: 8px;
-  position: sticky;
-  top: 16px;
+  max-height: calc(100vh - 120px - var(--status-bar));
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.18);
 }
 
-/* the id on a row of its own, the buttons below it */
-.room-add {
-  display: grid;
-  gap: 3px;
+.room-picker:popover-open {
+  display: flex;
 }
 
-.room-add input {
-  min-width: 0;
+.room-picker-head {
+  display: flex;
+  gap: 6px;
+}
+
+.room-picker-head input {
+  width: 9em;
   padding: 2px 4px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 4px;
 }
 
-.room-add button {
-  padding: 2px 0;
-}
-
 .room-list {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(10, 44px);
   gap: 3px;
-  max-height: calc(100vh - 185px - var(--status-bar));
+  min-height: 0;
   overflow-y: auto;
+  padding: 2px;
 }
 
 .room-list button {
@@ -342,7 +369,24 @@ h2 {
 }
 
 .room-head h2 {
-  margin: 0 0 0 6px;
+  margin: 0 0 0 2px;
+  font-size: inherit;
+}
+
+/* the title, a button that looks like one */
+.room-picker-button {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-color: transparent;
+  background: transparent;
+  white-space: nowrap;
+}
+
+.room-picker-button .caret {
+  margin-left: 4px;
+  color: var(--muted);
+  font-weight: normal;
 }
 
 .room-head .room-name {
@@ -1155,7 +1199,7 @@ header button.pressed {
 /* the room fits the window's height (exits and the hover lines around it) */
 .exits-room {
   width: 100%;
-  max-width: calc((100vh - 230px - var(--status-bar)) * 640 / 348);
+  max-width: calc((100vh - 190px - var(--status-bar)) * 640 / 348);
   justify-self: center;
 }
 
@@ -1249,6 +1293,11 @@ header button.pressed {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   z-index: 2;
+}
+
+/* the side panel's tools and layers: narrower, so that both fit on a row */
+.side-header .segmented label {
+  padding-inline: 5px;
 }
 
 .area-tools {
@@ -1389,7 +1438,7 @@ canvas.cell.text-tile {
   opacity: 1;
 }
 
-.room-head .room-delete {
+.room-head .room-new {
   margin-left: auto;
 }
 

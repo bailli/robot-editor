@@ -443,7 +443,14 @@ export class App {
   private readonly status = h("span", { class: "status" });
   private readonly episodeSelect = h("select", { "aria-label": "Episode" });
   private readonly roomList = h("div", { class: "room-list" });
-  private readonly roomTitle = h("h2");
+  private readonly roomTitle = h("span");
+  /** Under the room's title: the episode, Go to room and all the rooms. */
+  private readonly roomPicker = h("div", {
+    class: "room-picker",
+    popover: "auto",
+    role: "dialog",
+    "aria-label": "Rooms",
+  });
   private readonly roomName = h("input", {
     class: "room-name",
     "aria-label": "Room name",
@@ -885,30 +892,32 @@ export class App {
         ),
       );
     }
+    const pickerButton = h(
+      "button",
+      { class: "room-picker-button", title: "Another room or episode" },
+      this.roomTitle,
+      h("span", { class: "caret", "aria-hidden": "true" }, "▾"),
+    );
+    pickerButton.popoverTargetElement = this.roomPicker;
+    // below the title (the page's coordinates: it scrolls with it), the shown room in view
+    this.roomPicker.addEventListener("beforetoggle", (event) => {
+      if (event.newState !== "open") return;
+      const r = pickerButton.getBoundingClientRect();
+      this.roomPicker.style.left = `${r.left + window.scrollX}px`;
+      this.roomPicker.style.top = `${r.bottom + window.scrollY + 4}px`;
+    });
+    this.roomPicker.addEventListener("toggle", (event) => {
+      if (event.newState === "open") {
+        this.roomList.querySelector(".current")?.scrollIntoView({ block: "nearest" });
+      }
+    });
+    this.roomPicker.append(
+      h("div", { class: "room-picker-head" }, this.episodeSelect, this.goInput),
+      this.roomList,
+    );
     this.workspace = h(
       "div",
       { class: "workspace", hidden: true },
-      h(
-        "nav",
-        { class: "rooms" },
-        this.episodeSelect,
-        h(
-          "div",
-          { class: "room-add" },
-          this.goInput,
-          h(
-            "button",
-            {
-              title: "Add a room: empty or a copy of the shown one (also from the map's + slots)",
-              click: () => {
-                this.newRoom();
-              },
-            },
-            "New room…",
-          ),
-        ),
-        this.roomList,
-      ),
       h(
         "main",
         {},
@@ -917,8 +926,20 @@ export class App {
           { class: "room-head" },
           this.backButton,
           this.forwardButton,
-          this.roomTitle,
+          h("h2", {}, pickerButton),
+          this.roomPicker,
           this.roomName,
+          h(
+            "button",
+            {
+              class: "room-new",
+              title: "Add a room: empty or a copy of the shown one (also from the map's + slots)",
+              click: () => {
+                this.newRoom();
+              },
+            },
+            "New room…",
+          ),
           h(
             "button",
             {
@@ -1026,10 +1047,16 @@ export class App {
       ),
       this.welcome,
       this.workspace,
-      h("footer", { class: "status-bar" }, this.status),
+      // the last message left, the cell under the mouse right
+      h(
+        "footer",
+        { class: "status-bar" },
+        this.status,
+        h("div", { class: "cell-status" }, this.cellInfo, this.cellText),
+      ),
       this.newRoomDialog.element,
     );
-    this.roomPane.append(this.exitsView.element, this.cellInfo, this.cellText);
+    this.roomPane.append(this.exitsView.element);
     this.recordTab.append(this.recordView.element, this.cellDataSection, this.cellTexts);
     this.mapButton.textContent = "Map";
     this.mapView.element.hidden = true;
@@ -1385,6 +1412,7 @@ export class App {
             "data-room": String(r.id),
             title: this.roomLabel(episode, r.id),
             click: () => {
+              this.roomPicker.hidePopover();
               this.showRoom(r.id);
             },
           },
@@ -1669,6 +1697,7 @@ export class App {
   /** Opens room `id` if the episode has it (the Go to room field). */
   goTo(id: number): void {
     if (this.need().hasRoom(this.episode, id)) {
+      this.roomPicker.hidePopover();
       this.setMap(false, id);
       this.goInput.value = "";
     } else {
@@ -2176,6 +2205,8 @@ export class App {
     });
     this.goInput.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") return;
+      // closing the picker focuses its button, which the Enter would press again
+      event.preventDefault();
       this.goTo(Number(this.goInput.value));
     });
     this.areaButtons.copy.addEventListener("click", () => {

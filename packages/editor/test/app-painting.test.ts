@@ -161,7 +161,9 @@ test("right click picks a tile, left click paints it, undo reverts it", async ()
   expect(app.tile).toBe(room.base[source]);
   await clickCell(target);
   expect(app.editor?.room(1, 43).base[target]).toBe(room.base[source]);
-  await expect.element(page.getByRole("button", { name: "43", exact: true })).toHaveClass(/edited/);
+  expect(document.querySelector('.room-list [data-room="43"]')?.classList.contains("edited")).toBe(
+    true,
+  );
   await expect.element(page.getByRole("button", { name: "Save exe" })).toBeEnabled();
 
   await userEvent.keyboard("{Control>}z{/Control}");
@@ -273,6 +275,7 @@ test("the tile filter keeps the tiles whose name or value match", async () => {
 });
 
 test("switching episodes shows the episode's start room", async () => {
+  await page.getByRole("button", { name: /^Robot I – room/ }).click();
   await userEvent.selectOptions(page.getByRole("combobox", { name: "Episode" }), "Robot III");
   await expect.element(page.getByRole("heading", { name: "Robot III – room 41" })).toBeVisible();
 });

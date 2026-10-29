@@ -1081,7 +1081,10 @@ web server, not `file://`). The exe is read in the browser and never uploaded.
 Supported:
 
 - open/drop an exe (in development `reference/GameOfRobot.exe` opens by itself)
-- episode and room selection, room list with edited rooms marked
+- episode and room selection: the room's title opens the room picker (the episode,
+  "Go to room" and the episode's rooms, edited ones marked); the status bar along the
+  window's bottom has the last message left and the hover line (the cell under the
+  mouse, what the game says about it) right
 - room drawn exactly as the renderer draws it (cell image cache, per-cell redraws); a
   room with a backdrop (house interiors, see room connections) shows the backdrop room
   slightly dimmed in its class 99 cells, in the view and on the map; painting over its

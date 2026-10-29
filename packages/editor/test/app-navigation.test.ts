@@ -281,14 +281,32 @@ test("neighbours across the end of a row or a hundred are named as such", () => 
   );
 });
 
-test("Go to room opens a room by its id", async () => {
+test("Go to room in the room picker opens a room by its id", async () => {
+  const picker = page.getByRole("button", { name: /^Robot I – room/ });
   const go = page.getByRole("spinbutton", { name: "Go to room" });
+  await picker.click();
   await userEvent.fill(go, "44");
   await userEvent.keyboard("{Enter}");
   await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
+  // the picker closes on going
+  expect(document.querySelector(".room-picker:popover-open")).toBeNull();
+  await picker.click();
   await userEvent.fill(go, "999");
   await userEvent.keyboard("{Enter}");
   expect(document.querySelector(".status.error")?.textContent).toMatch(/has no room 999/);
+  // a wrong id leaves it open; Escape closes it
+  expect(document.querySelector(".room-picker:popover-open")).not.toBeNull();
+  await userEvent.keyboard("{Escape}");
+  expect(document.querySelector(".room-picker:popover-open")).toBeNull();
+});
+
+test("the room picker lists the episode's rooms and opens the one picked", async () => {
+  await page.getByRole("button", { name: /^Robot I – room/ }).click();
+  const rooms = page.getByRole("dialog", { name: "Rooms" });
+  await rooms.getByRole("button", { name: "44", exact: true }).click();
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 44" })).toBeVisible();
+  expect(document.querySelector(".room-picker:popover-open")).toBeNull();
+  expect(document.querySelector(".room-list .current")?.getAttribute("data-room")).toBe("44");
 });
 
 test("the map's + slots next to rooms add a room there", async () => {
