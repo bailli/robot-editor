@@ -79,6 +79,7 @@ import {
 } from "@robot/formats";
 
 import { ActorsView, actorOrigin } from "./actors-view.ts";
+import { CellDataField, type CellDataFieldEvents } from "./cell-data-field.ts";
 import { CircuitView } from "./circuit-view.ts";
 import { CodeView } from "./code-view.ts";
 import { confirmDialog } from "./confirm-dialog.ts";
@@ -371,6 +372,22 @@ export class App {
       "Click a magenta cell, or any cell with the Inspect tool, to see its logic record here (Escape: back to this list).",
     ),
   );
+  /** The data the selected cell keeps in its state, base and overlay (CellDataField). */
+  private readonly cellData = {
+    base: this.selectedCellData("base"),
+    overlay: this.selectedCellData("overlay"),
+  };
+  private readonly cellDataBase = h("h4", {}, "Base");
+  private readonly cellDataOverlay = h("h4", {}, "Overlay");
+  private readonly cellDataSection = h(
+    "section",
+    { class: "record-view", "aria-label": "Data of the cell", hidden: true },
+    h("h3", {}, "Data of the cell"),
+    this.cellDataBase,
+    this.cellData.base.element,
+    this.cellDataOverlay,
+    this.cellData.overlay.element,
+  );
   /** The texts the selected cell shows, each opened for writing with a click. */
   private readonly cellTexts = h("section", {
     class: "record-view cell-texts",
@@ -476,6 +493,12 @@ export class App {
   private readonly tilePreview = h("span", { class: "tile-preview" });
   private readonly cellText = h("p", { class: "cell-text" }, "\u00a0");
   private readonly tileText = h("p", { class: "tile-text" });
+  /** The current tile's data (a package's contents, a note's message, …). */
+  private readonly tileData = new CellDataField(
+    this.cellDataEvents((value) => {
+      this.setTile(value);
+    }),
+  );
   private readonly tileNames = new Map<number, TileNames>();
   private readonly tileGrid = h("div", { class: "tile-grid" });
   /** The tiles painted with last, per episode, most recent first. */
@@ -908,6 +931,7 @@ export class App {
     this.tilesTab.append(
       h("label", { class: "tile-current" }, this.tilePreview, this.tileInput),
       this.tileText,
+      this.tileData.element,
       this.recentRow,
       h(
         "p",
@@ -971,7 +995,7 @@ export class App {
       this.newRoomDialog.element,
     );
     this.roomPane.append(this.exitsView.element, this.cellInfo, this.cellText);
-    this.recordTab.append(this.recordView.element, this.cellTexts);
+    this.recordTab.append(this.recordView.element, this.cellDataSection, this.cellTexts);
     this.mapButton.textContent = "Map";
     this.mapView.element.hidden = true;
     this.wire();
@@ -1845,7 +1869,47 @@ export class App {
       ),
     );
     this.tileText.title = this.names().title(value);
+    if (this.editor) {
+      this.tileData.show(value, this.editor.game.episode(this.episode).classes, this.episode);
+    }
     this.markTile();
+  }
+
+  /** What a cell data field (CellDataField) tells and asks for; `change` takes its value. */
+  private cellDataEvents(change: (value: number) => void): CellDataFieldEvents {
+    return {
+      change,
+      refused: (reason) => {
+        this.setStatus(`Not taken: ${reason}`, true);
+      },
+      text: (resource, entry) => this.need().textEntry(resource, entry)?.[0],
+      editText: (resource, entry) => {
+        this.editText(resource, entry);
+      },
+      preview: (value) => this.tileCanvas(value),
+      typeName: (type) => {
+        const summary = this.names().summary(type);
+        return summary.length > 40 ? `${summary.slice(0, 39)}…` : summary;
+      },
+    };
+  }
+
+  /** A data field for the selected cell's `layer`. */
+  private selectedCellData(layer: Layer): CellDataField {
+    const events = this.cellDataEvents((value) => {
+      this.setSelectedCell(layer, value);
+    });
+    return new CellDataField(events);
+  }
+
+  /** Writes a value into the selected cell's `layer` as one edit (its data changed). */
+  private setSelectedCell(layer: Layer, value: number): void {
+    const selected = this.selected;
+    if (!selected) return;
+    const editor = this.need();
+    editor.beginStroke(this.episode, this.roomId, layer);
+    if (editor.paint(selected.index, value)) this.updateView([selected.index]);
+    this.endStroke();
   }
 
   /** Marks the current tile in the palette and the recent ones. */
@@ -2443,7 +2507,7 @@ export class App {
       this.refreshCircuit();
       // painted tile types are no longer free, copies in use cannot go
       this.refreshEpisodeTab();
-      if (this.selected) this.showCellTexts(this.selected.index);
+      if (this.selected) this.showSelectedCell(this.selected.index);
     }
   }
 
@@ -2602,8 +2666,11 @@ export class App {
     );
     const selected = this.selected;
     // what the selected cell shows (painting changes it)
-    if (selected) this.showCellTexts(selected.index);
-    else this.cellTexts.hidden = true;
+    if (selected) this.showSelectedCell(selected.index);
+    else {
+      this.cellDataSection.hidden = true;
+      this.cellTexts.hidden = true;
+    }
     const value = selected ? (room[selected.layer][selected.index] ?? 0) : 0;
     const record =
       selected && (value & 0xff) === LOGIC_CELL
@@ -2973,6 +3040,28 @@ export class App {
     return true;
   }
 
+  /** The data and the texts of the cell at `index`. */
+  private showSelectedCell(index: number): void {
+    this.showCellData(index);
+    this.showCellTexts(index);
+  }
+
+  /** The data the cell at `index` keeps in its state, base and overlay, to be changed. */
+  private showCellData(index: number): void {
+    const editor = this.need();
+    const room = editor.room(this.episode, this.roomId);
+    const { classes } = editor.game.episode(this.episode);
+    this.cellData.base.show(room.base[index] ?? 0, classes, this.episode);
+    this.cellData.overlay.show(room.overlay[index] ?? 0, classes, this.episode);
+    const [base, overlay] = [
+      this.cellData.base.element.hidden,
+      this.cellData.overlay.element.hidden,
+    ];
+    this.cellDataBase.hidden = base;
+    this.cellDataOverlay.hidden = overlay;
+    this.cellDataSection.hidden = base && overlay;
+  }
+
   /** The texts the cell at `index` shows, base and overlay, with a way to write each. */
   private showCellTexts(index: number): void {
     const room = this.need().room(this.episode, this.roomId);
@@ -3114,6 +3203,7 @@ export class App {
       this.refreshActors();
       this.refreshCircuit();
       this.refreshEpisodeTab();
+      if (this.selected) this.showSelectedCell(this.selected.index);
     }
     this.refreshRoomList();
     this.refreshButtons();

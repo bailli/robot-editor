@@ -649,6 +649,38 @@ h2 {
   margin: 0;
 }
 
+.record-view h4 {
+  font-size: 13px;
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+/* a cell's own data (CellDataField): under the current tile, or the selected cell's */
+.cell-data {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+.cell-data[hidden] {
+  display: none;
+}
+
+.cell-data p {
+  margin: 0;
+}
+
+.cell-data-preview {
+  display: flex;
+  flex: none;
+}
+
+.cell-data-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .record-summary {
   margin: 0;
   color: var(--muted);
