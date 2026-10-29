@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-10-28.
+Setup and commands are in the [README](README.md). Last updated: 2026-10-29.
 
 ## Goal and approach
 
@@ -1073,8 +1073,9 @@ Supported:
 - layout: the room fits the window's height with its exits around it (north above, south
   below, west and east written vertically at the sides; doors, stairs, bus, oracles,
   teleporters and actors in a line above); the column right of it has the tool and layer
-  settings (always visible) and tabs (Tiles, Record, Actors, Circuit, Script, Room,
-  Episode; keys 1–7) that scroll on their own, its width can be dragged (remembered in
+  settings (always visible) and tabs (what is edited first, from the cell out: Tiles,
+  Record, Room, Script, Episode, Texts; then what is there to look at: Actors, Circuit;
+  keys 1–8) that scroll on their own, its width can be dragged (remembered in
   the browser); clicking a logic cell opens the Record tab, which with no cell selected
   lists the room's records (click selects the cell, hover outlines it; Escape drops the
   selected cell and goes back to the list); the tab buttons tell what is there without
@@ -1149,7 +1150,7 @@ Supported:
   inspector with the record's fields per type (cells with previews: click takes the
   current tile, right-click paints with the cell; target room with
   "Go", arrival position, a travelling actor picked from the episode's actors, spawner radius/period, a native's object, price and chatter,
-  circuit stairs, an oracle's symbol, hint id and text, "Symbol found", a teleporter's condition and message,
+  circuit stairs, an oracle's symbol, its hint shown (330 + n: the cell's state sets it) with its text, "Symbol found", a teleporter's condition and message,
   …, "Gone after leaving" (byte 1 bit 5, every type)) and the raw
   bytes; change the type (listed by number), add a record to a plain cell
   (in the base layer, where the game keeps them; it shows the cell it replaces, lowest
@@ -1223,14 +1224,28 @@ Supported:
   piece, else the target's line stays (I's thief bribe `!THIEFIRI` into IV, **verified
   under Wine**: the game's entry holds it). II's oracle events 263 and 266 into
   IV's 197 and 198 save as the mod the oracle game test uses (verified under Wine)
-- texts from other episodes (tab Episode, `texts-view.ts`; mod kind `copyTexts` into the
+- texts (tab Texts, `texts-view.ts`; mod kind `texts`): the episode's entries
+  (`Editor.textStates`; III: its texts or its resource 1320 of room names, diary pages
+  and event texts, `textResources`), found by number or words, each with what it is for
+  (a tile type's description, a room's name, a first take's or event's text, a diary
+  page, an oracle's hint, notes' messages, …) and marked where edited (written, new,
+  removed, ← a copy); opened, its variants as the game stores them (`\` breaks a line,
+  `@` tiles, colour codes) with how each reads, tiles drawn; Apply (Ctrl+Enter), Cancel
+  (Escape, again: back to the list), Remove, "Original" (the base's: the exe with the
+  mod's copies); a number no entry has can be written. `Editor.setText`: one undo step,
+  variants trimmed, lines longer than the format holds (254) wrapped at 78 (`wrapLine`;
+  the game reads a line break as a space); refused (`textWriteProblem`): `|`, `;`, a line
+  starting like a header, characters outside CP437, empty variants, room texts longer
+  than the game reads (999). Room names, descriptions, tile descriptions, notes, hints
+  and script hovers show the texts as written
+- texts from other episodes (tab Texts, below the entries; mod kind `copyTexts` into the
   episode's texts, `textsId`): the copies (entry ← episode and entry, the text's start),
   each removable (×); a form: the episode, an entry of its texts as loaded (number),
   the entry it goes to (below 1800, the same number by default), what it says and what
   it replaces; "Copy" (`Editor.setTextCopies`, one undo step, a new base like a tile
   type copy). Refused: a text the source lacks, an entry from 1800 on (event texts come
-  with their events). A text written in the editor wins over its copy (saveMod drops
-  the copy). Copies into other resources (III's 1320) are kept from a mod but not listed
+  with their events), an entry written here. Written over a copy, the written text wins
+  (saveMod drops the copy); "Original" goes back to the copy. Copies into other resources (III's 1320) are kept from a mod but not listed
 - code patches (tab Episode, `code-view.ts`; mod kind `code`, all episodes; folded
   while the mod has none, it opens when the first comes): the byte writes by address
   (`Editor.codePatches`): section, the bytes the exe holds there and those written, and
@@ -1307,14 +1322,10 @@ Supported:
 
 Not supported (yet):
 
-- **editing texts freely:** the editor writes only room names and their descriptions,
-  and copies entries from other episodes (tab Episode). Any other entry (tile
-  descriptions 0–127, messages such as the notes' 800 + n, the oracle's hints, event
-  texts 1800 + n, III's diary pages in 1320) can't be written or added, even though the
-  mod format can hold it (`texts`, `withTextEntry`). Missing: a list of an episode's
-  entries (search, the tiles drawn in them), editing the variants, adding entries at a
-  free number, and the form the game needs (`;` ends an entry, `\` breaks a line, `_`,
-  colour codes, `@` tiles, CRUNCHED and its line feeds)
+- texts: which scripts, records and cells use an entry (the Texts tab says what an entry
+  is for by its number, not where it is used); a check of what the game's message boxes
+  and buffers fit (the fetch 0x438850 cuts a text at its caller's buffer, 2000 or 2048
+  bytes for some callers, others not traced)
 - **compound cell types:** some classes keep data of their own in the state (high
   byte), but the editor treats it like any other state. Tiles are painted in the states
   the episode's rooms use or the shape has frames for, and any other state only as a
@@ -1322,8 +1333,8 @@ Not supported (yet):
   inside), notes (message 800 + (state & 0x7f), bit 7 note or old writing/cassette),
   diary pages (the page in 1320), expert fields (state × 10,000 points) and letters (the
   character). Missing: a control for that data when painting or inspecting such a cell
-  (a package's content picked from the tiles; a note's message picked or written, which
-  needs the free text editing above; the points as a number); the states that are only
+  (a package's content picked from the tiles; a note's message picked or written, with
+  the Texts tab's editing; the points as a number); the states that are only
   frames would then no longer have to be listed one by one
 - painting over logic cells (use the inspector or the area tools); records are edited
   field by field

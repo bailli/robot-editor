@@ -35,17 +35,19 @@ leaves the browser).
 by itself; otherwise open or drop an exe (it never leaves the browser). Pick an episode
 and a room, then paint the base or overlay layer: left button paints, right button picks
 the tile under the cursor, Ctrl+Z / Ctrl+Y undo and redo, G shows the grid, P F S I
-choose the tool, L the layer, 1–7 the side panel's tab (? or the "Shortcuts" button
+choose the tool, L the layer, 1–8 the side panel's tab (? or the "Shortcuts" button
 lists all keys). The Fill
 tool fills connected cells; with the Select tool an area is copied (Ctrl+C), cut
 (Ctrl+X), cleared (Delete) and pasted (Ctrl+V, then click), logic records included. The
-side panel's tabs: Tiles; Record (a logic record's fields); Actors (robots and other actors
-of the room); Circuit (the room's logic circuit); Script (a room's script, source and
-disassembly); Room (the description shown under the room's name on entering, the darkness,
-the points for the first visit, the music); Episode (the start room and cell, the rucksack's
-capacity, the episode rules such as flags, the backdrop rule and diagonal moves, what the
-dealer sells and for how much, copies of tile types, events and texts from other episodes,
-the mod's code patches, and kits: "Add oracles" / "Add circuits" with "Place example").
+side panel's tabs: Tiles; Record (a logic record's fields); Room (the description shown
+under the room's name on entering, the darkness, the points for the first visit, the
+music); Script (a room's script, source and disassembly); Episode (the start room and cell,
+the rucksack's capacity, the episode rules such as flags, the backdrop rule and diagonal
+moves, what the dealer sells and for how much, copies of tile types and events from other
+episodes, the mod's code patches, and kits: "Add oracles" / "Add circuits" with "Place
+example"); Texts (every text entry of the episode, found by number or words, written,
+added or removed, and copies of texts from other episodes); Actors (robots and other
+actors of the room); Circuit (the room's logic circuit).
 "Map" shows all rooms and their links, "Dark" draws rooms as dark as in the game.
 "Save exe" downloads a copy with the edits (scenes, texts, the Episode tab's settings).
 A mod is the same edits as a JSON file against the pristine exe: "Open mod…" loads one,

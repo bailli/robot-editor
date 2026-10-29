@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 
 import { ROOM_WIDTH, displayText, readEventTable } from "@robot/formats";
 
+import { hex } from "../src/format.ts";
 import { app, bytes, clickCell, game, useApp } from "./app-setup.ts";
 import { defined, firstDifference } from "./game.ts";
 
@@ -285,15 +286,20 @@ test("Enigma's number says what the entry gives", () => {
   );
 });
 
-test("an oracle's hint is picked by its message id", async () => {
+test("an oracle's hint is shown by its message id, set by the cell's state", async () => {
   app.showEpisode(3, 48);
   await page.getByRole("tab", { name: "Record" }).click();
   const room = game.room(3, 48);
   const oracle = defined(room.records.find((r) => r.data[0] === 12));
   app.select(room.base.findIndex((c) => c === (0x7f | (oracle.slot << 8))));
-  const id = page.getByRole("textbox", { name: "Hint (eastwards)" });
-  await expect.element(id).toHaveValue(String(330 + (oracle.data[3] & 15)));
-  await userEvent.fill(id, "331");
+  // not a field of its own: the symbol (the cell's state) picks it
+  await expect
+    .element(page.getByRole("textbox", { name: "Hint (eastwards)" }))
+    .not.toBeInTheDocument();
+  const shown = () => document.querySelector(".record-value")?.textContent;
+  expect(shown()).toBe(String(330 + (oracle.data[3] & 15)));
+  const cell = page.getByRole("textbox", { name: "Cell" });
+  await userEvent.fill(cell, hex(((oracle.data[3] & 0xf0) | 1) * 256 + oracle.data[2]));
   await userEvent.keyboard("{Enter}");
   const data = () =>
     defined(
@@ -301,19 +307,21 @@ test("an oracle's hint is picked by its message id", async () => {
         .room(3, 48)
         .records.find((r) => r.slot === oracle.slot),
     ).data;
-  // the low 4 bits of the cell's state, the rest of it kept
   expect(data()[3]).toBe((oracle.data[3] & 0xf0) | 1);
+  expect(shown()).toBe("331");
   const hint = defined(game.episodeTexts(3)?.entries.get(331));
   expect(document.querySelector(".record-text")?.textContent).toBe(displayText(hint[0] ?? ""));
-  // out of range: the field goes back to the value
-  await userEvent.fill(id, "346");
-  await userEvent.keyboard("{Enter}");
-  await expect.element(id).toHaveValue("331");
   await page.getByRole("checkbox", { name: "Symbol found" }).click();
   expect(data()[3]).toBe((oracle.data[3] & 0xe0) | 0x11);
   expect(document.querySelector(".record-summary")?.textContent).toMatch(
     /^an oracle; its symbol counts as found:/,
   );
+  // a hint written in the Texts tab shows here
+  const index = room.base.findIndex((c) => c === (0x7f | (oracle.slot << 8)));
+  app.editor?.setText(3, 48, 1310, 331, ["Ein neuer Tipp."]);
+  app.select(index);
+  expect(document.querySelector(".record-text")?.textContent).toBe("Ein neuer Tipp.");
+  app.undo();
   await userEvent.keyboard("{Control>}z{/Control}");
   await userEvent.keyboard("{Control>}z{/Control}");
   expect(defined(app.editor).isEdited(3, 48)).toBe(false);

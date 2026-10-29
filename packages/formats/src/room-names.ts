@@ -19,7 +19,7 @@
  */
 import type { EpisodeClasses } from "./classes.ts";
 import type { Room } from "./scene.ts";
-import type { Texts } from "./texts.ts";
+import { type Texts, wrapLine } from "./texts.ts";
 
 export const ROOM_NAME_ENTRY = 1000;
 /** The banner's buffer for a room's text (0x406560). */
@@ -182,7 +182,7 @@ export function roomNameText(name: string, episode: number, old?: string): strin
  * joined by "\n", empty: none) after the name, which stays as it is. Entries with a
  * description keep its form, others take the episode's: episode III writes a "!" before
  * the name and the description after its backslash, the others an empty line after the
- * name (episode I's "RING-PLATZ"). Lines are wrapped at DESCRIPTION_WIDTH (the game
+ * name (episode I's "RING-PLATZ"). Lines are wrapped at TEXT_WIDTH (wrapLine; the game
  * wraps them anew); an unchanged description keeps the text as it is.
  */
 export function roomDescriptionText(description: string, episode: number, old: string): string {
@@ -196,47 +196,17 @@ export function roomDescriptionText(description: string, episode: number, old: s
     .replace(/^\n+|\n+$/g, "");
   if (lines === split.description) return old; // as it is, wrapping included
   if (!lines) return name;
-  const text = lines.split("\n").map(wrap).join("\\\n");
+  const text = lines
+    .split("\n")
+    .map((line) => wrapLine(line))
+    .join("\\\n");
   return form === "!" ? `!${name}\\\n${text}` : `${name}\\\n\\\n${text}`;
 }
 
 /** The episode whose rooms write their descriptions after a "!" name. */
 const DESCRIBED_EPISODE = 3;
-/** The longest line of a description as written (the originals' are up to 78). */
-const DESCRIPTION_WIDTH = 78;
 
 function styledName(name: string, style: "stars" | "underlined" | "plain"): string {
   if (style === "underlined") return `${name}\\\n${"═".repeat(name.length)}`;
   return style === "stars" ? `*** ${name} ***` : name;
-}
-
-/** What a text entry's line must not start with (textEntryProblem). */
-const HEADER_LIKE = /^\d*:/;
-
-/**
- * A line broken into lines of at most DESCRIPTION_WIDTH characters at spaces; never
- * before a word that would start a line like a text entry's header ("12:"); a paragraph
- * starting with one gets a space before it.
- */
-function wrap(line: string): string {
-  let out = "";
-  let width = 0;
-  for (const word of line.split(" ").filter(Boolean)) {
-    if (width === 0) {
-      // the first line starts the paragraph, which must not look like a header either
-      if (HEADER_LIKE.test(word)) {
-        out += " ";
-        width++;
-      }
-      out += word;
-    } else if (width + 1 + word.length > DESCRIPTION_WIDTH && !HEADER_LIKE.test(word)) {
-      out += `\n${word}`;
-      width = 0;
-    } else {
-      out += ` ${word}`;
-      width++;
-    }
-    width += word.length;
-  }
-  return out;
 }

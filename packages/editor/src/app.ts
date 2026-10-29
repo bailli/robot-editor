@@ -15,18 +15,23 @@ import {
   LOGIC_CELL,
   MAX_ROOMS,
   NAMED_ROOMS,
+  NOTE_CLASS,
+  ORACLE_CLASS,
   PLACEMENT_AREAS,
   ROBOT_CLASSES,
   ROOM_CELLS,
+  ROOM_NAME_ENTRY,
   ROOM_WIDTH,
   type Room,
   type RoomActor,
   SCRIPT_EVENTS,
   START_ROOMS,
   type Shape,
+  TILE_TYPES,
   actorKindClass,
   actorKindName,
   cellGood,
+  classTexts,
   compileScript,
   cryptScene,
   darkPalette,
@@ -34,6 +39,7 @@ import {
   describeRecord,
   disassemble,
   displayText,
+  eventTableLength,
   eventTextsId,
   exitMode,
   goodTile,
@@ -58,6 +64,7 @@ import {
   robotsTakeRandomColours,
   roomActors,
   roomCircuit,
+  roomNamesId,
   roomSaveTime,
   roomScript,
   roomSettings,
@@ -86,6 +93,7 @@ import {
   MAX_RECORD_SLOTS,
   MAX_ROOM_ID,
   type NewRoomContent,
+  type TextEntryState,
   type TextSource,
   areaBetween,
   areaCells,
@@ -187,6 +195,14 @@ const TOOLS: readonly { tool: Tool; label: string; key: string; title: string }[
       "Click a cell to see what is there: its logic record, else its actor or circuit, in their tab (I)",
   },
 ];
+
+/** Texts: tiles without a description, the help, the notes' messages (800 + state & 0x7f). */
+const NO_DESCRIPTION = 510;
+const HELP_TEXT = 995;
+const NOTE_TEXTS = 800;
+/** Texts of oracles (classTexts): hint 330 + n, death message 945. */
+const ORACLE_HINTS = 330;
+const ORACLE_DEATH = 945;
 
 /** Tiles kept per episode in the Tiles tab's row of recent ones. */
 const RECENT_TILES = 12;
@@ -504,7 +520,7 @@ export class App {
       this.setTile(value);
     },
     text: (id) => {
-      const texts = this.need().game.episodeTexts(this.episode)?.entries.get(id);
+      const texts = this.need().textEntry(textsId(this.episode), id);
       const tile = (v: number) => this.names().tileName(v);
       return texts?.map((t) => displayText(t, tile)).join(" – or – ");
     },
@@ -651,6 +667,8 @@ export class App {
           : `Text ${to} is as the exe has it again`,
       );
     },
+    write: (resource, entry, variants) => this.writeText(resource, entry, variants),
+    preview: (value) => this.cellPreview(value),
   });
   /** Per episode of the exe as loaded: its cells and names, for the types to copy. */
   private readonly sourceCaches = new Map<number, { cells: CellCache; names: TileNames }>();
@@ -685,17 +703,16 @@ export class App {
   /** The pieces some room of the loaded exe plays. */
   private roomMusic: Set<string> | undefined;
   /**
-   * The column right of the room: tiles, the selected record, the actors, the script,
-   * the room's settings, the episode's (the start, the dealer).
+   * The column right of the room: what is edited first, from the cell out (tiles, the
+   * selected record, the room's settings, its script, the episode's, its texts), then
+   * what is there to look at (the actors, the circuit).
    */
   readonly sidePanel: SidePanel = new SidePanel(
     [
       { name: "tiles", label: "Tiles", content: this.tilesTab },
       { name: "record", label: "Record", content: this.recordTab },
-      { name: "actors", label: "Actors", content: this.actorsView.element },
-      { name: "circuit", label: "Circuit", content: this.circuitView.element },
-      { name: "script", label: "Script", content: this.scriptView.element },
       { name: "room", label: "Room", content: this.settingsView.element },
+      { name: "script", label: "Script", content: this.scriptView.element },
       {
         name: "episode",
         label: "Episode",
@@ -706,11 +723,14 @@ export class App {
           this.kitsView.element,
           this.tileTypesView.element,
           this.eventsView.element,
-          this.textsView.element,
           this.dealerView.element,
           this.codeView.element,
         ),
       },
+      { name: "texts", label: "Texts", content: this.textsView.element },
+      // what is there, mostly to look at
+      { name: "actors", label: "Actors", content: this.actorsView.element },
+      { name: "circuit", label: "Circuit", content: this.circuitView.element },
     ],
     (width) => {
       this.workspace.style.setProperty("--side-width", `${width}px`);
@@ -1914,6 +1934,8 @@ export class App {
         if (event.key === "Escape") {
           if (this.pasting) this.stopPasting();
           else if (this.area) this.setArea(undefined);
+          else if (this.sidePanel.shown === "texts" && this.textsView.isOpen)
+            this.textsView.close();
           else if (this.selected) this.select(undefined);
         } else if (event.key === "Delete" && !ctrl) {
           this.clearArea();
@@ -2454,15 +2476,7 @@ export class App {
         }),
       classTexts: (copy) => editor.classTextsToCopy(copy),
     });
-    const line = (text: string | undefined) =>
-      text === undefined ? undefined : displayText(text).replace(/\s+/g, " ");
-    this.textsView.show({
-      episode: this.episode,
-      names: EPISODE_NAMES,
-      copies: editor.textCopies(this.episode),
-      source: (from, entry) => line(editor.pristine.texts(textsId(from))?.entries.get(entry)?.[0]),
-      current: (entry) => line(editor.textEntry(textsId(this.episode), entry)?.[0]),
-    });
+    this.refreshTextsTab();
     this.eventsView.show({
       episode: this.episode,
       names: EPISODE_NAMES,
@@ -2510,6 +2524,108 @@ export class App {
           : "no dealer",
       ].join("; "),
     });
+  }
+
+  /** The Texts tab: the episode's entries, the open one, the copies of other episodes'. */
+  private refreshTextsTab(): void {
+    const editor = this.need();
+    const { episode } = this;
+    const line = (text: string | undefined) =>
+      text === undefined ? undefined : displayText(text).replace(/\s+/g, " ");
+    const resources = editor.textResources(episode).map((id) => ({
+      id,
+      label: id === textsId(episode) ? `Texts (${id})` : `Names, diary, events (${id})`,
+    }));
+    // asked for on each keystroke in the tab: the same until the next refresh
+    const states = new Map<number, TextEntryState[]>();
+    const entries = (resource: number) => {
+      let found = states.get(resource);
+      if (!found) {
+        found = editor.textStates(resource);
+        states.set(resource, found);
+      }
+      return found;
+    };
+    this.textsView.show({
+      episode,
+      names: EPISODE_NAMES,
+      resources,
+      entries,
+      role: (resource, entry) => this.textRole(resource, entry),
+      problem: (resource, entry, variants) =>
+        editor.textWriteProblem(episode, resource, entry, variants),
+      copies: editor.textCopies(episode),
+      source: (from, entry) => line(editor.pristine.texts(textsId(from))?.entries.get(entry)?.[0]),
+      current: (entry) => line(editor.textEntry(textsId(episode), entry)?.[0]),
+    });
+    const edited = resources.reduce((n, r) => n + entries(r.id).filter((s) => s.written).length, 0);
+    const copies = editor.textCopies(episode).length;
+    this.sidePanel.setState("texts", {
+      ...(edited + copies > 0 ? { badge: String(edited + copies), note: edited > 0 } : {}),
+      title: `${edited} ${edited === 1 ? "entry" : "entries"} written here, ${copies} ${copies === 1 ? "copy" : "copies"} of other episodes' texts`,
+    });
+  }
+
+  /** What a text entry of the shown episode is for, e.g. "Name of room 43". */
+  private textRole(resource: number, entry: number): string {
+    const editor = this.need();
+    const { episode } = this;
+    const { classes } = editor.game.episode(episode);
+    const type = (t: number) => {
+      const name = this.names().info(t).name;
+      return `tile type 0x${t.toString(16).padStart(2, "0")}${name ? ` (${name})` : ""}`;
+    };
+    const room = entry - ROOM_NAME_ENTRY;
+    const event = entry - EVENT_TEXT;
+    if (resource === eventTextsId(episode) && event >= 0) {
+      if (event >= eventTableLength(episode)) return "Event text past the event table";
+      return event < TILE_TYPES ? `First take of ${type(event)}` : `Text of event entry ${event}`;
+    }
+    if (resource === roomNamesId(episode) && room >= 0 && room < (NAMED_ROOMS[episode] ?? 0)) {
+      const there = editor.hasRoom(episode, room) ? "" : " (no such room)";
+      return `Name of room ${room}${there}, and its description`;
+    }
+    if (resource !== textsId(episode)) return episode === 3 ? `Diary page ${entry}` : "Text";
+    if (entry < TILE_TYPES) return `Description of ${type(entry)}`;
+    if (entry === NO_DESCRIPTION) return "Description of tiles without one";
+    if (entry === HELP_TEXT) return "Help (controls, the rucksack)";
+    if (classes.typeOfClass.has(NOTE_CLASS) && entry >= NOTE_TEXTS && entry < NOTE_TEXTS + 0x80)
+      return `Message, of notes in state ${entry - NOTE_TEXTS} (+ 0x80: read on the spot)`;
+    if (classes.typeOfClass.has(ORACLE_CLASS) && classTexts(ORACLE_CLASS).includes(entry))
+      return entry === ORACLE_DEATH
+        ? "Message, of oracles walked into southwards (the hero dies)"
+        : `Oracle hint, symbol ${entry - ORACLE_HINTS}`;
+    return "Message";
+  }
+
+  /**
+   * Writes an entry of a text resource of the shown episode (Editor.setText); false if
+   * it was refused, which the status line says.
+   */
+  private writeText(
+    resource: number,
+    entry: number,
+    variants: readonly string[] | undefined,
+  ): boolean {
+    const editor = this.need();
+    try {
+      if (!editor.setText(this.episode, this.roomId, resource, entry, variants)) return true;
+    } catch (error) {
+      this.setStatus(`Cannot write text ${entry}: ${message(error)}`, true);
+      return false;
+    }
+    this.afterTextEdit();
+    this.setStatus(variants ? `Text ${entry} written` : `Text ${entry} removed`);
+    return true;
+  }
+
+  /** After a text edit: names, descriptions and what tells about them. */
+  private afterTextEdit(): void {
+    this.showRoom(this.roomId); // the name too (refreshConnections)
+    this.showTiles(); // the palette's tooltips
+    if (this.selected) this.select(this.selected.index);
+    this.refreshButtons();
+    this.remember(this.episode, this.roomId); // labels of back/forward
   }
 
   /** The rooms of the episode with a dealer record (a travelling actor that is the dealer). */
@@ -2578,8 +2694,8 @@ export class App {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);
       if (this.selected) this.select(this.selected.index);
-      // robots' colours follow the flags
-      if (edit.flags) this.showTiles();
+      // robots' colours follow the flags; the palette's tooltips the descriptions
+      if (edit.flags || edit.text) this.showTiles();
     } else {
       this.updateView(edit.changes.map((c) => c.index));
       // as at the end of a stroke: painted cells may be passages or actors
@@ -2908,14 +3024,13 @@ export class App {
     if (kind === "enigma") {
       const entry = readEventTable(game.image, this.episode).at(value);
       if (!entry || value < 0) return `entry ${value} (missing)`;
-      const text = game.texts(eventTextsId(this.episode))?.entries.get(EVENT_TEXT + value)?.[0];
+      const text = this.need().textEntry(eventTextsId(this.episode), EVENT_TEXT + value)?.[0];
       const shown = text === undefined ? "" : `, text ${EVENT_TEXT + value}:\n${displayText(text)}`;
       return `entry ${value}: ${entry.points} points${shown}`;
     }
     if (kind !== "text") return undefined;
-    const variants = game
-      .episodeTexts(this.episode)
-      ?.entries.get(value)
+    const variants = this.need()
+      .textEntry(textsId(this.episode), value)
       ?.map((t) => displayText(t, (v) => this.names().tileName(v)));
     if (!variants) return `text ${value} (missing)`;
     if (variants.length === 1) return variants[0];
@@ -2933,7 +3048,8 @@ export class App {
   private names(): TileNames {
     let names = this.tileNames.get(this.episode);
     if (!names) {
-      names = new TileNames(this.need().game, this.episode);
+      const editor = this.need();
+      names = new TileNames(editor.game, this.episode, (id) => editor.textEntries(id));
       this.tileNames.set(this.episode, names);
     }
     return names;

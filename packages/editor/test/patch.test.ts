@@ -19,3 +19,17 @@ test("a patched select shows the new value, also on an option it gains", () => {
   patchChildren(parent, [select(["0", "1"], "0")]);
   expect((kept as HTMLSelectElement).value).toBe("0");
 });
+
+test("a patched textarea shows the new value and stays the same element", () => {
+  const area = (value: string) => {
+    const element = document.createElement("textarea");
+    element.value = value;
+    return element;
+  };
+  const parent = document.createElement("div");
+  parent.append(area("old"));
+  const kept = parent.firstChild;
+  patchChildren(parent, [area("new")]);
+  expect(parent.firstChild).toBe(kept);
+  expect((kept as HTMLTextAreaElement).value).toBe("new");
+});

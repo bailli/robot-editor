@@ -38,5 +38,7 @@ function patchNode(a: Node, b: Node): void {
   if (a instanceof HTMLInputElement && b instanceof HTMLInputElement) {
     if (a.value !== b.value) a.value = b.value;
     a.checked = b.checked;
+  } else if (a instanceof HTMLTextAreaElement && b instanceof HTMLTextAreaElement) {
+    if (a.value !== b.value) a.value = b.value;
   } else if (a instanceof HTMLSelectElement && selected !== undefined) a.value = selected;
 }

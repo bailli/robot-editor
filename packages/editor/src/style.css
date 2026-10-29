@@ -1594,3 +1594,93 @@ button.link {
   opacity: 0.6;
   cursor: progress;
 }
+
+/* a record field other fields set (an oracle's hint): shown, not edited */
+.record-value {
+  font-family: ui-monospace, monospace;
+  padding: 2px 7px;
+}
+
+/* the Texts tab: the entries, an open entry's variants and how they read */
+.text-search {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.text-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 50vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.text-row {
+  display: flex;
+  min-width: 0;
+}
+
+.text-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 1px 4px;
+  text-align: left;
+  border: none;
+  background: none;
+}
+
+.text-entry:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.text-number {
+  flex: none;
+  min-width: 4ch;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.text-mark {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.text-mark.edited {
+  color: var(--edited);
+}
+
+.text-variant-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.record-field.text-variant {
+  width: auto;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.text-preview {
+  overflow-wrap: anywhere;
+}
+
+.texts-view .error {
+  color: var(--error);
+}

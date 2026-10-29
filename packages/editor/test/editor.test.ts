@@ -1122,6 +1122,118 @@ describe("Editor and texts from other episodes", () => {
   });
 });
 
+describe("Editor and text entries", () => {
+  test("an entry written, added and removed: undoable, saved into exe and mod", () => {
+    const editor = new Editor(game);
+    expect(editor.textResources(1)).toEqual([1110]);
+    expect(editor.textResources(3)).toEqual([1310, 1320]);
+    const no = defined(game.texts(1110)?.entries.get(510));
+    expect(editor.textState(1110, 510)).toEqual({
+      entry: 510,
+      variants: no,
+      base: no,
+      written: false,
+    });
+    // trimmed as the game reads them; the same again changes nothing
+    expect(editor.setText(1, 43, 1110, 510, [" Nichts zu sehen. ", "Gar nichts."])?.room).toBe(43);
+    expect(editor.setText(1, 43, 1110, 510, ["Nichts zu sehen.", "Gar nichts."])).toBeUndefined();
+    expect(editor.textEntry(1110, 510)).toEqual(["Nichts zu sehen.", "Gar nichts."]);
+    expect(editor.textState(1110, 510)?.written).toBe(true);
+    editor.setText(1, 43, 1110, 900, ["Ein neuer Zettel."]);
+    editor.setText(1, 43, 1110, 801, undefined);
+    expect(editor.textState(1110, 801)).toMatchObject({ variants: undefined, written: true });
+    expect(
+      editor
+        .textStates(1110)
+        .filter((s) => s.written)
+        .map((s) => s.entry),
+    ).toEqual([510, 801, 900]);
+    const mod = editor.saveMod();
+    expect(mod.changes.texts).toEqual([
+      { resource: 1110, entry: 510, variants: ["Nichts zu sehen.", "Gar nichts."] },
+      { resource: 1110, entry: 801, variants: null },
+      { resource: 1110, entry: 900, variants: ["Ein neuer Zettel."] },
+    ]);
+    const saved = new Game(editor.save()).texts(1110)?.entries;
+    expect(saved?.get(900)).toEqual(["Ein neuer Zettel."]);
+    expect(saved?.has(801)).toBe(false);
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    // the base's text again: nothing left in the mod
+    editor.setText(1, 43, 1110, 510, no);
+    expect(editor.saveMod().changes.texts.map((c) => c.entry)).toEqual([801, 900]);
+    editor.undo();
+    editor.undo();
+    editor.undo();
+    editor.undo();
+    expect(editor.textStates(1110).some((s) => s.written)).toBe(false);
+    expect(editor.saveMod().changes.texts).toEqual([]);
+  });
+
+  test("room names in III's own resource are written there, as long as the game reads", () => {
+    const editor = new Editor(game);
+    editor.setText(3, 41, 1320, 1041, ["!Die Bucht\\\nWellen."]);
+    expect(editor.roomName(3, 41)).toEqual({ room: 41, name: "Die Bucht", description: "Wellen." });
+    expect(editor.isEdited(3, 41)).toBe(true);
+    expect(() => editor.setText(3, 41, 1320, 1041, [`!${"x ".repeat(500)}`])).toThrow(
+      /at most 999/,
+    );
+    // a message may be longer; lines too long to store are wrapped
+    editor.setText(3, 41, 1310, 900, ["Wort ".repeat(240)]);
+    const lines = defined(editor.textEntry(1310, 900)?.[0]).split("\n");
+    expect(lines.length).toBe(16);
+    expect(Math.max(...lines.map((l) => l.length))).toBeLessThanOrEqual(78);
+  });
+
+  test("refused: other resources, numbers, empty variants, separators, characters", () => {
+    const editor = new Editor(game);
+    const write = (resource: number, entry: number, variants: string[] | undefined) =>
+      editor.textWriteProblem(1, resource, entry, variants);
+    expect(write(1210, 510, ["x"])).toMatch(/no text resource 1210/);
+    expect(write(1110, 65536, ["x"])).toMatch(/from 0 to 65535/);
+    expect(write(1110, 510, [])).toMatch(/at least one/);
+    expect(write(1110, 510, ["x", " "])).toMatch(/cannot be empty/);
+    expect(write(1110, 510, ["a|b"])).toMatch(/separate/);
+    expect(write(1110, 510, ["a\n12:b"])).toMatch(/digits/);
+    expect(write(1110, 510, ["€"])).toBeDefined();
+    expect(write(1110, 510, undefined)).toBeUndefined();
+    expect(() => editor.setText(1, 43, 1110, 510, ["a;b"])).toThrow(RangeError);
+    expect(editor.dirty).toBe(false);
+  });
+
+  test("a copied entry: written over, back to the copy; no copy over a written one", () => {
+    const editor = new Editor(game);
+    editor.setTextCopies(0, 43, [{ to: 331, source: { from: 2, of: 331 } }]);
+    const copied = game.texts(1210)?.entries.get(331);
+    expect(editor.textState(1010, 331)).toEqual({
+      entry: 331,
+      variants: copied,
+      base: copied,
+      copy: { from: 2, of: 331 },
+      written: false,
+    });
+    editor.setText(0, 43, 1010, 331, ["Ein eigener Tipp."]);
+    expect(editor.textState(1010, 331)).toMatchObject({
+      copy: { from: 2, of: 331 },
+      written: true,
+    });
+    expect(editor.saveMod().changes.copyTexts).toEqual([]);
+    // the copy's text again: the copy is what the mod keeps
+    editor.setText(0, 43, 1010, 331, defined(copied));
+    expect(editor.saveMod().changes.copyTexts).toHaveLength(1);
+    // a written entry takes no copy, a copy goes and the written text stays
+    editor.setText(0, 43, 1010, 332, ["Noch ein Tipp."]);
+    expect(editor.textProblem(0, 332, { from: 2, of: 332 })).toMatch(/written here/);
+    editor.setText(0, 43, 1010, 331, ["Ein eigener Tipp."]);
+    editor.setTextCopies(0, 43, [{ to: 331, source: undefined }]);
+    expect(editor.textState(1010, 331)).toEqual({
+      entry: 331,
+      variants: ["Ein eigener Tipp."],
+      base: undefined,
+      written: true,
+    });
+  });
+});
+
 describe("Editor and kits", () => {
   const ivRoom = readEpisodeStart(game.image, 4).room;
   const kit = (key: string) => defined(KITS.find((k) => k.key === key));

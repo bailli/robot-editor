@@ -56,11 +56,12 @@ const HELP: readonly HelpGroup[] = [
     rows: [
       ["1", "Tiles"],
       ["2", "Record (with no cell selected: the room's records)"],
-      ["3", "Actors"],
-      ["4", "Circuit"],
-      ["5", "Script"],
-      ["6", "Room"],
-      ["7", "Episode (the dealer)"],
+      ["3", "Room"],
+      ["4", "Script"],
+      ["5", "Episode (the dealer)"],
+      ["6", "Texts (with an entry open: Escape back to the list)"],
+      ["7", "Actors"],
+      ["8", "Circuit"],
     ],
   },
   {

@@ -9,6 +9,7 @@ export {
   SAND_DESCRIBE_METHOD,
   SAND_SCORPION_STATES,
   SCORPION_SAND_TOUCH_METHODS,
+  TILE_TYPES,
   classTexts,
   freeTileTypes,
   readClassTable,
@@ -213,6 +214,7 @@ export {
   textEntryProblem,
   textPieces,
   withTextEntry,
+  wrapLongLines,
 } from "./texts.ts";
 export {
   MAX_RUCKSACK,

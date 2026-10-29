@@ -313,13 +313,14 @@ test("the Episode tab copies events of other episodes to spare entries, undoably
   await expect.element(events.getByText("0 spare")).toBeVisible();
 });
 
-test("the Episode tab copies texts of other episodes, a copied class's in one go", async () => {
+test("the Texts tab copies texts of other episodes, a copied class's in one go", async () => {
   app.showEpisode(0, 43);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Texts" }).click();
   const types = page.getByRole("region", { name: "Tile types" });
   const texts = page.getByRole("region", { name: "Texts" });
   await expect.element(texts.getByText(/has no texts of other episodes/)).toBeVisible();
   // II's oracle in Junior: its hints and death message come with "Texts"
+  await page.getByRole("tab", { name: "Episode" }).click();
   await userEvent.selectOptions(types.getByLabelText("From episode"), "II");
   await userEvent.selectOptions(types.getByLabelText("Type"), String(0x51));
   await types.getByRole("button", { name: "Copy" }).click();
@@ -329,6 +330,7 @@ test("the Episode tab copies texts of other episodes, a copied class's in one go
   expect(app.editor?.textCopies(0).map((c) => c.to)).toEqual([331, 332, 334, 339, 945]);
   expect(status()).toMatch(/Texts 331, 332, 334, 339, 945 of .* copied/);
   await expect.element(types.getByRole("button", { name: "Texts" })).not.toBeInTheDocument();
+  await page.getByRole("tab", { name: "Texts" }).click();
   await expect.element(texts.getByText(/^945 ← II: /)).toBeVisible();
   // one undo step
   app.undo();

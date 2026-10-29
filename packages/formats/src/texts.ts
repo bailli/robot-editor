@@ -115,6 +115,47 @@ export function textPieces(text: string): TextPiece[] {
 
 /** The longest line the game reads in one piece (0x431620 reads up to 255 bytes). */
 const MAX_LINE = 254;
+/** The width texts are written in (the originals' lines are up to 78 characters). */
+const TEXT_WIDTH = 78;
+/** What a text entry's line must not start with (textEntryProblem). */
+const HEADER_LIKE = /^\d*:/;
+
+/**
+ * A line broken into lines of at most `width` characters at spaces (the game reads a
+ * line break as a space, and runs of spaces as one); never before a word that would
+ * start a line like a text entry's header ("12:"); a paragraph starting with one gets a
+ * space before it.
+ */
+export function wrapLine(line: string, width = TEXT_WIDTH): string {
+  let out = "";
+  let at = 0;
+  for (const word of line.split(" ").filter(Boolean)) {
+    if (at === 0) {
+      // the first line starts the paragraph, which must not look like a header either
+      if (HEADER_LIKE.test(word)) {
+        out += " ";
+        at++;
+      }
+      out += word;
+    } else if (at + 1 + word.length > width && !HEADER_LIKE.test(word)) {
+      out += `\n${word}`;
+      at = 0;
+    } else {
+      out += ` ${word}`;
+      at++;
+    }
+    at += word.length;
+  }
+  return out;
+}
+
+/** A variant with the lines too long to store (textEntryProblem) wrapped (wrapLine). */
+export function wrapLongLines(variant: string): string {
+  return variant
+    .split("\n")
+    .map((line) => (line.length > MAX_LINE ? wrapLine(line) : line))
+    .join("\n");
+}
 
 /**
  * Why a variant cannot be stored as it is, or undefined: "|" and ";" end variants, a
@@ -125,7 +166,7 @@ export function textEntryProblem(variant: string): string | undefined {
   if (/[|;]/.test(variant)) return `"|" and ";" separate texts`;
   if (variant.includes("\x7f")) return "the character DEL (0x7f) cannot be stored";
   for (const line of variant.split("\n")) {
-    if (/^\d*:/.test(line)) return `a line must not start with digits and ":"`;
+    if (HEADER_LIKE.test(line)) return `a line must not start with digits and ":"`;
     if (line.length > MAX_LINE) return `lines are at most ${MAX_LINE} characters long`;
   }
   return undefined;

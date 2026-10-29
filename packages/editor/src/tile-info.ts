@@ -11,6 +11,7 @@ import {
   requiredPoints,
   roomNamesId,
   textPieces,
+  textsId,
 } from "@robot/formats";
 
 import { hex } from "./format.ts";
@@ -34,13 +35,13 @@ export interface TileInfo {
 export class TileNames {
   private readonly names: Map<number, string>;
   private readonly actorNames: ReadonlyMap<number, string>;
-  private readonly texts: ReadonlyMap<number, readonly string[]>;
-  /** Episode III's diary pages are in its room-name texts. */
-  private readonly pages: ReadonlyMap<number, readonly string[]>;
+  /** A text resource's entries, as edited where an editor gives them. */
+  private readonly entries: (id: number) => ReadonlyMap<number, readonly string[]> | undefined;
   private readonly classes: EpisodeClasses;
   private readonly episode: number;
 
-  constructor(game: Game, episode: number) {
+  /** `texts` gives the text resources (by default the game's): read when asked for. */
+  constructor(game: Game, episode: number, texts = (id: number) => game.texts(id)) {
     // actors whose tiles have no script name: the dealer, the thief
     this.actorNames = new Map(
       [...game.episode(episode).classes.classes].flatMap(([type, c]) => {
@@ -49,8 +50,7 @@ export class TileNames {
       }),
     );
     this.names = game.objectNames(episode);
-    this.texts = game.episodeTexts(episode)?.entries ?? new Map<number, string[]>();
-    this.pages = game.texts(roomNamesId(episode))?.entries ?? new Map<number, string[]>();
+    this.entries = (id) => texts(id)?.entries;
     this.classes = game.episode(episode).classes;
     this.episode = episode;
   }
@@ -62,18 +62,19 @@ export class TileNames {
       ? object.charAt(0) + object.slice(1).toLowerCase()
       : this.actorNames.get(value & 0xff);
     const description = describeCell(value, this.classes, this.episode, room);
-    const raw = description ? descriptionTexts(description, this.texts) : [];
+    const texts = this.entries(textsId(this.episode)) ?? new Map<number, string[]>();
+    const raw = description ? descriptionTexts(description, texts) : [];
     const points = requiredPoints(value, this.classes);
     const needs = points === undefined ? [] : [`Needs at least ${points} points to cross.`];
-    const texts = [
+    const shown = [
       ...needs,
       ...this.contents(value),
       ...raw.map((t) => displayText(t)).filter((d) => d !== ""),
     ];
     return {
       name,
-      descriptions: texts.map((t) => displayText(t, (v) => this.tileName(v))),
-      texts,
+      descriptions: shown.map((t) => displayText(t, (v) => this.tileName(v))),
+      texts: shown,
       random:
         description !== undefined && typeof description.variant !== "number" && raw.length > 1,
     };
@@ -85,7 +86,8 @@ export class TileNames {
     if (type !== undefined) return [`Contains @${type.toString(16)}.`];
     const note = noteText(value, this.classes);
     if (!note) return [];
-    const text = (note.read === "diary" ? this.pages : this.texts).get(note.text)?.[0] ?? "";
+    const resource = note.read === "diary" ? roomNamesId(this.episode) : textsId(this.episode);
+    const text = this.entries(resource)?.get(note.text)?.[0] ?? "";
     const recorder = this.classes.typeOfClass.has(0xbf);
     const how = {
       step: `Note, read when stepped on (message ${note.text}):`,

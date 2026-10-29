@@ -81,6 +81,7 @@ import {
   sha256,
   spareEventEntries,
   textChanges,
+  textEntryProblem,
   textsId,
   withBackdropRule,
   withDealer,
@@ -94,6 +95,7 @@ import {
   withRucksack,
   withTextChanges,
   withTextEntry,
+  wrapLongLines,
 } from "@robot/formats";
 
 export type Layer = "base" | "overlay";
@@ -224,6 +226,22 @@ export interface TextCopy {
   of: number;
 }
 
+/**
+ * An entry of a text resource: as edited, as the base has it (the exe with the mod's
+ * copies), and where the base's comes from.
+ */
+export interface TextEntryState {
+  entry: number;
+  /** The variants as edited; undefined: removed here. */
+  variants: readonly string[] | undefined;
+  /** The base's variants; undefined: the base has no such entry. */
+  base: readonly string[] | undefined;
+  /** The other episode's entry the base's is a copy of (mod kind copyTexts). */
+  copy?: TextSource;
+  /** Whether it was written here: differs from the base. */
+  written: boolean;
+}
+
 /** An entry of another episode's texts to copy. */
 export interface TextSource {
   from: number;
@@ -267,6 +285,14 @@ function withTextCopy(
   if (group < 0) out.push({ resource, from: source.from, entries: [pair] });
   else out[group] = { ...out[group], entries: [...out[group].entries, pair] };
   return out;
+}
+
+/** The highest text number: the game's text table keeps them as 16-bit words (0x438850). */
+const MAX_TEXT_ENTRY = 0xffff;
+
+/** Variants as setText writes them: trimmed, lines too long to store wrapped. */
+function textToWrite(variants: readonly string[]): string[] {
+  return variants.map((v) => wrapLongLines(v.trim()));
 }
 
 /** The tile types a copy can never go to or come from: empty floor and logic cells. */
@@ -792,6 +818,8 @@ export class Editor {
       return `entry ${to} is not one below ${EVENT_TEXT} (event texts come with their events)`;
     if (this.pristine.texts(textsId(from))?.entries.has(of) !== true)
       return `episode ${from} has no text ${of}`;
+    if (this.textState(textsId(episode), to)?.written === true)
+      return `text ${to} is written here: take it back to the exe's first`;
     return undefined;
   }
 
@@ -824,6 +852,123 @@ export class Editor {
     const key = (list: readonly TextCopy[]) => list.map((c) => `${c.to} ${c.from} ${c.of}`).join();
     if (key(textCopiesOf(copyTexts, episode)) === key(this.textCopies(episode))) return undefined;
     return this.rebase(episode, room, { ...this.changes, copyTexts });
+  }
+
+  /**
+   * The text resources whose entries the editor writes for the episode: its texts
+   * (textsId), and episode III's own resource of room names, diary pages and event texts.
+   */
+  textResources(episode: number): number[] {
+    return [...new Set([textsId(episode), roomNamesId(episode), eventTextsId(episode)])].filter(
+      (id) => this.game.texts(id) !== undefined,
+    );
+  }
+
+  /** The entries of a text resource as edited, and those removed here, by number. */
+  textStates(resource: number): TextEntryState[] {
+    const edited = this.textEntries(resource)?.entries;
+    const base = this.game.texts(resource)?.entries;
+    const entries = [...new Set([...(base?.keys() ?? []), ...(edited?.keys() ?? [])])];
+    return entries.sort((a, b) => a - b).flatMap((e) => this.textState(resource, e) ?? []);
+  }
+
+  /** An entry of a text resource (see textStates), undefined if neither base nor edits have it. */
+  textState(resource: number, entry: number): TextEntryState | undefined {
+    const variants = this.textEntries(resource)?.entries.get(entry);
+    const base = this.game.texts(resource)?.entries.get(entry);
+    if (!variants && !base) return undefined;
+    const same =
+      variants?.length === base?.length && (variants ?? []).every((v, i) => v === base?.[i]);
+    const copy = this.textCopy(resource, entry);
+    const source = copy?.from;
+    const from = EPISODES.find((e) => textsId(e) === source || eventTextsId(e) === source);
+    return {
+      entry,
+      variants,
+      base,
+      ...(copy && from !== undefined ? { copy: { from, of: copy.of } } : {}),
+      written: !same,
+    };
+  }
+
+  /**
+   * Why entry `entry` of text resource `resource` of the episode cannot hold `variants`
+   * (undefined: be removed) as setText writes them, undefined if it can: a resource the
+   * editor does not write (textResources), an entry number the game's table cannot
+   * hold, empty variants, what the text format cannot store (textEntryProblem) or code
+   * page 437 lacks, and room names longer than the game reads.
+   */
+  textWriteProblem(
+    episode: number,
+    resource: number,
+    entry: number,
+    variants: readonly string[] | undefined,
+  ): string | undefined {
+    if (!this.textResources(episode).includes(resource))
+      return `the episode has no text resource ${resource}`;
+    if (!Number.isInteger(entry) || entry < 0 || entry > MAX_TEXT_ENTRY)
+      return `text numbers go from 0 to ${MAX_TEXT_ENTRY}`;
+    if (!variants) return undefined;
+    if (variants.length === 0) return "a text needs at least one variant";
+    for (const variant of textToWrite(variants)) {
+      if (variant.trim() === "") return "a variant cannot be empty";
+      const problem = textEntryProblem(variant);
+      if (problem) return problem;
+      try {
+        encodeCp437(variant);
+      } catch (error) {
+        if (error instanceof RangeError) return error.message;
+        throw error;
+      }
+      const room = entry - ROOM_NAME_ENTRY;
+      if (
+        resource === roomNamesId(episode) &&
+        room >= 0 &&
+        room < Math.min(NAMED_ROOMS[episode] ?? Infinity, EVENT_TEXT - ROOM_NAME_ENTRY) &&
+        roomTextLength(variant) >= ROOM_TEXT_SIZE
+      )
+        return `the game reads at most ${ROOM_TEXT_SIZE - 1} characters of a room's text`;
+    }
+    return undefined;
+  }
+
+  /**
+   * Writes entry `entry` of text resource `resource` (one of the episode's, see
+   * textResources): `variants` (trimmed, as the game reads them; lines too long to
+   * store wrapped, wrapLongLines), or undefined to remove it. One undo step shown in room `room`, undefined if the entry stays as it is.
+   * Writing the base's variants takes the entry back to the base (no change in the mod).
+   * Throws a RangeError for texts the game cannot store (textWriteProblem).
+   */
+  setText(
+    episode: number,
+    room: number,
+    resource: number,
+    entry: number,
+    variants: readonly string[] | undefined,
+  ): Edit | undefined {
+    this.endStroke();
+    const problem = this.textWriteProblem(episode, resource, entry, variants);
+    if (problem) throw new RangeError(problem);
+    const before = this.textSource(resource);
+    if (before === undefined) throw new RangeError(`the exe has no text resource ${resource}`);
+    const text = withTextEntry(before, entry, variants && textToWrite(variants));
+    return this.writeText(episode, room, resource, text);
+  }
+
+  /** One undo step that sets text resource `resource` to `after`; undefined if it is so. */
+  private writeText(episode: number, room: number, resource: number, text: string) {
+    const before = this.textSource(resource);
+    if (before === undefined || text === before) return undefined;
+    const step: Edit = {
+      episode,
+      room,
+      layer: "base",
+      changes: [],
+      text: { id: resource, before, after: text },
+    };
+    this.apply(step, after);
+    this.push(step);
+    return step;
   }
 
   /**
@@ -1270,17 +1415,7 @@ export class Editor {
         throw new RangeError(`the game reads at most ${ROOM_TEXT_SIZE - 1} characters`);
     }
     const changed = withTextEntry(before, entry, set === undefined ? undefined : [set]);
-    if (changed === before) return undefined;
-    const step: Edit = {
-      episode,
-      room: id,
-      layer: "base",
-      changes: [],
-      text: { id: resource, before, after: changed },
-    };
-    this.apply(step, after);
-    this.push(step);
-    return step;
+    return this.writeText(episode, id, resource, changed);
   }
 
   /**
@@ -2032,10 +2167,11 @@ export class Editor {
     return this.textEntries(id)?.entries.get(entry);
   }
 
-  /** The parsed entries of a text resource as edited. */
-  private textEntries(id: number): Texts | undefined {
-    const source = this.textSource(id);
-    if (source === undefined) return undefined;
+  /** The parsed entries of a text resource as edited, undefined if the exe has none. */
+  textEntries(id: number): Texts | undefined {
+    // the base's are parsed once (the source would be decoded on each call)
+    const source = this.texts.get(id);
+    if (source === undefined) return this.game.texts(id);
     let known = this.parsed.get(id);
     if (known?.source !== source) {
       known = { source, texts: parseTexts(source) };

@@ -38,6 +38,8 @@ interface Field {
   ignored?: (d: Uint8Array) => boolean;
   /** The text the field names, shown next to it; undefined: none. */
   text?: (d: Uint8Array) => number | undefined;
+  /** Shown, not edited: other fields set it (e.g. an oracle's hint, by its cell's state). */
+  shown?: boolean;
 }
 
 type Choice = readonly [value: number, name: string];
@@ -213,16 +215,14 @@ export const RECORD_TYPES: readonly RecordType[] = (
         {
           label: "Hint (eastwards)",
           kind: "number",
-          min: ORACLE_HINTS,
+          shown: true,
           max: ORACLE_HINTS + 15,
           get: (d) => ORACLE_HINTS + (d[3] & 15),
-          set: (d, v) => {
-            d[3] = (d[3] & 0xf0) | (v - ORACLE_HINTS);
-          },
+          set: () => undefined,
           hint:
             "the message shown when it is walked into eastwards: 330 + the low 4 bits of the " +
-            "cell's state, which also pick its symbol (330-339; from 340 on there is none " +
-            "to lay, see Symbol found)",
+            "cell's state, which pick its symbol too (330-339; from 340 on there is none " +
+            "to lay, see Symbol found); written in the Texts tab",
           text: (d) => ORACLE_HINTS + (d[3] & 15),
         },
         flag(
@@ -528,6 +528,16 @@ export class RecordView {
       });
       return labelled(field.label, box, field.hint);
     }
+    const textId = field.text?.(data);
+    if (field.shown) {
+      // set by other fields: the value as text, with what it names
+      const shown = element("span", "record-value", String(value));
+      const text = textId === undefined ? undefined : this.events.text(textId);
+      const named = element("span", "record-text", text ?? "(none in this episode)");
+      named.title =
+        text === undefined ? `text ${String(textId)}` : `text ${String(textId)}: ${text}`;
+      return labelled(field.label, shown, field.hint, named);
+    }
     const input = element("input", "record-field");
     input.setAttribute("aria-label", field.label);
     input.spellcheck = false;
@@ -559,7 +569,6 @@ export class RecordView {
       });
       extras.push(preview);
     }
-    const textId = field.text?.(data);
     if (textId !== undefined) {
       // the text the field names, as the game shows it
       const text = this.events.text(textId);
