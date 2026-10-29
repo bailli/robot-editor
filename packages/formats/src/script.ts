@@ -316,6 +316,112 @@ export function scriptConstants(
   return constants;
 }
 
+/**
+ * The cells a script's SetObj calls place (the first argument, tile type | state << 8)
+ * where it is a constant expression: numbers, `constants` (O_STAIR | 0x0100) and C's
+ * operators. 0, which removes the top object, is left out, as are values the script
+ * computes from variables.
+ */
+export function scriptPlacedObjects(
+  source: string,
+  constants: ReadonlyMap<string, number>,
+): number[] {
+  const code = scanScript(source).filter((p) => p.kind !== "space" && p.kind !== "comment");
+  const placed: number[] = [];
+  code.forEach((piece, i) => {
+    if (piece.kind !== "name" || piece.text.toUpperCase() !== "SETOBJ") return;
+    if (code[i + 1]?.text !== "(") return;
+    // the first argument: up to its comma
+    const arg: ScriptPiece[] = [];
+    let depth = 0;
+    for (const p of code.slice(i + 2)) {
+      if (depth === 0 && (p.text === "," || p.text === ")")) break;
+      if (p.text === "(") depth++;
+      if (p.text === ")") depth--;
+      arg.push(p);
+    }
+    const value = constantValue(arg, constants);
+    if (value) placed.push(value & 0xffff);
+  });
+  return placed;
+}
+
+/** The value of a constant expression, undefined if it is none (or no expression). */
+function constantValue(
+  code: readonly ScriptPiece[],
+  constants: ReadonlyMap<string, number>,
+): number | undefined {
+  let t = 0;
+  const unary = (): number | undefined => {
+    const piece = code[t++] as ScriptPiece | undefined;
+    if (piece === undefined) return undefined;
+    if (piece.kind === "number") return Number(piece.text) | 0;
+    if (piece.kind === "name") return constants.get(piece.text);
+    if (piece.text === "(") {
+      const value = binary(0);
+      return code[t++]?.text === ")" ? value : undefined;
+    }
+    const operand = unary();
+    if (operand === undefined) return undefined;
+    if (piece.text === "-") return -operand | 0;
+    if (piece.text === "~") return ~operand;
+    if (piece.text === "!") return operand ? 0 : 1;
+    return undefined;
+  };
+  const binary = (level: number): number | undefined => {
+    if (level === BINARY_LEVELS.length) return unary();
+    let left = binary(level + 1);
+    while (left !== undefined && BINARY_LEVELS[level].includes(code[t]?.text ?? "")) {
+      const op = code[t++].text;
+      const right = binary(level + 1);
+      left = right === undefined ? undefined : apply(op, left, right);
+    }
+    return left;
+  };
+  const value = binary(0);
+  return t === code.length ? value : undefined;
+}
+
+/** A binary operator on 32-bit integers as in C, undefined for a division by zero. */
+function apply(op: string, a: number, b: number): number | undefined {
+  switch (op) {
+    case "||":
+      return a || b ? 1 : 0;
+    case "&&":
+      return a && b ? 1 : 0;
+    case "|":
+      return a | b;
+    case "^":
+      return a ^ b;
+    case "&":
+      return a & b;
+    case "==":
+      return a === b ? 1 : 0;
+    case "!=":
+      return a !== b ? 1 : 0;
+    case "<":
+      return a < b ? 1 : 0;
+    case "<=":
+      return a <= b ? 1 : 0;
+    case ">":
+      return a > b ? 1 : 0;
+    case ">=":
+      return a >= b ? 1 : 0;
+    case "<<":
+      return a << b;
+    case ">>":
+      return a >> b;
+    case "+":
+      return (a + b) | 0;
+    case "-":
+      return (a - b) | 0;
+    case "*":
+      return Math.imul(a, b);
+    default:
+      return b === 0 ? undefined : op === "/" ? (a / b) | 0 : (a % b) | 0;
+  }
+}
+
 // --- compiler ---------------------------------------------------------------------------
 
 type Token =

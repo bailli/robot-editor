@@ -162,6 +162,7 @@ export {
   readScriptKeywords,
   roomCompiledScript,
   scriptConstants,
+  scriptPlacedObjects,
   withRoomScript,
 } from "./script.ts";
 export type {

@@ -46,6 +46,7 @@ import {
   areaCells,
   clipArea,
   fillRegion,
+  placedTiles,
   recordCapacity,
   shownCell,
   tilesOf,
@@ -145,6 +146,20 @@ test("tilesOf lists the distinct values of a layer, empty first, without logic c
   // cells only records hold: in the base palette (episode IV room 185's teleporter wall)
   expect(tilesOf(game.episode(4).rooms, "base")).toContain(0xd044);
   expect(tilesOf(game.episode(4).rooms, "overlay")).not.toContain(0xd044);
+});
+
+test("the palette offers what rooms place while the game runs, in both layers", () => {
+  const classes = game.episode(1).classes;
+  // episode I's stairs down: only room 26's script and room 128's circuit place them
+  const placed = placedTiles(game.episode(1).rooms, game.scriptConstants(1), classes);
+  expect(placed).toContain(0x3d);
+  expect(tilesOf(game.episode(1).rooms, "base")).not.toContain(0x3d);
+  const editor = new Editor(game);
+  for (const layer of ["base", "overlay"] as const) {
+    expect(editor.tiles(1, layer)).toContain(0x3d);
+    expect(editor.tiles(1, layer)).toContain(0x13d);
+  }
+  expect(placed.some((t) => t === 0 || (t & 0xff) === LOGIC_CELL)).toBe(false);
 });
 
 describe("Editor records", () => {

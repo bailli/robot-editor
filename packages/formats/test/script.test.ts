@@ -14,6 +14,7 @@ import {
   disassemble,
   parseCompiledScript,
   roomCompiledScript,
+  scriptPlacedObjects,
   withRoomScript,
 } from "../src/script.ts";
 import { assertBytesEqual, exe } from "./data.ts";
@@ -92,6 +93,24 @@ test("the game's keywords and the script constants", () => {
   // the same class, a different tile type
   expect(EPISODES.map((e) => game.scriptConstants(e).get("O_SAND"))).toEqual([39, 49, 49, 49, 49]);
   expect(game.scriptConstants(1).get("O_KEY")).toBe(21);
+});
+
+test("SetObj's constant objects: with operators, without 0 and computed ones", () => {
+  const constants = game.scriptConstants(1);
+  const stair = constants.get("O_STAIR") ?? -1;
+  expect(stair).toBe(0x3d);
+  // episode I room 26: the stairs down on the first visit, else nothing
+  expect(scriptPlacedObjects(roomScript(game.room(1, 26)), constants)).toEqual([stair]);
+  const placed = (source: string) => scriptPlacedObjects(source, constants);
+  expect(placed("SETOBJ(O_STAIR | 0x0100, 5, 6, 1);")).toEqual([stair | 0x100]);
+  expect(placed("SetObj(O_STAIR | (32 << 8) | 0x8000, 18, 4, 0);")).toEqual([stair | 0xa000]);
+  expect(placed("SetObj(-(~O_STAIR) - 1, 1, 1, 1); SetObj(2 * 3 % 4, 1, 1, 1);")).toEqual([
+    stair,
+    2,
+  ]);
+  expect(placed("SetObj(O_STAIR + E_Value, 1, 1, 1); SetObj(O_NOTHING, 1, 1, 1);")).toEqual([]);
+  expect(placed("SetObj(1 / 0, 1, 1, 1); SetObj(0, 1, 1, 1); SetObj(1 2, 1, 1, 1);")).toEqual([]);
+  expect(placed("x = GetObj(SetObj, 1);")).toEqual([]);
 });
 
 test("the event constants compile to their numbers", () => {

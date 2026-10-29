@@ -1048,7 +1048,9 @@ Supported:
 - painting base or overlay with a tile from the episode's tiles (those its rooms use in
   that layer, and the tile types copied from other episodes in each state their shape
   has a frame for; the base layer's also those only logic records hold, e.g. IV 185's
-  teleporter wall 0xd044; robots show their first sprite on an empty cell (Junior to
+  teleporter wall 0xd044; both layers' also those the rooms place while the game runs,
+  `placedTiles`: constant objects of the scripts' `SetObj` calls and circuit nodes'
+  stairs, e.g. episode I's stairs down 0x003d, which lie in no room; robots show their first sprite on an empty cell (Junior to
   III draw nothing as tiles, IV's tile is a "?" the game never shows), in random colours
   where the game rolls them (fixed per palette and per cell, following the flag); other invisible tiles a hatching; a filter
   by name, text or hex value) or any hex value; right click picks; dragging fills lines;

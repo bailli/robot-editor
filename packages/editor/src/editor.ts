@@ -70,6 +70,7 @@ import {
   recordCell,
   recordCellOffsets,
   roomChanges,
+  roomCircuitStairs,
   roomDescriptionText,
   roomName,
   roomNameText,
@@ -78,6 +79,7 @@ import {
   roomSettings,
   roomTextLength,
   sameDealer,
+  scriptPlacedObjects,
   sha256,
   spareEventEntries,
   textChanges,
@@ -567,12 +569,15 @@ export class Editor {
   }
 
   /**
-   * The tiles to paint with in a layer: those of the base's rooms (tilesOf) and the
-   * tile types copied from other episodes, in every state their shape has a frame for
-   * and every state their type has in the rooms of the episode they come from.
+   * The tiles to paint with in a layer: those of the layer's rooms (tilesOf), in both
+   * layers those the rooms place while the game runs (placedTiles: the game stacks them
+   * on what lies there) and the tile types copied from other episodes, in every state
+   * their shape has a frame for and every state their type has in the rooms of the
+   * episode they come from.
    */
   tiles(episode: number, layer: Layer): number[] {
-    const { rooms, objects } = this.game.episode(episode);
+    const { rooms, objects, classes } = this.game.episode(episode);
+    const placed = placedTiles(rooms, this.game.scriptConstants(episode), classes);
     const copied = this.tileTypeCopies(episode).flatMap(({ to, from, of }) => [
       ...Array.from(
         { length: Math.max(1, objects[to]?.frames.length ?? 0) },
@@ -583,7 +588,7 @@ export class Editor {
         .filter((cell) => (cell & 0xff) === of)
         .map((cell) => to | (cell & 0xff00)),
     ]);
-    return [...new Set([...tilesOf(rooms, layer), ...copied])].sort(byTile);
+    return [...new Set([...tilesOf(rooms, layer), ...placed, ...copied])].sort(byTile);
   }
 
   /** The tiles of an episode's rooms as loaded (tilesOf), where copied types come from. */
@@ -2435,6 +2440,26 @@ export function tilesOf(rooms: readonly Room[], layer: Layer): number[] {
         if (!isLogicCell(cell)) values.add(cell);
       }
     }
+  }
+  return [...values].sort(byTile);
+}
+
+/**
+ * The cells an episode's rooms place while the game runs, which may lie nowhere else:
+ * those of the scripts' SetObj calls (scriptPlacedObjects; episode I's stairs down to 126
+ * in room 26) and the stairs of circuit nodes (roomCircuitStairs).
+ */
+export function placedTiles(
+  rooms: readonly Room[],
+  constants: ReadonlyMap<string, number>,
+  classes: EpisodeClasses,
+): number[] {
+  const values = new Set<number>();
+  for (const room of rooms) {
+    for (const cell of scriptPlacedObjects(roomScript(room), constants))
+      if (!isLogicCell(cell)) values.add(cell);
+    for (const { kind } of roomCircuitStairs(room, new Set()))
+      values.add(stairsDown(classes) | (kind === "stairs up" ? 0x100 : 0));
   }
   return [...values].sort(byTile);
 }
