@@ -92,6 +92,34 @@ test("the selected cell's data is changed in the room, as one edit", async () =>
   await expect.element(holds).toHaveValue(String(before >> 8));
 });
 
+test("a click on the selected package's contents puts the current tile's type inside", async () => {
+  app.showEpisode(2, 1);
+  const { rooms, classes } = game.episode(2);
+  const isPackage = (c: number) => classes.classes.get(c & 0xff)?.id === PACKAGE_CLASS;
+  const room = defined(rooms.find((r) => r.id !== 1 && r.base.some(isPackage)));
+  const index = room.base.findIndex(isPackage);
+  const before = defined(room.base[index]);
+  app.showRoom(room.id);
+  await page.getByRole("tab", { name: "Record" }).click();
+  app.select(index);
+  const section = page.getByRole("region", { name: "Data of the cell" });
+  const contents = () =>
+    defined(document.querySelector<HTMLElement>(".cell-data-preview canvas") ?? undefined);
+  const cell = () => defined(app.editor).room(2, room.id).base[index];
+  // a type in a state: the package holds the type
+  const type = before >> 8 === 0x13 ? 0x14 : 0x13;
+  app.setTile(type | 0x0200);
+  contents().click();
+  expect(cell()).toBe((before & 0xff) | (type << 8));
+  await expect
+    .element(section.getByRole("combobox", { name: "Package contents" }))
+    .toHaveValue(String(type));
+  // right-click: paint with what it holds
+  app.setTile(0);
+  contents().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  expect(app.tile).toBe(type);
+});
+
 test("a plain cell has no data section", async () => {
   await page.getByRole("tab", { name: "Record" }).click();
   app.select(0);

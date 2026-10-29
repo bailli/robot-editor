@@ -30,6 +30,13 @@ export interface CellDataFieldEvents {
   typeName(type: number): string;
   /** A tile drawn as in the palette (a package's contents). */
   preview(value: number): HTMLElement;
+  /**
+   * The tile painted with; given, a click on a package's contents puts its type inside
+   * and a right-click paints with them (useTile).
+   */
+  tile?: () => number;
+  /** Makes a tile the one painted with. */
+  useTile?: (value: number) => void;
 }
 
 /** The controls of one kind of data; `update` shows a cell's data in them. */
@@ -120,12 +127,35 @@ export class CellDataField {
     });
     const warning = element("p", "hint", "An electric fence: it kills the hero who opens it.");
     const preview = element("span", "cell-data-preview");
+    let held = 0;
+    const { tile, useTile } = this.events;
+    if (tile && useTile) {
+      // as the record inspector's cells: click takes the current tile, right-click paints
+      preview.addEventListener("click", (event) => {
+        event.preventDefault(); // inside the label: do not open the select
+        // a package holds a type: what comes out is in state 0
+        const type = tile() & 0xff;
+        if (type === 0 || classes.classes.has(type)) this.set({ kind: "package", type });
+        else this.events.refused(`type ${hex2(type)} has no class in this episode`);
+      });
+      preview.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        useTile(held);
+      });
+    }
     return {
       kind: "package",
       nodes: [row("Holds", preview, select), warning],
       update: (data) => {
-        preview.replaceChildren(this.events.preview(data.kind === "package" ? data.type : 0));
         if (data.kind !== "package") return;
+        held = data.type;
+        const image = this.events.preview(held);
+        if (tile && useTile) {
+          image.classList.add("pickable");
+          image.title =
+            "Click: put the current tile's type inside · Right-click: paint with what it holds";
+        }
+        preview.replaceChildren(image);
         // a type without a class stays as it is
         if (![...select.options].some((o) => o.value === String(data.type)))
           select.append(option(data.type));

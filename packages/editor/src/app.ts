@@ -1900,7 +1900,13 @@ export class App {
     const events = this.cellDataEvents((value) => {
       this.setSelectedCell(layer, value);
     });
-    return new CellDataField(events);
+    return new CellDataField({
+      ...events,
+      tile: () => this.tile,
+      useTile: (value) => {
+        this.setTile(value);
+      },
+    });
   }
 
   /** Writes a value into the selected cell's `layer` as one edit (its data changed). */
