@@ -36,8 +36,8 @@ test("a letter's character is its state", async () => {
   await expect.element(char).toHaveValue("A");
   await enter(char, "q"); // the game's letters are upper case
   expect(app.tile).toBe(0x5125);
-  // bit 7: drawn on colour 0; the character stays
-  await tiles().getByRole("checkbox", { name: "Black background" }).click();
+  // bit 7: drawn without the black border, not to be picked up; the character stays
+  await tiles().getByRole("checkbox", { name: "No border, cannot be picked up" }).click();
   expect(app.tile).toBe(0xd125);
   await enter(char, "[");
   expect(app.tile).toBe(0xdb25);

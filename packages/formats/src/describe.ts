@@ -50,8 +50,9 @@ export const LAST_NOTE_MESSAGE = FIRST_NOTE_MESSAGE + 0x7f;
  * - note: its message, read when stepped on or carried (see noteText)
  * - diary: the page, an entry of resource 1320 (see noteText)
  * - expert: the points the hero needs to cross it (see requiredPoints)
- * - letter: the character, drawn with glyph `code & 0x7f` of the game font; bit 7 draws
- *   the background in colour 0 (0x40e8f0 clears it then: episode I room 45's "[" blocks).
+ * - letter: the character, drawn with glyph `code & 0x7f` of the game font; bit 7 leaves
+ *   out the black border (0x40e8f0 sets colour slot 0 to 0 and clears the bit: episode I
+ *   room 45's "[" blocks join up so) and keeps the hero from picking the letter up.
  *   Only A–Z are counted when taken (0x410200)
  */
 export type CellData =

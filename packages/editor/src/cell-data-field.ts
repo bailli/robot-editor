@@ -250,8 +250,8 @@ export class CellDataField {
     char.setAttribute("aria-label", "Character");
     char.maxLength = 1;
     char.spellcheck = false;
-    const dark = element("input");
-    dark.type = "checkbox";
+    const borderless = element("input");
+    borderless.type = "checkbox";
     let code = 0;
     char.addEventListener("change", () => {
       const typed = char.value.toUpperCase().charCodeAt(0);
@@ -262,21 +262,21 @@ export class CellDataField {
         char.value = String.fromCharCode(code & 0x7f);
       }
     });
-    dark.addEventListener("change", () => {
-      this.set({ kind: "letter", code: (code & 0x7f) | (dark.checked ? 0x80 : 0) });
+    borderless.addEventListener("change", () => {
+      this.set({ kind: "letter", code: (code & 0x7f) | (borderless.checked ? 0x80 : 0) });
     });
-    const darkLabel = element("label", "cell-data-check");
-    darkLabel.append(dark, "Black background");
-    darkLabel.title =
-      "State bit 7: the game draws the letter's background in colour 0 (as room 45 of episode I does)";
+    const borderlessLabel = element("label", "cell-data-check");
+    borderlessLabel.append(borderless, "No border, cannot be picked up");
+    borderlessLabel.title =
+      "State bit 7: the game draws the letter without its black border, so letters side by side join up (as in room 45 of episode I), and the hero cannot pick it up, an A–Z neither";
     return {
       kind: "letter",
-      nodes: [row("Character", char), darkLabel],
+      nodes: [row("Character", char), borderlessLabel],
       update: (data) => {
         if (data.kind !== "letter") return;
         code = data.code;
         char.value = String.fromCharCode(code & 0x7f);
-        dark.checked = (code & 0x80) !== 0;
+        borderless.checked = (code & 0x80) !== 0;
       },
     };
   }
