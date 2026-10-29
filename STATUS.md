@@ -1181,6 +1181,15 @@ Supported:
 - tile names (items) and the game's descriptions in tooltips and the hover line; logic
   cells say what their record does, notes and diary pages their message, packages what
   they hold (drawn in the hover line)
+- the data some classes keep in their state (`cellData`/`withCellData`): a package's
+  contents (a tile type with a class; an electric fence is flagged), a note's message
+  (800–927) and whether it is read when stepped on (bit 7), a diary page, an expert
+  field's points (steps of 10,000 up to 2,550,000) and a letter's character (printable
+  ASCII; bit 7 kept). A field under the current tile sets it for painting, one in the
+  Record tab changes the selected cell (base and overlay, one undo step); ✎ opens a
+  note's message or a diary page in the Texts tab. The palette offers these classes in
+  one tile per look (rendered pixels: one package, one expert field, a note and old
+  writing, each letter) instead of every state the rooms use
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
   inspector with the record's fields per type (cells with previews: click takes the
   current tile, right-click paints with the cell; target room with
@@ -1378,16 +1387,6 @@ Not supported (yet):
   is for by its number, not where it is used); a check of what the game's message boxes
   and buffers fit (the fetch 0x438850 cuts a text at its caller's buffer, 2000 or 2048
   bytes for some callers, others not traced)
-- **compound cell types:** some classes keep data of their own in the state (high
-  byte), but the editor treats it like any other state. Tiles are painted in the states
-  the episode's rooms use or the shape has frames for, and any other state only as a
-  hex value; the hover line tells what the cell holds. Affected: packages (the tile type
-  inside), notes (message 800 + (state & 0x7f), bit 7 note or old writing/cassette),
-  diary pages (the page in 1320), expert fields (state × 10,000 points) and letters (the
-  character). Missing: a control for that data when painting or inspecting such a cell
-  (a package's content picked from the tiles; a note's message picked or written, with
-  the Texts tab's editing; the points as a number); the states that are only
-  frames would then no longer have to be listed one by one
 - painting over logic cells (use the inspector or the area tools); records are edited
   field by field
 - painting exit tiles is plain painting (0x0017 in the base layer)

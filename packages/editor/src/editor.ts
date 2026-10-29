@@ -44,6 +44,7 @@ import {
   type TileTypesChange,
   applyMod,
   backdropRoom,
+  cellData,
   checkMod,
   classTexts,
   dealerCapacity,
@@ -69,6 +70,7 @@ import {
   readVa,
   recordCell,
   recordCellOffsets,
+  renderCell,
   roomChanges,
   roomCircuitStairs,
   roomDescriptionText,
@@ -574,7 +576,8 @@ export class Editor {
    * layers those the rooms place while the game runs (placedTiles: the game stacks them
    * on what lies there) and the tile types copied from other episodes, in every state
    * their shape has a frame for and every state their type has in the rooms of the
-   * episode they come from.
+   * episode they come from. Of the classes that keep data in their state (cellData:
+   * packages, notes, …), one tile per look: the data is set with the tile.
    */
   tiles(episode: number, layer: Layer): number[] {
     const { rooms, objects, classes } = this.game.episode(episode);
@@ -589,7 +592,16 @@ export class Editor {
         .filter((cell) => (cell & 0xff) === of)
         .map((cell) => to | (cell & 0xff00)),
     ]);
-    return [...new Set([...tilesOf(rooms, layer), ...placed, ...copied])].sort(byTile);
+    const looks = new Set<string>();
+    return [...new Set([...tilesOf(rooms, layer), ...placed, ...copied])]
+      .sort(byTile)
+      .filter((value) => {
+        if (!cellData(value, classes)) return true;
+        const look = `${value & 0xff} ${renderCell(value, 0, objects, classes).join()}`;
+        if (looks.has(look)) return false;
+        looks.add(look);
+        return true;
+      });
   }
 
   /** The tiles of an episode's rooms as loaded (tilesOf), where copied types come from. */

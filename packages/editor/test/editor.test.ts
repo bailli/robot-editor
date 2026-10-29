@@ -162,6 +162,25 @@ test("the palette offers what rooms place while the game runs, in both layers", 
   expect(placed.some((t) => t === 0 || (t & 0xff) === LOGIC_CELL)).toBe(false);
 });
 
+test("the palette offers one tile per look of a class that keeps data in its state", () => {
+  const editor = new Editor(game);
+  // [base, overlay]
+  const ofType = (episode: number, type: number) =>
+    (["base", "overlay"] as const).map((layer) =>
+      editor
+        .tiles(episode, layer)
+        .filter((t) => (t & 0xff) === type)
+        .map((t) => t.toString(16)),
+    );
+  expect(ofType(2, 0x5e)).toEqual([["25e"], []]); // packages: whatever they hold
+  expect(ofType(1, 0x32)).toEqual([["532"], []]); // expert fields: whatever points they need
+  // old writing, and notes (state bit 7)
+  expect(ofType(2, 0x3a)).toEqual([
+    ["3a", "903a"],
+    ["93a", "8f3a"],
+  ]);
+});
+
 describe("Editor records", () => {
   const room55 = game.room(2, 55);
   const teleporterIndex = room55.base.findIndex((c) => (c & 0xff) === LOGIC_CELL);

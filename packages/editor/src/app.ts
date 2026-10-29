@@ -30,6 +30,7 @@ import {
   TILE_TYPES,
   actorKindClass,
   actorKindName,
+  cellData,
   cellGood,
   classTexts,
   compileScript,
@@ -3359,7 +3360,13 @@ export class App {
         ),
       ),
     );
-    this.setTile(tiles.includes(this.tile) ? this.tile : 0);
+    // a tile with data (cellData) stays while the palette has its type in some look
+    const classes = this.editor.game.episode(this.episode).classes;
+    const type = this.tile & 0xff;
+    const kept =
+      tiles.includes(this.tile) ||
+      (cellData(this.tile, classes) !== undefined && tiles.some((t) => (t & 0xff) === type));
+    this.setTile(kept ? this.tile : 0);
     this.filterTiles();
   }
 
