@@ -262,6 +262,9 @@ export function cellPixels(
     case FrameMethod.ZERO:
       pixels = framePixels(shape, 0);
       break;
+    case FrameMethod.NOTE:
+      pixels = framePixels(shape, state > 0x7f ? 1 : 0);
+      break;
     case FrameMethod.STATE:
       pixels = framePixels(shape, state);
       break;

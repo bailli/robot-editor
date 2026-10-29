@@ -361,10 +361,10 @@ Files in `packages/formats/src`:
   method (actors are created there), +0x54 describe method.
   Class 0 is the shared empty class (left out of the class→type table 0x4c70e0, 0x43b46a).
 - **Renderer:** draws base cells as tiles and overlay cells as sprites with each class's
-  frame method (12 methods incl. walls, terrain quarters, masks, doors, letters with the
-  game font, underlays); logic cells show their record's cell, circuit nodes with a
-  BULB on top (see circuits), class 99 cells the backdrop's (see room connections).
-  **745 cells differ** in 31
+  frame method (13 methods incl. walls, terrain quarters, masks, doors, letters with the
+  game font, notes by state bit 7 (0x4216b0), underlays); logic cells show their
+  record's cell, circuit nodes with a BULB on top (see circuits), class 99 cells the
+  backdrop's (see room connections). **736 cells differ** in 31
   reference screenshots (`pnpm robot eval`), most from runtime effects (see open items).
 - **Reference screenshots of any room** use a patched exe (`patch.ts`): the room in the
   start room's slot, without scripts and without anything that moves or kills

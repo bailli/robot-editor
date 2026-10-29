@@ -41,6 +41,8 @@ export const FrameMethod = {
   ADDONS: 0x426bf0,
   /** frame planes cut by a mask frame */
   CUT: 0x426dc0,
+  /** notes: frame 1 (a note) with state bit 7, else frame 0 (old writing, a cassette) */
+  NOTE: 0x4216b0,
 } as const;
 
 export interface ObjectClass {
