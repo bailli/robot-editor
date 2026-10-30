@@ -1077,6 +1077,42 @@ describe("Editor and events from other episodes", () => {
     expect(editor.game.musicPieces(4).at(-1)).toBe("ORACLE");
   });
 
+  test("musicCopies lists what plays each piece; removeMusic takes one out", () => {
+    const editor = new Editor(game);
+    editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
+    editor.copyEvent(4, shown, 198, { from: 2, of: 138 });
+    expect(editor.musicCopies(4)).toEqual([
+      { piece: "ORACLE", from: 2, uses: ["entry 197", "entry 198"] },
+    ]);
+    expect(editor.musicCopies(3)).toEqual([]);
+    expect(editor.removeMusic(4, shown, "THIEFIRI")).toBeUndefined();
+    // a room playing it keeps it
+    editor.setRoomSettings(4, shown, { music: "ORACLE" });
+    expect(editor.musicCopies(4)[0]?.uses).toEqual(["entry 197", "entry 198", `room ${shown}`]);
+    expect(() => editor.removeMusic(4, shown, "ORACLE")).toThrow(`rooms ${shown} play ORACLE`);
+    editor.undo();
+    editor.removeMusic(4, shown, "ORACLE");
+    expect(editor.musicCopies(4)).toEqual([]);
+    expect(editor.eventEntries(4).map((e) => e.sound)).toEqual([undefined, undefined]);
+    expect(editor.game.musicPieces(4)).toEqual(game.musicPieces(4));
+    expect(editor.game.sound(4, 197)).toBe("");
+    editor.undo();
+    expect(editor.musicCopies(4)).toHaveLength(1);
+  });
+
+  test("a copied tile type's piece taken out: the type keeps the episode's own line", () => {
+    const editor = new Editor(game);
+    editor.setTileType(3, 41, 0x59, { from: 1, of: 0x42 });
+    expect(editor.musicCopies(3)).toEqual([{ piece: "FANFA2", from: 1, uses: ["type 0x59"] }]);
+    editor.removeMusic(3, 41, "FANFA2");
+    expect(editor.musicCopies(3)).toEqual([]);
+    expect(editor.game.sound(3, 0x59)).toBe(game.sound(3, 0x59));
+    expect(editor.tileTypeCopies(3)).toHaveLength(1);
+    expect(
+      firstDifference(applyMod(game.image, parseMod(modJson(editor.saveMod()))), editor.save()),
+    ).toBe(-1);
+  });
+
   test("a copied piece stays while a room plays it", () => {
     const editor = new Editor(game);
     editor.copyEvent(4, shown, 197, { from: 2, of: 135 });

@@ -119,6 +119,7 @@ import { hex, plural } from "./format.ts";
 import { showHelp } from "./help-dialog.ts";
 import { KitsView } from "./kits-view.ts";
 import { MapView } from "./map-view.ts";
+import { MusicView } from "./music-view.ts";
 import { type NewRoomCheck, NewRoomDialog } from "./new-room-dialog.ts";
 import { RecordView } from "./record-view.ts";
 import {
@@ -717,6 +718,14 @@ export class App {
       this.editText(eventTextsId(this.episode), EVENT_TEXT + entry);
     },
   });
+  readonly musicView = new MusicView({
+    remove: (piece) => {
+      const name = EPISODE_NAMES[this.episode] ?? "";
+      this.rebaseAction(`Removing ${piece}…`, `remove ${piece}`, (episode, room) =>
+        this.need().removeMusic(episode, room, piece) ? `${piece} taken out of ${name}` : undefined,
+      );
+    },
+  });
   readonly codeView = new CodeView({
     add: (va, bytes) => {
       const at = `0x${va.toString(16)}`;
@@ -823,6 +832,7 @@ export class App {
           this.kitsView.element,
           this.tileTypesView.element,
           this.eventsView.element,
+          this.musicView.element,
           this.dealerView.element,
           this.codeView.element,
         ),
@@ -2987,6 +2997,11 @@ export class App {
           return { entry, id, points, text: text ? displayText(text).replace(/\s+/g, " ") : "" };
         });
       },
+    });
+    this.musicView.show({
+      episode: this.episode,
+      names: EPISODE_NAMES,
+      copies: editor.musicCopies(this.episode),
     });
     this.codeView.show({
       patches: editor.codePatches(),

@@ -220,6 +220,15 @@ export interface EventEntry extends EventChange {
   text?: { from: number; of: number };
 }
 
+/** A MUSIC piece of another episode copied into an episode's (mod kind music). */
+export interface MusicCopy {
+  piece: string;
+  /** The episode it comes from. */
+  from: number;
+  /** What plays it: "entry 197" (an event's sound), "type 0x59" (a copied type's), "room 53". */
+  uses: string[];
+}
+
 /** An entry of another episode's event table (from 128 on) to copy into an episode's. */
 export interface EventSource {
   from: number;
@@ -739,24 +748,80 @@ export class Editor {
   }
 
   /**
-   * The music copies of `changes` that something still names: an event's sound, the
-   * sound line a copied tile type comes with, a room's music as edited.
+   * The pieces of music things of the episode name, each with what names it: an event's
+   * sound, the sound line a copied tile type comes with, a room's music as edited.
    */
-  private neededMusic({ music, copies, events }: BaseChanges): MusicChange[] {
-    return music
+  private musicUses(episode: number, { copies, events }: BaseChanges): [string, string][] {
+    return [
+      ...events
+        .filter((e) => e.episode === episode)
+        .map((e): [string, string] => [e.sound ?? "", `entry ${e.entry}`]),
+      ...copies
+        .filter((t) => t.episode === episode)
+        .map((t): [string, string] => [
+          this.pristine.sound(t.from, t.of),
+          `type 0x${t.to.toString(16)}`,
+        ]),
+      ...this.rooms(episode).map((r): [string, string] => [roomSettings(r).music, `room ${r.id}`]),
+    ]
+      .map(([sound, use]): [string, string] => [sound.replace(/^!/, ""), use])
+      .filter(([piece]) => piece !== "");
+  }
+
+  /** The music copies of `changes` that something still names (musicUses). */
+  private neededMusic(changes: BaseChanges): MusicChange[] {
+    return changes.music
       .map((c) => {
-        const named = new Set(
-          [
-            ...events.filter((e) => e.episode === c.episode).map((e) => e.sound ?? ""),
-            ...copies
-              .filter((t) => t.episode === c.episode)
-              .map((t) => this.pristine.sound(t.from, t.of)),
-            ...this.rooms(c.episode).map((r) => roomSettings(r).music),
-          ].map((s) => s.replace(/^!/, "")),
-        );
+        const named = new Set(this.musicUses(c.episode, changes).map(([piece]) => piece));
         return { ...c, pieces: c.pieces.filter((p) => named.has(p)) };
       })
       .filter((c) => c.pieces.length > 0);
+  }
+
+  /**
+   * The episode's MUSIC pieces copied from other episodes (mod kind music), in the order
+   * they are added after its own, with what plays each.
+   */
+  musicCopies(episode: number): MusicCopy[] {
+    const uses = this.musicUses(episode, this.changes);
+    return this.changes.music
+      .filter((c) => c.episode === episode)
+      .flatMap(({ from, pieces }) =>
+        pieces.map((piece) => ({
+          piece,
+          from,
+          uses: uses.filter(([p]) => p === piece).map(([, use]) => use),
+        })),
+      );
+  }
+
+  /**
+   * Takes the copied piece `piece` out of the episode's music: the events whose sound it
+   * is lose their sound (their line stays as the exe has it), copied tile types keep the
+   * episode's own line; one undo step that makes a new base (rebase). Throws a RangeError
+   * while a room plays it.
+   */
+  removeMusic(episode: number, room: number, piece: string): Edit | undefined {
+    this.endStroke();
+    const copied = this.changes.music.some(
+      (c) => c.episode === episode && c.pieces.includes(piece),
+    );
+    if (!copied) return undefined;
+    const rooms = this.rooms(episode)
+      .filter((r) => roomSettings(r).music === piece)
+      .map((r) => r.id);
+    if (rooms.length > 0) throw new RangeError(`rooms ${rooms.join(", ")} play ${piece}`);
+    const music = this.changes.music
+      .map((c) =>
+        c.episode === episode ? { ...c, pieces: c.pieces.filter((p) => p !== piece) } : c,
+      )
+      .filter((c) => c.pieces.length > 0);
+    const events = this.changes.events.map((e) =>
+      e.episode === episode && e.sound?.replace(/^!/, "") === piece
+        ? { episode: e.episode, entry: e.entry, id: e.id, points: e.points }
+        : e,
+    );
+    return this.rebase(episode, room, { ...this.changes, music, events });
   }
 
   /**

@@ -183,8 +183,8 @@ Files in `packages/formats/src`:
   the numbers of the pieces there stay; at most 127 pieces (a sound keeps the number in
   7 bits), 256 instruments. **Verified under Wine** (`pnpm test:game`): II's ORACLE
   copied into IV is the game's 65th piece there, its channels on instruments of the
-  same names as in II, and a copied event's entry holds `0x80 | 65`. Not heard yet:
-  the game tests run without audio.
+  same names as in II, and a copied event's entry holds `0x80 | 65`; played by hand
+  with sound, the oracle's sound plays in IV (the game tests run without audio).
 - **Sound tables** (`1E06`): `N:SOUND ;note`; the notes name objects by tile type
   (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names. The game reads
   them line by line by number (0x4389b0: `;` ends the line, the number before `:` must
@@ -1350,7 +1350,11 @@ Supported:
   game's entry holds it), II's `!ORACLE` with its piece likewise. A copied piece stays
   while an event's sound, a copied tile type's sound line or a room's music names it,
   else the next change of the base drops it (`Editor.neededMusic`); a tile type copy
-  brings its sound's piece the same way (I's GATE into III: FANFA2). II's oracle events 263 and 266 into
+  brings its sound's piece the same way (I's GATE into III: FANFA2). The copied pieces
+  are listed below the events (`music-view.ts`, `Editor.musicCopies`: the piece, its
+  episode, what plays it: "entry 197", "type 0x59", "room 53"); × (`Editor.removeMusic`,
+  one undo step making a new base) takes one out: the events lose their sound, copied
+  tile types keep the episode's own line; refused while a room plays it. II's oracle events 263 and 266 into
   IV's 197 and 198 save as the mod the oracle game test uses (verified under Wine)
 - texts (tab Texts, `texts-view.ts`; mod kind `texts`): the episode's entries
   (`Editor.textStates`; III: its texts or its resource 1320 of room names, diary pages

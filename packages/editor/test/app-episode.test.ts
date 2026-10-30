@@ -270,6 +270,30 @@ test("the copy form's target: the same number where free, else the first type no
   expect(offered()).toContain(String(0x3a));
 });
 
+test("the Episode tab lists the music copied along; × takes a piece out, undoably", async () => {
+  const start = app.editor?.start(4).room ?? 0;
+  app.showEpisode(4, start);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const music = page.getByRole("region", { name: "Music" });
+  await expect.element(music.getByText(/has no music of other episodes/)).toBeVisible();
+  const events = page.getByRole("region", { name: "Events" });
+  await userEvent.selectOptions(events.getByLabelText("From episode"), "II");
+  await userEvent.selectOptions(events.getByLabelText("Event"), "135");
+  await events.getByRole("button", { name: "Copy" }).click();
+  await app.idle();
+  await expect.element(music.getByText("ORACLE ← II: entry 197")).toBeVisible();
+  await music.getByRole("button", { name: "Remove ORACLE" }).click();
+  await app.idle();
+  expect(status()).toMatch(/ORACLE taken out of Robot IV/);
+  await expect.element(music.getByText(/has no music of other episodes/)).toBeVisible();
+  // the event stays, without its sound
+  expect(app.editor?.eventEntries(4)[0]?.sound).toBeUndefined();
+  expect(app.editor?.game.musicPieces(4)).not.toContain("ORACLE");
+  app.undo();
+  await expect.element(music.getByText("ORACLE ← II: entry 197")).toBeVisible();
+  expect(app.editor?.eventEntries(4)[0]?.sound).toBe("!ORACLE");
+});
+
 test("the Episode tab copies events of other episodes to spare entries, undoably", async () => {
   const start = app.editor?.start(4).room ?? 0;
   app.showEpisode(4, start);

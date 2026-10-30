@@ -45,8 +45,8 @@ under the room's name on entering, the darkness, the points for the first visit,
 music); Script (a room's script, source and disassembly); Episode (the start room and cell,
 the rucksack's capacity, the episode rules such as flags, the backdrop rule and diagonal
 moves, what the dealer sells and for how much, copies of tile types and events from other
-episodes, the mod's code patches, and kits: "Add oracles" / "Add circuits" with "Place
-example"); Texts (every text entry of the episode, found by number or words, written,
+episodes, the music they brought along (each piece removable), the mod's code patches,
+and kits: "Add oracles" / "Add circuits" with "Place example"); Texts (every text entry of the episode, found by number or words, written,
 added or removed, and copies of texts from other episodes); Actors (robots and other
 actors of the room); Circuit (the room's logic circuit).
 "Map" shows all rooms and their links, "Dark" draws rooms as dark as in the game.
