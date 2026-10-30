@@ -329,6 +329,8 @@ export class App {
     { class: "icon", disabled: true, title: "Redo (Ctrl+Y)", "aria-label": "Redo" },
     "↷",
   );
+  /** "Test in game" turns on the game's command console (withConsole); a kept setting. */
+  private readonly consoleToggle = h("input", { type: "checkbox" });
   private readonly gridToggle = h("input", { type: "checkbox" });
   /** Draws rooms as dark as the game does on entering them (their darkness setting). */
   private readonly darkToggle = h("input", { type: "checkbox" });
@@ -1014,6 +1016,20 @@ export class App {
           this.undoButton,
           this.redoButton,
           this.testButton,
+          h(
+            "fieldset",
+            { class: "segmented" },
+            h("legend", {}, "Test in game"),
+            h(
+              "label",
+              {
+                title:
+                  "Test in game with the game's command console on: type e.g. SCENE 42 20 14, TAKE GOLD or ROBOTOFF and Return (the commands are in STATUS.md); while it is on, letter keys go to it, pick rucksack items with the arrows. Only for the test exe, not for Save exe",
+              },
+              this.consoleToggle,
+              "Console",
+            ),
+          ),
         ),
         h(
           "div",
@@ -1143,6 +1159,8 @@ export class App {
     try {
       exe = await store.exe();
       work = await store.work();
+      const settings = await store.settings();
+      if (settings) this.consoleToggle.checked = settings.console;
     } catch (error) {
       this.setStatus(`Cannot read the work kept in this browser: ${message(error)}`, true);
       return;
@@ -1785,13 +1803,16 @@ export class App {
         : { x: index % ROOM_WIDTH, y: Math.floor(index / ROOM_WIDTH) };
     let exe: Uint8Array;
     try {
-      exe = editor.testExe(this.episode, this.roomId, at);
+      exe = editor.testExe(this.episode, this.roomId, at, {
+        console: this.consoleToggle.checked,
+      });
     } catch (error) {
       this.setStatus(`Cannot build the exe: ${message(error)}`, true);
       return;
     }
     const episode = EPISODE_NAMES[this.episode] ?? "";
-    const where = `${episode} starts in room ${this.roomId}${at ? ` at (${at.x}, ${at.y})` : ""}`;
+    const console = this.consoleToggle.checked ? ", the console on" : "";
+    const where = `${episode} starts in room ${this.roomId}${at ? ` at (${at.x}, ${at.y})` : ""}${console}`;
     if (this.options.play) {
       try {
         await this.options.play(exe, this.episode);
@@ -2203,6 +2224,13 @@ export class App {
     });
     this.testButton.addEventListener("click", () => {
       void this.testInGame();
+    });
+    this.consoleToggle.addEventListener("change", () => {
+      this.options.store
+        ?.keepSettings({ console: this.consoleToggle.checked })
+        .catch((error: unknown) => {
+          this.setStatus(`Cannot keep the setting in this browser: ${message(error)}`, true);
+        });
     });
     this.roomName.addEventListener("change", () => {
       this.setRoomName(this.roomName.value);

@@ -86,6 +86,7 @@ Files in `packages/formats/src`:
 | `start.ts`                   | the room and cell an episode starts in, the rucksack's capacity, and patching them               |
 | `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them            |
 | `episode-methods.ts`         | rules by the episode vtable's methods: the backdrop room (mod 100, − 100), diagonal moves        |
+| `console.ts`                 | the game's command console always on (two bytes), for "Test in game"                             |
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants         |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                           |
 | `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on                 |
@@ -297,7 +298,9 @@ Files in `packages/formats/src`:
   before the game starts. 0x43c2a0 creates one by that name, closes it again and sets
   the console flag (app+0x64c) only on ERROR_ALREADY_EXISTS; the proxy holds it with
   `ROBOT_CONSOLE` in the environment (`harness.py play --console`; `serve` passes the
-  variable on). Printable characters (WM_CHAR, 0x404508) go into an 80-character line
+  variable on). Without the mutex: `withConsole` (`console.ts`) drops the check's jump
+  (0x43c304 `75 23` → `90 90`), as the editor's Console chip does for "Test in game"
+  (also on Windows and in the static build's download). Printable characters (WM_CHAR, 0x404508) go into an 80-character line
   in the bottom row (`>`, a message after `!!`), Backspace edits, Return runs it
   (0x43c620), Esc clears it; while it is on, no letter reaches the game (an Esc after a
   message opened the game's menu). The first word is compared (`_stricmp`) with strings
@@ -1251,7 +1254,9 @@ Supported:
   (`/play` on the dev server, only for requests from the editor's own page;
   `harness.py play`, the game window on this display; the episode is chosen by hand;
   when the harness refuses, e.g. without DISPLAY, the editor says why and downloads the
-  exe), the static build downloads it
+  exe), the static build downloads it; with the Console chip on (kept in the browser's
+  store with the work, not forgotten with it) the game's command console is on in that
+  exe only (`withConsole`; never in "Save exe" or mods)
 - tile names (items) and the game's descriptions in tooltips and the hover line; logic
   cells say what their record does, notes and diary pages their message, packages what
   they hold (drawn in the hover line)
@@ -1461,13 +1466,14 @@ Supported:
 - the work kept in the browser (`work-store.ts`, IndexedDB, never uploaded): the exe last
   opened and the work on it (the edits as a mod, `Editor.asMod`; whether they are saved;
   the opened mod's file and the mod as last opened or saved; script drafts not applied),
-  written at most a second after a change and when the page or the window loses focus.
+  written at most a second after a change and when the page or the window loses focus,
+  and the settings (the Console chip), written when changed and kept across exes.
   A reload, or a new start of the browser, brings it back (`App.start`; not the undo
   history, the clip or the recent tiles); work that no longer restores is downloaded as
   `unrestored.robotmod.json`. One tab at a time (Web Locks): another one says so and
   offers "Open here instead", which stops the first. "Reset…" lists what is kept and
   offers "Discard changes" (back to the exe as opened or the mod as last opened or
-  saved) and "Forget everything" (the editor starts empty). Without IndexedDB (some
+  saved) and "Forget everything" (the editor starts empty; the settings stay). Without IndexedDB (some
   private windows) the work lasts as long as the page
 
 Not supported (yet):
@@ -1680,7 +1686,7 @@ The driver tests (`packages/tools/test/driver.test.ts`, `pnpm test:game`) verify
 edit repeatably: a mod or patched exe, the change next to the hero's start, then the
 game's memory (hero, map, actor list, score) or a frame compared with our render. What
 they cover: the driver (every episode's start, runs repeat exactly, a frame equals the
-game's screenshot); episode I's room 43 to 42 and every gate and NOT, against our
+game's screenshot); the command console patched on (`GOLD`, `SCENE`); episode I's room 43 to 42 and every gate and NOT, against our
 circuit model; the circuits and oracles kits (examples too) in III, IV, Junior and I; an
 event copied with its sound, and one with a MUSIC piece IV lacked (IV); robots' sprites (III) against `robotSprite`; the
 episode rules as changed (Junior's oracles vanishing, robots' own colours, doors without
@@ -1701,9 +1707,10 @@ By hand or with the screenshot harness:
 - `robot start E ROOM OUT.exe --at X,Y` makes an exe starting the hero anywhere (the
   whole episode stays as it is); `robot play` and the editor's "Test in game" run one
   to be played by hand.
-- `harness.py play --console` (proxy built) turns on the game's command console (see
-  "Input, time and the driver"): `SCENE n x y`, `TAKE obj`, `GOLD`, `ROBOTOFF`, `NIGHT 0`
-  set up a state by hand without a patched exe.
+- The editor's Console chip (for "Test in game") or `harness.py play --console` (proxy
+  built, any exe) turns on the game's command console (see "Input, time and the
+  driver"): `SCENE n x y`, `TAKE obj`, `GOLD`, `ROBOTOFF`, `NIGHT 0` set up a state by
+  hand.
 - Exits open only once a room's robots are gone, so tests of walking out remove them
   (`calmRoom`); a 0.1 s key press moves the hero 2 cells, 0.3 s several (the game
   misses presses now and then). Message boxes (first takes, bonuses) stay until Return.

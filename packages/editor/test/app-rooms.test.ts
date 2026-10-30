@@ -5,6 +5,7 @@ import {
   ROOM_WIDTH,
   exitMode,
   parsePe,
+  readConsole,
   readEpisodeStart,
   renderRoom,
   toRgba,
@@ -166,6 +167,15 @@ test("Test in game runs an exe that starts in the room, at the selected cell", a
   await page.getByRole("button", { name: "Test in game" }).click();
   await expect.poll(() => runs.length).toBe(2);
   expect(readEpisodeStart(parsePe(defined(runs[1]).exe), 2)).toEqual({ room: 44, x: 12, y: 5 });
+  expect(readConsole(parsePe(defined(runs[1]).exe))).toBe(false);
+  // the Console chip: the same exe with the game's command console on
+  await page.getByRole("checkbox", { name: "Console" }).click();
+  await page.getByRole("button", { name: "Test in game" }).click();
+  await expect.poll(() => runs.length).toBe(3);
+  expect(readConsole(parsePe(defined(runs[2]).exe))).toBe(true);
+  expect(document.querySelector(".status")?.textContent).toBe(
+    "Game started: choose Robot II, it starts in room 44 at (12, 5), the console on",
+  );
 });
 
 test("deleting a room asks first, naming the rooms that lead to it", async () => {

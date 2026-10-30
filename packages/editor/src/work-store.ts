@@ -20,14 +20,21 @@ export interface Work {
   drafts: [string, ScriptDraft][];
 }
 
+/** The editor's choices, kept across exes. */
+export interface Settings {
+  /** "Test in game" turns on the game's command console. */
+  console: boolean;
+}
+
 const STORE = "work";
 const EXE = "exe";
 const WORK = "work";
+const SETTINGS = "settings";
 
 /**
  * Keeps the editor's work in the browser (IndexedDB): the exe last opened and the edits
- * on it, never uploaded. Only one tab at a time edits it, the one holding the lock (Web
- * Locks; the browser lets it go when the tab closes or crashes).
+ * on it, never uploaded, and the editor's settings. Only one tab at a time edits it, the
+ * one holding the lock (Web Locks; the browser lets it go when the tab closes or crashes).
  */
 export class WorkStore {
   private readonly db: IDBDatabase;
@@ -116,10 +123,22 @@ export class WorkStore {
     });
   }
 
-  /** Forgets the exe and the work on it. */
+  async settings(): Promise<Settings | undefined> {
+    const kept = await this.get(SETTINGS);
+    return isSettings(kept) ? kept : undefined;
+  }
+
+  keepSettings(settings: Settings): Promise<void> {
+    return this.change((store) => {
+      store.put(settings, SETTINGS);
+    });
+  }
+
+  /** Forgets the exe and the work on it (not the settings). */
   clear(): Promise<void> {
     return this.change((store) => {
-      store.clear();
+      store.delete(EXE);
+      store.delete(WORK);
     });
   }
 
@@ -156,6 +175,10 @@ function isKeptExe(value: unknown): value is KeptExe {
   return (
     isRecord(value) && value["bytes"] instanceof Uint8Array && typeof value["name"] === "string"
   );
+}
+
+function isSettings(value: unknown): value is Settings {
+  return isRecord(value) && typeof value["console"] === "boolean";
 }
 
 function isWork(value: unknown): value is Work {

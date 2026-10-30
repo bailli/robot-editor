@@ -127,6 +127,21 @@ test("Forget everything empties the store and the editor", async () => {
   expect(app.editor).toBeUndefined();
 });
 
+test("the Console setting stays across reloads, also when everything is forgotten", async () => {
+  const app = await tab();
+  await app.start(() => Promise.resolve(bytes));
+  const chip = page.getByRole("checkbox", { name: "Console" });
+  await expect.element(chip).not.toBeChecked();
+  await chip.click();
+  await expect.poll(async () => (await stores.at(-1)?.settings())?.console).toBe(true);
+  await reload(app);
+  await expect.element(chip).toBeChecked();
+  await button("Reset…").click();
+  await button("Forget everything").click();
+  await expect.poll(() => document.querySelector<HTMLElement>(".welcome")?.hidden).toBe(false);
+  expect((await stores.at(-1)?.settings())?.console).toBe(true);
+});
+
 test("one tab at a time: another one waits, then takes the work over", async () => {
   const first = await tab();
   await first.start(() => Promise.resolve(bytes));

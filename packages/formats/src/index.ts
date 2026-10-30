@@ -254,6 +254,7 @@ export {
   readEpisodeFlags,
   withEpisodeFlags,
 } from "./episode-flags.ts";
+export { readConsole, withConsole } from "./console.ts";
 export type { TextPiece, Texts } from "./texts.ts";
 export {
   DIARY_PAGE_CLASS,

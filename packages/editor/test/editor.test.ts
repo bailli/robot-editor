@@ -23,6 +23,7 @@ import {
   parsePe,
   planKit,
   readBackdropRule,
+  readConsole,
   readDealer,
   readDiagonalMoves,
   readEpisodeFlags,
@@ -612,6 +613,11 @@ describe("Editor rooms and names", () => {
     expect(readEpisodeStart(parsePe(editor.testExe(1, 44)), 1)).toEqual({ room: 44, x: 5, y: 14 });
     expect(editor.dirty).toBe(true); // not saved
     expect(() => editor.testExe(1, 998)).toThrow();
+    expect(readConsole(parsePe(exe))).toBe(false);
+    const withConsole = parsePe(editor.testExe(1, 44, undefined, { console: true }));
+    expect(readConsole(withConsole)).toBe(true);
+    expect(readEpisodeStart(withConsole, 1)).toEqual({ room: 44, x: 5, y: 14 });
+    expect(readConsole(parsePe(editor.save()))).toBe(false);
   });
 });
 

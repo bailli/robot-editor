@@ -45,6 +45,7 @@ import {
   robotSpriteCount,
   roomActors,
   roomCircuit,
+  withConsole,
   withExitMode,
   withRoomScript,
 } from "@robot/formats";
@@ -300,10 +301,15 @@ function exampleMod(
 
 /** Writes the mod's exe to a temporary directory for `use`. */
 async function withModExe<T>(game: Game, mod: Mod, use: (exe: string) => Promise<T>): Promise<T> {
+  return withExeFile(applyMod(game.image, mod), use);
+}
+
+/** `bytes` as a GameOfRobot.exe in a temporary folder, for `use`. */
+async function withExeFile<T>(bytes: Uint8Array, use: (exe: string) => Promise<T>): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), "robot-driver-"));
   try {
     const exe = join(dir, "GameOfRobot.exe");
-    writeFileSync(exe, applyMod(game.image, mod));
+    writeFileSync(exe, bytes);
     return await use(exe);
   } finally {
     rmSync(dir, { recursive: true });
@@ -987,6 +993,29 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
       }),
     );
     assert.deepEqual(after, { room: 43, x: 7, y: 17 }, "2 down, 2 right (without: none)");
+  }, 60_000);
+
+  test("episode I: with the console patched on, GOLD gives 50 gold and SCENE moves the hero", async () => {
+    const seen = await withExeFile(withConsole(game.image), (exe) =>
+      withGame(exe, async (d) => {
+        const type = async (line: string) => {
+          for (const c of line) await d.press(c.charCodeAt(0), 5);
+          await d.press("return", 50);
+        };
+        await d.startEpisode(1);
+        await type("GOLD");
+        const gold = (await d.peek(0x4fe30e, 1))[0];
+        await type("SCENE 42 20 14");
+        await d.run(300);
+        await d.closeBoxes();
+        return { gold, hero: await d.hero() };
+      }),
+    );
+    assert.deepEqual(
+      seen,
+      { gold: 50, hero: { room: 42, x: 20, y: 14 } },
+      "without: 0 gold, room 43",
+    );
   }, 60_000);
 
   test("episode III: the rucksack holds a weight below its capacity", async () => {

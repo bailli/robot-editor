@@ -91,6 +91,7 @@ import {
   textEntryProblem,
   textsId,
   withBackdropRule,
+  withConsole,
   withDealer,
   withDiagonalMoves,
   withEpisodeFlags,
@@ -2277,13 +2278,20 @@ export class Editor {
 
   /**
    * The edited exe in which `episode` starts in room `room`, the hero at `at` (else at
-   * the episode's start cell), to try the room out in the game.
+   * the episode's start cell), to try the room out in the game; with `console` the
+   * game's command console is on (withConsole).
    */
-  testExe(episode: number, room: number, at?: { x: number; y: number }): Uint8Array {
+  testExe(
+    episode: number,
+    room: number,
+    at?: { x: number; y: number },
+    options: { console?: boolean } = {},
+  ): Uint8Array {
     this.room(episode, room);
     const { x, y } = at ?? this.start(episode);
     const start: EpisodeStart = { room, x, y };
-    return withEpisodeStart(parsePe(this.build()), episode, start);
+    const exe = withEpisodeStart(parsePe(this.build()), episode, start);
+    return options.console ? withConsole(parsePe(exe)) : exe;
   }
 
   private build(): Uint8Array {
