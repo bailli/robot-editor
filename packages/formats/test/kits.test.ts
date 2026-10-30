@@ -24,6 +24,8 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
     events: [],
     lacking: [],
     without: [],
+    // the tangram's !KLINGELI Junior has
+    music: [],
   });
   // II and III have them
   expect(planKit(game, 3, oracles)).toMatchObject({ types: [], present: [0x50, 0x51] });
@@ -40,9 +42,12 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
     [200, 265],
   ]);
   expect(iv.without).toEqual([266, 267, 268, 269, 270, 271]);
+  expect(iv.music).toEqual(["ORACLE"]);
   const chosen = planKit(game, 4, oracles, { events: [263, 266] });
-  // as the game test's mod, which gave 3500 points and II's texts under Wine
+  // as the game test's mod, which gave 3500 points and II's texts under Wine; IV lacks
+  // the events' piece, which comes along
   expect(kitChanges(game, 4, oracles, chosen)).toEqual({
+    music: [{ episode: 4, from: 2, pieces: ["ORACLE"] }],
     tileTypes: [
       {
         episode: 4,
@@ -54,8 +59,8 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
       },
     ],
     events: [
-      { episode: 4, entry: 197, id: 263, points: 3500 },
-      { episode: 4, entry: 198, id: 266, points: 3500 },
+      { episode: 4, entry: 197, id: 263, points: 3500, sound: "!ORACLE" },
+      { episode: 4, entry: 198, id: 266, points: 3500, sound: "!ORACLE" },
     ],
     copyTexts: [
       {
@@ -98,8 +103,13 @@ test("circuits: I's pieces, stairs only where the episode has none; event 293 wh
     without: [293],
   });
   const iv = planKit(game, 4, circuits);
-  expect(kitChanges(game, 4, circuits, iv).events).toEqual([
-    { episode: 4, entry: 197, id: 293, points: 4000 },
+  expect(kitChanges(game, 4, circuits, iv)).toMatchObject({
+    // the gate's and bulb's FANFA2 and the lit node's BULBON, which IV lacks
+    music: [{ episode: 4, from: 1, pieces: ["FANFA2", "BULBON"] }],
+    events: [{ episode: 4, entry: 197, id: 293, points: 4000, sound: "!BULBON" }],
+  });
+  expect(kitChanges(game, 3, circuits, planKit(game, 3, circuits)).music).toEqual([
+    { episode: 3, from: 1, pieces: ["FANFA2"] },
   ]);
   // I and II have circuits
   for (const e of [1, 2]) expect(planKit(game, e, circuits).types).toEqual([]);

@@ -23,7 +23,7 @@ export interface KitsContext {
 
 /**
  * The Episode tab's kits (formats' KITS): per kit what adding it to the shown episode
- * copies (tile types, texts, events) and what it cannot (events without an entry),
+ * copies (tile types, texts, events, music) and what it cannot (events without an entry),
  * with checkboxes for the events where the spare entries do not hold them all, and
  * "Add". Patched in place (patchChildren); the events chosen stay while the episode does.
  */
@@ -62,7 +62,7 @@ export class KitsView {
       element(
         "p",
         "hint",
-        "A kit copies what a feature of another episode needs in one undo step: its tile types (to free types), the texts its classes show and the events its code raises (to entries the game never uses). Kits share the spare entries (IV has four: oracles and circuits together). The parts show below, each removable on its own.",
+        "A kit copies what a feature of another episode needs in one undo step: its tile types (to free types), the texts its classes show, the events its code raises (to entries the game never uses) and the pieces of music their sounds need. Kits share the spare entries (IV has four: oracles and circuits together). The parts show below, each removable on its own.",
       ),
     ];
   }
@@ -100,6 +100,7 @@ export class KitsView {
       ),
     );
     if (plan.texts.length > 0) box.append(line("texts", `Texts: ${plan.texts.join(", ")}`));
+    if (plan.music.length > 0) box.append(line("music", `Music: ${plan.music.join(", ")}`));
     // more events than spare entries: the player picks
     const picking = plan.lacking.length > fit.events.length && fit.events.length > 0;
     if (picking) {

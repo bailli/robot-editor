@@ -107,7 +107,7 @@ export class EventsView {
       element(
         "p",
         "hint",
-        "The game’s code raises events by number, each once per game (its points, its text in the bonus box): e.g. oracles 262–271, a lit circuit node 293. An episode whose table lacks the number gives nothing. A copy takes over an entry the game never uses (Junior and I: 190, IV: 197–200; II and III have none) with the event’s number, points and text, and its sound where this episode has that piece of music (else the entry’s own stays). Scripts award an entry with Enigma(n).",
+        "The game’s code raises events by number, each once per game (its points, its text in the bonus box): e.g. oracles 262–271, a lit circuit node 293. An episode whose table lacks the number gives nothing. A copy takes over an entry the game never uses (Junior and I: 190, IV: 197–200; II and III have none) with the event’s number, points and text, and its sound, with its piece of music where this episode lacks it. Scripts award an entry with Enigma(n).",
       ),
     );
     return nodes;

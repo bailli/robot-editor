@@ -60,6 +60,7 @@ const dealer1: Dealer = (() => {
 })();
 
 const changes: ModChanges = {
+  music: [],
   tileTypes: [
     {
       episode: 3,
@@ -273,6 +274,28 @@ test("the file: saving again gives the same file, in key order", () => {
   expect(parseMod(modJson(mod({ texts: [text] }))).changes.texts).toEqual([text]);
 });
 
+test("music comes first: copied events and tile types sound with pieces the episode lacked", () => {
+  const sounding = mod({
+    music: [
+      { episode: 4, from: 2, pieces: ["ORACLE"] },
+      { episode: 3, from: 1, pieces: ["FANFA2"] },
+    ],
+    // III's GATE copy takes I's FANFA2 line now that III has the piece
+    tileTypes: [{ episode: 3, from: 1, types: [[0x59, 0x42]] }],
+    events: [{ episode: 4, entry: 197, id: 263, points: 3500, sound: "!ORACLE" }],
+  });
+  const modded = new Game(applyMod(game.image, sounding));
+  expect(modded.musicPieces(4)).toEqual([...game.musicPieces(4), "ORACLE"]);
+  expect(modded.musicPieces(3)).toEqual([...game.musicPieces(3), "FANFA2"]);
+  expect(modded.sound(4, 197)).toBe("!ORACLE");
+  expect(game.sound(1, 0x42)).toBe("FANFA2");
+  expect(modded.sound(3, 0x59)).toBe("FANFA2");
+  const json = modJson(sounding);
+  expect(json).toContain('"music": [');
+  expect(parseMod(json)).toEqual(parseMod(modJson(parseMod(json))));
+  expect(modJson(parseMod(json))).toBe(json);
+});
+
 test("refused: a tile type copy of a type that is a copy itself", () => {
   const chain = [
     { episode: 1, from: 0, types: [[0x60, 0x25]] as const },
@@ -334,6 +357,19 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { events: [{ episode: 4, entry: 197, id: 263, points: 0, sound: "!" }] },
     { events: [{ episode: 4, entry: 197, id: 263, points: 0, sound: "A B" }] },
     { events: [{ episode: 4, entry: 197, id: 263, points: 0, sound: "!ORACLE" }] },
+    // a piece from the own episode, one the source lacks, one the episode has, none, a
+    // piece twice, no piece's name
+    { music: [{ episode: 4, from: 4, pieces: ["ORACLE"] }] },
+    { music: [{ episode: 4, from: 1, pieces: ["ORACLE"] }] },
+    { music: [{ episode: 4, from: 2, pieces: ["THIEFIRI"] }] },
+    { music: [{ episode: 4, from: 2, pieces: [] }] },
+    {
+      music: [
+        { episode: 4, from: 2, pieces: ["ORACLE"] },
+        { episode: 4, from: 3, pieces: ["ORACLE"] },
+      ],
+    },
+    { music: [{ episode: 4, from: 2, pieces: ["ORACLE123"] }] },
     // no dealer in III; more goods than I's table holds; too few shown; no item
     { dealer: [{ episode: 3, ...dealer1 }] },
     { dealer: [{ episode: 1, goods: Array(28).fill(dealer1.goods[0]), most: 6 }] },

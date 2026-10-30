@@ -282,10 +282,14 @@ test("the Episode tab copies events of other episodes to spare entries, undoably
   await expect.element(events.getByLabelText("To entry")).toHaveValue("197");
   await events.getByRole("button", { name: "Copy" }).click();
   await app.idle();
+  // its sound, with the piece IV lacks
+  const sound = "!ORACLE";
   expect(app.editor?.eventEntries(4)).toEqual([
-    { episode: 4, entry: 197, id: 263, points: 3500, text: { from: 2, of: 135 } },
+    { episode: 4, entry: 197, id: 263, points: 3500, sound, text: { from: 2, of: 135 } },
   ]);
-  await expect.element(events.getByText("197 ← II 135: event 263, 3500 points")).toBeVisible();
+  await expect
+    .element(events.getByText("197 ← II 135: event 263, 3500 points, !ORACLE"))
+    .toBeVisible();
   expect(status()).toMatch(/Entry 197 is now entry 135 of/);
   // the copied event is no longer offered; the next copy goes to the next spare entry
   const offered = [...(events.getByLabelText("Event").element() as HTMLSelectElement).options].map(
@@ -294,7 +298,8 @@ test("the Episode tab copies events of other episodes to spare entries, undoably
   expect(offered).not.toContain("135");
   await expect.element(events.getByLabelText("To entry")).toHaveValue("198");
   const saved = parseMod(app.saveMod() ?? "");
-  expect(saved.changes.events).toEqual([{ episode: 4, entry: 197, id: 263, points: 3500 }]);
+  expect(saved.changes.events).toEqual([{ episode: 4, entry: 197, id: 263, points: 3500, sound }]);
+  expect(saved.changes.music).toEqual([{ episode: 4, from: 2, pieces: ["ORACLE"] }]);
   expect(saved.changes.copyTexts).toEqual([
     { resource: 1410, from: 1210, entries: [[1997, 1935]] },
   ]);

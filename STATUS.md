@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-10-29.
+Setup and commands are in the [README](README.md). Last updated: 2026-10-30.
 
 ## Goal and approach
 
@@ -82,7 +82,7 @@ Files in `packages/formats/src`:
 | `describe.ts`                | the description the game shows for a cell                                                        |
 | `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                         |
 | `room-tags.ts`               | a room's darkness, points for the first visit, music and episode III flags; changing them        |
-| `music.ts`                   | MUSIC resources: the names of their pieces                                                       |
+| `music.ts`                   | MUSIC resources: instruments and pieces; copying pieces into another episode's                   |
 | `start.ts`                   | the room and cell an episode starts in, the rucksack's capacity, and patching them               |
 | `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them            |
 | `episode-methods.ts`         | rules by the episode vtable's methods: the backdrop room (mod 100, − 100), diagonal moves        |
@@ -160,11 +160,31 @@ Files in `packages/formats/src`:
   before such a word, a space before a paragraph that starts with one. **Verified under Wine:** a new description
   for episode I room 43 (empty line, two paragraphs) and III room 41 (`!`, name in the
   title bar) show in the banner as written, wrapped anew.
-- **MUSIC** (`1E05`, `music.ts`): "MUC1" at 0x1a, the number of instruments (u32 at
-  0x22, 32-byte entries from 0x30, name first), the number of pieces (u16 at 0x2e), then
-  86-byte piece entries starting with an 8-byte CP437 name (sorted; songs and sound
-  effects alike: 26, 48, 72, 55, 64 pieces), then the music data (not decoded). Every
-  room's music names a piece of its episode, but for `HUMBA`.
+- **MUSIC** (`1E05`, `music.ts`): songs and sound effects alike (26, 48, 72, 55, 64
+  pieces), played on an OPL2 (AdLib) emulation (3579545 Hz, 0x444870) through
+  DirectSound. The constructor loads it into episode +0x1d0 (0x4447d0: word 0 must be
+  0x8001, the rest of the 0x1a-byte header, a name like "ROBOT1", is ignored) and
+  parses the block from 0x1a (0x444490; offsets from there): "MUC1", u32 +4 offset and
+  u16 +8 number of the instruments (32 bytes: an 8-byte name, the two FM operators;
+  copied as they are), u32 +0x10 offset and u16 +0x14 number of the pieces (86 bytes:
+  8-byte CP437 name, u32 data offset, u32 length, a u16, 16 channel slots of 4
+  bytes from +0x14 (bit 0 of byte 0 plays the channel, byte 2 its instrument's index),
+  u16 at +0x54; the two u16 are timing, not traced), then the data. Each piece's data is a **MIDI track** (varlen deltas,
+  running status, notes, controllers, pitch bend, tempo meta; dispatch 0x443d30, jump
+  table 0x4440f8): program changes do nothing, so instruments come from the slots
+  alone. Channel 15 is the PC speaker's part (0x443dd7: played only in that mode,
+  reading just the slot's instrument's transpose); episode I's pieces name instrument
+  84 there, past its 43. In all five the tables and data follow each other without
+  gaps, in table order (I has 5 more bytes at the end). Pieces are sorted by name, but
+  found by a linear search (0x444820, number from 1). Every room's music names a piece
+  of its episode, but for `HUMBA`. **Copying a piece** (`withMusicPieces`,
+  `Game.withMusicPieces`, mod kind `music`): appended with its data, its slots pointed
+  at the target's instruments (one equal byte for byte is shared, others appended), so
+  the numbers of the pieces there stay; at most 127 pieces (a sound keeps the number in
+  7 bits), 256 instruments. **Verified under Wine** (`pnpm test:game`): II's ORACLE
+  copied into IV is the game's 65th piece there, its channels on instruments of the
+  same names as in II, and a copied event's entry holds `0x80 | 65`. Not heard yet:
+  the game tests run without audio.
 - **Sound tables** (`1E06`): `N:SOUND ;note`; the notes name objects by tile type
   (`21:QFANFARE ;O_KEY`) → `game.objectNames(e)`. Only items have names. The game reads
   them line by line by number (0x4389b0: `;` ends the line, the number before `:` must
@@ -1286,9 +1306,13 @@ Supported:
   copy has); "Copy" sets the entry's id and points and copies text 1800 + n
   (`Editor.copyEvent`). Each one undo step, which makes a new base like a tile type
   copy; refused: an id the table has already, an entry that is not spare. The sound
-  (its sound table line, `Game.copiedSound`) comes along where the episode has the
-  piece, else the target's line stays (I's thief bribe `!THIEFIRI` into IV, **verified
-  under Wine**: the game's entry holds it). II's oracle events 263 and 266 into
+  (its sound table line, `Game.sound`) comes along, and its MUSIC piece where the
+  episode lacks it (mod kind `music`, `Game.lackedPieces`; II's oracle event into IV
+  brings ORACLE); I's thief bribe `!THIEFIRI` into IV (**verified under Wine**: the
+  game's entry holds it), II's `!ORACLE` with its piece likewise. A copied piece stays
+  while an event's sound, a copied tile type's sound line or a room's music names it,
+  else the next change of the base drops it (`Editor.neededMusic`); a tile type copy
+  brings its sound's piece the same way (I's GATE into III: FANFA2). II's oracle events 263 and 266 into
   IV's 197 and 198 save as the mod the oracle game test uses (verified under Wine)
 - texts (tab Texts, `texts-view.ts`; mod kind `texts`): the episode's entries
   (`Editor.textStates`; III: its texts or its resource 1320 of room names, diary pages
@@ -1322,10 +1346,10 @@ Supported:
   while the mod has none, it opens when the first comes): the byte writes by address
   (`Editor.codePatches`): section, the bytes the exe holds there and those written, and
   a warning where edits made here write over some of them (the start, rucksack, flags,
-  backdrop rule, moves and dealer come later, kinds 4 and 7–11; they are settings of
+  backdrop rule, moves and dealer come later, kinds 5 and 8–12; they are settings of
   their own, never patches); each removable (× → `Editor.removeCode`). A form writes
   one: address and bytes in hex, what the exe holds there shown while typing
-  (`Editor.codeBytes`: the base, kinds 1–2 applied, which `expect` gets); refused
+  (`Editor.codeBytes`: the base, kinds 1–3 applied, which `expect` gets); refused
   outside initialised sections, in `.rsrc`, over another patch's bytes, bytes the exe
   holds already, more than 4096 (`codeProblem`). Each one undo step making a new base.
   A mod opens only where the exe holds each patch's `expect`
@@ -1342,9 +1366,10 @@ Supported:
   the mod does not set yet (`Editor.kitPlan`). Where they do not all fit (IV: four
   entries for ten oracle symbols) checkboxes pick which (the first ones by default),
   the rest give no points; kits share the spare entries (IV's oracles and circuits
-  together). Events take their sound as a copy does, but no kit target has the piece
-  (`!ORACLE`: II and III; the lit node's `!BULBON`: I and II), so the target's line stays
-  (none in IV, `!FANFARE` in Junior's and I's 190). "Add oracles" / "Add circuits" (`Editor.addKit`) is one undo step making a
+  together). Types and events take their sounds as copies do, with the pieces the
+  episode lacks (`KitPlan.music`, listed as "Music"): oracles into IV bring ORACLE
+  (II and III have it), circuits FANFA2 (the gate's and bulb's) into Junior and III,
+  FANFA2 and the lit node's BULBON into IV. "Add oracles" / "Add circuits" (`Editor.addKit`) is one undo step making a
   new base; the parts then show in the lists of tile types, events and texts, each
   removable there. **Verified under Wine** (`pnpm test:game`, the circuit and oracle
   game tests now build their mods with `planKit` and `kitChanges`): circuits in III
@@ -1452,8 +1477,8 @@ stands, decided 2026-10-27; details in the sections named.
   target cell, east shows the copied hint 331).
 - **`Game.withTileTypes(episode, from, types)`** copies what belongs to a tile type:
   the class table entry, the `_Rob_object` shape, the description (entry n), the sound
-  table line (I's sound only where the episode has that MUSIC piece, else its own:
-  III has no FANFA2, so its GATE takes nothing) and the first take (event table entry
+  table line (I's sound only where the episode has that MUSIC piece, else its own: a
+  mod's kind `music` copies the piece first, e.g. FANFA2 for III's GATE) and the first take (event table entry
   n, its text 1800 + n, in III in resource 1320). Not covered: other texts a class
   shows (the oracle's hints and messages: the editor offers them, `classTexts`), English
   texts, code that checks the episode.
@@ -1485,8 +1510,7 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
-- **Next:** the proxy as an in-memory loader ("The mod format", "Two forms"). Sounds a
-  copied event's episode lacks would need MUSIC pieces copied, and MUSIC is not decoded.
+- **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
   English would be our own translations (for the oracles in Junior: 80, 81, 331, 334,
@@ -1507,14 +1531,19 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
   changes apply in key order, the file's, so the result does not depend on the order
   they were made in (new text entries, sound lines and shapes are appended). Later
   kinds as needed: shapes of the mod's own.
-  1. `tileTypes` (key: episode, target type): `{ episode, from, types: [[to, of], …] }`
+  1. `music` (key: episode, piece): `{ episode, from, pieces: [name, …] }` → MUSIC
+     pieces of episode `from` that `episode` lacks, added with their instruments
+     (`Game.withMusicPieces`, see Resources), first, so the sounds of copied tile types
+     and events (kinds 2 and 3) can name them; the mod carries their names only.
+     Refused: a piece `from` lacks or `episode` has, more than 127 pieces.
+  2. `tileTypes` (key: episode, target type): `{ episode, from, types: [[to, of], …] }`
      → `Game.withTileTypes`. `checkMod` refuses a copy of a copy (a source type that is a target of
      the mod), as the editor does: copies apply in episode order and would chain.
-  2. `events` (key: episode, entry): `{ episode, entry, id, points, sound? }` →
+  3. `events` (key: episode, entry): `{ episode, entry, id, points, sound? }` →
      `withEventEntries`, after the tile types (it may override a copied first take);
      `sound` (a MUSIC piece of the episode, `!` before it for bit 7) sets line `entry` of
      the sound table, its note kept (`Game.withSounds`; refused for a piece the episode
-     lacks), without it the line stays. From entry 128 on the id is 0 or 256–391: the
+     lacks, its own or copied by kind 1), without it the line stays. From entry 128 on the id is 0 or 256–391: the
      constructor maps id → entry in 0x4c70e0 (0x43b4bf, shared with class → type below
      256, 0x188 long, no bounds check); a tile type's entry (below 128) has an id of 0–255 in all
      originals (mostly its class id) and the mod format takes only those, so it never shares
@@ -1523,32 +1552,32 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
      over an entry the episode never uses: IV's 197–200 (ids 388–391, no note, text or
      points; IV's scripts award 180–196, no code raises those ids). III has no such
      spare entry.
-  3. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
+  4. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
      if the exe holds `expect` there (e.g. the oracle flags in Junior).
-  4. `dealer` (key: episode): `{ episode, most, goods: [[class, state, price], …] }` →
+  5. `dealer` (key: episode): `{ episode, most, goods: [[class, state, price], …] }` →
      `withDealer` (see "The dealer's goods"): the episode's whole list, at most as many
      goods as its table has room for, each of a class the episode has a tile of.
-  5. `texts` (key: resource id, entry): `{ resource, entry, variants | null }` →
+  6. `texts` (key: resource id, entry): `{ resource, entry, variants | null }` →
      `withTextEntry`, entry by entry (room names, descriptions, hints, messages), never
      whole resources: the file holds only what the mod wrote, and two changes to one
      resource compose. `copyTexts` (same keys: an entry is either copied or written):
      `{ resource, from, entries: [[to, of], …] }` copies entries of resource `from` (as
-     kinds 1–3 left the exe) into `resource`, e.g. episode II's oracle hints and death
+     kinds 1–4 left the exe) into `resource`, e.g. episode II's oracle hints and death
      message (1210: 331, 334, 945) into Junior's 1010, so the mod carries no text of
      the game's own.
-  6. `rooms` (key: episode, room id): the room as its SCNV3 bytes (id, tags with the
+  7. `rooms` (key: episode, room id): the room as its SCNV3 bytes (id, tags with the
      script, map, records; as `serializeScene` writes one room), base64; `null` removes
      the room. Others keep their place; once a room is added or removed, the episode's
      rooms are sorted by id, as the editor keeps them → `withScene`.
-  7. `start` (key: episode): `{ episode, room, x, y }` → `withEpisodeStart`.
-  8. `rucksack` (key: episode): `{ episode, capacity }` → `withRucksack` (1–250).
-  9. `flags` (key: episode): `{ episode, flags }` (the whole word, hex in the file) →
-     `withEpisodeFlags`.
-  10. `backdrop` (key: episode): `{ episode, rule }` ("mod100", "minus100") →
+  8. `start` (key: episode): `{ episode, room, x, y }` → `withEpisodeStart`.
+  9. `rucksack` (key: episode): `{ episode, capacity }` → `withRucksack` (1–250).
+  10. `flags` (key: episode): `{ episode, flags }` (the whole word, hex in the file) →
+      `withEpisodeFlags`.
+  11. `backdrop` (key: episode): `{ episode, rule }` ("mod100", "minus100") →
       `withBackdropRule`.
-  11. `moves` (key: episode): `{ episode, diagonal }` → `withDiagonalMoves`.
+  12. `moves` (key: episode): `{ episode, diagonal }` → `withDiagonalMoves`.
 - **File:** one JSON file (`*.robotmod.json`) with `format` (1), `name`, `author`,
-  `description`, `base` (`{ sha256 }`) and `changes` (`tileTypes`, `events`, `code`,
+  `description`, `base` (`{ sha256 }`) and `changes` (`music`, `tileTypes`, `events`, `code`,
   `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`, `backdrop`, `moves`: arrays of the
   changes above; a kind left out is empty). `base` is the sha256 of the whole
   pristine exe (the Windows version 2018, `reference/GameOfRobot.exe`); applying
@@ -1578,13 +1607,13 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
   `applyPatch` and `applyMod`; `sha256.ts` (synchronous, for the browser too);
   `serializeRoom`/`parseRoom` in `scene.ts`. On the command line
   `robot mod apply MOD OUT.exe`, later `robot mod compile MOD OUT.patch` for the proxy.
-- **The editor** works on two images: the **base** (pristine + kinds 1–3 and the text
-  copies: the tile types, events, code and text copies, which it edits by making a new
-  base (`BaseChanges`; events copied with their texts)) and
-  the **edited** state on top (kinds 4–11: the dealers, rooms, texts, the start, the
+- **The editor** works on two images: the **base** (pristine + kinds 1–4 and the text
+  copies: the music, tile types, events, code and text copies, which it edits by making a new
+  base (`BaseChanges`; events copied with their texts and pieces)) and
+  the **edited** state on top (kinds 5–12: the dealers, rooms, texts, the start, the
   rucksack, the flags, the backdrop rule and diagonal moves). Opening takes an exe and, optionally, a
-  mod; "Save mod" writes the tile types, events, code and text copies as edited plus kinds
-  4–11 as the difference between the edited state and the base (dealers, starts,
+  mod; "Save mod" writes the music, tile types, events, code and text copies as edited plus kinds
+  5–12 as the difference between the edited state and the base (dealers, starts,
   rucksacks, flags, backdrop rules and moves that differ, rooms that
   differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
   written in the editor replaces its copy in `copyTexts`. "Save exe" and "Test in
@@ -1611,7 +1640,7 @@ game's memory (hero, map, actor list, score) or a frame compared with our render
 they cover: the driver (every episode's start, runs repeat exactly, a frame equals the
 game's screenshot); episode I's room 43 to 42 and every gate and NOT, against our
 circuit model; the circuits and oracles kits (examples too) in III, IV, Junior and I; an
-event copied with its sound (IV); robots' sprites (III) against `robotSprite`; the
+event copied with its sound, and one with a MUSIC piece IV lacked (IV); robots' sprites (III) against `robotSprite`; the
 episode rules as changed (Junior's oracles vanishing, robots' own colours, doors without
 the key, Teleport() points kept, house cells, diagonal moves, the backdrop rule); class 99
 cases against our render; the rucksack's capacity (III). There is no game test for the
@@ -1683,7 +1712,8 @@ Roughly by value for the editor.
 7. **Description extras:** key colours (strings 0x9c50/0x9c51 from the exe's string
    table), messages 200/201 added by two classes, codes formatted by 0x41d2c0/0x40ff80, and
    four describe methods that depend on game flags/options.
-8. **Not decoded at all:** MUSIC's data (see Resources) and PCXBITMAP resources, the
+8. **Not decoded at all:** the fields of MUSIC's instruments (OPL operator settings)
+   and pieces beyond what copying needs (see Resources), PCXBITMAP resources, the
    obfuscated command strings near 0x4828d4 ("Command %s unknown!", probably cheats; two jump ±100 rooms).
 
 ## Limits and what is shared between episodes
@@ -1769,6 +1799,8 @@ Roughly by value for the editor.
 | 0x432560, 0x4327c4, 0x432e06 | room load: convert records; overlay objects → type 1 records; allocate one     |
 | 0x42bef0, 0x407aa0           | an event's first time (sound, points, text 1800 + n); script Enigma            |
 | 0x4389b0, 0x43a710           | read the sound table into the event table; a class's event table entry         |
+| 0x4447d0, 0x444490, 0x444820 | MUSIC: load (episode +0x1d0); parse the MUC1 block; find a piece by name       |
+| 0x443d30, 0x4440f8           | MUSIC: a piece's next MIDI event; its jump table by status (C0 does nothing)   |
 | 0x4393d8, 0x4393e8, 0x439537 | entering a room: episode III kind 3 bit 0; background music; kind 3 bit 1      |
 | 0x40f700, 0x40f9a0           | circuits: evaluate the nodes (after taking or putting down a piece); trace     |
 | 0x4328f0, 0x432c90           | draw a map cell (classes; logic cells by record type); its jump table          |

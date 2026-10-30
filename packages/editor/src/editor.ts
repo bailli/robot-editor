@@ -28,6 +28,7 @@ import {
   MAX_RUCKSACK,
   type Mod,
   ModError,
+  type MusicChange,
   NAMED_ROOMS,
   NO_CHANGES,
   OPPOSITE,
@@ -189,11 +190,13 @@ export interface TileTypeCopy {
 }
 
 /**
- * What the base adds to the exe as loaded (Editor): tile types copied from other
+ * What the base adds to the exe as loaded (Editor): MUSIC pieces copied from other
+ * episodes (mod kind music, for the sounds of the copies), tile types copied from other
  * episodes, event table entries (mod kind events), the mod's code and text entries
  * copied (copyTexts).
  */
 export interface BaseChanges {
+  music: readonly MusicChange[];
   copies: readonly TileTypeCopy[];
   events: readonly EventChange[];
   code: readonly CodeChange[];
@@ -303,6 +306,23 @@ function textToWrite(variants: readonly string[]): string[] {
 
 /** The tile types a copy can never go to or come from: empty floor and logic cells. */
 const FIXED_TYPES: readonly number[] = [0, LOGIC_CELL];
+
+/** `music` with the pieces of episode `from` added to `episode`'s, those it has not yet. */
+function withMusicCopy(
+  music: readonly MusicChange[],
+  episode: number,
+  from: number,
+  pieces: readonly string[],
+): MusicChange[] {
+  const has = new Set(music.filter((c) => c.episode === episode).flatMap((c) => c.pieces));
+  const added = pieces.filter((p) => !has.has(p));
+  if (added.length === 0) return [...music];
+  const out = [...music];
+  const group = out.findIndex((c) => c.episode === episode && c.from === from);
+  if (group < 0) out.push({ episode, from, pieces: added });
+  else out[group] = { ...out[group], pieces: [...out[group].pieces, ...added] };
+  return out;
+}
 
 /** The mod's tileTypes changes for a list of copies: one per episode and source episode. */
 function tileTypeChanges(copies: readonly TileTypeCopy[]): TileTypesChange[] {
@@ -476,7 +496,7 @@ export class Editor {
   /** The loaded mod's name, author and description (the changes are the editor's own). */
   private readonly mod: Omit<Mod, "base" | "changes">;
   /** Tile types, event entries, code and text copies: what the base adds to the pristine exe. */
-  private changes: BaseChanges = { copies: [], events: [], code: [], copyTexts: [] };
+  private changes: BaseChanges = { music: [], copies: [], events: [], code: [], copyTexts: [] };
 
   constructor(game: Game, mod?: Mod) {
     this.pristine = game;
@@ -485,7 +505,7 @@ export class Editor {
       this.mod = { name: "", author: "", description: "" };
       return;
     }
-    const { tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
+    const { music, tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
     const { rucksack, flags, backdrop, moves } = mod.changes;
     if (mod.base !== this.pristineHash) throw new ModError("base: the mod is for another exe");
     this.mod = { name: mod.name, author: mod.author, description: mod.description };
@@ -493,7 +513,7 @@ export class Editor {
     const copies = tileTypes.flatMap(({ episode, from, types }) =>
       types.map(([to, of]) => ({ episode, from, to, of })),
     );
-    this.changes = { copies, events, code, copyTexts };
+    this.changes = { music, copies, events, code, copyTexts };
     this.base = this.baseWith(this.changes);
     for (const episode of new Set(rooms.map((c) => c.episode))) {
       const set = rooms.filter((c) => c.episode === episode);
@@ -527,10 +547,10 @@ export class Editor {
   }
 
   /** The base with these changes (the pristine exe if there is nothing to apply). */
-  private baseWith({ copies, events, code, copyTexts }: BaseChanges): Game {
+  private baseWith({ music, copies, events, code, copyTexts }: BaseChanges): Game {
     const tileTypes = tileTypeChanges(copies);
-    const changes = { ...NO_CHANGES, tileTypes, events, code, copyTexts };
-    if ([tileTypes, events, code, copyTexts].every((list) => list.length === 0))
+    const changes = { ...NO_CHANGES, music, tileTypes, events, code, copyTexts };
+    if ([music, tileTypes, events, code, copyTexts].every((list) => list.length === 0))
       return this.pristine;
     return new Game(
       applyMod(this.pristine.image, { ...this.mod, base: this.pristineHash, changes }),
@@ -663,7 +683,13 @@ export class Editor {
       if (problem) throw new RangeError(problem);
     }
     const copies = source === undefined ? others : [...others, { episode, to, ...source }];
-    return this.rebase(episode, room, { ...this.changes, copies }, (base) => {
+    const pieces = source
+      ? this.pristine.lackedPieces(episode, [this.pristine.sound(source.from, source.of)])
+      : [];
+    const music = source
+      ? withMusicCopy(this.changes.music, episode, source.from, pieces)
+      : this.changes.music;
+    return this.rebase(episode, room, { ...this.changes, music, copies }, (base) => {
       for (const [e, dealer] of this.dealers) {
         if (e !== episode) continue;
         try {
@@ -687,6 +713,7 @@ export class Editor {
     changes: BaseChanges,
     check?: (base: Game) => void,
   ): Edit {
+    changes = { ...changes, music: this.neededMusic(changes) };
     const base = this.baseWith(changes);
     check?.(base);
     const texts = new Map(
@@ -709,6 +736,27 @@ export class Editor {
     this.apply(step, after);
     this.push(step);
     return step;
+  }
+
+  /**
+   * The music copies of `changes` that something still names: an event's sound, the
+   * sound line a copied tile type comes with, a room's music as edited.
+   */
+  private neededMusic({ music, copies, events }: BaseChanges): MusicChange[] {
+    return music
+      .map((c) => {
+        const named = new Set(
+          [
+            ...events.filter((e) => e.episode === c.episode).map((e) => e.sound ?? ""),
+            ...copies
+              .filter((t) => t.episode === c.episode)
+              .map((t) => this.pristine.sound(t.from, t.of)),
+            ...this.rooms(c.episode).map((r) => roomSettings(r).music),
+          ].map((s) => s.replace(/^!/, "")),
+        );
+        return { ...c, pieces: c.pieces.filter((p) => named.has(p)) };
+      })
+      .filter((c) => c.pieces.length > 0);
   }
 
   /**
@@ -779,9 +827,10 @@ export class Editor {
 
   /**
    * Makes entry `entry` of the episode's event table entry `source.of` of episode
-   * `source.from` (its id, points and sound where the episode has its piece, mod kind
-   * events, and its text, copyTexts), or with `source` undefined takes the mod's change
-   * of the entry back, and its text copy; one undo step that makes a new base (rebase).
+   * `source.from` (its id, points and sound, mod kind events, the sound's piece where the
+   * episode lacks it, music, and its text, copyTexts), or with `source` undefined takes
+   * the mod's change of the entry back, and its text copy; one undo step that makes a
+   * new base (rebase).
    * Throws a RangeError where the copy cannot be made (eventProblem).
    */
   copyEvent(
@@ -804,7 +853,8 @@ export class Editor {
     const problem = this.eventProblem(episode, entry, source);
     if (problem) throw new RangeError(problem);
     const { id, points } = readEventTable(this.pristine.image, source.from)[source.of];
-    const sound = this.pristine.copiedSound(episode, source.from, source.of);
+    const sound = this.pristine.sound(source.from, source.of) || undefined;
+    const pieces = sound ? this.pristine.lackedPieces(episode, [sound]) : [];
     const from = eventTextsId(source.from);
     const of = EVENT_TEXT + source.of;
     const hasText = this.pristine.texts(from)?.entries.has(of) === true;
@@ -816,6 +866,7 @@ export class Editor {
     const events = [...others, { episode, entry, id, points, ...(sound ? { sound } : {}) }];
     return this.rebase(episode, room, {
       ...this.changes,
+      music: withMusicCopy(this.changes.music, episode, source.from, pieces),
       events,
       copyTexts: hasText ? withTextCopy(copyTexts, resource, text, { from, of }) : copyTexts,
     });
@@ -1058,8 +1109,13 @@ export class Editor {
     const copies = changes.tileTypes.flatMap((c) =>
       c.types.map(([to, of]) => ({ episode, to, from: c.from, of })),
     );
+    const music = changes.music.reduce(
+      (list, c) => withMusicCopy(list, c.episode, c.from, c.pieces),
+      this.changes.music,
+    );
     return this.rebase(episode, room, {
       ...this.changes,
+      music,
       copies: [...this.changes.copies, ...copies],
       events: [...this.changes.events, ...changes.events],
       copyTexts,
@@ -1101,7 +1157,7 @@ export class Editor {
   }
 
   /**
-   * The bytes the base holds at `va` (what a new code change there expects: kinds 1-2
+   * The bytes the base holds at `va` (what a new code change there expects: kinds 1-3
    * applied, no code over it), undefined outside initialised code and data.
    */
   codeBytes(va: number, length: number): Uint8Array | undefined {
@@ -2128,6 +2184,7 @@ export class Editor {
       ...this.mod,
       base: this.pristineHash,
       changes: {
+        music: this.changes.music,
         tileTypes: tileTypeChanges(this.changes.copies),
         events: this.changes.events,
         code: this.changes.code,

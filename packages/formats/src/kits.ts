@@ -8,8 +8,9 @@ import { LOGIC_CELL } from "./scene.ts";
 /**
  * Kits: what makes a feature of one episode work in another, copied in one step (the
  * editor's Episode tab, Editor.addKit): its tile types (withTileTypes: class, shape,
- * description, sound, first take), the texts their classes show (classTexts) and the
- * events their code raises, in entries the episode never uses (spareEventEntries). A
+ * description, sound, first take), the texts their classes show (classTexts), the
+ * events their code raises, in entries the episode never uses (spareEventEntries), and
+ * the MUSIC pieces the types' and events' sounds name that the episode lacks. A
  * type whose class the episode has already is not copied: the circuits' stairs only go
  * to Junior, and a kit in the episode it comes from has nothing to do. See STATUS, "Fan
  * episodes", for the pilots they come from.
@@ -79,6 +80,8 @@ export interface KitPlan {
   lacking: number[];
   /** The lacking events no entry is left for: they give no points. */
   without: number[];
+  /** The MUSIC pieces the copied types' and events' sounds name that the episode lacks. */
+  music: string[];
   /** Why the kit cannot be added, if it cannot. */
   problem?: string;
 }
@@ -157,6 +160,9 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     .filter((id) => lacking.includes(id))
     .map((id, k) => ({ entry: spare[k] ?? -1, of: entryOf(id), id }));
   const given = new Set(events.map((e) => e.id));
+  const sounds = [...types.map(([, of]) => of), ...events.map((e) => e.of)].map((n) =>
+    source.sound(kit.from, n),
+  );
   const plan: KitPlan = {
     types,
     present,
@@ -164,6 +170,7 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     events,
     lacking,
     without: lacking.filter((id) => !given.has(id)),
+    music: game.lackedPieces(episode, sounds),
   };
   if (problems.length > 0) plan.problem = problems.join("; ");
   return plan;
@@ -188,15 +195,15 @@ function unusedFreeTypes(game: Game, episode: number): number[] {
 
 /**
  * The mod changes a plan makes (tileTypes, events with the kit episode's points and
- * sounds where the episode has their pieces, the texts and the events' texts as
- * copyTexts), for a mod or the editor to merge.
+ * sounds, the pieces those sounds name that the episode lacks as music, the texts and
+ * the events' texts as copyTexts), for a mod or the editor to merge.
  */
 export function kitChanges(
   source: Game,
   episode: number,
   kit: Kit,
   plan: KitPlan,
-): Pick<ModChanges, "tileTypes" | "events" | "copyTexts"> {
+): Pick<ModChanges, "music" | "tileTypes" | "events" | "copyTexts"> {
   const table = readEventTable(source.image, kit.from);
   const eventTexts = source.texts(eventTextsId(kit.from))?.entries;
   const withText = plan.events.filter((e) => eventTexts?.has(EVENT_TEXT + e.of) === true);
@@ -211,15 +218,16 @@ export function kitChanges(
   add(textsId(episode), textsId(kit.from), texts);
   add(eventTextsId(episode), eventTextsId(kit.from), copies);
   return {
+    music: plan.music.length > 0 ? [{ episode, from: kit.from, pieces: plan.music }] : [],
     tileTypes: plan.types.length > 0 ? [{ episode, from: kit.from, types: plan.types }] : [],
     events: plan.events.map(({ entry, of, id }) => {
-      const sound = source.copiedSound(episode, kit.from, of);
+      const sound = source.sound(kit.from, of);
       return {
         episode,
         entry,
         id,
         points: table[of]?.points ?? 0,
-        ...(sound === undefined ? {} : { sound }),
+        ...(sound ? { sound } : {}),
       };
     }),
     copyTexts,

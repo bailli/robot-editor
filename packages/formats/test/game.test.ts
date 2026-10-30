@@ -106,16 +106,30 @@ test("withSounds: an entry's sound, its note kept, a missing line added", () => 
   assert.throws(() => game.withSounds(4, new Map([[197, "!ORACLE"]])), /no piece ORACLE/);
 });
 
-test("copiedSound: the source's sound where the episode has its piece", () => {
+test("lackedPieces: the pieces sounds name that the episode lacks", () => {
   // I's thief bribe (entry 130) sounds !THIEFIRI, which IV has and Junior lacks
-  assert.equal(game.copiedSound(4, 1, 130), "!THIEFIRI");
-  assert.equal(game.copiedSound(0, 1, 130), undefined);
+  assert.equal(game.sound(1, 130), "!THIEFIRI");
+  assert.deepEqual(game.lackedPieces(4, [game.sound(1, 130)]), []);
+  assert.deepEqual(game.lackedPieces(0, [game.sound(1, 130)]), ["THIEFIRI"]);
   // II's oracles and I's lit node: their pieces are only in II and III, I and II
-  assert.equal(game.copiedSound(3, 2, 135), "!ORACLE");
-  for (const e of [0, 1, 4]) assert.equal(game.copiedSound(e, 2, 135), undefined);
-  assert.equal(game.copiedSound(4, 1, 165), undefined);
+  assert.deepEqual(game.lackedPieces(3, [game.sound(2, 135)]), []);
+  for (const e of [0, 1, 4])
+    assert.deepEqual(game.lackedPieces(e, [game.sound(2, 135)]), ["ORACLE"]);
+  assert.deepEqual(game.lackedPieces(4, ["!BULBON", "BULBON", "", "PUTOUTFI"]), ["BULBON"]);
   // IV's 139 has an empty line
-  assert.equal(game.copiedSound(1, 4, 139), undefined);
+  assert.equal(game.sound(4, 139), "");
+});
+
+test("withMusicPieces: a piece another episode has, for a sound and a room's music", () => {
+  const saved = new Game(game.withMusicPieces(4, 2, ["ORACLE"]));
+  assert.deepEqual(saved.musicPieces(4), [...game.musicPieces(4), "ORACLE"]);
+  assert.deepEqual(game.lackedPieces(4, ["!ORACLE"]), ["ORACLE"]);
+  assert.deepEqual(saved.lackedPieces(4, ["!ORACLE"]), []);
+  const sounded = new Game(saved.withSounds(4, new Map([[197, "!ORACLE"]])));
+  assert.equal(sounded.sound(4, 197), "!ORACLE");
+  for (const e of [0, 1, 2, 3]) assert.deepEqual(saved.musicPieces(e), game.musicPieces(e));
+  assert.throws(() => game.withMusicPieces(4, 2, ["THIEFIRI"]), /has THIEFIRI already/);
+  assert.throws(() => game.withMusicPieces(4, 2, ["NOSUCH"]), /no piece NOSUCH/);
 });
 
 test("withSoundLine takes the note literally, $ patterns included", () => {

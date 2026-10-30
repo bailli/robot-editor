@@ -115,7 +115,7 @@ export class TileTypesView {
       element(
         "p",
         "hint",
-        "Copied: the class (what it does), the shape, the description, the sound and the first take with its points and text. Other texts the class shows (an oracle’s hints and death message) come with “Texts”. Not copied: English texts, code that checks the episode; the shape keeps its colour numbers, drawn in this episode’s palette. A type rooms use stays a copy.",
+        "Copied: the class (what it does), the shape, the description, the sound (with its piece of music where this episode lacks it) and the first take with its points and text. Other texts the class shows (an oracle’s hints and death message) come with “Texts”. Not copied: English texts, code that checks the episode; the shape keeps its colour numbers, drawn in this episode’s palette. A type rooms use stays a copy.",
       ),
     );
     return nodes;

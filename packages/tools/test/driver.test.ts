@@ -34,10 +34,12 @@ import {
   kitChanges,
   kitExample,
   movedRecord,
+  musicName,
   planKit,
   readEpisodeFlags,
   readEpisodeStart,
   readEventTable,
+  readMusic,
   renderRoom,
   robotSprite,
   robotSpriteCount,
@@ -581,34 +583,73 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     assert.deepEqual(seen.map(name), lit.map(name));
   }, 60_000);
 
-  test("episode IV: an event copied with its sound has it in the game's event table", async () => {
-    // I's thief bribe (entry 130, event 258) into IV's spare entry 197, as copyEvent does
-    const sound = game.copiedSound(4, 1, 130);
-    assert.equal(sound, "!THIEFIRI");
+  test("episode IV: events copied with their sounds, a piece IV lacked among them", async () => {
+    // I's thief bribe (entry 130, event 258) into IV's spare entry 197, as copyEvent does;
+    // II's oracle event 263 (entry 135) into 198, with its !ORACLE, which IV lacks
+    const bribe = game.sound(1, 130);
+    const oracle = game.sound(2, 135);
+    assert.deepEqual([bribe, oracle], ["!THIEFIRI", "!ORACLE"]);
     const mod: Mod = {
       ...emptyMod(game.image.data),
       changes: {
         ...NO_CHANGES,
-        events: [{ episode: 4, entry: 197, id: 258, points: 5000, sound }],
+        music: [{ episode: 4, from: 2, pieces: ["ORACLE"] }],
+        events: [
+          { episode: 4, entry: 197, id: 258, points: 5000, sound: bribe },
+          { episode: 4, entry: 198, id: 263, points: 3500, sound: oracle },
+        ],
       },
     };
     // entry n +8: the piece's number from 1, bit 7 for "!" (0x4389b0); 133 is IV's own !PUTOUTFI
-    const sounds = (d: Driver) => Promise.all([133, 197].map((n) => d.u32(0x479068 + 12 * n + 8)));
+    const sounds = (d: Driver) =>
+      Promise.all([133, 197, 198].map((n) => d.u32(0x479068 + 12 * n + 8)));
     const before = await withGame(undefined, async (d) => {
       await d.startEpisode(4);
       return sounds(d);
     });
+    const modded = new Game(applyMod(game.image, mod));
     const after = await withModExe(game, mod, (exe) =>
       withGame(exe, async (d) => {
         await d.startEpisode(4);
-        return sounds(d);
+        // the episode's music as the game's parser (0x444490) made it: counts, then the
+        // pieces (0x9c bytes; channel c's instrument at +0x1c + 8c) and instruments (63)
+        const music = await d.u32((await d.u32(0x51bb18)) + 0x1d0);
+        const [instruments, pieces, piecesAt, instrumentsAt] = await Promise.all(
+          [0, 4, 8, 12].map((k) => d.u32(music + k)),
+        );
+        const name = async (at: number) => musicName(await d.peek(at, 8));
+        const copy = piecesAt + 0x9c * (pieces - 1);
+        const used = [];
+        for (let c = 0; c < 15; c++) {
+          const at = await d.u32(copy + 0x1c + 8 * c);
+          if (at !== 0) used.push(await name(at));
+        }
+        return {
+          sounds: await sounds(d),
+          counts: [instruments, pieces],
+          name: await name(copy),
+          used,
+          firstInstrument: await name(instrumentsAt),
+        };
       }),
     );
-    const piece = (name: string) => 0x80 | (game.musicPieces(4).indexOf(name) + 1);
+    const piece = (name: string) => 0x80 | (modded.musicPieces(4).indexOf(name) + 1);
     const own = piece("PUTOUTFI");
-    assert.deepEqual(after, [own, piece("THIEFIRI")]);
     assert.equal(before[0], own);
-    assert.notEqual(before[1], after[1]);
+    assert.notEqual(before[2], after.sounds[2]);
+    assert.deepEqual(after.sounds, [own, piece("THIEFIRI"), piece("ORACLE")]);
+    const music = readMusic(modded.resource("MUSIC", 1405).data);
+    assert.deepEqual(after.counts, [music.instruments.length, music.pieces.length]);
+    assert.equal(after.name, "ORACLE");
+    assert.equal(after.firstInstrument, musicName(music.instruments[0].subarray(0, 8)));
+    // the channels II's ORACLE plays, on instruments of the same names
+    const ii = readMusic(game.resource("MUSIC", 1205).data);
+    const source = ii.pieces.find((p) => p.name === "ORACLE")?.entry ?? new Uint8Array(86);
+    const played = Array.from({ length: 15 }, (_, c) => 0x14 + 4 * c)
+      .filter((at) => (source[at] & 1) !== 0)
+      .map((at) => musicName(ii.instruments[source[at + 2]].subarray(0, 8)));
+    assert.ok(played.length > 0);
+    assert.deepEqual(after.used, played);
   }, 60_000);
 
   for (const episode of [4, 0]) {

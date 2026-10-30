@@ -886,8 +886,11 @@ describe("Editor and tile types from other episodes", () => {
     expect(editor.game.episode(3).classes.classes.get(0x59)?.id).toBe(76);
     expect(editor.tileTypeCopies(3)).toEqual([{ episode: 3, to: 0x59, from: 1, of: 0x42 }]);
     expect(editor.setTileType(3, 41, 0x59, { from: 1, of: 0x42 })).toBeUndefined();
+    // its sound line's FANFA2, which III lacks, comes along
+    expect(editor.game.sound(3, 0x59)).toBe("FANFA2");
     const mod = editor.saveMod();
     expect(mod.changes.tileTypes).toEqual([{ episode: 3, from: 1, types: [[0x59, 0x42]] }]);
+    expect(mod.changes.music).toEqual([{ episode: 3, from: 1, pieces: ["FANFA2"] }]);
     expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
     const opened = new Editor(game, mod);
     expect(opened.tileTypeCopies(3)).toEqual(editor.tileTypeCopies(3));
@@ -985,15 +988,18 @@ describe("Editor and events from other episodes", () => {
       { id: 266, points: 3500 },
     ]);
     expect(editor.game.texts(1410)?.entries.get(1997)).toEqual(game.texts(1210)?.entries.get(1935));
+    // their sound's piece, which IV lacks, comes along once
+    const sound = "!ORACLE";
     expect(editor.eventEntries(4)).toEqual([
-      { episode: 4, entry: 197, id: 263, points: 3500, text: { from: 2, of: 135 } },
-      { episode: 4, entry: 198, id: 266, points: 3500, text: { from: 2, of: 138 } },
+      { episode: 4, entry: 197, id: 263, points: 3500, sound, text: { from: 2, of: 135 } },
+      { episode: 4, entry: 198, id: 266, points: 3500, sound, text: { from: 2, of: 138 } },
     ]);
     expect(editor.sourceEvents(2, 4)).not.toContain(135);
     const mod = editor.saveMod();
+    expect(mod.changes.music).toEqual([{ episode: 4, from: 2, pieces: ["ORACLE"] }]);
     expect(mod.changes.events).toEqual([
-      { episode: 4, entry: 197, id: 263, points: 3500 },
-      { episode: 4, entry: 198, id: 266, points: 3500 },
+      { episode: 4, entry: 197, id: 263, points: 3500, sound },
+      { episode: 4, entry: 198, id: 266, points: 3500, sound },
     ]);
     expect(mod.changes.copyTexts).toEqual([
       {
@@ -1051,12 +1057,33 @@ describe("Editor and events from other episodes", () => {
       { episode: 4, entry: 197, id: 258, points: 5000, sound: "!THIEFIRI" },
     ]);
     expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
-    // II's oracle event: IV lacks !ORACLE, the line stays as the exe has it
+    // II's oracle event: IV lacks !ORACLE, so the piece comes along (mod kind music)
     editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
-    expect(editor.eventEntries(4)[0]?.sound).toBeUndefined();
-    expect(editor.game.sound(4, 197)).toBe("");
+    expect(editor.eventEntries(4)[0]?.sound).toBe("!ORACLE");
+    expect(editor.game.sound(4, 197)).toBe("!ORACLE");
+    expect(editor.game.musicPieces(4)).toEqual([...game.musicPieces(4), "ORACLE"]);
+    expect(editor.saveMod().changes.music).toEqual([{ episode: 4, from: 2, pieces: ["ORACLE"] }]);
+    expect(
+      firstDifference(applyMod(game.image, parseMod(modJson(editor.saveMod()))), editor.save()),
+    ).toBe(-1);
+    // the thief's bribe again: nothing names ORACLE, it goes
+    editor.copyEvent(4, shown, 197, { from: 1, of: 130 });
+    expect(editor.saveMod().changes.music).toEqual([]);
+    expect(editor.game.musicPieces(4)).toEqual(game.musicPieces(4));
+    editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
     editor.copyEvent(4, shown, 197, undefined);
     expect(editor.game).toBe(game);
+    editor.undo();
+    expect(editor.game.musicPieces(4).at(-1)).toBe("ORACLE");
+  });
+
+  test("a copied piece stays while a room plays it", () => {
+    const editor = new Editor(game);
+    editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
+    editor.setRoomSettings(4, shown, { music: "ORACLE" });
+    editor.copyEvent(4, shown, 197, undefined);
+    expect(editor.saveMod().changes.music).toEqual([{ episode: 4, from: 2, pieces: ["ORACLE"] }]);
+    expect(editor.game.musicPieces(4).at(-1)).toBe("ORACLE");
   });
 
   test("text entries edited before a copy stay", () => {

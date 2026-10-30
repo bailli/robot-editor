@@ -177,7 +177,16 @@ export { scriptArgument, scriptDoc, scriptFunctionDoc, scriptTextVariants } from
 export { scriptHandlers } from "./script-handlers.ts";
 export type { ScriptHandler } from "./script-handlers.ts";
 export type { ScriptArgumentKind, ScriptFunctionDoc, ScriptPlace } from "./script-docs.ts";
-export { MUSIC_NAME_LENGTH, MusicFormatError, musicName, musicPieces } from "./music.ts";
+export {
+  MAX_MUSIC_PIECES,
+  MUSIC_NAME_LENGTH,
+  MusicFormatError,
+  musicName,
+  musicPieces,
+  readMusic,
+  withMusicPieces,
+} from "./music.ts";
+export type { Music } from "./music.ts";
 export { findResource, readResources, replaceResource, ResourceType } from "./resources.ts";
 export type { PeResource } from "./resources.ts";
 export { cryptScene, SCENE_KEY } from "./scene-crypt.ts";
@@ -373,6 +382,7 @@ export type {
   Mod,
   ModChanges,
   ModPatch,
+  MusicChange,
   PatchResource,
   PatchWrite,
   RoomChange,

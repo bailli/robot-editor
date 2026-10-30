@@ -3,20 +3,22 @@
  *
  * A mod is a set of keyed changes, each key at most once, applied in a fixed order of
  * kinds (a later kind wins over an earlier one):
- *   1. tileTypes  (episode, target type)  tile types from another episode (withTileTypes)
- *   2. events     (episode, entry)        an event table entry's id, points and sound
- *   3. code       (address)               bytes written where the exe holds `expect`
- *   4. dealer     (episode)               the dealer's goods and how many shown (withDealer)
- *   5. copyTexts  (resource, entry)       a text entry copied from another one of the exe
+ *   1. music      (episode, piece)        a MUSIC piece copied from another episode
+ *   2. tileTypes  (episode, target type)  tile types from another episode (withTileTypes)
+ *   3. events     (episode, entry)        an event table entry's id, points and sound
+ *   4. code       (address)               bytes written where the exe holds `expect`
+ *   5. dealer     (episode)               the dealer's goods and how many shown (withDealer)
+ *   6. copyTexts  (resource, entry)       a text entry copied from another one of the exe
  *      texts      (resource, entry)       a text entry set or removed (withTextEntry)
- *   6. rooms      (episode, room id)      a room replaced, added or removed (withScene)
- *   7. start      (episode)               where the episode starts (withEpisodeStart)
- *   8. rucksack   (episode)               the rucksack's capacity (withRucksack)
- *   9. flags      (episode)               the episode's flags (withEpisodeFlags)
- *  10. backdrop   (episode)               the room drawn behind (withBackdropRule)
- *  11. moves      (episode)               diagonal moves or not (withDiagonalMoves)
+ *   7. rooms      (episode, room id)      a room replaced, added or removed (withScene)
+ *   8. start      (episode)               where the episode starts (withEpisodeStart)
+ *   9. rucksack   (episode)               the rucksack's capacity (withRucksack)
+ *  10. flags      (episode)               the episode's flags (withEpisodeFlags)
+ *  11. backdrop   (episode)               the room drawn behind (withBackdropRule)
+ *  12. moves      (episode)               diagonal moves or not (withDiagonalMoves)
  * copyTexts and texts share their keys: an entry is either copied or written. Copies read
- * the exe as kinds 1-3 left it, so the mod carries no text of the game's own. The event
+ * the exe as kinds 1-4 left it, so the mod carries no text or music of the game's own.
+ * Pieces come first, so the sounds of copied tile types and events find them. The event
  * tables are full: a new event takes over an entry the episode never uses.
  * Applying first compiles the mod against the pristine exe (checked by its sha256) into a
  * patch: byte writes outside the resources and whole replaced resources. The exe writer
@@ -63,6 +65,13 @@ export const MOD_FORMAT = 1;
 /** Room ids have 10 bits (records and exits hold them so). */
 const MAX_ROOM_ID = 0x3ff;
 
+export interface MusicChange {
+  episode: number;
+  from: number;
+  /** Pieces of episode `from` that `episode` lacks, added with their instruments. */
+  pieces: readonly string[];
+}
+
 export interface TileTypesChange {
   episode: number;
   from: number;
@@ -83,14 +92,15 @@ export interface EventChange {
   points: number;
   /**
    * Its sound, line `entry` of the sound table (Game.withSounds): a MUSIC piece of the
-   * episode, `!` before it sets bit 7. Without it the line stays.
+   * episode (its own or one kind music copies), `!` before it sets bit 7. Without it the
+   * line stays.
    */
   sound?: string;
 }
 
 export interface CodeChange {
   va: number;
-  /** What the exe holds there as kinds 1-2 leave it; the change is refused otherwise. */
+  /** What the exe holds there as kinds 1-3 leave it; the change is refused otherwise. */
   expect: Uint8Array;
   bytes: Uint8Array;
 }
@@ -151,6 +161,7 @@ export interface MovesChange {
 }
 
 export interface ModChanges {
+  music: readonly MusicChange[];
   tileTypes: readonly TileTypesChange[];
   events: readonly EventChange[];
   code: readonly CodeChange[];
@@ -199,6 +210,7 @@ export class ModError extends Error {
 }
 
 export const NO_CHANGES: ModChanges = {
+  music: [],
   tileTypes: [],
   events: [],
   code: [],
@@ -245,6 +257,7 @@ function episodeOk(episode: number, where: string): void {
 export function checkMod(mod: Mod): void {
   need(/^[0-9a-f]{64}$/.test(mod.base), "base", "not a sha256 (64 lowercase hex digits)");
   const {
+    music,
     tileTypes,
     events,
     code,
@@ -263,6 +276,21 @@ export function checkMod(mod: Mod): void {
     need(!keys.has(key), where, "changed twice");
     keys.add(key);
   };
+  music.forEach((c, i) => {
+    const where = `music[${i}]`;
+    episodeOk(c.episode, where);
+    episodeOk(c.from, where);
+    need(c.from !== c.episode, where, "copies from its own episode");
+    need(c.pieces.length > 0, where, "no pieces");
+    for (const piece of c.pieces) {
+      need(
+        /^[^\0]{1,8}$/.test(piece) && piece === piece.trim(),
+        where,
+        `piece ${JSON.stringify(piece)} (1-8 characters)`,
+      );
+      once(`music ${c.episode} ${piece}`, `${where} (${piece})`);
+    }
+  });
   tileTypes.forEach((c, i) => {
     const where = `tileTypes[${i}]`;
     episodeOk(c.episode, where);
@@ -407,7 +435,11 @@ const byKeys =
  * they were made in (new text entries and sound lines are appended, for example).
  */
 function canonical(changes: ModChanges): ModChanges {
+  const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   return {
+    music: changes.music
+      .map((c) => ({ ...c, pieces: c.pieces.toSorted(byName) }))
+      .toSorted((a, b) => a.episode - b.episode || byName(a.pieces[0] ?? "", b.pieces[0] ?? "")),
     tileTypes: changes.tileTypes
       .map((c) => ({ ...c, types: c.types.toSorted(byKeys(([to]) => to)) }))
       .toSorted(
@@ -455,6 +487,10 @@ function canonical(changes: ModChanges): ModChanges {
 /** The mod's changes applied through the editing functions, in the order of kinds. */
 function build(image: PeImage, changes: ModChanges): Uint8Array {
   let game = new Game(image.data);
+  for (const c of changes.music) {
+    const where = `music (episode ${c.episode} from ${c.from})`;
+    game = new Game(refusing(where, () => game.withMusicPieces(c.episode, c.from, c.pieces)));
+  }
   for (const c of changes.tileTypes) {
     const where = `tileTypes (episode ${c.episode} from ${c.from})`;
     game = new Game(refusing(where, () => game.withTileTypes(c.episode, c.from, new Map(c.types))));
@@ -701,6 +737,7 @@ function fromHex(text: string, where: string): Uint8Array {
 export function modJson(mod: Mod): string {
   checkMod(mod);
   const {
+    music,
     tileTypes,
     events,
     code,
@@ -721,6 +758,7 @@ export function modJson(mod: Mod): string {
     description: mod.description,
     base: { sha256: mod.base },
     changes: {
+      music: music.map((c) => ({ episode: c.episode, from: c.from, pieces: [...c.pieces] })),
       tileTypes: tileTypes.map((c) => ({
         episode: c.episode,
         from: c.from,
@@ -823,6 +861,11 @@ export function parseMod(text: string): Mod {
     description: string(file["description"] ?? "", "description"),
     base: string(object(file["base"], "base")["sha256"], "base.sha256"),
     changes: {
+      music: list("music", (o, w) => ({
+        episode: int(o["episode"], `${w}.episode`),
+        from: int(o["from"], `${w}.from`),
+        pieces: array(o["pieces"], `${w}.pieces`).map((v) => string(v, `${w}.pieces`)),
+      })),
       tileTypes: list("tileTypes", (o, w) => ({
         episode: int(o["episode"], `${w}.episode`),
         from: int(o["from"], `${w}.from`),

@@ -7,7 +7,7 @@ import {
 import { decodeCp437, encodeCp437 } from "./cp437.ts";
 import { crunch, uncrunch } from "./crunched.ts";
 import { EVENT_TEXT, readEventTable, withEventEntries } from "./events.ts";
-import { musicPieces } from "./music.ts";
+import { musicPieces, withMusicPieces } from "./music.ts";
 import { type Rgb, episodePalette } from "./palette.ts";
 import { type PeImage, parsePe } from "./pe.ts";
 import { type PeResource, findResource, readResources, replaceResource } from "./resources.ts";
@@ -205,9 +205,10 @@ export class Game {
    * A copy of the exe in which tile types of `episode` become those of episode `from`
    * (`types`: target type -> source type), as far as the data goes: the class table
    * entry, the _Rob_object shape, the description (text entry n), the line of the sound
-   * table (its sound only where `episode` has that piece, else the target's stays) and
-   * the first take (event table entry n and its text 1800 + n, eventTextsId). Other texts a class
-   * shows (messages, hints) and code that checks the episode are the caller's.
+   * table (its sound only where `episode` has that piece, else the target's stays: a mod
+   * copies the piece first, kind music) and the first take (event table entry n and its
+   * text 1800 + n, eventTextsId). Other texts a class shows (messages, hints) and code
+   * that checks the episode are the caller's.
    */
   withTileTypes(episode: number, from: number, types: ReadonlyMap<number, number>): Uint8Array {
     const source = this.episode(from);
@@ -251,14 +252,23 @@ export class Game {
     return soundLine(this.textSource(soundsId(episode)) ?? "", n)[1];
   }
 
+  /** The pieces `sounds` name (`!` dropped, each once) that the episode's MUSIC lacks. */
+  lackedPieces(episode: number, sounds: Iterable<string>): string[] {
+    const pieces = new Set(this.musicPieces(episode));
+    const names = [...sounds].map((s) => s.replace(/^!/, "")).filter((s) => s !== "");
+    return [...new Set(names)].filter((name) => !pieces.has(name));
+  }
+
   /**
-   * The sound a copy of entry `of` of episode `from` takes into `episode`: undefined where
-   * the entry has none or `episode` lacks its piece (its own line stays, as withTileTypes
-   * keeps it).
+   * A copy of the exe whose MUSIC resource for `episode` has the pieces `names` of
+   * episode `from` added (withMusicPieces: with their instruments, at the end, so the
+   * numbers of its own stay). Throws a RangeError for a piece `from` lacks or `episode`
+   * has, or too many.
    */
-  copiedSound(episode: number, from: number, of: number): string | undefined {
-    const sound = this.sound(from, of);
-    return sound && this.musicPieces(episode).includes(sound.replace(/^!/, "")) ? sound : undefined;
+  withMusicPieces(episode: number, from: number, names: readonly string[]): Uint8Array {
+    const music = this.resource("MUSIC", musicId(episode));
+    const source = this.resource("MUSIC", musicId(from)).data;
+    return replaceResource(this.image, music, withMusicPieces(music.data, source, names));
   }
 
   /**
