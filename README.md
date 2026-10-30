@@ -24,7 +24,8 @@ What is decoded, what the editor supports and what is still open: [STATUS.md](ST
 - `packages/editor` – `@robot/editor`: the level editor in the browser
 - `packages/tools` – `@robot/tools`: command line tools (`pnpm robot ...`)
 - `tools/wine/harness.py` – runs the real game under Wine for reference screenshots
-- `tools/wine/proxy` – the proxy DLL (`ddraw.dll`, C) the driver uses to step the game
+- `tools/wine/proxy` – the proxy DLL (`ddraw.dll`, C) the driver uses to step the game;
+  it also turns on the game's hidden command console
 
 ## Editor
 
@@ -108,6 +109,11 @@ with the mingw-w64 cross-compiler (`apt install gcc-mingw-w64-i686`):
 display and prints `ready PORT DISPLAY TOKEN` once the game waits for its first step;
 `Driver.start()` does that and connects, `Driver.connect(PORT)` connects to a game
 served by hand (the protocol is one text line per command, see `proxy.c`).
+
+`python3 tools/wine/harness.py play --console` runs the game to be played with the
+proxy holding the mutex that turns on the game's command console: type e.g.
+`SCENE 42 20 14`, `TAKE GOLD` or `ROBOTOFF` and Return (the commands are in STATUS.md;
+while the console is on, letter keys go to it).
 
 ```ts
 const d = await Driver.start();

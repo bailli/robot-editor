@@ -62,7 +62,7 @@ for episodes I–IV.
 | `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build; CodeMirror 6 for the script source)       |
 | `packages/tools/src`    | `@robot/tools`: CLI `pnpm robot …` (render, compare, eval, patch, shots, script, start, play, mod) |
 | `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool; `serve` runs it for the driver      |
-| `tools/wine/proxy`      | the only C: proxy `ddraw.dll` for the driver (mingw-w64, `pnpm proxy`)                             |
+| `tools/wine/proxy`      | the only C: proxy `ddraw.dll` for the driver and the command console (mingw-w64, `pnpm proxy`)     |
 | `shots.json`            | per reference screenshot: hash, palette offset, cells where our render still differs               |
 
 Files in `packages/formats/src`:
@@ -293,6 +293,44 @@ Files in `packages/formats/src`:
   "neighbour", walking out west arrives in room 42 at (38, 15); a captured frame equals
   the game's own screenshot (Ctrl+Alt+P) pixel for pixel. From launch to the hero in
   the start room takes about 4 s per test, Wine's start included.
+- **The command console** (a developer's): on only when a mutex `Robot32Command` exists
+  before the game starts. 0x43c2a0 creates one by that name, closes it again and sets
+  the console flag (app+0x64c) only on ERROR_ALREADY_EXISTS; the proxy holds it with
+  `ROBOT_CONSOLE` in the environment (`harness.py play --console`; `serve` passes the
+  variable on). Printable characters (WM_CHAR, 0x404508) go into an 80-character line
+  in the bottom row (`>`, a message after `!!`), Backspace edits, Return runs it
+  (0x43c620), Esc clears it; while it is on, no letter reaches the game (an Esc after a
+  message opened the game's menu). The first word is compared (`_stricmp`) with strings
+  obfuscated by 0x431d60: a 0x06 lead byte, then each byte XORed with Borland
+  `rand() & 0x1f` seeded with the low 16 bits of a key that starts at 0x53654375 and
+  adds every decoded byte; the last byte decodes to the NUL. The same hides the class
+  names (vtable +4, with the states a command may give: `KEY:0-15`, `LETTER:A-Z`,
+  `LCARD:L` a word, `NOTE:d`), the credits at 0x482b08 and the URLs at 0x4746d0.
+  Commands (obj: a class name, `NAME(state)` or a number, 0x43c390): `TAKE obj…` into
+  the rucksack (0x42c010, weight checked), `DROP obj…` onto the hero's cell (0x433420),
+  `INFO obj [state]` its description (0x406ae0), `TEXT n [m]` text n (variant m,
+  0x4064b0), `ROOMINFO n` room n's banner (0x406560), `NOTE n` message 800 + n
+  (0x4066a0), `DIARY n` diary page n (0x4067b0), `BIRNBAUM` every diary page read
+  (0x4fe3c8 all set), `LIFE` 3 lives (0x4fe30d), `GOLD` 50 gold more (0x4fe30e; the
+  word is the gold class's name), `ROBOTOFF` robots stand still for 500 runs of task
+  0x66 (0x4fe35c, counted down every 147 ms: ≈ 73 s; 0x4462ed and 0x44ad45 skip their
+  moves meanwhile), `GO dx dy` the hero moved by (dx, dy) within the map (0x44c300),
+  `KILL n` the room's n-th actor (list 0x53e9a8, 0x44da70), `SPEED n` food + n
+  (0x4fe300, 1…0x7fff; below 1000 text 986, hunger), `DIGEST n` + n towards the
+  toilet (0x4fe302, ≤ 127; from 64 text 985), `ENIGMA n` event n (0x42bef0),
+  `CLRENIGMA` every event new again (the 13 dwords at 0x4fe324), `SCENE n [x y]`
+  NxtRoom n, arriving at (x, y), `LASTSCENE` the previous room (0x4fe2f8), `UP`/`DOWN`
+  the room id − 100 (only above 100) / + 100, `PLAY name` (0x43a950, probably a MUSIC
+  piece), `UNSTORE n` forget room n's stored state (frees +8, clears bit 2 of +4),
+  `SCORE n` points + n (0x42b640), `NIGHT n` darkness min(n, 100) (0x4fe30f, redrawn),
+  `SEND n WORD` the pair (n, the 4-letter word in 2 bits per letter, 0x42fae0) into
+  the 32 pairs at 0x4fe46b (0x42fb20; kept in saved games; the code of `LCARD:L`, so
+  probably the punch cards, LCARD/LCDOOR/LCREADER; not traced), `WRITE` nothing;
+  anything else "Command %s unknown!" (an object: "Object %s unknown!"). **Verified
+  with the driver** (episode I, `ROBOT_CONSOLE=1`): `GOLD` (0 → 50), `ROBOTOFF`
+  (0x4fe35c 500, counting down), `TAKE GOLD` (class 10 in the first slot),
+  `SCENE 42 20 14` (room 42 at (20, 14)), `DOWN`/`UP` (17 → 117 → 17), an unknown
+  word's message; without the variable `GOLD` does nothing. The rest from the code.
 
 ### Scenes (rooms)
 
@@ -1659,6 +1697,9 @@ By hand or with the screenshot harness:
 - `robot start E ROOM OUT.exe --at X,Y` makes an exe starting the hero anywhere (the
   whole episode stays as it is); `robot play` and the editor's "Test in game" run one
   to be played by hand.
+- `harness.py play --console` (proxy built) turns on the game's command console (see
+  "Input, time and the driver"): `SCENE n x y`, `TAKE obj`, `GOLD`, `ROBOTOFF`, `NIGHT 0`
+  set up a state by hand without a patched exe.
 - Exits open only once a room's robots are gone, so tests of walking out remove them
   (`calmRoom`); a 0.1 s key press moves the hero 2 cells, 0.3 s several (the game
   misses presses now and then). Message boxes (first takes, bonuses) stay until Return.
@@ -1713,8 +1754,7 @@ Roughly by value for the editor.
    table), messages 200/201 added by two classes, codes formatted by 0x41d2c0/0x40ff80, and
    four describe methods that depend on game flags/options.
 8. **Not decoded at all:** the fields of MUSIC's instruments (OPL operator settings)
-   and pieces beyond what copying needs (see Resources), PCXBITMAP resources, the
-   obfuscated command strings near 0x4828d4 ("Command %s unknown!", probably cheats; two jump ±100 rooms).
+   and pieces beyond what copying needs (see Resources), PCXBITMAP resources.
 
 ## Limits and what is shared between episodes
 
@@ -1789,6 +1829,8 @@ Roughly by value for the editor.
 | 0x404677, 0x42cd40, 0x43bc90 | WM_KEYDOWN; virtual key → DOS key code (table 0x481b68); the key handler       |
 | 0x401210, 0x402100, 0x437620 | the frame buffer; WM_PAINT (StretchDIBits); DirectDraw present (display obj.)  |
 | 0x404190, 0x433710           | the screenshot command (4015, Ctrl+Alt+P); write a palette PNG                 |
+| 0x43c2a0, 0x43c620, 0x43ce10 | command console: on (mutex `Robot32Command`); run a line; its keys             |
+| 0x431d60, 0x43c390           | decode an obfuscated string (0x06 lead byte); a class by name (`NAME(state)`)  |
 | 0x44c5a0, 0x44c680           | hero walks off an edge (sets the RandObj reference point); pending room change |
 | 0x44dc60, 0x44d520           | create an actor (kind, x, y); factory lookup by class                          |
 | 0x4073a0, 0x407650           | script RandObj; count a class in the room (actors, else the top of each cell)  |

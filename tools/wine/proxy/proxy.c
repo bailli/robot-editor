@@ -2,8 +2,9 @@
  * ddraw.dll proxy for GameOfRobot.exe: lets a test driver run the game step by step.
  *
  * Placed next to the exe and loaded instead of the system ddraw.dll (Wine:
- * WINEDLLOVERRIDES=ddraw=n,b), it forwards DirectDrawCreate to the real one. Without
- * ROBOT_PROXY_PORT in the environment it does nothing else. With it, it listens on
+ * WINEDLLOVERRIDES=ddraw=n,b), it forwards DirectDrawCreate to the real one. With
+ * ROBOT_CONSOLE in the environment it turns on the game's command console (see
+ * STATUS.md). Without ROBOT_PROXY_PORT it does nothing else. With it, it listens on
  * 127.0.0.1:PORT for a driver (one line per command, one line per answer, see
  * `command`; `hello` names ROBOT_PROXY_TOKEN, so a driver knows it has the game it
  * started) and puts the game on virtual time:
@@ -664,6 +665,9 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved) {
   (void)reserved;
   if (reason != DLL_PROCESS_ATTACH) return TRUE;
   DisableThreadLibraryCalls(instance);
+  /* The game's command console (0x43c2a0) is on only when this mutex exists already:
+   * held for the game's lifetime, the game's own CreateMutexA finds it. */
+  if (GetEnvironmentVariableA("ROBOT_CONSOLE", NULL, 0)) CreateMutexA(NULL, FALSE, "Robot32Command");
   char port[16];
   if (!GetEnvironmentVariableA("ROBOT_PROXY_PORT", port, sizeof port)) return TRUE;
   GetEnvironmentVariableA("ROBOT_PROXY_TOKEN", token, sizeof token);

@@ -4,7 +4,7 @@
 usage:
   harness.py setup                         create the sandboxed Wine prefix in .wine/
   harness.py shot EPISODE OUT.png [--exe PATH] [--wait SECONDS] [--keep] [--debug DIR] [--keys KEY...]
-  harness.py play [EPISODE] [--exe PATH] [--mute]
+  harness.py play [EPISODE] [--exe PATH] [--mute] [--console]
   harness.py serve [--exe PATH] [--port PORT]
 
 `shot` starts a new game of EPISODE (0 = Junior .. 4 = IV) and saves the game's own
@@ -22,7 +22,9 @@ frame. The harness closes the name dialog and the room-name banner first.
 in a window of its own (a Wine virtual desktop). It presses nothing: choose the episode
 in the game (its number is only printed). It ends when the game ends; a game started
 by an earlier `play` is ended first. Screenshots and saved games stay in the prefix
-until the next `shot`, which deletes them.
+until the next `shot`, which deletes them. --console turns on the game's command console
+(the proxy DLL holds the mutex it looks for, see STATUS.md): type a command such as
+`SCENE 42 20 14` or `TAKE GOLD` and Return; while it is on, letters go to the console.
 
 `serve` runs the game on a virtual display with the proxy DLL (tools/wine/proxy, built
 by `pnpm proxy`) on virtual time and prints "ready PORT DISPLAY TOKEN" once the game
@@ -62,7 +64,7 @@ PROXY = os.path.join(ROOT, "tools", "wine", "proxy", "ddraw.dll")
 EPISODE_BUTTONS = {e: (340, 313 + 51 * e) for e in range(5)}
 
 
-def env(display=None, sound=False, proxy=None):
+def env(display=None, sound=False, proxy=None, console=False):
     e = dict(os.environ)
     if os.path.isdir(WINE_BIN):
         e["PATH"] = WINE_BIN + os.pathsep + e["PATH"]
@@ -72,6 +74,9 @@ def env(display=None, sound=False, proxy=None):
     if proxy:  # (port, token): the proxy ddraw.dll next to the exe, see `serve`
         e["WINEDLLOVERRIDES"] += ";ddraw=n,b"
         e["ROBOT_PROXY_PORT"], e["ROBOT_PROXY_TOKEN"] = str(proxy[0]), proxy[1]
+    if console:  # the proxy without a driver, only for the game's command console
+        e["WINEDLLOVERRIDES"] += ";ddraw=n,b"
+        e["ROBOT_CONSOLE"] = "1"
     if display:
         e["DISPLAY"] = display
     return e
@@ -284,20 +289,27 @@ PLAY_DIR = os.path.join(PREFIX, "drive_c", "robot-play")
 EPISODE_NAMES = ["Robot Junior", "Robot I", "Robot II", "Robot III", "Robot IV"]
 
 
-def play(episode=None, exe=EXE, mute=False):
+def play(episode=None, exe=EXE, mute=False, console=False):
     """Run the game on this display to be played (see the module doc)."""
     if not os.path.isdir(GAME_DIR):
         sys.exit("run `harness.py setup` first")
     if not os.environ.get("DISPLAY"):
         sys.exit("no DISPLAY to show the game on")
+    if console and not os.path.isfile(PROXY):
+        sys.exit("build the proxy first: pnpm proxy")
     sandbox()
     run("wineserver", "-k", check=False)  # an earlier game (also one of `shot`)
     os.makedirs(PLAY_DIR, exist_ok=True)
     shutil.copyfile(exe, os.path.join(PLAY_DIR, "GameOfRobot.exe"))
+    proxy = os.path.join(PLAY_DIR, "ddraw.dll")
+    if console:
+        shutil.copyfile(PROXY, proxy)
+    elif os.path.exists(proxy):
+        os.remove(proxy)
     if episode is not None:
         print(f"choose {EPISODE_NAMES[episode]} in the game")
     subprocess.run(["wine", "explorer", "/desktop=robot,1024x768", "C:\\robot-play\\GameOfRobot.exe"],
-                   cwd=PLAY_DIR, env=env(sound=not mute), stdout=subprocess.DEVNULL,
+                   cwd=PLAY_DIR, env=env(sound=not mute, console=console), stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL, check=False)
 
 
@@ -396,6 +408,7 @@ def main():
     s.add_argument("episode", type=int, choices=range(5), nargs="?")
     s.add_argument("--exe", default=EXE)
     s.add_argument("--mute", action="store_true")
+    s.add_argument("--console", action="store_true", help="turn on the game's command console")
     s = sub.add_parser("serve")
     s.add_argument("--exe", default=EXE)
     s.add_argument("--port", type=int, help="the proxy's port (default: a free one)")
@@ -405,7 +418,7 @@ def main():
     elif a.cmd == "serve":
         serve(os.path.abspath(a.exe), a.port)
     elif a.cmd == "play":
-        play(a.episode, os.path.abspath(a.exe), a.mute)
+        play(a.episode, os.path.abspath(a.exe), a.mute, a.console)
     else:
         shot(a.episode, os.path.abspath(a.out), a.exe, a.wait, a.keep, a.debug, a.keys)
 
