@@ -1,6 +1,7 @@
 import {
   ACTOR_RECORD,
   CIRCUIT_NODE_RECORD,
+  type ConsoleObject,
   DEALER_CLASS,
   type Direction,
   EPISODES,
@@ -53,6 +54,7 @@ import {
   randomPlacement,
   randomRobotColours,
   readBackdropRule,
+  readConsoleObjects,
   readDealer,
   readDiagonalMoves,
   readEpisodeFlags,
@@ -116,7 +118,7 @@ import {
   passageExit,
 } from "./exits-view.ts";
 import { hex, plural } from "./format.ts";
-import { showHelp } from "./help-dialog.ts";
+import { type HelpPage, showHelp } from "./help-dialog.ts";
 import { KitsView } from "./kits-view.ts";
 import { MapView } from "./map-view.ts";
 import { MusicView } from "./music-view.ts";
@@ -519,6 +521,8 @@ export class App {
     }),
   );
   private readonly tileNames = new Map<number, TileNames>();
+  /** The console's object names, read once per game (the help shows them). */
+  private consoleNames: { game: Game; objects: ConsoleObject[] } | undefined;
   private readonly tileGrid = h("div", { class: "tile-grid" });
   /** The tiles painted with last, per episode, most recent first. */
   private readonly recentTiles = new Map<number, number[]>();
@@ -1022,19 +1026,31 @@ export class App {
           { class: "header-group", role: "group", "aria-label": "Edit" },
           this.undoButton,
           this.redoButton,
-          this.testButton,
           h(
             "fieldset",
-            { class: "segmented" },
+            { class: "segmented joined" },
             h("legend", {}, "Test in game"),
+            this.testButton,
             h(
               "label",
               {
                 title:
-                  "Test in game with the game's command console on: type e.g. SCENE 42 20 14, TAKE GOLD or ROBOTOFF and Return (the commands are in STATUS.md); while it is on, letter keys go to it, pick rucksack items with the arrows. Only for the test exe, not for Save exe",
+                  "Test in game with the game's command console on: type e.g. SCENE 42 20 14, TAKE GOLD or ROBOTOFF and Return; while it is on, letter keys go to it, pick rucksack items with the arrows. Only for the test exe, not for Save exe",
               },
               this.consoleToggle,
               "Console",
+            ),
+            h(
+              "button",
+              {
+                class: "icon",
+                title: "The game's console commands",
+                "aria-label": "Console commands",
+                click: () => {
+                  this.showHelp("console");
+                },
+              },
+              "?",
             ),
           ),
         ),
@@ -1071,9 +1087,11 @@ export class App {
             "button",
             {
               class: "icon",
-              title: "Shortcuts: keyboard and mouse (?)",
-              "aria-label": "Shortcuts",
-              click: showHelp,
+              title: "Help: the shortcuts (keyboard and mouse) and the game's console commands (?)",
+              "aria-label": "Help",
+              click: () => {
+                this.showHelp("shortcuts");
+              },
             },
             "?",
           ),
@@ -1843,6 +1861,15 @@ export class App {
     if (!this.options.play) this.setStatus(`Saved ${name}: ${where}`);
   }
 
+  /** The help on `page`, with the opened exe's object names for the console. */
+  private showHelp(page: HelpPage): void {
+    const game = this.editor?.game;
+    if (game && this.consoleNames?.game !== game) {
+      this.consoleNames = { game, objects: readConsoleObjects(game.image) };
+    }
+    showHelp(page, game ? this.consoleNames?.objects : []);
+  }
+
   /** "room 43 – DER START": a room with the name the game shows for it. */
   private roomLabel(episode: number, id: number): string {
     const editor = this.need();
@@ -2428,7 +2455,7 @@ export class App {
           return;
         }
         if (event.key === "?" && !event.ctrlKey && !event.metaKey && !event.altKey) {
-          showHelp();
+          this.showHelp("shortcuts");
           return;
         }
         if (!this.editor) return;

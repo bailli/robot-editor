@@ -90,8 +90,8 @@ test("the Walkable toggle shades what keeps the hero off, W toggles it", async (
   expect(shade(wall)).toBe(0);
 });
 
-test("? and the Shortcuts button show the help; keys in it leave the room alone", async () => {
-  const help = page.getByRole("dialog", { name: "Shortcuts" });
+test("? and the Help button show the help; keys in it leave the room alone", async () => {
+  const help = page.getByRole("dialog", { name: "Help" });
   await userEvent.keyboard("?");
   await expect.element(help).toBeVisible();
   expect(help.element().textContent).toMatch(/Ctrl\+V.*Paste/);
@@ -105,7 +105,21 @@ test("? and the Shortcuts button show the help; keys in it leave the room alone"
   expect(grid.checked).toBe(before);
   await userEvent.keyboard("{Escape}");
   await expect.element(help).not.toBeInTheDocument();
-  await page.getByRole("button", { name: "Shortcuts" }).click();
+  await page.getByRole("button", { name: "Help" }).click();
+  await help.getByRole("button", { name: "Close" }).click();
+  await expect.element(help).not.toBeInTheDocument();
+});
+
+test("the console's help: its commands and the exe's object names, a page of the help", async () => {
+  const help = page.getByRole("dialog", { name: "Help" });
+  await page.getByRole("button", { name: "Console commands" }).click();
+  const pages = () => [...help.element().querySelectorAll("section")].map((s) => !s.hidden);
+  expect(pages()).toEqual([false, true]);
+  const commands = help.getByRole("region", { name: "Console commands" }).element().textContent;
+  expect(commands).toMatch(/SCENE n.*SCENE n x y.*Go to room n/);
+  expect(commands).toContain("KEY(0-15)");
+  await help.getByRole("radio", { name: "Shortcuts" }).click();
+  expect(pages()).toEqual([true, false]);
   await help.getByRole("button", { name: "Close" }).click();
   await expect.element(help).not.toBeInTheDocument();
 });

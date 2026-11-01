@@ -138,7 +138,7 @@ test("keys choose the tool, the layer and the tab; the help lists them", async (
   }
   // the help names every tab by its key, in the panel's order
   await userEvent.keyboard("?");
-  const help = page.getByRole("dialog", { name: "Shortcuts" });
+  const help = page.getByRole("dialog", { name: "Help" });
   const rows = [...help.element().querySelectorAll("caption")]
     .find((c) => c.textContent === "Side panel")
     ?.closest("table")

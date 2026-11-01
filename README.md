@@ -62,7 +62,7 @@ adds a room with walls and exits, empty or as a copy of another room. "Test in g
 edits (the hero at the selected cell): under `pnpm editor` in Wine on this display
 (after `python3 tools/wine/harness.py setup`; choose the episode in the game),
 otherwise the exe is downloaded. With the Console chip next to it, that exe has the
-game's command console on (`SCENE 42 20 14`, `TAKE GOLD`, `ROBOTOFF`, …; see STATUS.md). `pnpm --filter @robot/editor build`
+game's command console on (`SCENE 42 20 14`, `TAKE KEY(3)`, `ROBOTOFF`, …; the ? next to it lists the commands). `pnpm --filter @robot/editor build`
 makes a static build in `packages/editor/dist/`.
 
 ## Command line

@@ -177,6 +177,29 @@ dialog::backdrop {
   color: var(--muted);
 }
 
+/* the pages: Shortcuts, Console commands */
+.help-dialog > form > .segmented {
+  margin-bottom: 12px;
+}
+
+.help-dialog p {
+  margin: 0 0 12px;
+}
+
+.help-dialog code {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.help-dialog .console-objects {
+  line-height: 1.7;
+}
+
+.help-dialog .console-objects code {
+  white-space: nowrap;
+}
+
 kbd {
   font-family: ui-monospace, monospace;
   font-size: 12px;
@@ -1316,6 +1339,26 @@ header button.pressed {
 .segmented label:has(input:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+  z-index: 2;
+}
+
+/* buttons and chips as one row: "Test in game", its Console chip and the commands' help */
+.segmented.joined > :is(button, label) {
+  position: relative;
+  margin-left: -1px;
+  border-radius: 0;
+}
+
+.segmented.joined > :nth-child(2) {
+  margin-left: 0;
+  border-radius: 4px 0 0 4px;
+}
+
+.segmented.joined > :last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.segmented.joined > button:is(:hover, :focus-visible) {
   z-index: 2;
 }
 

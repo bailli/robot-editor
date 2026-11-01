@@ -86,7 +86,7 @@ Files in `packages/formats/src`:
 | `start.ts`                   | the room and cell an episode starts in, the rucksack's capacity, and patching them               |
 | `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them            |
 | `episode-methods.ts`         | rules by the episode vtable's methods: the backdrop room (mod 100, − 100), diagonal moves        |
-| `console.ts`                 | the game's command console always on (two bytes), for "Test in game"                             |
+| `console.ts`                 | the game's command console always on (two bytes), for "Test in game"; its objects' names         |
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants         |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                           |
 | `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on                 |
@@ -309,9 +309,15 @@ Files in `packages/formats/src`:
   adds every decoded byte; the last byte decodes to the NUL. The same hides the class
   names (vtable +4, with the states a command may give: `KEY:0-15`, `LETTER:A-Z`,
   `LCARD:L` a word, `NOTE:d`), the credits at 0x482b08 and the URLs at 0x4746d0.
-  Commands (obj: a class name, `NAME(state)` or a number, 0x43c390): `TAKE obj…` into
+  Objects (0x43c390): a name of the episode's classes (`_stricmp`), `NAME(state)` where
+  its suffix allows one: in a range one of it (`KEY(3)`; without a state "Object %s
+  unknown!"), `d` 0–255, `L` a 4-letter word; no suffix gives state 0, a single number
+  that state; the state's digits or one letter (as typed, so a capital: the game window
+  gets small letters without Shift). The result is class | state << 8.
+  Commands: `TAKE obj…` into
   the rucksack (0x42c010, weight checked), `DROP obj…` onto the hero's cell (0x433420),
-  `INFO obj [state]` its description (0x406ae0), `TEXT n [m]` text n (variant m,
+  `INFO obj` / `INFO n [state]` its description (0x406ae0; n a tile type, 0x43a5f0),
+  `TEXT n [m]` text n (variant m,
   0x4064b0), `ROOMINFO n` room n's banner (0x406560), `NOTE n` message 800 + n
   (0x4066a0), `DIARY n` diary page n (0x4067b0), `BIRNBAUM` every diary page read
   (0x4fe3c8 all set), `LIFE` 3 lives (0x4fe30d), `GOLD` 50 gold more (0x4fe30e; the
@@ -332,8 +338,12 @@ Files in `packages/formats/src`:
   anything else "Command %s unknown!" (an object: "Object %s unknown!"). **Verified
   with the driver** (episode I, `ROBOT_CONSOLE=1`): `GOLD` (0 → 50), `ROBOTOFF`
   (0x4fe35c 500, counting down), `TAKE GOLD` (class 10 in the first slot),
-  `SCENE 42 20 14` (room 42 at (20, 14)), `DOWN`/`UP` (17 → 117 → 17), an unknown
-  word's message; without the variable `GOLD` does nothing. The rest from the code.
+  `TAKE KEY(3)` (0x0315, with its first-take message), `TAKE LETTER(B)` (with Shift;
+  `letter(b)`: "Object unknown!"), `SCENE 42 20 14` (room 42 at (20, 14)), `DOWN`/`UP`
+  (17 → 117 → 17), an unknown word's message; without the variable `GOLD` does nothing.
+  The rest from the code. The editor's help lists the commands and the opened exe's
+  object names (`readConsoleObjects`: every `mov eax, imm32; ret` in .text returning
+  such a name; 111 in the original).
 
 ### Scenes (rooms)
 
@@ -1195,8 +1205,10 @@ Supported:
   number of records, of actors and RandObj calls, the circuit's nodes on of all (orange
   with problems), ● for a script (✎ in orange while a draft is not applied), ● in
   orange for an edited dealer; the tooltip says it in words, with the tab's key
-- help (button "Shortcuts", key ?): a dialog listing the keys and mouse buttons
-  (`help-dialog.ts`); keys typed in a dialog do not reach the room
+- help (button "Help", key ?): a dialog with two pages, the keys and mouse buttons and
+  the game's console commands with the opened exe's object names (`help-dialog.ts`;
+  the ? next to the Console chip opens that page); keys typed in a dialog do not reach
+  the room
 - exits: N/S/W/E targets incl. script changes; arrow keys follow fixed exits, Page
   Down/Up the doors and stairs in or down (+ 100) and out or up (− 100); per
   direction the exits byte's setting (neighbour / outside / none) can be changed,
@@ -1693,7 +1705,7 @@ The driver tests (`packages/tools/test/driver.test.ts`, `pnpm test:game`) verify
 edit repeatably: a mod or patched exe, the change next to the hero's start, then the
 game's memory (hero, map, actor list, score) or a frame compared with our render. What
 they cover: the driver (every episode's start, runs repeat exactly, a frame equals the
-game's screenshot); the command console patched on (`GOLD`, `SCENE`); episode I's room 43 to 42 and every gate and NOT, against our
+game's screenshot); the command console patched on (`GOLD`, `TAKE KEY(3)`, `SCENE`); episode I's room 43 to 42 and every gate and NOT, against our
 circuit model; the circuits and oracles kits (examples too) in III, IV, Junior and I; an
 event copied with its sound, and one with a MUSIC piece IV lacked (IV); robots' sprites (III) against `robotSprite`; the
 episode rules as changed (Junior's oracles vanishing, robots' own colours, doors without

@@ -995,26 +995,35 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     assert.deepEqual(after, { room: 43, x: 7, y: 17 }, "2 down, 2 right (without: none)");
   }, 60_000);
 
-  test("episode I: with the console patched on, GOLD gives 50 gold and SCENE moves the hero", async () => {
+  test("episode I: with the console patched on, GOLD, TAKE KEY(3) and SCENE work", async () => {
     const seen = await withExeFile(withConsole(game.image), (exe) =>
       withGame(exe, async (d) => {
+        // letters arrive in lower case (WM_CHAR without Shift); ( and ) need Shift
         const type = async (line: string) => {
-          for (const c of line) await d.press(c.charCodeAt(0), 5);
+          for (const c of line) {
+            const shift = "()".includes(c);
+            if (shift) await d.key("shift", true);
+            await d.press(c === "(" ? 0x39 : c === ")" ? 0x30 : c.charCodeAt(0), 5);
+            if (shift) await d.key("shift", false);
+          }
           await d.press("return", 50);
         };
         await d.startEpisode(1);
         await type("GOLD");
         const gold = (await d.peek(0x4fe30e, 1))[0];
+        await type("TAKE KEY(3)");
+        await d.closeBoxes();
+        const slot = new DataView((await d.peek(0x4fe0c2, 2)).buffer).getUint16(0, true);
         await type("SCENE 42 20 14");
         await d.run(300);
         await d.closeBoxes();
-        return { gold, hero: await d.hero() };
+        return { gold, slot, hero: await d.hero() };
       }),
     );
     assert.deepEqual(
       seen,
-      { gold: 50, hero: { room: 42, x: 20, y: 14 } },
-      "without: 0 gold, room 43",
+      { gold: 50, slot: 0x0315, hero: { room: 42, x: 20, y: 14 } },
+      "without: 0 gold, an empty rucksack, room 43",
     );
   }, 60_000);
 
