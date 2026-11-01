@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 
 import { readClassTable } from "../src/classes.ts";
 import { type Dealer, readDealer, withDealer } from "../src/dealer.ts";
+import { endsAtRoom255, withRoom255Ending } from "../src/endings.ts";
 import {
   ORACLE_VANISHES_EAST,
   ORACLE_VANISHES_NORTH,
@@ -112,6 +113,8 @@ const changes: ModChanges = {
   backdrop: [{ episode: 3, rule: "minus100" }],
   // Junior's hero walks diagonally, as III's does
   moves: [{ episode: 0, diagonal: true }],
+  // room 255 ends episode II too
+  ending: [{ episode: 2, room255: true }],
 };
 
 /** Same resources (by type, name, language) and same bytes outside them. */
@@ -165,6 +168,7 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   direct = new Game(withEpisodeFlags(direct.image, 0, 0x4801e946));
   direct = new Game(withBackdropRule(direct.image, 3, "minus100"));
   direct = new Game(withDiagonalMoves(direct.image, 0, true));
+  direct = new Game(withRoom255Ending(direct.image, 2, true));
   sameContent(modded.image, direct.image);
 
   expect(modded.episode(3).classes.typeOfClass.get(76)).toBe(0x59);
@@ -188,6 +192,13 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   expect(readEpisodeFlags(modded.image, 0)).toBe(0x4801e946);
   expect(readBackdropRule(modded.image, 3)).toBe("minus100");
   expect(readDiagonalMoves(modded.image, 0)).toBe(true);
+  expect([0, 1, 2, 3, 4].map((e) => endsAtRoom255(modded.image, e))).toEqual([
+    false,
+    true,
+    true,
+    false,
+    false,
+  ]);
   expect(readDealer(modded.image, 1)).toEqual(dealer1);
   for (const e of [0, 1, 2, 4]) {
     expect(modded.episode(e).rooms).toEqual(game.episode(e).rooms);
@@ -209,6 +220,8 @@ test("compiled: byte writes in the tables and the start method, whole resources"
       [0x466cd8 + 0x1c, 4], // Junior's vtable: the step method
       [0x408de0, 0x1a], // I's goods method
       [0x475730, 4 * 27], // I's goods
+      [0x40283f, 10], // the room 255 check
+      [0x465e60, 0x20], // its stub in the padding of .text
     ] as const;
     assert.ok(
       tables.some(([start, length]) => within(va, start, length) && within(end, start, length)),

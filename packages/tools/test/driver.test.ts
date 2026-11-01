@@ -995,6 +995,61 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     assert.deepEqual(after, { room: 43, x: 7, y: 17 }, "2 down, 2 right (without: none)");
   }, 60_000);
 
+  // a teleporter to room 255 east of the hero: with the ending on, IV's ending method
+  // ends the game at once (the high scores; the hero object's x is 255 then)
+  test("episode IV: a teleporter to room 255 ends the episode once room 255 ends it", async () => {
+    const hero = { x: 5, y: 16 };
+    const area = { x0: 2, x1: 10, y0: 14, y1: 18 };
+    const seen = [];
+    for (const room255 of [false, true]) {
+      const changes = { ending: [{ episode: 4, room255 }] };
+      const mod = startRoomMod(game, 4, changes, area, hero, (_, record) => {
+        record(7, 16, [13, 1, 0, 0, 255, 0, 0]);
+      });
+      seen.push(
+        await withModExe(game, mod, (exe) =>
+          withGame(exe, async (d) => {
+            await d.startEpisode(4);
+            await d.hold("right", 40);
+            await d.run(150);
+            return d.hero();
+          }),
+        ),
+      );
+    }
+    // IV has a room 255 of its own, which the ending makes unreachable
+    assert.deepEqual(seen, [
+      { room: 255, x: 0, y: 0 },
+      { room: 53, x: 255, y: 0 },
+    ]);
+  }, 60_000);
+
+  test("episode I: Junior's goal (the kit) ends the game on the first touch", async () => {
+    const mod = exampleMod(game, 1, "goal", { x: 8, y: 13 }, { x: 5, y: 14 });
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(1);
+        await d.hold("right", 40);
+        await d.run(60);
+        // the 10000 points of event 298 (no bonus box) and text 994, Junior's, whose
+        // window lets the game clock run
+        const score = await d.score();
+        const on = await d.hero();
+        // its two pages (the first Return does not reach them), then the end of the
+        // game: the rank (here none: "Du hast leider nichts dazugelernt.")
+        for (let box = 0; box < 4; box++) await d.press("return", 150);
+        return { score, on, after: await d.hero() };
+      }),
+    );
+    assert.deepEqual(seen, {
+      score: 10000,
+      on: { room: 43, x: 8, y: 14 },
+      // the high scores: no game (with I's bonus box "Das war's" first, closing the
+      // goal's text left the game running)
+      after: { room: 43, x: 255, y: 0 },
+    });
+  }, 60_000);
+
   test("episode I: with the console patched on, GOLD, TAKE KEY(3) and SCENE work", async () => {
     const seen = await withExeFile(withConsole(game.image), (exe) =>
       withGame(exe, async (d) => {

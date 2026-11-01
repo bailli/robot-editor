@@ -4,6 +4,7 @@ export {
   EMPTY_CLASS_OBJECT,
   FrameMethod,
   BLINK_LOAD_METHOD,
+  GOAL_CLASS,
   ORACLE_CLASS,
   HATCHING_LOAD_METHODS,
   SAND_DESCRIBE_METHOD,
@@ -254,6 +255,7 @@ export {
   readEpisodeFlags,
   withEpisodeFlags,
 } from "./episode-flags.ts";
+export { endsAtRoom255, readRoom255Endings, withRoom255Ending } from "./endings.ts";
 export {
   type ConsoleObject,
   decodeConsoleString,
@@ -385,6 +387,7 @@ export type {
   CodeChange,
   CopyTextsChange,
   DealerChange,
+  EndingChange,
   EventChange,
   Mod,
   ModChanges,

@@ -16,6 +16,7 @@
  *  10. flags      (episode)               the episode's flags (withEpisodeFlags)
  *  11. backdrop   (episode)               the room drawn behind (withBackdropRule)
  *  12. moves      (episode)               diagonal moves or not (withDiagonalMoves)
+ *  13. ending     (episode)               room 255 ends the episode or not (withRoom255Ending)
  * copyTexts and texts share their keys: an entry is either copied or written. Copies read
  * the exe as kinds 1-4 left it, so the mod carries no text or music of the game's own.
  * Pieces come first, so the sounds of copied tile types and events find them. The event
@@ -30,6 +31,7 @@
  */
 import { TILE_TYPES } from "./classes.ts";
 import { type Dealer, dealerProblem, withDealer } from "./dealer.ts";
+import { withRoom255Ending } from "./endings.ts";
 import { withEpisodeFlags } from "./episode-flags.ts";
 import {
   BACKDROP_RULES,
@@ -160,6 +162,12 @@ export interface MovesChange {
   diagonal: boolean;
 }
 
+export interface EndingChange {
+  episode: number;
+  /** Whether a room change to room 255 ends the episode (only episode I's originally). */
+  room255: boolean;
+}
+
 export interface ModChanges {
   music: readonly MusicChange[];
   tileTypes: readonly TileTypesChange[];
@@ -174,6 +182,7 @@ export interface ModChanges {
   flags: readonly FlagsChange[];
   backdrop: readonly BackdropChange[];
   moves: readonly MovesChange[];
+  ending: readonly EndingChange[];
 }
 
 export interface Mod {
@@ -223,6 +232,7 @@ export const NO_CHANGES: ModChanges = {
   flags: [],
   backdrop: [],
   moves: [],
+  ending: [],
 };
 
 /** A mod without changes for the given exe. */
@@ -270,6 +280,7 @@ export function checkMod(mod: Mod): void {
     flags,
     backdrop,
     moves,
+    ending,
   } = mod.changes;
   const keys = new Set<string>();
   const once = (key: string, where: string) => {
@@ -418,6 +429,12 @@ export function checkMod(mod: Mod): void {
     need(typeof c.diagonal === "boolean", where, "diagonal is not true or false");
     once(`moves ${c.episode}`, where);
   });
+  ending.forEach((c, i) => {
+    const where = `ending[${i}] (episode ${c.episode})`;
+    episodeOk(c.episode, where);
+    need(typeof c.room255 === "boolean", where, "room255 is not true or false");
+    once(`ending ${c.episode}`, where);
+  });
 }
 
 // --- applying -----------------------------------------------------------------------
@@ -481,6 +498,7 @@ function canonical(changes: ModChanges): ModChanges {
     flags: changes.flags.toSorted(byKeys((c) => c.episode)),
     backdrop: changes.backdrop.toSorted(byKeys((c) => c.episode)),
     moves: changes.moves.toSorted(byKeys((c) => c.episode)),
+    ending: changes.ending.toSorted(byKeys((c) => c.episode)),
   };
 }
 
@@ -584,6 +602,9 @@ function build(image: PeImage, changes: ModChanges): Uint8Array {
   }
   for (const { episode, diagonal } of changes.moves) {
     data = withDiagonalMoves(parsePe(data), episode, diagonal);
+  }
+  for (const { episode, room255 } of changes.ending) {
+    data = withRoom255Ending(parsePe(data), episode, room255);
   }
   return data;
 }
@@ -750,6 +771,7 @@ export function modJson(mod: Mod): string {
     flags,
     backdrop,
     moves,
+    ending,
   } = canonical(mod.changes);
   const file: Json = {
     format: MOD_FORMAT,
@@ -801,6 +823,7 @@ export function modJson(mod: Mod): string {
       flags: flags.map((c) => ({ episode: c.episode, flags: `0x${c.flags.toString(16)}` })),
       backdrop: backdrop.map((c) => ({ episode: c.episode, rule: c.rule })),
       moves: moves.map((c) => ({ episode: c.episode, diagonal: c.diagonal })),
+      ending: ending.map((c) => ({ episode: c.episode, room255: c.room255 })),
     },
   };
   // arrays of numbers (the pairs) on one line each; strings hold no line breaks
@@ -946,6 +969,10 @@ export function parseMod(text: string): Mod {
       moves: list("moves", (o, w) => {
         need(typeof o["diagonal"] === "boolean", `${w}.diagonal`, "not true or false");
         return { episode: int(o["episode"], `${w}.episode`), diagonal: o["diagonal"] };
+      }),
+      ending: list("ending", (o, w) => {
+        need(typeof o["room255"] === "boolean", `${w}.room255`, "not true or false");
+        return { episode: int(o["episode"], `${w}.episode`), room255: o["room255"] };
       }),
     },
   };

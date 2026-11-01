@@ -15,6 +15,7 @@ import {
   compileScript,
   describeRecord,
   emptyMod,
+  endsAtRoom255,
   findResource,
   kitChanges,
   modJson,
@@ -1442,6 +1443,32 @@ describe("Editor and kits", () => {
     expect(editor.addKit(0, 43, kit("oracles"))).toBeUndefined();
   });
 
+  test("the goal: text 994 replaced, event 298 moved off its bonus text, or that removed", () => {
+    const editor = new Editor(game);
+    editor.addKit(1, 43, kit("goal"));
+    const junior = game.texts(1010)?.entries.get(994);
+    expect(editor.textEntry(1110, 994)).toEqual(junior);
+    let mod = editor.saveMod();
+    expect(mod.changes.copyTexts).toEqual([{ resource: 1110, from: 1010, entries: [[994, 994]] }]);
+    expect(mod.changes.events).toEqual([
+      { episode: 1, entry: 190, id: 298, points: 10000, sound: "FINALE" },
+      { episode: 1, entry: 170, id: 0, points: 0 },
+    ]);
+    expect(mod.changes.texts).toEqual([]);
+    expect(editor.addKit(1, 43, kit("goal"))).toBeUndefined();
+    editor.undo();
+    // the spare entry taken by another event: "Das war's" goes, in the same undo step
+    const other = editor.sourceEvents(2, 1)[0] ?? -1;
+    editor.copyEvent(1, 43, 190, { from: 2, of: other });
+    editor.addKit(1, 43, kit("goal"));
+    expect(editor.textEntry(1110, 1970)).toBeUndefined();
+    mod = editor.saveMod();
+    expect(mod.changes.texts).toEqual([{ resource: 1110, entry: 1970, variants: null }]);
+    expect(editor.addKit(1, 43, kit("goal"))).toBeUndefined();
+    editor.undo();
+    expect(editor.textEntry(1110, 1970)).toEqual(["Das war's"]);
+  });
+
   test("copied types offer the states their episode's rooms use: letters 0 and 1", () => {
     const editor = new Editor(game);
     editor.addKit(3, 41, kit("circuits"));
@@ -1588,6 +1615,32 @@ describe("Editor and the episode's settings", () => {
     expect(new Editor(game, mod).diagonalMoves(0)).toBe(true);
     editor.undo();
     expect(editor.saveMod().changes.moves).toEqual([]);
+  });
+
+  test("room 255 ends an episode or not as one step, saved into exe and mod", () => {
+    const editor = new Editor(game);
+    expect([0, 1, 2, 3, 4].map((e) => editor.endsAtRoom255(e))).toEqual([
+      false,
+      true,
+      false,
+      false,
+      false,
+    ]);
+    editor.setRoom255Ending(3, 41, true);
+    editor.setRoom255Ending(1, 43, false);
+    const exe = parsePe(editor.save());
+    expect([1, 3].map((e) => endsAtRoom255(exe, e))).toEqual([false, true]);
+    const mod = editor.saveMod();
+    expect(mod.changes.ending).toEqual([
+      { episode: 3, room255: true },
+      { episode: 1, room255: false },
+    ]);
+    expect(new Editor(game, mod).endsAtRoom255(3)).toBe(true);
+    editor.undo();
+    editor.undo();
+    expect(editor.isEndingEdited(3)).toBe(false);
+    expect(editor.saveMod().changes.ending).toEqual([]);
+    expect(firstDifference(editor.save(), game.image.data)).toBe(-1);
   });
 
   test("the backdrop rule changes as one step; what is drawn behind follows", () => {

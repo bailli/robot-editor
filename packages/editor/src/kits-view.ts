@@ -1,4 +1,4 @@
-import { KITS, type Kit, type KitPlan } from "@robot/formats";
+import { EVENT_TEXT, KITS, type Kit, type KitPlan } from "@robot/formats";
 
 import { element } from "./dom.ts";
 import { hex2 } from "./format.ts";
@@ -86,7 +86,8 @@ export class KitsView {
     const typeName = (of: number) => kit.types.find(([t]) => t === of)?.[1] ?? hex2(of);
     const label = (id: number) => (kit.eventLabel ? `${kit.eventLabel(id)} (${id})` : String(id));
     const own = plan.present.length === kit.types.length && plan.lacking.length === 0;
-    if (own && plan.texts.length === 0) {
+    const quiet = plan.moved.length + plan.silenced.length;
+    if (own && plan.texts.length === 0 && quiet === 0) {
       box.append(line("own", `${name(episode)} has ${kit.name.toLowerCase()} already.`));
       box.append(this.exampleBar(context, kit));
       return box;
@@ -99,7 +100,24 @@ export class KitsView {
         `Tile types: ${types.length > 0 ? types.join(", ") : "none to copy"}${present.length > 0 ? ` (has: ${present.join(", ")})` : ""}`,
       ),
     );
-    if (plan.texts.length > 0) box.append(line("texts", `Texts: ${plan.texts.join(", ")}`));
+    if (plan.texts.length > 0) {
+      const replaced =
+        plan.replaced.length > 0 ? ` (replacing its own ${plan.replaced.join(", ")})` : "";
+      box.append(line("texts", `Texts: ${plan.texts.join(", ")}${replaced}`));
+    }
+    // events whose bonus box would come first: moved off their text, or the text removed
+    for (const m of plan.moved) {
+      box.append(
+        line(
+          `moved ${m.id}`,
+          `Event ${m.id} moves from entry ${m.from} to ${m.entry}, without the bonus box of text ${EVENT_TEXT + m.from}`,
+        ),
+      );
+    }
+    if (plan.silenced.length > 0) {
+      const texts = plan.silenced.map((n) => EVENT_TEXT + n).join(", ");
+      box.append(line("silenced", `Removes text ${texts} (a bonus box that would come first)`));
+    }
     if (plan.music.length > 0) box.append(line("music", `Music: ${plan.music.join(", ")}`));
     // more events than spare entries: the player picks
     const picking = plan.lacking.length > fit.events.length && fit.events.length > 0;
@@ -152,7 +170,7 @@ export class KitsView {
         line("without", `Without points (no entry left): ${plan.without.map(label).join(", ")}`),
       );
     }
-    const empty = plan.types.length + plan.texts.length + plan.events.length === 0;
+    const empty = plan.types.length + plan.texts.length + plan.events.length + quiet === 0;
     const add = element("button", undefined, `Add ${kit.name.toLowerCase()}`);
     add.type = "button";
     add.disabled = empty || plan.problem !== undefined;

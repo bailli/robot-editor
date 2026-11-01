@@ -27,11 +27,14 @@ export interface EpisodeViewEvents {
   backdrop(rule: BackdropRule): void;
   /** Diagonal moves on or off (Editor.setDiagonalMoves). */
   diagonal(diagonal: boolean): void;
+  /** Room 255 ends the episode or not (Editor.setRoom255Ending). */
+  ending(ends: boolean): void;
 }
 
 /** What the view shows of the episode: its start, rucksack and flags. */
 export interface EpisodeContext {
   episode: string;
+  episodeNumber: number;
   start: EpisodeStart;
   /** The start as the exe (or the opened mod's base) has it; likewise the others. */
   original: EpisodeStart;
@@ -44,6 +47,11 @@ export interface EpisodeContext {
   originalBackdrop: BackdropRule | undefined;
   diagonal: boolean;
   originalDiagonal: boolean;
+  /** Whether room 255 ends the episode. */
+  ending: boolean;
+  originalEnding: boolean;
+  /** Whether the episode has a room 255, which the ending makes unreachable. */
+  hasRoom255: boolean;
   /** The shown room. */
   room: number;
   /** "Go to room 43 – DER START" */
@@ -75,6 +83,15 @@ function ruleRow(
   row.append(box, element("span", undefined, `${label}${checked !== original ? " (edited)" : ""}`));
   return row;
 }
+
+/** What the episode's ending method does once room 255 ends it, by episode (endings.ts). */
+const ENDINGS = [
+  "Junior’s ending does nothing: the hero stays where he is and the game goes on.",
+  "Episode I’s ending rolls the cast of robots as credits, then the game ends (the rank, the high scores).",
+  "Episode II’s ending is room 600, the ship at sea with “ES IST VOLLBRACHT”, then the game ends.",
+  "Episode III’s ending darkens the room to black, then the game ends.",
+  "Episode IV’s ending ends the game at once.",
+] as const;
 
 /** The episode flags the view offers: the bit, its label and what it does. */
 const FLAGS = [
@@ -121,6 +138,7 @@ export class EpisodeView {
   private readonly start = element("section", "start-view record-view");
   private readonly rucksack = element("section", "start-view record-view");
   private readonly flags = element("section", "start-view record-view");
+  private readonly ending = element("section", "start-view record-view");
   private readonly events: EpisodeViewEvents;
   private context: EpisodeContext | undefined;
 
@@ -129,7 +147,8 @@ export class EpisodeView {
     this.start.setAttribute("aria-label", "Start");
     this.rucksack.setAttribute("aria-label", "Rucksack");
     this.flags.setAttribute("aria-label", "Flags");
-    this.element.append(this.start, this.rucksack, this.flags);
+    this.ending.setAttribute("aria-label", "Ending");
+    this.element.append(this.start, this.rucksack, this.flags, this.ending);
   }
 
   show(context: EpisodeContext): void {
@@ -137,6 +156,7 @@ export class EpisodeView {
     patchChildren(this.start, this.renderStart(context));
     patchChildren(this.rucksack, this.renderRucksack(context));
     patchChildren(this.flags, this.renderFlags(context));
+    patchChildren(this.ending, this.renderEnding(context));
   }
 
   private renderStart(context: EpisodeContext): Node[] {
@@ -209,6 +229,28 @@ export class EpisodeView {
         "p",
         "hint",
         "As many slots, and the weight carried stays below it: an item is taken only while the weights plus its own are less, else it stays where it lies (“Zum Tragen ist das mindestens eins zu viel.”). Most items weigh 1, episode III’s up to 10 (tools 2, a ladder 3, chests 4, wood 5, a tree 10). The originals: Junior 38, I 50, II 60, III 200, IV 120.",
+      ),
+    ];
+  }
+
+  private renderEnding(context: EpisodeContext): Node[] {
+    const what = ENDINGS[context.episodeNumber] ?? "";
+    const room255 = ruleRow(
+      "room255",
+      "Room 255 ends the episode",
+      `Only episode I: a teleporter to room 255 (its own target or one a script’s Teleport() set) calls the episode’s ending (episode vtable +0x6c) instead of entering a room. ${what}`,
+      [context.ending, context.originalEnding],
+      (on) => {
+        this.events.ending(on);
+      },
+    );
+    return [
+      element("h3", undefined, "Ending"),
+      room255,
+      element(
+        "p",
+        "hint",
+        `${what}${context.hasRoom255 ? " The episode’s own room 255 can then no longer be entered." : ""} The other way is Junior’s goal (the kit “Goal” below): walked onto, it shows its text (994) and ends the game when that is closed.`,
       ),
     ];
   }

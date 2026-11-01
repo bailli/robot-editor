@@ -185,6 +185,12 @@ test("the Episode tab sets the rucksack and the oracles' flags, undoably; the mo
   await oracles.getByRole("checkbox", { name: /Diagonal moves/ }).click();
   expect(app.editor?.diagonalMoves(0)).toBe(true);
   app.undo();
+  const ending = page.getByRole("region", { name: "Ending" });
+  await expect.element(ending.getByText(/Junior’s ending does nothing/)).toBeVisible();
+  await ending.getByRole("checkbox", { name: /Room 255 ends the episode/ }).click();
+  expect(app.editor?.endsAtRoom255(0)).toBe(true);
+  await expect.element(ending.getByText("Room 255 ends the episode (edited)")).toBeVisible();
+  app.undo();
   await oracles.getByRole("checkbox", { name: /room 100 below/ }).click();
   expect(app.editor?.backdropRule(0)).toBe("minus100");
   app.undo();

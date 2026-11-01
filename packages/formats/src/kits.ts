@@ -1,7 +1,7 @@
 import { classTexts, freeTileTypes } from "./classes.ts";
 import { EVENT_TEXT, FIRST_EVENT_ENTRY, readEventTable, spareEventEntries } from "./events.ts";
 import { type Game, eventTextsId, textsId } from "./game.ts";
-import type { CopyTextsChange, ModChanges } from "./mod.ts";
+import type { CopyTextsChange, ModChanges, TextChange } from "./mod.ts";
 import { readOracleSymbols, recordCellOffsets } from "./records.ts";
 import { LOGIC_CELL } from "./scene.ts";
 
@@ -13,7 +13,7 @@ import { LOGIC_CELL } from "./scene.ts";
  * the MUSIC pieces the types' and events' sounds name that the episode lacks. A
  * type whose class the episode has already is not copied: the circuits' stairs only go
  * to Junior, and a kit in the episode it comes from has nothing to do. See STATUS, "Fan
- * episodes", for the pilots they come from.
+ * episodes", for the pilots they come from, and "Endings" for the goal.
  */
 export interface Kit {
   key: string;
@@ -26,6 +26,17 @@ export interface Kit {
   events: readonly number[];
   /** An event's name for the view, e.g. the oracle symbol it is for. */
   eventLabel?: (id: number) => string;
+  /**
+   * Texts copied even where the episode has an entry of its own (the goal's 994, which
+   * the classes' code shows by number).
+   */
+  replaceTexts?: readonly number[];
+  /**
+   * Events (ids) whose bonus box must not show: where the episode's entry for one has a
+   * text, the id moves to a spare entry without one, else that text is removed. (The
+   * goal's box would come first, and closing its text then does not end the game.)
+   */
+  quietEvents?: readonly number[];
   /** What it takes in the rooms, for the view. */
   note: string;
   /** What its example (kitExample) holds, for the view. */
@@ -64,6 +75,20 @@ export const KITS: readonly Kit[] = [
       "Letters 1 and 0 into an OR gate, a wire on to a node with its stairs; the wire is missing and lies below its gap: taken and used there (rucksack, “Benutzen”) it lights the node, which places the stairs; “Ablegen” puts it down without lighting anything.",
     note: "Letters 1 and 0, wires and gates lead to a circuit node (a logic record); once a circuit piece is taken a lit node places its stairs.",
   },
+  {
+    key: "goal",
+    name: "Goal",
+    from: 0,
+    types: [[0x32, "goal"]],
+    events: [],
+    // walked onto: event 298 (10000 points; text 1970, which only IV's helicopter uses
+    // too), then text 994, whose closing ends the game (0x41f450)
+    replaceTexts: [994],
+    quietEvents: [298],
+    example:
+      "Junior's goal, 3 × 2 cells: walked onto, it gives 10000 points where the episode has its event, shows text 994 (Junior's “Du hast es geschafft!”, to write anew in the Texts tab) and ends the game once that is closed.",
+    note: "Junior's goal (tile 0x32, states 0–5 its 3 × 2 parts) ends the game: walked onto, it shows text 994, and closing it ends the game as running out of lives does (the rank, the high scores). It replaces the episode's own text 994 (I and II: the joke for reading README.TXT; III: the message for carrying too much wood).",
+  },
 ];
 
 /** What adding a kit to an episode does (planKit). */
@@ -82,6 +107,22 @@ export interface KitPlan {
   without: number[];
   /** The MUSIC pieces the copied types' and events' sounds name that the episode lacks. */
   music: string[];
+  /** Of `texts`, those the episode has an entry of its own for (replaceTexts). */
+  replaced: number[];
+  /**
+   * Quiet events moved from an entry with a text to a spare one without: the entry's
+   * points and sound go along, the old entry gets the spare's id and points.
+   */
+  moved: {
+    entry: number;
+    from: number;
+    id: number;
+    points: number;
+    sound: string;
+    freed: { id: number; points: number };
+  }[];
+  /** Entries of quiet events whose text (1800 + n) is removed: no spare entry was left. */
+  silenced: number[];
   /** Why the kit cannot be added, if it cannot. */
   problem?: string;
 }
@@ -96,6 +137,10 @@ export interface KitOptions {
   spare?: readonly number[];
   /** Whether the episode's texts (textsId) have entry n (default: as in `game`). */
   hasText?: (n: number) => boolean;
+  /** The episode's text entry n (textsId; default: as in `game`), for replaceTexts. */
+  text?: (n: number) => readonly string[] | undefined;
+  /** Whether the episode's event texts (eventTextsId) have entry n (default: as in `game`). */
+  hasEventText?: (n: number) => boolean;
   /** The lacking events to give entries, in order (default: as many as fit, in order). */
   events?: readonly number[];
 }
@@ -132,7 +177,10 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     types.push([to, of]);
   }
   const sourceTexts = source.texts(textsId(kit.from))?.entries;
-  const hasText = options.hasText ?? ((n) => game.texts(textsId(episode))?.entries.has(n) === true);
+  const ownTexts = game.texts(textsId(episode))?.entries;
+  const hasText = options.hasText ?? ((n) => ownTexts?.has(n) === true);
+  const text = options.text ?? ((n) => ownTexts?.get(n));
+  const sameText = (n: number) => text(n)?.join("|") === sourceTexts?.get(n)?.join("|");
   // the texts of every class the episode does not have by itself, copied by hand or not
   const native = source.episode(episode).classes.typeOfClass;
   const texts = [
@@ -142,7 +190,11 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
         .filter((id) => !native.has(id))
         .flatMap((id) => classTexts(id)),
     ),
-  ].filter((n) => sourceTexts?.has(n) === true && !hasText(n));
+  ].filter(
+    (n) =>
+      sourceTexts?.has(n) === true &&
+      (kit.replaceTexts?.includes(n) === true ? !sameText(n) : !hasText(n)),
+  );
   const table = readEventTable(source.image, kit.from);
   const held = new Set(readEventTable(game.image, episode).map((e) => e.id));
   const entryOf = (id: number) => table.findIndex((e, n) => n >= FIRST_EVENT_ENTRY && e.id === id);
@@ -160,6 +212,25 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     .filter((id) => lacking.includes(id))
     .map((id, k) => ({ entry: spare[k] ?? -1, of: entryOf(id), id }));
   const given = new Set(events.map((e) => e.id));
+  // quiet events: off entries with a text, to spare entries without one left by `events`
+  const eventTexts = game.texts(eventTextsId(episode))?.entries;
+  const hasEventText = options.hasEventText ?? ((n) => eventTexts?.has(n) === true);
+  const own = readEventTable(game.image, episode);
+  const quietSpare = spare.slice(events.length).filter((n) => !hasEventText(EVENT_TEXT + n));
+  const moved: KitPlan["moved"] = [];
+  const silenced: number[] = [];
+  for (const id of kit.quietEvents ?? []) {
+    const from = own.findIndex((e, n) => n >= FIRST_EVENT_ENTRY && e.id === id);
+    if (from < 0 || !hasEventText(EVENT_TEXT + from)) continue;
+    const entry = quietSpare.shift();
+    if (entry === undefined) {
+      silenced.push(from);
+      continue;
+    }
+    const { points } = own[from] ?? { points: 0 };
+    const freed = own[entry] ?? { id: 0, points: 0 };
+    moved.push({ entry, from, id, points, sound: game.sound(episode, from), freed });
+  }
   const sounds = [...types.map(([, of]) => of), ...events.map((e) => e.of)].map((n) =>
     source.sound(kit.from, n),
   );
@@ -171,6 +242,9 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     lacking,
     without: lacking.filter((id) => !given.has(id)),
     music: game.lackedPieces(episode, sounds),
+    replaced: texts.filter((n) => hasText(n)),
+    moved,
+    silenced,
   };
   if (problems.length > 0) plan.problem = problems.join("; ");
   return plan;
@@ -196,14 +270,15 @@ function unusedFreeTypes(game: Game, episode: number): number[] {
 /**
  * The mod changes a plan makes (tileTypes, events with the kit episode's points and
  * sounds, the pieces those sounds name that the episode lacks as music, the texts and
- * the events' texts as copyTexts), for a mod or the editor to merge.
+ * the events' texts as copyTexts; quiet events moved as events, their texts removed as
+ * texts), for a mod or the editor to merge.
  */
 export function kitChanges(
   source: Game,
   episode: number,
   kit: Kit,
   plan: KitPlan,
-): Pick<ModChanges, "music" | "tileTypes" | "events" | "copyTexts"> {
+): Pick<ModChanges, "music" | "tileTypes" | "events" | "copyTexts" | "texts"> {
   const table = readEventTable(source.image, kit.from);
   const eventTexts = source.texts(eventTextsId(kit.from))?.entries;
   const withText = plan.events.filter((e) => eventTexts?.has(EVENT_TEXT + e.of) === true);
@@ -220,17 +295,28 @@ export function kitChanges(
   return {
     music: plan.music.length > 0 ? [{ episode, from: kit.from, pieces: plan.music }] : [],
     tileTypes: plan.types.length > 0 ? [{ episode, from: kit.from, types: plan.types }] : [],
-    events: plan.events.map(({ entry, of, id }) => {
-      const sound = source.sound(kit.from, of);
-      return {
-        episode,
-        entry,
-        id,
-        points: table[of]?.points ?? 0,
-        ...(sound ? { sound } : {}),
-      };
-    }),
+    events: [
+      ...plan.events.map(({ entry, of, id }) => {
+        const sound = source.sound(kit.from, of);
+        return {
+          episode,
+          entry,
+          id,
+          points: table[of]?.points ?? 0,
+          ...(sound ? { sound } : {}),
+        };
+      }),
+      ...plan.moved.flatMap(({ entry, from, id, points, sound, freed }) => [
+        { episode, entry, id, points, ...(sound ? { sound } : {}) },
+        { episode, entry: from, ...freed },
+      ]),
+    ],
     copyTexts,
+    texts: plan.silenced.map((n): TextChange => ({
+      resource: eventTextsId(episode),
+      entry: EVENT_TEXT + n,
+      variants: null,
+    })),
   };
 }
 
@@ -264,6 +350,7 @@ const [ZERO, ONE] = [0x30, 0x31];
  *   it (state n, hint 330 + n), which sends the hero below the block. n: the first symbol
  *   whose event (262 + n) the episode's table has and whose hint `hasText`, else the
  *   first with its event, else 0.
+ * - goal (3 × 2): its six parts in the base layer, as in Junior's room 43.
  */
 export function kitExample(
   game: Game,
@@ -294,6 +381,13 @@ export function kitExample(
     // a node: stairs down at (6, 1) once lit
     const node = Uint8Array.from([11, 0, 0, 0, 6, 1, 0, 0, 0, 0]);
     return { w, h: 3, base, overlay, records: [{ x: 4, y: 1, data: node }] };
+  }
+  if (kit.key === "goal") {
+    const [goal] = types;
+    if (goal === undefined) return undefined;
+    const w = 3;
+    const base = Array.from({ length: 2 * w }, (_, k) => cell(0, k));
+    return { w, h: 2, base, overlay: base.map(() => 0), records: [] };
   }
   if (kit.key === "oracles") {
     const [tangram, oracle] = types;

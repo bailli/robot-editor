@@ -44,6 +44,7 @@ import {
   type RoomSettings,
   type RoomTag,
   STAIRS_CLASS,
+  type TextChange,
   type Texts,
   type TileTypesChange,
   applyMod,
@@ -53,6 +54,7 @@ import {
   classTexts,
   dealerCapacity,
   encodeCp437,
+  endsAtRoom255,
   eventTableLength,
   eventTextsId,
   exitMode,
@@ -98,6 +100,7 @@ import {
   withEpisodeFlags,
   withEpisodeStart,
   withExitMode,
+  withRoom255Ending,
   withRoomChanges,
   withRoomScript,
   withRoomSettings,
@@ -171,6 +174,8 @@ export interface Edit {
   backdrop?: { before: BackdropRule; after: BackdropRule };
   /** Whether the hero walks diagonally, before and after. */
   diagonal?: { before: boolean; after: boolean };
+  /** Whether room 255 ends the episode, before and after. */
+  ending?: { before: boolean; after: boolean };
   /** What the base adds to the exe as loaded, and the edited texts, before and after. */
   base?: {
     before: BaseChanges;
@@ -498,6 +503,7 @@ export class Editor {
   private readonly flagWords = new Map<number, number>();
   private readonly backdropRules = new Map<number, BackdropRule>();
   private readonly diagonals = new Map<number, boolean>();
+  private readonly endings = new Map<number, boolean>();
   private readonly undoStack: Edit[] = [];
   private readonly redoStack: Edit[] = [];
   private stroke: Edit | undefined;
@@ -534,7 +540,7 @@ export class Editor {
       return;
     }
     const { music, tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
-    const { rucksack, flags, backdrop, moves } = mod.changes;
+    const { rucksack, flags, backdrop, moves, ending } = mod.changes;
     if (mod.base !== this.pristineHash) throw new ModError("base: the mod is for another exe");
     this.mod = { name: mod.name, author: mod.author, description: mod.description };
     this.modded = true;
@@ -567,6 +573,7 @@ export class Editor {
     for (const c of flags) this.flagWords.set(c.episode, c.flags);
     for (const c of backdrop) this.backdropRules.set(c.episode, c.rule);
     for (const c of moves) this.diagonals.set(c.episode, c.diagonal);
+    for (const c of ending) this.endings.set(c.episode, c.room255);
     // pieces nothing plays were copied by themselves: they stay (copyMusic)
     const kept = music.flatMap(({ episode, pieces }) => {
       const named = new Set(this.musicUses(episode, this.changes).map(([piece]) => piece));
@@ -746,6 +753,7 @@ export class Editor {
     room: number,
     changes: BaseChanges,
     check?: (base: Game) => void,
+    edits: readonly TextChange[] = [],
   ): Edit {
     changes = { ...changes, music: this.neededMusic(changes) };
     const base = this.baseWith(changes);
@@ -756,6 +764,17 @@ export class Editor {
         return [id, withTextChanges(base.textSource(id) ?? "", edits)];
       }),
     );
+    // text edits that come with the new base (a kit's), on the texts as edited
+    for (const id of new Set(edits.map((e) => e.resource))) {
+      const text = texts.get(id) ?? base.textSource(id) ?? "";
+      texts.set(
+        id,
+        withTextChanges(
+          text,
+          edits.filter((e) => e.resource === id),
+        ),
+      );
+    }
     const step: Edit = {
       episode,
       room,
@@ -1194,11 +1213,14 @@ export class Editor {
     const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
     const set = new Set(this.eventEntries(episode).map((e) => e.entry));
     const texts = this.textEntries(textsId(episode))?.entries;
+    const eventTexts = this.textEntries(eventTextsId(episode))?.entries;
     return planKit(this.game, episode, kit, {
       source: this.pristine,
       free: this.freeTileTypes(episode).filter((t) => !copied.has(t)),
       spare: spareEventEntries(episode).filter((n) => !set.has(n)),
       hasText: (n) => texts?.has(n) === true,
+      text: (n) => texts?.get(n),
+      hasEventText: (n) => eventTexts?.has(n) === true,
       ...(events ? { events } : {}),
     });
   }
@@ -1223,15 +1245,17 @@ export class Editor {
   }
 
   /**
-   * Adds `kit` to the episode (kitPlan: tile types, texts, events and their texts) as
-   * one undo step that makes a new base (rebase); undefined if it has nothing to add.
-   * Throws a RangeError where the plan has a problem.
+   * Adds `kit` to the episode (kitPlan: tile types, texts, events and their texts; quiet
+   * events moved, or their texts removed as edits) as one undo step that makes a new base
+   * (rebase); undefined if it has nothing to add. Throws a RangeError where the plan has
+   * a problem.
    */
   addKit(episode: number, room: number, kit: Kit, events?: readonly number[]): Edit | undefined {
     this.endStroke();
     const plan = this.kitPlan(episode, kit, events);
     if (plan.problem) throw new RangeError(plan.problem);
-    if (plan.types.length + plan.texts.length + plan.events.length === 0) return undefined;
+    const parts = [plan.types, plan.texts, plan.events, plan.moved, plan.silenced];
+    if (parts.every((p) => p.length === 0)) return undefined;
     const changes = kitChanges(this.pristine, episode, kit, plan);
     let copyTexts: readonly CopyTextsChange[] = this.changes.copyTexts;
     for (const c of changes.copyTexts) {
@@ -1245,13 +1269,24 @@ export class Editor {
       (list, c) => withMusicCopy(list, c.episode, c.from, c.pieces),
       this.changes.music,
     );
-    return this.rebase(episode, room, {
-      ...this.changes,
-      music,
-      copies: [...this.changes.copies, ...copies],
-      events: [...this.changes.events, ...changes.events],
-      copyTexts,
-    });
+    // a moved event's entries replace what the mod set there
+    const set = new Set(changes.events.map((e) => `${e.episode} ${e.entry}`));
+    return this.rebase(
+      episode,
+      room,
+      {
+        ...this.changes,
+        music,
+        copies: [...this.changes.copies, ...copies],
+        events: [
+          ...this.changes.events.filter((e) => !set.has(`${e.episode} ${e.entry}`)),
+          ...changes.events,
+        ],
+        copyTexts,
+      },
+      undefined,
+      changes.texts,
+    );
   }
 
   /**
@@ -1546,6 +1581,24 @@ export class Editor {
     return diagonal !== undefined && diagonal !== readDiagonalMoves(this.game.image, episode);
   }
 
+  /** Whether a room change to room 255 ends the episode, as edited (endings.ts). */
+  endsAtRoom255(episode: number): boolean {
+    return this.endings.get(episode) ?? endsAtRoom255(this.game.image, episode);
+  }
+
+  /** Lets room 255 end the episode or not; one undo step (shown in room `room`). */
+  setRoom255Ending(episode: number, room: number, ends: boolean): Edit | undefined {
+    this.endStroke();
+    const before = this.endsAtRoom255(episode);
+    if (before === ends) return undefined;
+    return this.commitEpisode({ episode, room, ending: { before, after: ends } });
+  }
+
+  isEndingEdited(episode: number): boolean {
+    const ends = this.endings.get(episode);
+    return ends !== undefined && ends !== endsAtRoom255(this.game.image, episode);
+  }
+
   /** The room drawn behind a room of the episode (backdropRoom, by the edited rule). */
   backdropOf(episode: number, room: Room): Room | undefined {
     const classes = this.game.episode(episode).classes;
@@ -1555,7 +1608,10 @@ export class Editor {
 
   /** Applies a change of the episode's settings as one undo step. */
   private commitEpisode(
-    edit: Pick<Edit, "episode" | "room" | "rucksack" | "flags" | "backdrop" | "diagonal">,
+    edit: Pick<
+      Edit,
+      "episode" | "room" | "rucksack" | "flags" | "backdrop" | "diagonal" | "ending"
+    >,
   ): Edit {
     const step: Edit = { ...edit, layer: "base", changes: [] };
     this.apply(step, after);
@@ -2312,6 +2368,9 @@ export class Editor {
     const moves = [...this.diagonals]
       .filter(([episode]) => this.isDiagonalEdited(episode))
       .map(([episode, diagonal]) => ({ episode, diagonal }));
+    const ending = [...this.endings]
+      .filter(([episode]) => this.isEndingEdited(episode))
+      .map(([episode, room255]) => ({ episode, room255 }));
     const mod: Mod = {
       ...this.mod,
       base: this.pristineHash,
@@ -2329,6 +2388,7 @@ export class Editor {
         flags,
         backdrop,
         moves,
+        ending,
       },
     };
     checkMod(mod);
@@ -2372,7 +2432,10 @@ export class Editor {
     return this.withSettings(exe);
   }
 
-  /** `exe` with the edited dealers, starts, rucksacks, flags, backdrop rules and moves. */
+  /**
+   * `exe` with the edited dealers, starts, rucksacks, flags, backdrop rules, moves and
+   * endings.
+   */
   private withSettings(exe: Uint8Array): Uint8Array {
     for (const [episode, dealer] of this.dealers) {
       if (this.isDealerEdited(episode)) exe = withDealer(parsePe(exe), episode, dealer);
@@ -2391,6 +2454,9 @@ export class Editor {
     }
     for (const [episode, diagonal] of this.diagonals) {
       if (this.isDiagonalEdited(episode)) exe = withDiagonalMoves(parsePe(exe), episode, diagonal);
+    }
+    for (const [episode, ends] of this.endings) {
+      if (this.isEndingEdited(episode)) exe = withRoom255Ending(parsePe(exe), episode, ends);
     }
     return exe;
   }
@@ -2474,6 +2540,11 @@ export class Editor {
     if (edit.diagonal) {
       const { before: old, after: now } = edit.diagonal;
       this.diagonals.set(edit.episode, value === before ? old : now);
+      return;
+    }
+    if (edit.ending) {
+      const { before: old, after: now } = edit.ending;
+      this.endings.set(edit.episode, value === before ? old : now);
       return;
     }
     if (edit.backdrop) {

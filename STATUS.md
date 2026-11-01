@@ -67,37 +67,38 @@ for episodes I–IV.
 
 Files in `packages/formats/src`:
 
-| File                         | What it covers                                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------------------------------ |
-| `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc`     |
-| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression (decoder and encoder), CP437                                           |
-| `texts.ts`                   | text resources: tile descriptions, messages, object names; setting an entry                      |
-| `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                       |
-| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects: reader and writer), shape tables and frames                |
-| `palette.ts`                 | the 16-colour palettes per episode                                                               |
-| `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font        |
-| `render.ts`                  | drawing cells and rooms like the game                                                            |
-| `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                    |
-| `walkable.ts`                | where the hero can walk: each cell walks, blocks or depends (`heroSteps`)                        |
-| `describe.ts`                | the description the game shows for a cell                                                        |
-| `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                         |
-| `room-tags.ts`               | a room's darkness, points for the first visit, music and episode III flags; changing them        |
-| `music.ts`                   | MUSIC resources: instruments and pieces; copying pieces into another episode's                   |
-| `start.ts`                   | the room and cell an episode starts in, the rucksack's capacity, and patching them               |
-| `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them            |
-| `episode-methods.ts`         | rules by the episode vtable's methods: the backdrop room (mod 100, − 100), diagonal moves        |
-| `console.ts`                 | the game's command console always on (two bytes), for "Test in game"; its objects' names         |
-| `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants         |
-| `script-docs.ts`             | what the script functions and variables do, how scripts and events run                           |
-| `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on                 |
-| `records.ts`                 | what logic records do                                                                            |
-| `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                   |
-| `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`); patching them       |
-| `dealer.ts`                  | the dealer's goods per episode: classes, prices, how many shown; patching them                   |
-| `mod.ts`, `sha256.ts`        | mods: keyed changes to the pristine exe, their JSON file, compiled to a patch and applied        |
-| `kits.ts`                    | kits: an episode's feature (oracles, circuits) planned into another as tile types, texts, events |
-| `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts)    |
-| `game.ts`                    | `Game`: loads an exe, episodes lazily, saves scenes, texts, tile types from other episodes       |
+| File                         | What it covers                                                                                  |
+| ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| `pe.ts`, `resources.ts`      | PE headers, resource tree; replacing a resource in place or growing it at the end of `.rsrc`    |
+| `crunched.ts`, `cp437.ts`    | CRUNCHED text compression (decoder and encoder), CP437                                          |
+| `texts.ts`                   | text resources: tile descriptions, messages, object names; setting an entry                     |
+| `scene-crypt.ts`, `scene.ts` | SCENE encryption, the SCNV3 room format (reader and writer), `resolveCell`                      |
+| `omf.ts`, `shapes.ts`        | SHAPES resources (16-bit OMF objects: reader and writer), shape tables and frames               |
+| `palette.ts`                 | the 16-colour palettes per episode                                                              |
+| `classes.ts`                 | object classes per tile type (vtables), frame/describe methods, underlays, patterns, font       |
+| `render.ts`                  | drawing cells and rooms like the game                                                           |
+| `exits.ts`                   | room connections: exits, scripts, doors, stairs, oracles, teleporters, actors                   |
+| `walkable.ts`                | where the hero can walk: each cell walks, blocks or depends (`heroSteps`)                       |
+| `describe.ts`                | the description the game shows for a cell                                                       |
+| `room-names.ts`              | the name the game shows for a room; a name's text in the episode's style                        |
+| `room-tags.ts`               | a room's darkness, points for the first visit, music and episode III flags; changing them       |
+| `music.ts`                   | MUSIC resources: instruments and pieces; copying pieces into another episode's                  |
+| `start.ts`                   | the room and cell an episode starts in, the rucksack's capacity, and patching them              |
+| `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them           |
+| `episode-methods.ts`         | rules by the episode vtable's methods: the backdrop room (mod 100, − 100), diagonal moves       |
+| `endings.ts`                 | which episodes room 255 ends (episode I's check made a mask), and patching it                   |
+| `console.ts`                 | the game's command console always on (two bytes), for "Test in game"; its objects' names        |
+| `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants        |
+| `script-docs.ts`             | what the script functions and variables do, how scripts and events run                          |
+| `script-handlers.ts`         | a script's handlers from its source: their events, whether they return or run on                |
+| `records.ts`                 | what logic records do                                                                           |
+| `circuits.ts`                | logic circuits: the game's trace and evaluation, what each node gets, problems                  |
+| `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`); patching them      |
+| `dealer.ts`                  | the dealer's goods per episode: classes, prices, how many shown; patching them                  |
+| `mod.ts`, `sha256.ts`        | mods: keyed changes to the pristine exe, their JSON file, compiled to a patch and applied       |
+| `kits.ts`                    | kits: an episode's feature (oracles, circuits, goal) planned into another: types, texts, events |
+| `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts)   |
+| `game.ts`                    | `Game`: loads an exe, episodes lazily, saves scenes, texts, tile types from other episodes      |
 
 ## What is decoded and verified
 
@@ -750,20 +751,54 @@ rx, ry, …)` sets up episode I's wizard: the hidden door behind his throne at (
 
 ### Endings
 
-From the code only; no ending has been played through or tried in the game.
+The originals' endings are from the code (none played through); the ending methods,
+room 255 in every episode and Junior's goal in other episodes are **verified under
+Wine** (`pnpm test:game` and tries with the driver).
 
 - **Mechanism:** bit 0x100 of the game flags 0x4fe448 makes the main loop (0x4027ed)
   clear it and call the episode's ending method, vtable +0x6c: Junior 0x447fd0 (only
-  `ret`), I 0x4095e0 (a text window, 0x409130), II 0x40a820 (NxtRoom = 600), III
-  0x40b4a0 (a window), IV 0x40d6e0 (not read). Two places set the bit: a room change to
-  NxtRoom 255 in episode I (0x40281a checks the episode number, [0x51bb18]+4; elsewhere
-  255 is just a missing room) and episode III's 0x416700. Episode II's ship calls +0x6c
-  itself; Junior and IV end without it.
+  `ret`), I 0x4095e0 (a window rolling the credits, "Das Spiel der ROBOTER – Besetzung",
+  the cast of robots, to event 298's sound FINALE; then 0x401430), II 0x40a820 (NxtRoom
+  = 600), III 0x40b4a0 (a window), IV 0x40d6e0 (`jmp 0x401430`: posts message 0x409,
+  which ends the game). Two places set the bit: a room change to NxtRoom 255 in episode I
+  (0x40281a checks the episode number, [0x51bb18]+4; elsewhere 255 is a room like any
+  other: only IV has one) and episode III's 0x416700. Episode II's ship calls +0x6c
+  itself; Junior and IV end without it. **Seen in the game**, with room 255 ending each
+  episode (a teleporter to 255): Junior nothing (the hero walks on), I the credits and
+  then the end of the game, II room 600 ("ES IST VOLLBRACHT", then the menu on Return),
+  III the room darkening to black, then the high scores, IV the high scores at once.
+- **The end of a game** (lives run out, Junior's goal): message 0x500 to the main
+  window (0x43be71) sets the lives (0x4fe30d) to 0 and calls 0x43b560, which shows the
+  rank ("Gratulation! Du bist jetzt immerhin 6ter." or "Du hast leider nichts
+  dazugelernt.") and then the high scores.
+- **Room 255 in any episode** (`endings.ts`, `withRoom255Ending`; Episode tab, mod kind
+  `ending`): the 10 bytes at 0x40283f (`mov esi, 1; cmp [ecx+4], esi; jne 0x402851`)
+  jump to a stub at 0x465e60, in the padding of .text (file bytes past its virtual size
+  0x64e55 but within its raw size; the loader maps them with the last page), that tests
+  the episode's bit in a mask after it (`bt`) and jumps on to 0x402849 (the bit set) or
+  0x402851 (the room loaded). With episode I's bit alone the exe's own bytes are written
+  back. **Verified under Wine**: the mask's episodes end at room 255 as listed above;
+  without, IV's teleporter to 255 enters its room 255.
 - **Junior:** the ZIEL, class 50 (tile 50, states 0–5 its 3×2 parts, "Das ist Dein
-  ZIEL!") at (19–21, 2–3) in the start room 43. Its touch (vtable +0x0c, 0x41d540 →
-  table 0x47ef40) lets the hero step on; its +0x10 handler (as the wizard's door, table
-  0x47ef70, entry 0 = the hero) is 0x41f450: event 0x12a and text 994 ("Du hast es
-  geschafft! … Dein Ziel ist erreicht, die Diamanten sind eingesackt").
+  ZIEL!") at (19–21, 2–3) in the base layer of the start room 43. Its touch (vtable
+  +0x0c, 0x41d540 → table 0x47ef40) lets the hero step on; its +0x10 handler (as the
+  wizard's door, table 0x47ef70, entry 0 = the hero) is 0x41f450: event 0x12a (298,
+  entry 170: 10000 points, no text in Junior) and text 994 ("Du hast es geschafft! …
+  Dein Ziel ist erreicht, die Diamanten sind eingesackt", two pages) with mode 2
+  (0x406360): its window's handler (0x4c5dc4, vtable 0x4663c4, 0x405fe0) posts message
+  0x500 on closing, so Junior's ending is the end of the game, as when the lives run
+  out. Nothing else opens a text with mode 2. The window lets the game clock run.
+- **The goal elsewhere** (the kit "Goal", `kits.ts`): the class works in any episode,
+  but event 298's text 1800 + 170 = 1970 ("Das war's" in I and II, the helicopter's
+  ending text in IV, none in Junior) shows as a bonus box together with text 994, and
+  closing 994 then leaves the game running (the end comes on the second touch, the
+  event being spent). So the kit moves id 298 to a spare entry without text (I 190, IV
+  197; I's FINALE goes along, the old entry gets the spare's id) or, where none is left
+  (II), removes text 1970; III has no entry for 298, which then gives entry 0 (no
+  points, no text). Text 994 is replaced by Junior's: in I and II it is the joke shown
+  for README.TXT (0x451f2d), in III the message for carrying too much wood (0x415b1f).
+  **Verified under Wine**: in I the kit's goal shows Junior's text with 10000 points,
+  and closing it ends the game.
 - **I:** room 2, the cinema ("DAS KINO", reached only through the wizard's door, so only
   registered), has a teleporter at (9, 0) with flag 0x02 (default target 43 at (4, 15));
   the room's script `Teleport(255, 0, 0)` sends it to 255, which ends the episode. The
@@ -1412,7 +1447,7 @@ Supported:
   while the mod has none, it opens when the first comes): the byte writes by address
   (`Editor.codePatches`): section, the bytes the exe holds there and those written, and
   a warning where edits made here write over some of them (the start, rucksack, flags,
-  backdrop rule, moves and dealer come later, kinds 5 and 8–12; they are settings of
+  backdrop rule, moves, ending and dealer come later, kinds 5 and 8–13; they are settings of
   their own, never patches); each removable (× → `Editor.removeCode`). A form writes
   one: address and bytes in hex, what the exe holds there shown while typing
   (`Editor.codeBytes`: the base, kinds 1–3 applied, which `expect` gets); refused
@@ -1420,8 +1455,11 @@ Supported:
   holds already, more than 4096 (`codeProblem`). Each one undo step making a new base.
   A mod opens only where the exe holds each patch's `expect`
 - kits (tab Episode, `kits-view.ts`; `kits.ts`: `KITS`, `planKit`, `kitChanges`): oracles
-  (II's tangram 0x50 and oracle 0x51, events 262–271) and circuits (I's letter 0x25,
-  gate 0x42, bulb 0x43, stairs 0x3d; event 293). Per kit what adding it to the shown
+  (II's tangram 0x50 and oracle 0x51, events 262–271), circuits (I's letter 0x25,
+  gate 0x42, bulb 0x43, stairs 0x3d; event 293) and the goal (Junior's 0x32, its text
+  994 replacing the episode's, `Kit.replaceTexts`; event 298 kept quiet,
+  `Kit.quietEvents`: moved to a spare entry without text, `KitPlan.moved`, or its text
+  removed, `KitPlan.silenced`, as text edits in the same undo step; see Endings). Per kit what adding it to the shown
   episode copies: the types whose class the episode lacks (stairs only to Junior; II
   and III have oracles, I and II circuits: "has … already"), each at the same number
   where free, else the first free type no copy has (free: no class, and no room's map
@@ -1463,8 +1501,9 @@ Supported:
   keep their sprite's colours (0x20), Teleport() points last only in their room
   (0x2000), house cells in states 9+ block from room 100 on (0x40000); diagonal moves;
   backdrops show the room 100 below (else id mod 100; the room and the map draw by it
-  at once); one undo step each, saved into the exe and the mod (`rucksack`, `flags`,
-  `backdrop`, `moves`)
+  at once); "Ending": room 255 ends the episode, with what its ending method does and,
+  for IV, that its own room 255 can then not be entered; one undo step each, saved
+  into the exe and the mod (`rucksack`, `flags`, `backdrop`, `moves`, `ending`)
 - the episode's start (tab Episode, `episode-view.ts`): the room and the hero's cell
   there; "Start here" sets the shown room and the picked cell (Select tool, one cell,
   or Inspect; else the start's cell), "Original start" goes back to the exe's; one undo
@@ -1643,9 +1682,11 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
   11. `backdrop` (key: episode): `{ episode, rule }` ("mod100", "minus100") →
       `withBackdropRule`.
   12. `moves` (key: episode): `{ episode, diagonal }` → `withDiagonalMoves`.
+  13. `ending` (key: episode): `{ episode, room255 }` → `withRoom255Ending` (see
+      Endings; the episodes share one mask).
 - **File:** one JSON file (`*.robotmod.json`) with `format` (1), `name`, `author`,
   `description`, `base` (`{ sha256 }`) and `changes` (`music`, `tileTypes`, `events`, `code`,
-  `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`, `backdrop`, `moves`: arrays of the
+  `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`, `backdrop`, `moves`, `ending`: arrays of the
   changes above; a kind left out is empty). `base` is the sha256 of the whole
   pristine exe (the Windows version 2018, `reference/GameOfRobot.exe`); applying
   refuses any other exe. A changed room carries the original content it keeps (a fan
@@ -1677,11 +1718,11 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
 - **The editor** works on two images: the **base** (pristine + kinds 1–4 and the text
   copies: the music, tile types, events, code and text copies, which it edits by making a new
   base (`BaseChanges`; events copied with their texts and pieces)) and
-  the **edited** state on top (kinds 5–12: the dealers, rooms, texts, the start, the
-  rucksack, the flags, the backdrop rule and diagonal moves). Opening takes an exe and, optionally, a
+  the **edited** state on top (kinds 5–13: the dealers, rooms, texts, the start, the
+  rucksack, the flags, the backdrop rule, diagonal moves and the ending). Opening takes an exe and, optionally, a
   mod; "Save mod" writes the music, tile types, events, code and text copies as edited plus kinds
-  5–12 as the difference between the edited state and the base (dealers, starts,
-  rucksacks, flags, backdrop rules and moves that differ, rooms that
+  5–13 as the difference between the edited state and the base (dealers, starts,
+  rucksacks, flags, backdrop rules, moves and endings that differ, rooms that
   differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
   written in the editor replaces its copy in `copyTexts`. "Save exe" and "Test in
   game" stay, built from the base and the edits. Undo/redo, dirty state (either save
@@ -1710,7 +1751,8 @@ circuit model; the circuits and oracles kits (examples too) in III, IV, Junior a
 event copied with its sound, and one with a MUSIC piece IV lacked (IV); robots' sprites (III) against `robotSprite`; the
 episode rules as changed (Junior's oracles vanishing, robots' own colours, doors without
 the key, Teleport() points kept, house cells, diagonal moves, the backdrop rule); class 99
-cases against our render; the rucksack's capacity (III). There is no game test for the
+cases against our render; the rucksack's capacity (III); room 255 ending IV; the goal
+kit in I. There is no game test for the
 dealer. Tests of what the originals do by themselves (the rules unchanged, sand heaps,
 notes, a cassette, diary pages, packages, the thief) ran up to 10e727d and are recorded
 here only: the exe does not change, so they cannot fail again; `git show
@@ -1843,6 +1885,9 @@ Roughly by value for the editor.
 | 0x433a60, 0x433c30           | open/close exit tiles on the edges (task 0x66, started on entering a room)     |
 | 0x413d30, 0x4140d0, 0x426880 | door in, door out, stairs                                                      |
 | 0x412ae0, 0x44cc30           | oracle, teleporter (step-on handler 0x44cb60)                                  |
+| 0x40281a, 0x465e60           | NxtRoom 255 ends episode I (the check at 0x402844); the stub of `endings.ts`   |
+| 0x41f450, 0x406360           | the goal's +0x10 handler; a text window (mode 2: closing it ends the game)     |
+| 0x43be71, 0x43b560           | message 0x500: the lives to 0, the end of the game (rank, high scores)         |
 | 0x44c6f0, 0x42bd40           | may an actor step on a cell (teleporter conditions); count a class carried     |
 | 0x44c9d0, 0x42bcd0           | an actor's step (1 moves, 3 handled); does the hero carry an item word         |
 | 0x42b6f0                     | room load: records 7/8 spawn actors                                            |

@@ -41,6 +41,7 @@ import {
   describeRecord,
   disassemble,
   displayText,
+  endsAtRoom255,
   eventTableLength,
   eventTextsId,
   exitMode,
@@ -674,6 +675,9 @@ export class App {
     },
     diagonal: (diagonal) => {
       this.editEpisode(() => this.need().setDiagonalMoves(this.episode, this.roomId, diagonal));
+    },
+    ending: (ends) => {
+      this.editEpisode(() => this.need().setRoom255Ending(this.episode, this.roomId, ends));
     },
     backdrop: (rule) => {
       this.editEpisode(() => this.need().setBackdropRule(this.episode, this.roomId, rule));
@@ -3022,6 +3026,7 @@ export class App {
     const { image } = editor.game;
     this.episodeView.show({
       episode: EPISODE_NAMES[this.episode] ?? `episode ${this.episode}`,
+      episodeNumber: this.episode,
       start,
       original: readEpisodeStart(image, this.episode),
       rucksack: editor.rucksack(this.episode),
@@ -3031,6 +3036,9 @@ export class App {
       backdrop: editor.backdropRule(this.episode),
       diagonal: editor.diagonalMoves(this.episode),
       originalDiagonal: readDiagonalMoves(image, this.episode),
+      ending: editor.endsAtRoom255(this.episode),
+      originalEnding: endsAtRoom255(image, this.episode),
+      hasRoom255: editor.hasRoom(this.episode, 255),
       originalBackdrop: readBackdropRule(image, this.episode),
       room: this.roomId,
       label: (room) => `Go to ${this.roomLabel(this.episode, room)}`,
@@ -3095,7 +3103,8 @@ export class App {
       editor.isRucksackEdited(this.episode) ||
       editor.isFlagsEdited(this.episode) ||
       editor.isBackdropEdited(this.episode) ||
-      editor.isDiagonalEdited(this.episode);
+      editor.isDiagonalEdited(this.episode) ||
+      editor.isEndingEdited(this.episode);
     const edited = dealerEdited || settingsEdited || editor.isStartEdited(this.episode);
     this.dealerView.show({
       episode: EPISODE_NAMES[this.episode] ?? `episode ${this.episode}`,
@@ -3359,7 +3368,8 @@ export class App {
       edit.rucksack ||
       edit.flags ||
       edit.backdrop ||
-      edit.diagonal
+      edit.diagonal ||
+      edit.ending
     ) {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);

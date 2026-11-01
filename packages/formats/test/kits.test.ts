@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 
 import { Game } from "../src/game.ts";
 import { KITS, kitChanges, planKit } from "../src/kits.ts";
+import { NO_CHANGES, applyMod, emptyMod } from "../src/mod.ts";
 import { exe } from "./data.ts";
 
 const game = new Game(exe());
@@ -10,7 +11,7 @@ const kit = (key: string) => {
   if (!found) throw new Error(key);
   return found;
 };
-const [oracles, circuits] = [kit("oracles"), kit("circuits")];
+const [oracles, circuits, goal] = [kit("oracles"), kit("circuits"), kit("goal")];
 
 test("oracles: II's tangram and oracle, their texts; IV's events in its spare entries", () => {
   // Junior has the oracles' events 262-271, not their texts
@@ -26,6 +27,9 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
     without: [],
     // the tangram's !KLINGELI Junior has
     music: [],
+    replaced: [],
+    moved: [],
+    silenced: [],
   });
   // II and III have them
   expect(planKit(game, 3, oracles)).toMatchObject({ types: [], present: [0x50, 0x51] });
@@ -77,6 +81,7 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
         ],
       },
     ],
+    texts: [],
   });
   expect(planKit(game, 4, oracles, { events: [262, 263, 264, 265, 266] }).problem).toMatch(
     /5 events chosen, 4 spare entries left/,
@@ -129,4 +134,49 @@ test("a type a record holds (an oracle's object, a teleporter's cell) is not fre
   const types = planKit(changed, 0, oracles, { source: game }).types;
   expect(types.map(([, of]) => of)).toEqual([0x50, 0x51]);
   expect(types.map(([to]) => to).filter((to) => to === 0x50 || to === 0x51)).toEqual([]);
+});
+
+test("goal: Junior's, its text 994 replacing the episode's; event 298 without a bonus box", () => {
+  // Junior has it; III lacks event 298 (raised, it gives entry 0: nothing)
+  expect(planKit(game, 0, goal)).toMatchObject({ types: [], present: [0x32], texts: [] });
+  expect(planKit(game, 3, goal)).toMatchObject({
+    texts: [994],
+    replaced: [994],
+    events: [],
+    moved: [],
+    silenced: [],
+  });
+  // I: 298 in entry 170 with text 1970 ("Das war's"), moved to the spare entry 190
+  const i = planKit(game, 1, goal);
+  expect(i).toMatchObject({ texts: [994], replaced: [994], silenced: [] });
+  expect(i.types.map(([, of]) => of)).toEqual([0x32]);
+  expect(i.moved).toEqual([
+    // FINALE: the music of I's ending (0x4095e0 plays event 298's sound), which follows
+    { entry: 190, from: 170, id: 298, points: 10000, sound: "FINALE", freed: { id: 0, points: 0 } },
+  ]);
+  const changes = kitChanges(game, 1, goal, i);
+  expect(changes.events).toEqual([
+    { episode: 1, entry: 190, id: 298, points: 10000, sound: "FINALE" },
+    { episode: 1, entry: 170, id: 0, points: 0 },
+  ]);
+  expect(changes.copyTexts).toEqual([{ resource: 1110, from: 1010, entries: [[994, 994]] }]);
+  // II has no spare entry: its text 1970 would go (II has no free type either)
+  const ii = planKit(game, 2, goal);
+  expect(ii).toMatchObject({ moved: [], silenced: [170], problem: /free tile types/ });
+  expect(kitChanges(game, 2, goal, ii).texts).toEqual([
+    { resource: 1210, entry: 1970, variants: null },
+  ]);
+  // IV: 1970 is the helicopter's text too, so 298 moves to 197 (id 388 goes to 170)
+  expect(planKit(game, 4, goal).moved).toMatchObject([
+    { entry: 197, from: 170, id: 298, freed: { id: 388, points: 0 } },
+  ]);
+  // once moved, nothing is left to do
+  const moved = new Game(
+    applyMod(game.image, { ...emptyMod(game.image.data), changes: { ...NO_CHANGES, ...changes } }),
+  );
+  expect(planKit(moved, 1, goal, { source: game })).toMatchObject({
+    types: [],
+    texts: [],
+    moved: [],
+  });
 });

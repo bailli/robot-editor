@@ -93,7 +93,7 @@ export class CodeView {
     const hint = element(
       "p",
       "hint",
-      "Bytes the mod writes into the exe’s code or data, for all episodes; a mod opens only where the exe holds what each patch expects. Wrong bytes crash the game. The start, rucksack, flags, backdrop rule, moves and dealer are no patches (they have their own settings above) and win where they write the same bytes.",
+      "Bytes the mod writes into the exe’s code or data, for all episodes; a mod opens only where the exe holds what each patch expects. Wrong bytes crash the game. The start, rucksack, flags, backdrop rule, moves, ending and dealer are no patches (they have their own settings above) and win where they write the same bytes.",
     );
     const body = element("div", "code-body");
     body.append(this.list, ...rows, bar, hint);
