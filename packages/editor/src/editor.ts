@@ -24,6 +24,7 @@ import {
   LAST_NOTE_MESSAGE,
   LOGIC_CELL,
   type LogicRecord,
+  MAX_MUSIC_PIECES,
   MAX_ROOMS,
   MAX_RUCKSACK,
   type Mod,
@@ -192,12 +193,14 @@ export interface TileTypeCopy {
 
 /**
  * What the base adds to the exe as loaded (Editor): MUSIC pieces copied from other
- * episodes (mod kind music, for the sounds of the copies), tile types copied from other
- * episodes, event table entries (mod kind events), the mod's code and text entries
- * copied (copyTexts).
+ * episodes (mod kind music, for the sounds of the copies or by themselves), tile types
+ * copied from other episodes, event table entries (mod kind events), the mod's code and
+ * text entries copied (copyTexts).
  */
 export interface BaseChanges {
   music: readonly MusicChange[];
+  /** The copied pieces that stay while nothing plays them: copied by themselves (copyMusic). */
+  kept: readonly KeptPiece[];
   copies: readonly TileTypeCopy[];
   events: readonly EventChange[];
   code: readonly CodeChange[];
@@ -226,8 +229,16 @@ export interface MusicCopy {
   piece: string;
   /** The episode it comes from. */
   from: number;
+  /** Whether it was copied by itself (copyMusic): it stays while nothing plays it. */
+  kept: boolean;
   /** What plays it: "entry 197" (an event's sound), "type 0x59" (a copied type's), "room 53". */
   uses: string[];
+}
+
+/** A copied piece of an episode's music that stays while nothing plays it. */
+export interface KeptPiece {
+  episode: number;
+  piece: string;
 }
 
 /** An entry of another episode's event table (from 128 on) to copy into an episode's. */
@@ -506,7 +517,14 @@ export class Editor {
   /** The loaded mod's name, author and description (the changes are the editor's own). */
   private readonly mod: Omit<Mod, "base" | "changes">;
   /** Tile types, event entries, code and text copies: what the base adds to the pristine exe. */
-  private changes: BaseChanges = { music: [], copies: [], events: [], code: [], copyTexts: [] };
+  private changes: BaseChanges = {
+    music: [],
+    kept: [],
+    copies: [],
+    events: [],
+    code: [],
+    copyTexts: [],
+  };
 
   constructor(game: Game, mod?: Mod) {
     this.pristine = game;
@@ -523,7 +541,7 @@ export class Editor {
     const copies = tileTypes.flatMap(({ episode, from, types }) =>
       types.map(([to, of]) => ({ episode, from, to, of })),
     );
-    this.changes = { music, copies, events, code, copyTexts };
+    this.changes = { music, kept: [], copies, events, code, copyTexts };
     this.base = this.baseWith(this.changes);
     for (const episode of new Set(rooms.map((c) => c.episode))) {
       const set = rooms.filter((c) => c.episode === episode);
@@ -549,6 +567,12 @@ export class Editor {
     for (const c of flags) this.flagWords.set(c.episode, c.flags);
     for (const c of backdrop) this.backdropRules.set(c.episode, c.rule);
     for (const c of moves) this.diagonals.set(c.episode, c.diagonal);
+    // pieces nothing plays were copied by themselves: they stay (copyMusic)
+    const kept = music.flatMap(({ episode, pieces }) => {
+      const named = new Set(this.musicUses(episode, this.changes).map(([piece]) => piece));
+      return pieces.filter((piece) => !named.has(piece)).map((piece) => ({ episode, piece }));
+    });
+    this.changes = { ...this.changes, kept };
   }
 
   /** The exe the edits apply to: the loaded one, or with a mod its base (see above). */
@@ -769,11 +793,12 @@ export class Editor {
       .filter(([piece]) => piece !== "");
   }
 
-  /** The music copies of `changes` that something still names (musicUses). */
+  /** The music copies of `changes` that something still names (musicUses) or that are kept. */
   private neededMusic(changes: BaseChanges): MusicChange[] {
     return changes.music
       .map((c) => {
         const named = new Set(this.musicUses(c.episode, changes).map(([piece]) => piece));
+        for (const k of changes.kept) if (k.episode === c.episode) named.add(k.piece);
         return { ...c, pieces: c.pieces.filter((p) => named.has(p)) };
       })
       .filter((c) => c.pieces.length > 0);
@@ -791,14 +816,54 @@ export class Editor {
         pieces.map((piece) => ({
           piece,
           from,
+          kept: this.changes.kept.some((k) => k.episode === episode && k.piece === piece),
           uses: uses.filter(([p]) => p === piece).map(([, use]) => use),
         })),
       );
   }
 
   /**
-   * Takes the copied piece `piece` out of the episode's music: the events whose sound it
-   * is lose their sound (their line stays as the exe has it), copied tile types keep the
+   * The pieces of episode `from`'s music (as loaded) that `episode` lacks, in their order:
+   * those copyMusic can copy.
+   */
+  sourceMusic(from: number, episode: number): string[] {
+    if (from === episode) return [];
+    const has = new Set(this.game.musicPieces(episode));
+    return this.pristine.musicPieces(from).filter((piece) => !has.has(piece));
+  }
+
+  /** Why piece `piece` of episode `from` cannot be copied into `episode`, undefined if it can. */
+  musicProblem(episode: number, from: number, piece: string): string | undefined {
+    if (from === episode) return "a copy comes from another episode";
+    if (!this.pristine.musicPieces(from).includes(piece))
+      return `episode ${from} has no piece ${piece}`;
+    const pieces = this.game.musicPieces(episode);
+    if (pieces.includes(piece)) return `the episode has ${piece} already`;
+    if (pieces.length >= MAX_MUSIC_PIECES)
+      return `the episode has ${pieces.length} pieces, at most ${MAX_MUSIC_PIECES}`;
+    return undefined;
+  }
+
+  /**
+   * Copies piece `piece` of episode `from`'s music (as loaded, with its instruments) into
+   * the episode's (mod kind music), where it stays while nothing plays it until
+   * removeMusic takes it out: for a room's music. One undo step that makes a new base
+   * (rebase). Throws a RangeError where it cannot be copied (musicProblem).
+   */
+  copyMusic(episode: number, room: number, from: number, piece: string): Edit {
+    this.endStroke();
+    const problem = this.musicProblem(episode, from, piece);
+    if (problem) throw new RangeError(problem);
+    return this.rebase(episode, room, {
+      ...this.changes,
+      music: withMusicCopy(this.changes.music, episode, from, [piece]),
+      kept: [...this.changes.kept, { episode, piece }],
+    });
+  }
+
+  /**
+   * Takes the copied piece `piece` out of the episode's music (copied along or by itself):
+   * the events whose sound it is lose their sound (their line stays as the exe has it), copied tile types keep the
    * episode's own line; one undo step that makes a new base (rebase). Throws a RangeError
    * while a room plays it.
    */
@@ -822,7 +887,8 @@ export class Editor {
         ? { episode: e.episode, entry: e.entry, id: e.id, points: e.points }
         : e,
     );
-    return this.rebase(episode, room, { ...this.changes, music, events });
+    const kept = this.changes.kept.filter((k) => k.episode !== episode || k.piece !== piece);
+    return this.rebase(episode, room, { ...this.changes, music, kept, events });
   }
 
   /**

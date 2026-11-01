@@ -1359,7 +1359,14 @@ Supported:
   are listed below the events (`music-view.ts`, `Editor.musicCopies`: the piece, its
   episode, what plays it: "entry 197", "type 0x59", "room 53"); × (`Editor.removeMusic`,
   one undo step making a new base) takes one out: the events lose their sound, copied
-  tile types keep the episode's own line; refused while a room plays it. II's oracle events 263 and 266 into
+  tile types keep the episode's own line; refused while a room plays it. A form below
+  copies a piece by itself (for a room's music, tab Room): the episode, one of its
+  pieces as loaded that this episode lacks (`Editor.sourceMusic`; songs, those some
+  room plays, first), "Copy" (`Editor.copyMusic`, one undo step making a new base;
+  refused: a piece the episode has, more than 127). Such a piece is kept
+  (`BaseChanges.kept`, listed "by itself") until ×: `neededMusic` keeps it while
+  nothing plays it; a loaded mod's pieces that nothing plays count as kept. The Room
+  tab's music list follows each new base (it was the loaded exe's before). II's oracle events 263 and 266 into
   IV's 197 and 198 save as the mod the oracle game test uses (verified under Wine)
 - texts (tab Texts, `texts-view.ts`; mod kind `texts`): the episode's entries
   (`Editor.textStates`; III: its texts or its resource 1320 of room names, diary pages

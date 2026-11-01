@@ -721,6 +721,13 @@ export class App {
     },
   });
   readonly musicView = new MusicView({
+    copy: (from, piece) => {
+      const name = EPISODE_NAMES[this.episode] ?? "";
+      this.rebaseAction(`Copying ${piece}…`, `copy ${piece}`, (episode, room) => {
+        this.need().copyMusic(episode, room, from, piece);
+        return `${piece} of ${EPISODE_NAMES[from] ?? ""} copied into ${name}`;
+      });
+    },
     remove: (piece) => {
       const name = EPISODE_NAMES[this.episode] ?? "";
       this.rebaseAction(`Removing ${piece}…`, `remove ${piece}`, (episode, room) =>
@@ -1384,9 +1391,8 @@ export class App {
   private use(editor: Editor, status: string, drafts?: [string, ScriptDraft][]): void {
     this.editor = editor;
     this.scriptView.dropDrafts(drafts);
-    for (const view of [this.tileTypesView, this.eventsView, this.kitsView, this.textsView]) {
-      view.reset();
-    }
+    const views = [this.tileTypesView, this.eventsView, this.musicView, this.kitsView];
+    for (const view of [...views, this.textsView]) view.reset();
     this.recentTiles.clear();
     this.caches.clear();
     this.stopPasting();
@@ -1499,24 +1505,6 @@ export class App {
 
   /** The Room tab: the shown room's tags (darkness, points, music, flags). */
   private showSettings(room: Room): void {
-    const game = this.need().game;
-    let pieces = this.musicPieces.get(this.episode);
-    if (!pieces) {
-      try {
-        pieces = game.musicPieces(this.episode);
-      } catch {
-        pieces = []; // a MUSIC resource that is not understood: offer no pieces
-      }
-      this.musicPieces.set(this.episode, pieces);
-    }
-    // from the scenes only: loading every episode (shapes, classes) would take long
-    this.roomMusic ??= new Set(
-      EPISODES.flatMap((e) =>
-        parseScene(cryptScene(game.resource("SCENE", sceneId(e)).data)).map(
-          (r) => roomSettings(r).music,
-        ),
-      ),
-    );
     const settings = roomSettings(room);
     this.sidePanel.setState("room", {
       title: [
@@ -1527,11 +1515,39 @@ export class App {
     });
     this.settingsView.show(settings, {
       episode: this.episode,
-      pieces,
-      roomMusic: this.roomMusic,
+      pieces: this.episodePieces(this.episode),
+      roomMusic: this.allRoomMusic(),
       saved: roomSaveTime(room),
       ...this.descriptionContext(room.id),
     });
+  }
+
+  /** The pieces of the episode's MUSIC resource as edited. */
+  private episodePieces(episode: number): string[] {
+    let pieces = this.musicPieces.get(episode);
+    if (!pieces) {
+      try {
+        pieces = this.need().game.musicPieces(episode);
+      } catch {
+        pieces = []; // a MUSIC resource that is not understood: offer no pieces
+      }
+      this.musicPieces.set(episode, pieces);
+    }
+    return pieces;
+  }
+
+  /** The pieces some room of the loaded exe plays. */
+  private allRoomMusic(): Set<string> {
+    const game = this.need().game;
+    // from the scenes only: loading every episode (shapes, classes) would take long
+    this.roomMusic ??= new Set(
+      EPISODES.flatMap((e) =>
+        parseScene(cryptScene(game.resource("SCENE", sceneId(e)).data)).map(
+          (r) => roomSettings(r).music,
+        ),
+      ),
+    );
+    return this.roomMusic;
   }
 
   /** The description field of the Room tab: the description of the name the room shows. */
@@ -2836,6 +2852,7 @@ export class App {
    */
   private gameChanged(): void {
     this.caches.clear();
+    this.musicPieces.clear(); // copied pieces come and go with the base
     this.tileNames.clear();
     this.alienShapes.clear();
     this.robotSprites.clear();
@@ -3030,6 +3047,15 @@ export class App {
       episode: this.episode,
       names: EPISODE_NAMES,
       copies: editor.musicCopies(this.episode),
+      count: this.episodePieces(this.episode).length,
+      sources: (from) => {
+        try {
+          return editor.sourceMusic(from, this.episode);
+        } catch {
+          return []; // a MUSIC resource that is not understood: offer no pieces
+        }
+      },
+      roomMusic: this.allRoomMusic(),
     });
     this.codeView.show({
       patches: editor.codePatches(),

@@ -294,6 +294,36 @@ test("the Episode tab lists the music copied along; × takes a piece out, undoab
   expect(app.editor?.eventEntries(4)[0]?.sound).toBe("!ORACLE");
 });
 
+test("the Episode tab copies a piece of another episode's music; a room can play it", async () => {
+  const start = app.editor?.start(4).room ?? 0;
+  app.showEpisode(4, start);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const music = page.getByRole("region", { name: "Music" });
+  await userEvent.selectOptions(music.getByLabelText("From episode"), "II");
+  // songs first
+  const piece = music.getByLabelText("Piece");
+  const first = (piece.element() as HTMLSelectElement).options.item(0)?.textContent;
+  expect(first).toMatch(/\(room music\)$/);
+  await userEvent.selectOptions(piece, "ORACLE");
+  await music.getByRole("button", { name: "Copy" }).click();
+  await app.idle();
+  expect(status()).toMatch(/ORACLE of .* copied into Robot IV/);
+  await expect.element(music.getByText("ORACLE ← II: by itself")).toBeVisible();
+  const offered = [...(piece.element() as HTMLSelectElement).options].map((o) => o.value);
+  expect(offered).not.toContain("ORACLE");
+  // the Room tab offers it
+  await page.getByRole("tab", { name: "Room" }).click();
+  const roomMusic = page.getByRole("combobox", { name: "Music" });
+  const pieces = [...(roomMusic.element() as HTMLSelectElement).options].map((o) => o.value);
+  expect(pieces).toContain("ORACLE");
+  expect(parseMod(app.saveMod() ?? "").changes.music).toEqual([
+    { episode: 4, from: 2, pieces: ["ORACLE"] },
+  ]);
+  app.undo();
+  await app.idle();
+  expect(app.editor?.game.musicPieces(4)).not.toContain("ORACLE");
+});
+
 test("the Episode tab copies events of other episodes to spare entries, undoably", async () => {
   const start = app.editor?.start(4).room ?? 0;
   app.showEpisode(4, start);

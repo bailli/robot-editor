@@ -1088,7 +1088,7 @@ describe("Editor and events from other episodes", () => {
     editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
     editor.copyEvent(4, shown, 198, { from: 2, of: 138 });
     expect(editor.musicCopies(4)).toEqual([
-      { piece: "ORACLE", from: 2, uses: ["entry 197", "entry 198"] },
+      { piece: "ORACLE", from: 2, kept: false, uses: ["entry 197", "entry 198"] },
     ]);
     expect(editor.musicCopies(3)).toEqual([]);
     expect(editor.removeMusic(4, shown, "THIEFIRI")).toBeUndefined();
@@ -1109,7 +1109,9 @@ describe("Editor and events from other episodes", () => {
   test("a copied tile type's piece taken out: the type keeps the episode's own line", () => {
     const editor = new Editor(game);
     editor.setTileType(3, 41, 0x59, { from: 1, of: 0x42 });
-    expect(editor.musicCopies(3)).toEqual([{ piece: "FANFA2", from: 1, uses: ["type 0x59"] }]);
+    expect(editor.musicCopies(3)).toEqual([
+      { piece: "FANFA2", from: 1, kept: false, uses: ["type 0x59"] },
+    ]);
     editor.removeMusic(3, 41, "FANFA2");
     expect(editor.musicCopies(3)).toEqual([]);
     expect(editor.game.sound(3, 0x59)).toBe(game.sound(3, 0x59));
@@ -1117,6 +1119,43 @@ describe("Editor and events from other episodes", () => {
     expect(
       firstDifference(applyMod(game.image, parseMod(modJson(editor.saveMod()))), editor.save()),
     ).toBe(-1);
+  });
+
+  test("copyMusic copies a piece by itself: it stays while nothing plays it", () => {
+    const editor = new Editor(game);
+    expect(editor.sourceMusic(2, 4)).toContain("ORACLE");
+    expect(editor.sourceMusic(2, 4)).not.toContain(game.musicPieces(4)[0]);
+    expect(editor.sourceMusic(4, 4)).toEqual([]);
+    expect(editor.musicProblem(4, 4, "ORACLE")).toMatch(/another episode/);
+    expect(editor.musicProblem(4, 2, "NOSUCH")).toMatch(/has no piece NOSUCH/);
+    expect(editor.musicProblem(4, 2, game.musicPieces(4)[0] ?? "")).toMatch(/already/);
+    editor.copyMusic(4, shown, 2, "ORACLE");
+    expect(editor.musicCopies(4)).toEqual([{ piece: "ORACLE", from: 2, kept: true, uses: [] }]);
+    expect(editor.game.musicPieces(4)).toEqual([...game.musicPieces(4), "ORACLE"]);
+    expect(editor.sourceMusic(2, 4)).not.toContain("ORACLE");
+    expect(() => editor.copyMusic(4, shown, 2, "ORACLE")).toThrow(/already/);
+    // another new base keeps it, so does an event that sounds it, taken back again
+    editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
+    editor.copyEvent(4, shown, 197, undefined);
+    expect(editor.musicCopies(4)).toEqual([{ piece: "ORACLE", from: 2, kept: true, uses: [] }]);
+    // a saved mod's piece nothing plays stays kept
+    const mod = editor.saveMod();
+    expect(mod.changes.music).toEqual([{ episode: 4, from: 2, pieces: ["ORACLE"] }]);
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    const loaded = new Editor(game, parseMod(modJson(mod)));
+    expect(loaded.musicCopies(4)[0]?.kept).toBe(true);
+    loaded.copyEvent(4, shown, 197, { from: 1, of: 130 });
+    expect(loaded.game.musicPieces(4).at(-1)).toBe("ORACLE");
+    // × takes it out, undo brings it back kept
+    editor.removeMusic(4, shown, "ORACLE");
+    expect(editor.musicCopies(4)).toEqual([]);
+    expect(editor.game).toBe(game);
+    editor.undo();
+    expect(editor.musicCopies(4)[0]?.kept).toBe(true);
+    editor.undo();
+    editor.undo();
+    editor.undo();
+    expect(editor.game).toBe(game);
   });
 
   test("a copied piece stays while a room plays it", () => {
