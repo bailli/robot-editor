@@ -233,7 +233,9 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
       "the hidden door behind the wizard's throne at (x, y) leads to `room` at (rx, ry); " +
       "it appears once KILLHIM is laid with the wizard two rows above the word (needs " +
       "the wand), in a registered game only (0x42c820, 0x410050). Outside the area " +
-      "(ax, ay, aw, ah) he mutters a spell (text 993). Episode I.",
+      "(ax, ay, aw, ah) he mutters a spell (text 993) and the hero dies; with the pill " +
+      "active he is spared (event 305) and the wizard leaves him alone for the rest of " +
+      "the game (0x434600). Episode I's; works in III too (tried in the game).",
   },
 };
 

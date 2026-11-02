@@ -922,6 +922,28 @@ Wine** (`pnpm test:game` and tries with the driver).
   (1/4 + 2/8) / 17 = 1/34 (LEFT, SOLIDOFF), an I with about 1/12. The letters stay on
   the floor and can be taken again, so laying a word keeps the number of letters
   carried and brings 1200 points.
+- **The pill** (class 0x4f, episode I's tile 0x46: "Diese Pille sieht recht übel aus…";
+  from the code, the user's tries under "Cross-episode classes"): "Benutzen" (vtable
+  +0x38, 0x40fff0) adds 5400 to the timer 0x4fe306 (counted down by the main loop,
+  0x40177d; unit not traced) and, when it was 0, picks the form 0x4fe310 =
+  `random(0, [episode + 0x2c] − 1)`. Meanwhile the hero's step (0x447bc0) puts him in
+  mode 2 (+0x16, +0x50; 1 without the pill) and draws him with the **current
+  episode's** form shapes, [episode + 0x3c] + form × 12 (0x447770). While it lasts:
+  robots' chase (0x445e6f) no longer aims at him but at a random cell; a blast
+  (0x41ede4) spares him; an actor walking into his cell meets tile type 2 instead of 1
+  (0x44ca7b: the hero counts as the type of his mode), and type 2 is a different class
+  object per episode (Junior and I 0x4c77bc, II 0x4c6150, III 0x4c6800, IV 0x4c6884,
+  each with its own handler per actor kind: I 0x47f438, III 0x47c83c); and the
+  wizard's spell spares him (below). Dying clears timer and form (0x44dbb6); saved
+  games keep both in one byte (form in the top 2 bits, so at most 4 forms). How the
+  pilled hero kills robots in I is not traced.
+- **The wizard's area** (`Wizzard(…, ax, ay, aw, ah)`, check 0x434600): while the
+  hero stands outside it, without the pill message 993 ("Der Zauberer murmelt\ MANAMA
+  RARARA TABARA") and the hero dies (seen in the game); with the pill event 305
+  instead (5000 points in Junior, I and II, I's text 1977 "Dank Deiner guten Tarnung
+  scheint der Zauberer Tomaten auf den Augen zu haben…"; III and IV have no entry).
+  Once event 305 or 0x11f (the wizard's door) is set the check is off for the rest of
+  the game.
 - **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
   1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
   class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
@@ -1636,6 +1658,15 @@ stands, decided 2026-10-27; details in the sections named.
   set; **verified under Wine** (`pnpm test:game`): in Junior with them both oracles
   are drawn as empty floor after north and east and walking north into the first
   again goes on north; without them it sends the hero once more.
+- **Tried in the game by the user (2026-11-02)**, classes copied with the editor:
+  IV's punch cards and card reader in episode I turn the `Area(x, y, size, key)` square
+  as in IV; IV's train and tracks in I carry the hero; I's pill in III turns the hero
+  into one of III's animals (III's own form shapes, see "The pill"), but an animal
+  touching him still kills him, whereas in I the pilled hero kills robots by touching
+  them (probably because the pilled hero counts as tile type 2, which is III's own
+  class there, not I's; not traced further); I's wizard in III with a `Wizzard` script
+  kills the hero when he leaves the safe area and spares him with the pill (no points:
+  III has no event 305). Killing the wizard was not tried.
 - **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
@@ -1962,6 +1993,9 @@ Roughly by value for the editor.
 | 0x4158e0, 0x4155d0, 0x424d20 | old mechanism (III): start (room + 100); its task; the lamp lights the steam   |
 | 0x42f910, 0x42f3a0           | registration: checksum of name and episode value; licensee name set            |
 | 0x407ec0, 0x42c820, 0x410050 | script Wizzard; the word KILLHIM; place the wizard's door (registered only)    |
+| 0x434600                     | the wizard's area: outside it text 993 and death, with the pill event 305      |
+| 0x40fff0, 0x4fe306, 0x4fe310 | use the pill; its timer; the form (the episode's shapes, [episode + 0x3c])     |
+| 0x445e6f, 0x44ca7b           | robots' chase skips a pilled hero; an actor meets the hero as tile type 1 or 2 |
 | 0x44a831                     | the bus: BusWest, or BusEast (≥ 100 only registered, else room 53)             |
 | 0x407160, 0x433420           | script SetObj; place a value (an actor if its class has a factory)             |
 | 0x4027ed, 0x40281a           | game flag 0x100 → episode +0x6c (the ending); NxtRoom 255 sets it (episode I)  |
