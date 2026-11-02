@@ -978,6 +978,8 @@ Wine** (`pnpm test:game` and tries with the driver).
   description) will do. `Enigma(0x11f)` returns 1 the first time even without an entry
   (0x42bef0: bit set, then always 1; 0 only when already set), so the door comes
   without I's 20,000 points (Junior and I have the entry, III no spare one).
+  **Seen by the user in III** (2026-11-02): with I's 0x47 copied to a free type the
+  door works there.
 - **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
   1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
   class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
@@ -1701,7 +1703,12 @@ stands, decided 2026-10-27; details in the sections named.
   class there, not I's; not traced further); I's wizard in III with a `Wizzard` script
   kills the hero when he leaves the safe area and spares him with the pill (no points:
   III has no event 305); after that he spares him without the pill too. KILLHIM there
-  ended the game: III has no magic words (text 514), see "The wizard's area".
+  ended the game: III has no magic words (text 514), see "The wizard's area"; with
+  I's texts 512, 514 and 990–993, the wand and the door (I's 0x47 in a free type)
+  KILL and the wizard's door work there too. The **computer** (I and II: tile 8, the
+  portable computer, and 0x41, the interface) works in another episode with both tile
+  types and its texts 550–555 (the programs: GAME OF ROBOT, STERNCHEN, SUPERHIRN,
+  MEMORY, the command replies) copied.
 - **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
