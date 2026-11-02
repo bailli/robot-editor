@@ -943,7 +943,8 @@ Wine** (`pnpm test:game` and tries with the driver).
   instead (5000 points in Junior, I and II, I's text 1977 "Dank Deiner guten Tarnung
   scheint der Zauberer Tomaten auf den Augen zu haben…"; III and IV have no entry).
   Once event 305 or 0x11f (the wizard's door) is set the check is off for the rest of
-  the game.
+  the game (**verified** in III by the user, 2026-11-02: after one pilled walk out of
+  the area, leaving it again once the pill had worn off was safe).
 - **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
   1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
   class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
@@ -1666,7 +1667,8 @@ stands, decided 2026-10-27; details in the sections named.
   them (probably because the pilled hero counts as tile type 2, which is III's own
   class there, not I's; not traced further); I's wizard in III with a `Wizzard` script
   kills the hero when he leaves the safe area and spares him with the pill (no points:
-  III has no event 305). Killing the wizard was not tried.
+  III has no event 305); after that he spares him without the pill too. Killing the
+  wizard was not tried.
 - **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
