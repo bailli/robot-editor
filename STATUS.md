@@ -945,6 +945,20 @@ Wine** (`pnpm test:game` and tries with the driver).
   Once event 305 or 0x11f (the wizard's door) is set the check is off for the rest of
   the game (**verified** in III by the user, 2026-11-02: after one pilled walk out of
   the area, leaving it again once the pill had worn off was safe).
+  The check runs in task 0x76, which `Wizzard` starts (0x407f60, the task 0x435ab0).
+  While that task exists, **laying letters that make no magic word** (0x42cbbb, the end
+  of the matcher) shows text 991 (I: "Der böse Zauberer mag es überhaupt nicht, wenn Du
+  hier Wörter legst!") and runs 0x42ca70: the hero dies with the lives set to 1, so the
+  game ends. Episode III has **no text 514** (no magic words: every word fails there)
+  and its own text 991, four error messages ("FATAL: Illegales Objekt", "…Spielsicherung
+  ist von einer älteren Version…"), shown instead. **Seen by the user in III**
+  (2026-11-02): KILLHIM with I's wizard showed the "older version" message and ended
+  the game. To kill the wizard in another episode, copy I's text 514 (and 990–993 for
+  the wizard's own messages) along with the wand.
+  **KILL** (wand; 0x42c390) kills the room's actors of kind 0x101 (robots) and 0x104
+  (androids; III's snakes), nothing else: with text 514 copied, III's snakes would die,
+  its wild boars (0x108), turtles and natives not. **Seen by the user** (2026-11-02):
+  KILL in III did nothing (no text 514 there).
 - **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
   1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
   class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
@@ -1667,8 +1681,8 @@ stands, decided 2026-10-27; details in the sections named.
   them (probably because the pilled hero counts as tile type 2, which is III's own
   class there, not I's; not traced further); I's wizard in III with a `Wizzard` script
   kills the hero when he leaves the safe area and spares him with the pill (no points:
-  III has no event 305); after that he spares him without the pill too. Killing the
-  wizard was not tried.
+  III has no event 305); after that he spares him without the pill too. KILLHIM there
+  ended the game: III has no magic words (text 514), see "The wizard's area".
 - **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
@@ -1996,6 +2010,7 @@ Roughly by value for the editor.
 | 0x42f910, 0x42f3a0           | registration: checksum of name and episode value; licensee name set            |
 | 0x407ec0, 0x42c820, 0x410050 | script Wizzard; the word KILLHIM; place the wizard's door (registered only)    |
 | 0x434600                     | the wizard's area: outside it text 993 and death, with the pill event 305      |
+| 0x42cbbb, 0x42ca70           | no magic word during task 0x76 (Wizzard): text 991, hero dies with 1 life      |
 | 0x40fff0, 0x4fe306, 0x4fe310 | use the pill; its timer; the form (the episode's shapes, [episode + 0x3c])     |
 | 0x445e6f, 0x44ca7b           | robots' chase skips a pilled hero; an actor meets the hero as tile type 1 or 2 |
 | 0x44a831                     | the bus: BusWest, or BusEast (≥ 100 only registered, else room 53)             |
