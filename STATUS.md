@@ -970,8 +970,14 @@ Wine** (`pnpm test:game` and tries with the driver).
   no word ends the game. **Seen by the user in III** (2026-11-02, I's texts 512, 514
   and 990–993 and the wand copied, unregistered): KILLHIM re-rolled the letters, no
   door, the wizard stayed, and the next letter put down killed the hero. With text 514
-  copied, KILL killed animals there. For the door in III its class 80 also needs a
-  tile type there (a shape).
+  copied, KILL killed animals there: those spawned from 0x10c3 (in the user's words
+  III's robot equivalent; which of kinds 0x101/0x104 they are is not checked).
+  **The door elsewhere:** 0x410050 writes class 80 into the map (0x4332a0 takes
+  class | state << 8), not a tile type; only I and II map class 80 (tile 0x47), III's
+  0x47 is another class. Any free type of the episode given I's 0x47 (shape,
+  description) will do. `Enigma(0x11f)` returns 1 the first time even without an entry
+  (0x42bef0: bit set, then always 1; 0 only when already set), so the door comes
+  without I's 20,000 points (Junior and I have the entry, III no spare one).
 - **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
   1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
   class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
