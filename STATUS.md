@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-10-30.
+Setup and commands are in the [README](README.md). Last updated: 2026-11-02.
 
 ## Goal and approach
 
@@ -908,6 +908,20 @@ Wine** (`pnpm test:game` and tries with the driver).
   (0x42ca90) compare the states unmasked. **Verified in the game** by the user
   (2026-10-29): with bit 7 set the letter has no border and cannot be picked up, an "A"
   neither.
+- **Magic words** (episode I, text 514; code only, not traced in a game test): the table
+  at 0x481ac0 holds 8 bytes per word in the text's order, a wand flag and the handler,
+  ended by a null handler. Putting a letter down (0x40e8ba, 0x40eb11) calls 0x42ca90,
+  which compares the letters from that cell on with each word; a word with the flag
+  counts only while the hero carries the wand (class 0x48, 0x42bcd0): KILL, GOLDED,
+  SOLIDOFF, CLEARITY and KILLHIM (as the user knows from playing). A matched word adds
+  **1200 points** (0x42b640) and runs its handler. All handlers but ROBOT, DOUBLE and
+  GOLD then call 0x42c890, which **re-rolls the laid letters**: from the word's first
+  cell east, as long as the cells are letters (class 59), each becomes a random letter
+  of a random word: word `random(0, 16)`, then a character `random(0, len − 1)` of it
+  (0x436890, both inclusive). So a re-rolled letter is an F with probability
+  (1/4 + 2/8) / 17 = 1/34 (LEFT, SOLIDOFF), an I with about 1/12. The letters stay on
+  the floor and can be taken again, so laying a word keeps the number of letters
+  carried and brings 1200 points.
 - **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
   1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
   class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
