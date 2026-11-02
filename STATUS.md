@@ -959,6 +959,19 @@ Wine** (`pnpm test:game` and tries with the driver).
   (androids; III's snakes), nothing else: with text 514 copied, III's snakes would die,
   its wild boars (0x108), turtles and natives not. **Seen by the user** (2026-11-02):
   KILL in III did nothing (no text 514 there).
+  **KILLHIM** (wand; 0x42c820) acts only where the episode maps the wizard (0x4c7218,
+  entry 78 of the class → type table 0x4c70e0): with the word's first letter at (x, y)
+  it looks for class 78 in (x … x + 6, y − 2); not there: text 992, else 0x410050, which
+  places the door only in a registered game (above). Once the door's event 0x11f is
+  set, the wizard's task (0x4346c0) replaces his cells (class 78) run by run and, when
+  none are left, returns 0 and ends; event 305 (the pill) only stops the area check.
+  So **without the door the watch never ends**: every letter put down afterwards whose
+  run of letters (the matcher reads the whole run through that cell, exact match) is
+  no word ends the game. **Seen by the user in III** (2026-11-02, I's texts 512, 514
+  and 990–993 and the wand copied, unregistered): KILLHIM re-rolled the letters, no
+  door, the wizard stayed, and the next letter put down killed the hero. With text 514
+  copied, KILL killed animals there. For the door in III its class 80 also needs a
+  tile type there (a shape).
 - **The old mechanism** (episode III, class 157, tile 0x2a; text 42: states 0 pipes,
   1 boiler, 2 pistons, 3 and 7–10 the drive anchor, 4–6 steam): on entering a room every
   class's hook at vtable +0x1c runs (0x439455); this one (0x4158e0) looks for steam (state
@@ -2011,6 +2024,7 @@ Roughly by value for the editor.
 | 0x407ec0, 0x42c820, 0x410050 | script Wizzard; the word KILLHIM; place the wizard's door (registered only)    |
 | 0x434600                     | the wizard's area: outside it text 993 and death, with the pill event 305      |
 | 0x42cbbb, 0x42ca70           | no magic word during task 0x76 (Wizzard): text 991, hero dies with 1 life      |
+| 0x42c390, 0x42c820           | the words KILL (kinds 0x101, 0x104) and KILLHIM (wizard two rows up, 992)      |
 | 0x40fff0, 0x4fe306, 0x4fe310 | use the pill; its timer; the form (the episode's shapes, [episode + 0x3c])     |
 | 0x445e6f, 0x44ca7b           | robots' chase skips a pilled hero; an actor meets the hero as tile type 1 or 2 |
 | 0x44a831                     | the bus: BusWest, or BusEast (≥ 100 only registered, else room 53)             |
