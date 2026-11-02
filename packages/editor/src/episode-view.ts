@@ -250,7 +250,7 @@ export class EpisodeView {
       element(
         "p",
         "hint",
-        `${what}${context.hasRoom255 ? " The episode’s own room 255 can then no longer be entered." : ""} The other way is Junior’s goal (the kit “Goal” below): walked onto, it shows its text (994) and ends the game when that is closed.`,
+        `${what}${context.hasRoom255 ? " The episode’s own room 255 can then no longer be entered." : ""} The other way is Junior’s goal (the kit “Goal” below): walked onto, it shows its text (1700 once the kit is added, Junior’s to begin with) and ends the game when that is closed.`,
       ),
     ];
   }

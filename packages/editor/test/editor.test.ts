@@ -1443,13 +1443,23 @@ describe("Editor and kits", () => {
     expect(editor.addKit(0, 43, kit("oracles"))).toBeUndefined();
   });
 
-  test("the goal: text 994 replaced, event 298 moved off its bonus text, or that removed", () => {
+  test("the goal: its text moved to 1700, event 298 moved off its bonus text, or that removed", () => {
     const editor = new Editor(game);
     editor.addKit(1, 43, kit("goal"));
     const junior = game.texts(1010)?.entries.get(994);
-    expect(editor.textEntry(1110, 994)).toEqual(junior);
+    expect(editor.textEntry(1110, 1700)).toEqual(junior);
+    expect(editor.textEntry(1010, 1700)).toEqual(junior);
+    expect(editor.textEntry(1110, 994)).toEqual(game.texts(1110)?.entries.get(994));
     let mod = editor.saveMod();
-    expect(mod.changes.copyTexts).toEqual([{ resource: 1110, from: 1010, entries: [[994, 994]] }]);
+    expect(mod.changes.code.map((c) => [c.va, [...c.bytes]])).toEqual([
+      [0x41f45f, [0xa4, 6, 0, 0]],
+    ]);
+    expect(mod.changes.copyTexts.map((c) => [c.resource, c.from, c.entries])).toEqual([
+      [1010, 1010, [[1700, 994]]],
+      [1110, 1010, [[1700, 994]]],
+      [1011, 1011, [[1700, 994]]],
+      [1111, 1011, [[1700, 994]]],
+    ]);
     expect(mod.changes.events).toEqual([
       { episode: 1, entry: 190, id: 298, points: 10000, sound: "FINALE" },
       { episode: 1, entry: 170, id: 0, points: 0 },

@@ -996,7 +996,7 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
   }, 60_000);
 
   // a teleporter to room 255 east of the hero: with the ending on, IV's ending method
-  // ends the game at once (the high scores; the hero object's x is 255 then)
+  // ends the game at once (its box, then the high scores; the hero object's x is 255)
   test("episode IV: a teleporter to room 255 ends the episode once room 255 ends it", async () => {
     const hero = { x: 5, y: 16 };
     const area = { x0: 2, x1: 10, y0: 14, y1: 18 };
@@ -1012,6 +1012,9 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
             await d.startEpisode(4);
             await d.hold("right", 40);
             await d.run(150);
+            // the end's box ("Du hast leider nichts dazugelernt."), where it waits
+            await d.closeBoxes(1);
+            await d.run(50);
             return d.hero();
           }),
         ),

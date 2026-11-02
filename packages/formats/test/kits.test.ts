@@ -27,7 +27,8 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
     without: [],
     // the tangram's !KLINGELI Junior has
     music: [],
-    replaced: [],
+    code: [],
+    textCopies: [],
     moved: [],
     silenced: [],
   });
@@ -81,6 +82,7 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
         ],
       },
     ],
+    code: [],
     texts: [],
   });
   expect(planKit(game, 4, oracles, { events: [262, 263, 264, 265, 266] }).problem).toMatch(
@@ -136,19 +138,30 @@ test("a type a record holds (an oracle's object, a teleporter's cell) is not fre
   expect(types.map(([to]) => to).filter((to) => to === 0x50 || to === 0x51)).toEqual([]);
 });
 
-test("goal: Junior's, its text 994 replacing the episode's; event 298 without a bonus box", () => {
-  // Junior has it; III lacks event 298 (raised, it gives entry 0: nothing)
-  expect(planKit(game, 0, goal)).toMatchObject({ types: [], present: [0x32], texts: [] });
+test("goal: Junior's, its text moved to 1700 (a code patch); event 298 without a bonus box", () => {
+  const jump = {
+    va: 0x41f45f,
+    expect: Uint8Array.of(0xe2, 3, 0, 0),
+    bytes: Uint8Array.of(0xa4, 6, 0, 0),
+  };
+  // Junior has it; III lacks event 298 (raised, it gives entry 0: nothing) and keeps its
+  // own 994 (the wood message)
+  expect(planKit(game, 0, goal)).toMatchObject({ types: [], present: [0x32], code: [] });
   expect(planKit(game, 3, goal)).toMatchObject({
-    texts: [994],
-    replaced: [994],
+    texts: [],
+    code: [jump],
+    textCopies: [
+      { resource: 1010, from: 1010, entries: [[1700, 994]] },
+      { resource: 1310, from: 1010, entries: [[1700, 994]] },
+      { resource: 1011, from: 1011, entries: [[1700, 994]] },
+    ],
     events: [],
     moved: [],
     silenced: [],
   });
-  // I: 298 in entry 170 with text 1970 ("Das war's"), moved to the spare entry 190
+  // I: English too; 298 in entry 170 with text 1970 ("Das war's"), moved to entry 190
   const i = planKit(game, 1, goal);
-  expect(i).toMatchObject({ texts: [994], replaced: [994], silenced: [] });
+  expect(i).toMatchObject({ texts: [], silenced: [] });
   expect(i.types.map(([, of]) => of)).toEqual([0x32]);
   expect(i.moved).toEqual([
     // FINALE: the music of I's ending (0x4095e0 plays event 298's sound), which follows
@@ -159,7 +172,13 @@ test("goal: Junior's, its text 994 replacing the episode's; event 298 without a 
     { episode: 1, entry: 190, id: 298, points: 10000, sound: "FINALE" },
     { episode: 1, entry: 170, id: 0, points: 0 },
   ]);
-  expect(changes.copyTexts).toEqual([{ resource: 1110, from: 1010, entries: [[994, 994]] }]);
+  expect(changes.code).toEqual([jump]);
+  expect(changes.copyTexts).toEqual([
+    { resource: 1010, from: 1010, entries: [[1700, 994]] },
+    { resource: 1110, from: 1010, entries: [[1700, 994]] },
+    { resource: 1011, from: 1011, entries: [[1700, 994]] },
+    { resource: 1111, from: 1011, entries: [[1700, 994]] },
+  ]);
   // II has no spare entry: its text 1970 would go (II has no free type either)
   const ii = planKit(game, 2, goal);
   expect(ii).toMatchObject({ moved: [], silenced: [170], problem: /free tile types/ });
@@ -170,13 +189,24 @@ test("goal: Junior's, its text 994 replacing the episode's; event 298 without a 
   expect(planKit(game, 4, goal).moved).toMatchObject([
     { entry: 197, from: 170, id: 298, freed: { id: 388, points: 0 } },
   ]);
-  // once moved, nothing is left to do
-  const moved = new Game(
+  // once added, the episodes keep their own 994; then nothing is left to do, and IV
+  // takes only its copy and the event
+  const added = new Game(
     applyMod(game.image, { ...emptyMod(game.image.data), changes: { ...NO_CHANGES, ...changes } }),
   );
-  expect(planKit(moved, 1, goal, { source: game })).toMatchObject({
+  for (const e of [0, 1]) {
+    const texts = added.texts(1010 + 100 * e)?.entries;
+    expect(texts?.get(994)).toEqual(game.texts(1010 + 100 * e)?.entries.get(994));
+    expect(texts?.get(1700)).toEqual(game.texts(1010)?.entries.get(994));
+  }
+  expect(planKit(added, 1, goal, { source: game })).toMatchObject({
     types: [],
-    texts: [],
+    code: [],
+    textCopies: [],
     moved: [],
+  });
+  expect(planKit(added, 4, goal, { source: game })).toMatchObject({
+    code: [],
+    textCopies: [{ resource: 1410, from: 1010, entries: [[1700, 994]] }],
   });
 });

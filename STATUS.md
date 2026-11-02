@@ -795,10 +795,15 @@ Wine** (`pnpm test:game` and tries with the driver).
   event being spent). So the kit moves id 298 to a spare entry without text (I 190, IV
   197; I's FINALE goes along, the old entry gets the spare's id) or, where none is left
   (II), removes text 1970; III has no entry for 298, which then gives entry 0 (no
-  points, no text). Text 994 is replaced by Junior's: in I and II it is the joke shown
-  for README.TXT (0x451f2d), in III the message for carrying too much wood (0x415b1f).
-  **Verified under Wine**: in I the kit's goal shows Junior's text with 10000 points,
-  and closing it ends the game.
+  points, no text). The episodes' own 994 stay (in I and II the joke shown for
+  README.TXT, 0x451f2d; in III the message for carrying too much wood, 0x415b1f): the
+  goal's code is shared, so a code change makes its push (0x41f45e) show text 1700,
+  which no episode has and nothing in the code names or computes (teleporter messages
+  reach 1455, event texts start at 1800), and Junior's 994 is copied to 1700 in the
+  episode and in Junior (German; English into 1011 and 1111 where those exist), so
+  Junior's own goal stays as it was. Each episode's goal text is then its own 1700.
+  **Verified under Wine**: in I the kit's goal shows Junior's text (1700) with 10000
+  points, and closing it ends the game.
 - **I:** room 2, the cinema ("DAS KINO", reached only through the wizard's door, so only
   registered), has a teleporter at (9, 0) with flag 0x02 (default target 43 at (4, 15));
   the room's script `Teleport(255, 0, 0)` sends it to 255, which ends the episode. The
@@ -1457,7 +1462,8 @@ Supported:
 - kits (tab Episode, `kits-view.ts`; `kits.ts`: `KITS`, `planKit`, `kitChanges`): oracles
   (II's tangram 0x50 and oracle 0x51, events 262–271), circuits (I's letter 0x25,
   gate 0x42, bulb 0x43, stairs 0x3d; event 293) and the goal (Junior's 0x32, its text
-  994 replacing the episode's, `Kit.replaceTexts`; event 298 kept quiet,
+  994 moved to 1700, `Kit.textMove`: a code change, `KitPlan.code`, and copies into
+  the episode and Junior, `KitPlan.textCopies`; event 298 kept quiet,
   `Kit.quietEvents`: moved to a spare entry without text, `KitPlan.moved`, or its text
   removed, `KitPlan.silenced`, as text edits in the same undo step; see Endings). Per kit what adding it to the shown
   episode copies: the types whose class the episode lacks (stairs only to Junior; II
@@ -1886,7 +1892,7 @@ Roughly by value for the editor.
 | 0x413d30, 0x4140d0, 0x426880 | door in, door out, stairs                                                      |
 | 0x412ae0, 0x44cc30           | oracle, teleporter (step-on handler 0x44cb60)                                  |
 | 0x40281a, 0x465e60           | NxtRoom 255 ends episode I (the check at 0x402844); the stub of `endings.ts`   |
-| 0x41f450, 0x406360           | the goal's +0x10 handler; a text window (mode 2: closing it ends the game)     |
+| 0x41f450, 0x406360           | the goal's +0x10 handler (push 994 at 0x41f45e); a text window (mode 2: ends)  |
 | 0x43be71, 0x43b560           | message 0x500: the lives to 0, the end of the game (rank, high scores)         |
 | 0x44c6f0, 0x42bd40           | may an actor step on a cell (teleporter conditions); count a class carried     |
 | 0x44c9d0, 0x42bcd0           | an actor's step (1 moves, 3 handled); does the hero carry an item word         |

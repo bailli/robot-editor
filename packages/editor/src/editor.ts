@@ -1219,7 +1219,7 @@ export class Editor {
       free: this.freeTileTypes(episode).filter((t) => !copied.has(t)),
       spare: spareEventEntries(episode).filter((n) => !set.has(n)),
       hasText: (n) => texts?.has(n) === true,
-      text: (n) => texts?.get(n),
+      hasEntry: (resource, n) => this.textEntries(resource)?.entries.has(n) === true,
       hasEventText: (n) => eventTexts?.has(n) === true,
       ...(events ? { events } : {}),
     });
@@ -1254,8 +1254,9 @@ export class Editor {
     this.endStroke();
     const plan = this.kitPlan(episode, kit, events);
     if (plan.problem) throw new RangeError(plan.problem);
-    const parts = [plan.types, plan.texts, plan.events, plan.moved, plan.silenced];
-    if (parts.every((p) => p.length === 0)) return undefined;
+    const { types, texts, events: given, code, textCopies, moved, silenced } = plan;
+    const parts: readonly (readonly unknown[])[] = [types, texts, given, code, textCopies];
+    if ([...parts, moved, silenced].every((p) => p.length === 0)) return undefined;
     const changes = kitChanges(this.pristine, episode, kit, plan);
     let copyTexts: readonly CopyTextsChange[] = this.changes.copyTexts;
     for (const c of changes.copyTexts) {
@@ -1278,6 +1279,7 @@ export class Editor {
         ...this.changes,
         music,
         copies: [...this.changes.copies, ...copies],
+        code: [...this.changes.code, ...changes.code],
         events: [
           ...this.changes.events.filter((e) => !set.has(`${e.episode} ${e.entry}`)),
           ...changes.events,

@@ -86,7 +86,8 @@ export class KitsView {
     const typeName = (of: number) => kit.types.find(([t]) => t === of)?.[1] ?? hex2(of);
     const label = (id: number) => (kit.eventLabel ? `${kit.eventLabel(id)} (${id})` : String(id));
     const own = plan.present.length === kit.types.length && plan.lacking.length === 0;
-    const quiet = plan.moved.length + plan.silenced.length;
+    const quiet =
+      plan.moved.length + plan.silenced.length + plan.code.length + plan.textCopies.length;
     if (own && plan.texts.length === 0 && quiet === 0) {
       box.append(line("own", `${name(episode)} has ${kit.name.toLowerCase()} already.`));
       box.append(this.exampleBar(context, kit));
@@ -100,10 +101,20 @@ export class KitsView {
         `Tile types: ${types.length > 0 ? types.join(", ") : "none to copy"}${present.length > 0 ? ` (has: ${present.join(", ")})` : ""}`,
       ),
     );
-    if (plan.texts.length > 0) {
-      const replaced =
-        plan.replaced.length > 0 ? ` (replacing its own ${plan.replaced.join(", ")})` : "";
-      box.append(line("texts", `Texts: ${plan.texts.join(", ")}${replaced}`));
+    if (plan.texts.length > 0) box.append(line("texts", `Texts: ${plan.texts.join(", ")}`));
+    // a text the code shows by number, moved to one no episode has (textMove)
+    for (const c of plan.textCopies) {
+      const into = c.resource === c.from ? "its own" : "this episode’s";
+      const entries = c.entries.map(([to, of]) => `${to} ← ${of}`).join(", ");
+      box.append(line(`copy ${c.resource}`, `Text ${entries} into ${into} ${c.resource}`));
+    }
+    for (const c of plan.code) {
+      box.append(
+        line(
+          "code",
+          `Code at 0x${c.va.toString(16)}: shows text ${new DataView(c.bytes.buffer).getUint32(0, true)} instead of ${new DataView(c.expect.buffer).getUint32(0, true)} (all episodes)`,
+        ),
+      );
     }
     // events whose bonus box would come first: moved off their text, or the text removed
     for (const m of plan.moved) {

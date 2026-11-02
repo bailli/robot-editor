@@ -1,7 +1,8 @@
 import { classTexts, freeTileTypes } from "./classes.ts";
 import { EVENT_TEXT, FIRST_EVENT_ENTRY, readEventTable, spareEventEntries } from "./events.ts";
 import { type Game, eventTextsId, textsId } from "./game.ts";
-import type { CopyTextsChange, ModChanges, TextChange } from "./mod.ts";
+import type { CodeChange, CopyTextsChange, ModChanges, TextChange } from "./mod.ts";
+import { readVa } from "./pe.ts";
 import { readOracleSymbols, recordCellOffsets } from "./records.ts";
 import { LOGIC_CELL } from "./scene.ts";
 
@@ -27,10 +28,14 @@ export interface Kit {
   /** An event's name for the view, e.g. the oracle symbol it is for. */
   eventLabel?: (id: number) => string;
   /**
-   * Texts copied even where the episode has an entry of its own (the goal's 994, which
-   * the classes' code shows by number).
+   * A text the classes' code shows by number (`from`, the imm32 of a push at `va`), moved
+   * to `to`, which no episode has: a code change makes the push show `to` (in every
+   * episode, the code being shared), and the kit episode's entry `from` is copied to
+   * `to` there and in the episode, German and English where they have texts. So the
+   * episode keeps its own `from` (the goal's 994: the README.TXT joke in I and II,
+   * the wood message in III).
    */
-  replaceTexts?: readonly number[];
+  textMove?: { va: number; from: number; to: number };
   /**
    * Events (ids) whose bonus box must not show: where the episode's entry for one has a
    * text, the id moves to a spare entry without one, else that text is removed. (The
@@ -82,12 +87,13 @@ export const KITS: readonly Kit[] = [
     types: [[0x32, "goal"]],
     events: [],
     // walked onto: event 298 (10000 points; text 1970, which only IV's helicopter uses
-    // too), then text 994, whose closing ends the game (0x41f450)
-    replaceTexts: [994],
+    // too), then text 994, whose closing ends the game (0x41f450, push 994 at 0x41f45e);
+    // 1700: no episode has it, nothing in the code names or computes it
+    textMove: { va: 0x41f45f, from: 994, to: 1700 },
     quietEvents: [298],
     example:
-      "Junior's goal, 3 × 2 cells: walked onto, it gives 10000 points where the episode has its event, shows text 994 (Junior's “Du hast es geschafft!”, to write anew in the Texts tab) and ends the game once that is closed.",
-    note: "Junior's goal (tile 0x32, states 0–5 its 3 × 2 parts) ends the game: walked onto, it shows text 994, and closing it ends the game as running out of lives does (the rank, the high scores). It replaces the episode's own text 994 (I and II: the joke for reading README.TXT; III: the message for carrying too much wood).",
+      "Junior's goal, 3 × 2 cells: walked onto, it gives 10000 points where the episode has its event, shows text 1700 (Junior's “Du hast es geschafft!”, to write anew in the Texts tab) and ends the game once that is closed.",
+    note: "Junior's goal (tile 0x32, states 0–5 its 3 × 2 parts) ends the game: walked onto, it shows its text, and closing it ends the game as running out of lives does (the rank, the high scores). Its code shows text 994 in every episode, so a code patch makes it 1700, which no episode has: Junior's goal text is copied there, into this episode and into Junior.",
   },
 ];
 
@@ -107,8 +113,10 @@ export interface KitPlan {
   without: number[];
   /** The MUSIC pieces the copied types' and events' sounds name that the episode lacks. */
   music: string[];
-  /** Of `texts`, those the episode has an entry of its own for (replaceTexts). */
-  replaced: number[];
+  /** The code changes it takes (textMove's push, unless the exe has it already). */
+  code: CodeChange[];
+  /** Texts copied to other numbers (textMove), into the episode and the kit episode. */
+  textCopies: CopyTextsChange[];
   /**
    * Quiet events moved from an entry with a text to a spare one without: the entry's
    * points and sound go along, the old entry gets the spare's id and points.
@@ -137,8 +145,8 @@ export interface KitOptions {
   spare?: readonly number[];
   /** Whether the episode's texts (textsId) have entry n (default: as in `game`). */
   hasText?: (n: number) => boolean;
-  /** The episode's text entry n (textsId; default: as in `game`), for replaceTexts. */
-  text?: (n: number) => readonly string[] | undefined;
+  /** Whether text resource `resource` has entry n (default: as in `game`), for textMove. */
+  hasEntry?: (resource: number, n: number) => boolean;
   /** Whether the episode's event texts (eventTextsId) have entry n (default: as in `game`). */
   hasEventText?: (n: number) => boolean;
   /** The lacking events to give entries, in order (default: as many as fit, in order). */
@@ -177,12 +185,10 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     types.push([to, of]);
   }
   const sourceTexts = source.texts(textsId(kit.from))?.entries;
-  const ownTexts = game.texts(textsId(episode))?.entries;
-  const hasText = options.hasText ?? ((n) => ownTexts?.has(n) === true);
-  const text = options.text ?? ((n) => ownTexts?.get(n));
-  const sameText = (n: number) => text(n)?.join("|") === sourceTexts?.get(n)?.join("|");
+  const hasText = options.hasText ?? ((n) => game.texts(textsId(episode))?.entries.has(n) === true);
   // the texts of every class the episode does not have by itself, copied by hand or not
   const native = source.episode(episode).classes.typeOfClass;
+  const move = kit.textMove;
   const texts = [
     ...new Set(
       kit.types
@@ -190,11 +196,27 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
         .filter((id) => !native.has(id))
         .flatMap((id) => classTexts(id)),
     ),
-  ].filter(
-    (n) =>
-      sourceTexts?.has(n) === true &&
-      (kit.replaceTexts?.includes(n) === true ? !sameText(n) : !hasText(n)),
-  );
+  ].filter((n) => sourceTexts?.has(n) === true && !hasText(n) && n !== move?.from);
+  // the moved text: the push changed once, the entry copied where it is missing
+  const code: CodeChange[] = [];
+  const textCopies: CopyTextsChange[] = [];
+  const foreign = kit.types.some(([type]) => !native.has(classes.get(type)?.id ?? 0));
+  if (move && foreign) {
+    const imm = (n: number) => Uint8Array.of(n & 0xff, (n >> 8) & 0xff, n >> 16, n >>> 24);
+    const now = new DataView(readVa(game.image, move.va, 4).slice().buffer).getUint32(0, true);
+    if (now === move.from) code.push({ va: move.va, expect: imm(move.from), bytes: imm(move.to) });
+    else if (now !== move.to) problems.push(`the code at 0x${move.va.toString(16)} is changed`);
+    const hasEntry =
+      options.hasEntry ?? ((resource, n) => game.texts(resource)?.entries.has(n) === true);
+    for (const language of ["de", "en"] as const) {
+      const from = textsId(kit.from, language);
+      if (source.texts(from)?.entries.has(move.from) !== true) continue;
+      for (const resource of new Set([textsId(kit.from, language), textsId(episode, language)])) {
+        if (game.texts(resource) === undefined || hasEntry(resource, move.to)) continue;
+        textCopies.push({ resource, from, entries: [[move.to, move.from]] });
+      }
+    }
+  }
   const table = readEventTable(source.image, kit.from);
   const held = new Set(readEventTable(game.image, episode).map((e) => e.id));
   const entryOf = (id: number) => table.findIndex((e, n) => n >= FIRST_EVENT_ENTRY && e.id === id);
@@ -242,7 +264,8 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     lacking,
     without: lacking.filter((id) => !given.has(id)),
     music: game.lackedPieces(episode, sounds),
-    replaced: texts.filter((n) => hasText(n)),
+    code,
+    textCopies,
     moved,
     silenced,
   };
@@ -278,7 +301,7 @@ export function kitChanges(
   episode: number,
   kit: Kit,
   plan: KitPlan,
-): Pick<ModChanges, "music" | "tileTypes" | "events" | "copyTexts" | "texts"> {
+): Pick<ModChanges, "music" | "tileTypes" | "events" | "code" | "copyTexts" | "texts"> {
   const table = readEventTable(source.image, kit.from);
   const eventTexts = source.texts(eventTextsId(kit.from))?.entries;
   const withText = plan.events.filter((e) => eventTexts?.has(EVENT_TEXT + e.of) === true);
@@ -292,6 +315,12 @@ export function kitChanges(
   };
   add(textsId(episode), textsId(kit.from), texts);
   add(eventTextsId(episode), eventTextsId(kit.from), copies);
+  for (const c of plan.textCopies)
+    add(
+      c.resource,
+      c.from,
+      c.entries.map(([to, of]) => [to, of]),
+    );
   return {
     music: plan.music.length > 0 ? [{ episode, from: kit.from, pieces: plan.music }] : [],
     tileTypes: plan.types.length > 0 ? [{ episode, from: kit.from, types: plan.types }] : [],
@@ -311,6 +340,7 @@ export function kitChanges(
         { episode, entry: from, ...freed },
       ]),
     ],
+    code: plan.code,
     copyTexts,
     texts: plan.silenced.map((n): TextChange => ({
       resource: eventTextsId(episode),
