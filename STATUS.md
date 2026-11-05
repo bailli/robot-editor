@@ -922,6 +922,20 @@ Wine** (`pnpm test:game` and tries with the driver).
   (1/4 + 2/8) / 17 = 1/34 (LEFT, SOLIDOFF), an I with about 1/12. The letters stay on
   the floor and can be taken again, so laying a word keeps the number of letters
   carried and brings 1200 points.
+  **Editing text 514** (code only, not tried): word n is variant n of text 514 in the
+  current language's resource (0x42c950 → episode +0x3c → 0x438850; English 1111 has
+  its own copy), and its wand flag and handler are entry n of the fixed table. So a
+  word renamed keeps the effect of its position (KILLHIM's is the 17th, index 16),
+  swapping two words swaps their effects, a word removed from the end (or any variant
+  at or above the entry's count, `514:k`; the originals say 18 for 17 words) is
+  missing: nothing matches it, and a re-rolled letter that draws it stays as it was.
+  Words after the 17th do nothing (neither matched nor drawn). The reader drops
+  leading spaces and line breaks, makes the others one space (a space cannot be laid,
+  so such a word never matches) and keeps at most 19 characters; the match compares
+  the letters' states byte for byte (upper case, as the letters in the rooms). An
+  empty variant matches nothing but can be drawn: random(0, −1) = 0 gives a letter of
+  state 0. The re-roll draws from the edited words, so they also change which letters
+  turn up.
 - **The pill** (class 0x4f, episode I's tile 0x46: "Diese Pille sieht recht übel aus…";
   from the code, the user's tries under "Cross-episode classes"): "Benutzen" (vtable
   +0x38, 0x40fff0) adds 5400 to the timer 0x4fe306 (counted down by the main loop,
