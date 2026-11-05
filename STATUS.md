@@ -1723,6 +1723,25 @@ stands, decided 2026-10-27; details in the sections named.
   portable computer, and 0x41, the interface) works in another episode with both tile
   types and its texts 550–555 (the programs: GAME OF ROBOT, STERNCHEN, SUPERHIRN,
   MEMORY, the command replies) copied.
+- **Classes that need texts beyond their own** (survey, code only, 2026-11-05: every
+  call that shows text n or raises event n with a constant, attributed to the classes
+  whose methods reach it; shared code smears some, and indirect uses are missed, e.g.
+  the pen's 512). **Known and tried:** letters 514 (magic words, I and II only) with
+  the wand for flagged words and the pen 512 ("Was schreibst Du ?"); the wizard
+  990–993 (991 is III's error message), his door class 80; the computer 550–555; the
+  oracle 330–345 and 945; Junior's goal 994. **Candidates, not tried:** I's slot
+  machine (0x39) 509 (its reels), the expert field (class 66) 508 (not in III);
+  II's 0x52, 0x59 (money), 0x5b (the barrier's question) 894–897 and event 308; II's
+  telephone 0x5f and travel agency 0x64 260 and event 110, phone card 0x62, credit
+  card 0x63 and postman 0x65 270; II's road, traffic, bus and ship (0x6e–0x72) 282 and
+  290; II's skateboard 0x5d 240; III's bridle 0x3e, decoy whistle 0x42, the
+  researcher 0x46 and the chief 0x47 440–446 and 288 (events 339, 345); III's old
+  pipes, timber and natives (0x2a–0x2c) 300, 319 and 444; IV's punch card 0x59,
+  terminal 0x5b and cylinders 0x68 520–524, 532 and 965, the punch 0x5c and others
+  (0x5d, 0x5f, 0x61) 532 and 533; the river (class 55) and others 230 (only II and III
+  have it). The editor's copy of a type offers only `classTexts` (oracle, goal), in the
+  first language only, and skips a number the episode already uses for another text
+  (III's 991).
 - **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
