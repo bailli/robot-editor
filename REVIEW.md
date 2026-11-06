@@ -102,33 +102,6 @@ an entry once it is fixed or rejected; delete the file when it is empty.
 
 ## editor
 
-1. **Confirmed by reading: undoing a room removal makes the loaded exe's own Room
-   editable** (`editor.ts` removeRoom ~1975 stores `removed: this.room(...)`; `apply()`
-   at ~2572/2621 does `owned.add(present)`).
-   - Remove an untouched room, undo, paint: the paint writes into
-     `game.episode(e).rooms[...]`, the pristine data.
-   - `isEdited` and `roomChanges` then diff the room against itself, so asMod and save
-     lose the edits. Reset starts from the mutated exe.
-   - Fix: store an owned copy, or clone before `owned.add`. The same hazard applies to
-     any added/removed pristine Room.
-2. **Confirmed by reading: the "Test in game" queue can wedge the dev server**
-   (`vite.config.ts:121-130`).
-   - `playNative` throwing synchronously (mkdir, write, spawn) rejects `queue` for good:
-     that request hangs, an unhandled rejection follows, and every later POST hangs.
-   - Fix: `queue = queue.then(() => playNative(...)).catch(e => message(e)).then(respond)`.
-   - Also: no `req.on("error")`; `createReadStream(REFERENCE_EXE).pipe(res)` has no
-     error handler; the Wine path times out as 202.
-3. **Confirmed by reading: going to a room that doesn't exist breaks the editor**
-   (`app.ts:1489-1493` showRoom sets `roomId` before `editor.room()` throws).
-   - Callers without a `hasRoom` check: the ExitsView `go` (~496), the arrow keys and
-     PgUp/PgDn (2480-2489).
-   - Remove room N, then press an arrow towards it: every paint, undo or refresh throws
-     until another room is picked.
-   - Fix: check in showRoom first, or assign last, and guard the callers.
-4. **Arrow keys and PgUp/PgDn are always `preventDefault`ed** (`app.ts:2476-2490`), even
-   when nothing navigates. Keyboard scrolling of panels and arrow keys between
-   `role=tab`s don't work. Fix: prevent only when a room changes; skip tabs, lists and
-   scroll areas.
 5. **Smaller:**
    - `save()` (`app.ts:2247`) marks the editor saved before `modJson(asMod())`, which can
      throw.

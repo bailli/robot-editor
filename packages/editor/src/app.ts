@@ -1466,7 +1466,8 @@ export class App {
     this.episode = episode;
     this.episodeSelect.value = String(episode);
     const rooms = editor.rooms(episode);
-    const id = roomId ?? editor.start(episode).room;
+    const id =
+      roomId !== undefined && editor.hasRoom(episode, roomId) ? roomId : editor.start(episode).room;
     this.roomList.replaceChildren(
       ...rooms.map((r) =>
         h(
@@ -1489,6 +1490,11 @@ export class App {
 
   showRoom(id: number): void {
     const editor = this.need();
+    // an exit or a script may lead to a room that was deleted: stay where we are
+    if (!editor.hasRoom(this.episode, id)) {
+      this.setStatus(`There is no room ${id} in this episode`, true);
+      return;
+    }
     this.roomId = id;
     this.roomTitle.textContent = `${EPISODE_NAMES[this.episode] ?? ""} – room ${id}`;
     const room = editor.room(this.episode, id);
@@ -2476,18 +2482,23 @@ export class App {
         }
         const direction = ARROWS[event.key];
         if (direction && !event.ctrlKey && !event.metaKey && !event.altKey) {
-          // follow the exit that does not depend on the game state
-          event.preventDefault();
+          // follow the exit that does not depend on the game state; without one the key
+          // is the page's (scrolling)
           const room = this.connections ? fixedExit(this.connections, direction) : 0;
-          if (room !== 0) this.showRoom(room);
+          if (room !== 0 && this.editor.hasRoom(this.episode, room)) {
+            event.preventDefault();
+            this.showRoom(room);
+          }
           return;
         }
         const way = PAGES[event.key];
         if (way && !event.ctrlKey && !event.metaKey && !event.altKey) {
           // through the room's doors or stairs (each way leads to one room, +/- 100)
-          event.preventDefault();
           const room = this.connections ? passageExit(this.connections, way) : 0;
-          if (room !== 0) this.showRoom(room);
+          if (room !== 0 && this.editor.hasRoom(this.episode, room)) {
+            event.preventDefault();
+            this.showRoom(room);
+          }
           return;
         }
         const key = event.key.toLowerCase();

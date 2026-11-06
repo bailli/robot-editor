@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 
 import { exitMode, roomPassages } from "@robot/formats";
 
-import { app, bytes, exits, game, newApp, roomNameField, useApp } from "./app-setup.ts";
+import { app, bytes, clickCell, exits, game, newApp, roomNameField, useApp } from "./app-setup.ts";
 import { defined } from "./game.ts";
 
 useApp();
@@ -29,6 +29,24 @@ test("arrow keys follow the exits that do not depend on the game state", async (
   await userEvent.keyboard("{ArrowDown}{ArrowLeft}");
   // 43 -> west is closed: stays
   await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
+});
+
+test("an exit to a deleted room leads nowhere; the room shown stays usable", async () => {
+  // room 43's north exit leads to 33
+  defined(app.editor).removeRoom(1, 33);
+  await userEvent.keyboard("{ArrowUp}");
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
+  app.showRoom(33);
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
+  expect(document.querySelector(".status")?.textContent).toBe(
+    "There is no room 33 in this episode",
+  );
+  app.showEpisode(1, 33); // the start room instead
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
+  // painting still works in the room shown
+  app.setTile(0x0a);
+  await clickCell(5 * 40 + 20);
+  expect(app.editor?.room(1, 43).base[5 * 40 + 20]).toBe(0x0a);
 });
 
 test("Page Down and Page Up go through doors and stairs", async () => {
