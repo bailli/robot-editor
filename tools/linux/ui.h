@@ -20,6 +20,11 @@
    ui.c took it. Called by sdl.c for every key press before it becomes a window message. */
 BOOL ui_key(const SDL_KeyboardEvent *e);
 
+/* ---- misc.c ---- */
+
+/* The game's tray icon while it has one (there is no tray: see Shell_NotifyIconA). */
+BOOL tray_icon(HWND *hwnd, UINT *id, UINT *message);
+
 /* ---- dsound.c ---- */
 
 /* The wrapper's master volume in percent (0–100), over the game's own: set (clamped) and

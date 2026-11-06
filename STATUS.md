@@ -220,7 +220,7 @@ Files in `packages/formats/src`:
   accelerator table (resource type 9, id 1005; the main loop's TranslateAcceleratorA):
   Ctrl+Alt+P is command 4015, the screenshot (0x404190: named after the room, the frame
   buffer from 0x401210, written as a 640 × 348 palette PNG by 0x433710); Alt+B, E, G,
-  M, S, T, V, W, Alt+Return and Alt+F8 are commands 4003–4013, F11 is 4201 (not traced).
+  M, S, T, V, W, Alt+Return and Alt+F8 are commands 4003–4013, F11 is 4201 (0x1069: to the tray, see "Native Linux wrapper").
 - **Frames:** the game draws into a buffer of palette indices (0x401210 returns it) and
   shows it in a window, without Flip. With GDI, which it uses under Wine, WM_PAINT
   (0x402100) draws it with StretchDIBits (0x402220: 640 × 348, top-down, the colours
@@ -2128,7 +2128,7 @@ for Windows' own UI (headless dialogs, SDL message boxes, the wrapper's shortcut
 and sounds (checked under Xvfb with xdotool: episode chosen by key and by mouse, the game
 started, the hero walked, the accelerators, fullscreen on and off, the shortcuts, the
 dialogs, the screenshot, quitting; the sound recorded with SDL's `disk` driver). Not there
-yet: the tray, the driver's protocol.
+yet: the driver's protocol.
 
 - **Picture:** in a window the game presents with GDI (WM_PAINT's `StretchDIBits`, 640 ×
   348 palette indices), shown scaled; Alt+Enter (command 4007, only once an episode runs)
@@ -2227,6 +2227,14 @@ What the start needs, found on the way to milestone 1:
   `WndScaleX`, `WndScaleY`, `NoMusic`, `NoSound`, `NoEffects`, `DoorNumbers`, `AltShapes`,
   `AltBeam`, `MinimizeToTray`, `NestWarn`, `GoldWarn`, `CurrentEpisode`; written
   `FilePathSV1`… (save paths, after `SHGetFolderPathA` is not found in shell32).
+
+**Tray** (stand-in, no tray here): with `MinimizeToTray` 1, F11 (command 0x1069, 0x404ded)
+hides the window (`ShowWindow(SW_HIDE)`, then the icon: `Shell_NotifyIconA` add 0x402ba0,
+tip 0x402c40, delete 0x402c10; `NOTIFYICONDATA` 0x58 bytes, id 0x1000, callback 0x40a).
+The wrapper minimizes the window instead of hiding it (the game hides it for nothing else)
+and, when it is restored from the taskbar while the icon exists, sends the icon's
+callback with WM_LBUTTONDBLCLK: the game shows its window and removes the icon (checked
+under Xvfb with an isolated KWin).
 
 **Next:** the driver's protocol so that `pnpm test:game` can run without Wine. Untested:
 restarting the sound after a changed `SampleRate`/`DisableOpl` (the release path). The

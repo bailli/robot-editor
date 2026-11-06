@@ -356,7 +356,10 @@ static BOOL WINAPI ShowWindow(HWND hwnd, INT how) {
   w->visible = how != 0; /* SW_HIDE */
   trace("ShowWindow %d", how);
   if (hwnd == main_hwnd) {
-    screen_show(how);
+    /* The game hides its window only to go into the tray (F11), before it adds the icon:
+       minimized instead, as there is no tray to come back from (sdl.c clicks the icon on
+       restoring). */
+    screen_show(how ? how : 6 /* SW_MINIMIZE */);
     if (how && !was) { /* the first show activates it, as on Windows */
       send_message(hwnd, WM_SHOWWINDOW, TRUE, 0);
       send_message(hwnd, WM_ACTIVATEAPP, TRUE, 0);

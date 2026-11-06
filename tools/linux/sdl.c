@@ -383,6 +383,9 @@ static void button(const SDL_MouseButtonEvent *e) {
   }
 }
 
+/* What a double click on the tray icon sends; the game shows its window again on it. */
+#define TRAY_CLICK WM_LBUTTONDBLCLK
+
 /* No wrapper shortcuts until ui.c has its own (it overrides this). */
 __attribute__((weak)) BOOL ui_key(const SDL_KeyboardEvent *e) {
   (void)e;
@@ -429,6 +432,16 @@ void screen_poll(void) {
       case SDL_WINDOWEVENT_FOCUS_GAINED:
         if (main) post_message(main, WM_ACTIVATEAPP, TRUE, 0);
         break;
+      case SDL_WINDOWEVENT_RESTORED: {
+        /* Back from the taskbar while the game is "in the tray": a click on its icon. */
+        HWND icon_hwnd;
+        UINT icon_id, icon_message;
+        if (tray_icon(&icon_hwnd, &icon_id, &icon_message) && icon_message) {
+          trace("screen: restored, the tray icon clicked");
+          post_message(icon_hwnd, icon_message, icon_id, TRAY_CLICK);
+        }
+        break;
+      }
       default: break;
       }
       break;

@@ -239,10 +239,49 @@ static HINSTANCE WINAPI ShellExecuteA(HWND hwnd, LPCSTR op, LPCSTR file, LPCSTR 
   return result;
 }
 
-static BOOL WINAPI Shell_NotifyIconA(DWORD message, void *data) {
-  (void)data;
-  trace("Shell_NotifyIconA %u: no tray", message);
+/* No tray: the icon is remembered, so that while it exists the hidden window is minimized
+   instead (user32.c) and restoring it from the taskbar clicks the icon (sdl.c). */
+typedef struct {
+  DWORD cbSize;
+  HWND hWnd;
+  UINT uID, uFlags, uCallbackMessage;
+  HICON hIcon;
+  char szTip[64];
+} NOTIFYICONDATAA;
+_Static_assert(sizeof(NOTIFYICONDATAA) == 0x58, "NOTIFYICONDATAA");
+
+static struct {
+  BOOL shown;
+  HWND hwnd;
+  UINT id, message;
+} icon;
+
+BOOL tray_icon(HWND *hwnd, UINT *id, UINT *message) {
+  if (!icon.shown) return FALSE;
+  *hwnd = icon.hwnd;
+  *id = icon.id;
+  *message = icon.message;
   return TRUE;
+}
+
+static BOOL WINAPI Shell_NotifyIconA(DWORD message, const NOTIFYICONDATAA *data) {
+  switch (message) {
+  case 0: /* NIM_ADD */
+    icon.shown = TRUE;
+    icon.hwnd = data->hWnd;
+    icon.id = data->uID;
+    icon.message = data->uFlags & 1 ? data->uCallbackMessage : 0; /* NIF_MESSAGE */
+    trace("Shell_NotifyIconA: icon %u added (callback 0x%x)", icon.id, icon.message);
+    return TRUE;
+  case 1: /* NIM_MODIFY */
+    if (data->uFlags & 1) icon.message = data->uCallbackMessage;
+    return icon.shown;
+  case 2: /* NIM_DELETE */
+    trace("Shell_NotifyIconA: icon %u removed", icon.id);
+    icon.shown = FALSE;
+    return TRUE;
+  default: return FALSE;
+  }
 }
 
 const struct export misc_shell32_exports[] = {

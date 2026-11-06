@@ -36,7 +36,7 @@ static const struct setting {
     {"FullScreen", REG_DWORD, "0", "1: start in fullscreen (Alt+Enter)", NULL},
     {"UseTrueColor", REG_DWORD, "1", "1: fullscreen in 32 bits (0 asks for 8, refused here)", NULL},
     {"Force640x480", REG_DWORD, "0", "1: fullscreen mode 640 x 480 instead of 640 x 400", NULL},
-    {"MinimizeToTray", REG_DWORD, "0", "1: F11 minimizes to the tray (none here)", NULL},
+    {"MinimizeToTray", REG_DWORD, "0", "1: F11 minimizes (to the tray on Windows)", NULL},
     {"CurrentEpisode", REG_DWORD, "0", "the episode chosen last: 0 Junior, 1-4 I-IV", NULL},
     {"WndScaleX", REG_DWORD, "-", "the game's window scaling, horizontal (untested)", NULL},
     {"WndScaleY", REG_DWORD, "-", "the game's window scaling, vertical (untested)", NULL},
