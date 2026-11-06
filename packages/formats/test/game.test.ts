@@ -5,6 +5,7 @@ import { test } from "vitest";
 import { readClassTable } from "../src/classes.ts";
 import { readEventTable } from "../src/events.ts";
 import { EPISODES, Game, eventTextsId, roomNamesId, withSoundLine } from "../src/game.ts";
+import { HERO_ICON_CLASS, HERO_TYPE, readHeroStateIcons } from "../src/hero-states.ts";
 import { withTextEntry } from "../src/texts.ts";
 import { assertBytesEqual, exe } from "./data.ts";
 
@@ -76,6 +77,68 @@ test("withTileTypes: episode I's circuit pieces in episode III, all their data",
   assert.deepEqual(saved.episode(3).rooms, game.episode(3).rooms);
   for (const e of [0, 1, 2, 4]) {
     assert.deepEqual(readClassTable(saved.image, e), readClassTable(game.image, e));
+  }
+});
+
+test("withTileTypes: III's axe, hammer and bridle bring their icons and hero frames", () => {
+  // III's 0x61, 0x62, 0x3e put the hero into states 10, 11, 12; III's icons for them are
+  // frames 0-2 of its class-135 type (icons 1-3), which IV and I lack (icon 0)
+  const tools = [0x61, 0x62, 0x3e];
+  const iconType = (g: Game, e: number) =>
+    g.episode(e).classes.typeOfClass.get(HERO_ICON_CLASS) ?? -1;
+  const iii = game.episode(3).objects[iconType(game, 3)];
+  for (const [episode, types, frames] of [
+    [4, [0x03, 0x48, 0x6d], 4],
+    [1, [0x4c, 0x4d, 0x4e], 7],
+  ] as const) {
+    assert.deepEqual(readHeroStateIcons(game.image, episode).slice(10), [0, 0, 0]);
+    const saved = new Game(
+      game.withTileTypes(episode, 3, new Map(types.map((to, k) => [to, tools[k] ?? 0]))),
+    );
+    const icons = saved.episode(episode).objects[iconType(saved, episode)];
+    // appended after the episode's own frames, which stay
+    assert.deepEqual(readHeroStateIcons(saved.image, episode).slice(10), [
+      frames + 1,
+      frames + 2,
+      frames + 3,
+    ]);
+    assert.deepEqual(
+      icons?.frames.slice(0, frames),
+      game.episode(episode).objects[iconType(game, episode)]?.frames,
+    );
+    assert.deepEqual(icons?.frames.slice(frames), iii?.frames.slice(0, 3));
+    // the other states' icons and the other episodes' stay
+    assert.deepEqual(
+      readHeroStateIcons(saved.image, episode).slice(0, 10),
+      readHeroStateIcons(game.image, episode).slice(0, 10),
+    );
+    for (const e of EPISODES.filter((e) => e !== episode)) {
+      assert.deepEqual(readHeroStateIcons(saved.image, e), readHeroStateIcons(game.image, e));
+    }
+  }
+  // the hero: I's has frames 0-5 only and gets III's 6-11; IV's has 12 of its own
+  const hero = (g: Game, e: number) => g.episode(e).objects[HERO_TYPE];
+  const i = new Game(game.withTileTypes(1, 3, new Map([[0x4c, 0x61]])));
+  assert.equal(hero(game, 1)?.frames.length, 6);
+  assert.deepEqual(hero(i, 1)?.frames, [
+    ...(hero(game, 1)?.frames ?? []),
+    ...(hero(game, 3)?.frames.slice(6, 8) ?? []),
+  ]);
+  assert.deepEqual(hero(i, 1)?.colours, hero(game, 1)?.colours);
+  const iv = new Game(game.withTileTypes(4, 3, new Map([[0x03, 0x62]])));
+  assert.deepEqual(hero(iv, 4), hero(game, 4));
+});
+
+test("withTileTypes leaves a hero state's icon the episode has, and others alone", () => {
+  // Junior's 0x14 (state 2) into I, which has state 2's icon
+  const i = new Game(game.withTileTypes(1, 0, new Map([[0x4c, 0x14]])));
+  assert.deepEqual(readHeroStateIcons(i.image, 1), readHeroStateIcons(game.image, 1));
+  // a copy without hero states (III's timber) writes no icon and no shape beyond its own
+  const iv = new Game(game.withTileTypes(4, 3, new Map([[0x03, 0x2b]])));
+  assert.deepEqual(readHeroStateIcons(iv.image, 4), readHeroStateIcons(game.image, 4));
+  for (const g of [i, iv]) {
+    const e = g === i ? 1 : 4;
+    assert.deepEqual(g.episode(e).objects.slice(0, 2), game.episode(e).objects.slice(0, 2));
   }
 });
 

@@ -696,11 +696,12 @@ export class Editor {
 
   /**
    * Makes tile type `to` of the episode a copy of type `source.of` of episode
-   * `source.from` (withTileTypes: class, shape, description, sound, first take), or with
-   * `source` undefined removes the copy; one undo step (shown in room `room`), which
-   * makes a new base: text entries edited here stay as they are. Throws a RangeError
-   * where the copy cannot be made (tileTypeProblem), where a removed copy's type lies in
-   * rooms, or where an edited dealer would sell a class the episode then lacks.
+   * `source.from` (withTileTypes: class, shape, description, sound, first take, the
+   * hero states' icons and frames), or with `source` undefined removes the copy; one
+   * undo step (shown in room `room`), which makes a new base: text entries edited here
+   * stay as they are. Throws a RangeError where the copy cannot be made
+   * (tileTypeProblem), where a removed copy's type lies in rooms, or where an edited
+   * dealer would sell a class the episode then lacks.
    */
   setTileType(
     episode: number,

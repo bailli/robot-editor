@@ -9,12 +9,13 @@ import { LOGIC_CELL } from "./scene.ts";
 /**
  * Kits: what makes a feature of one episode work in another, copied in one step (the
  * editor's Episode tab, Editor.addKit): its tile types (withTileTypes: class, shape,
- * description, sound, first take), the texts their classes show (classTexts), the
- * events their code raises, in entries the episode never uses (spareEventEntries), and
- * the MUSIC pieces the types' and events' sounds name that the episode lacks. A
- * type whose class the episode has already is not copied: the circuits' stairs only go
- * to Junior, and a kit in the episode it comes from has nothing to do. See STATUS, "Fan
- * episodes", for the pilots they come from, and "Endings" for the goal.
+ * description, sound, first take, the hero states' icons and frames), the texts their
+ * classes show (classTexts), the events their code raises, in entries the episode never
+ * uses (spareEventEntries), and the MUSIC pieces the types' and events' sounds name
+ * that the episode lacks. A type whose class the episode has already is not copied: the
+ * circuits' stairs only go to Junior, and a kit in the episode it comes from has
+ * nothing to do. See STATUS, "Fan episodes", for the pilots they come from, and
+ * "Endings" for the goal.
  */
 export interface Kit {
   key: string;

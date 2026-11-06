@@ -97,6 +97,7 @@ Files in `packages/formats/src`:
 | `dealer.ts`                  | the dealer's goods per episode: classes, prices, how many shown; patching them                  |
 | `mod.ts`, `sha256.ts`        | mods: keyed changes to the pristine exe, their JSON file, compiled to a patch and applied       |
 | `kits.ts`                    | kits: an episode's feature (oracles, circuits, goal) planned into another: types, texts, events |
+| `hero-states.ts`             | the hero's states: classes that set them, status-line icons, frames; patching                   |
 | `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts)   |
 | `game.ts`                    | `Game`: loads an exe, episodes lazily, saves scenes, texts, tile types from other episodes      |
 
@@ -1756,10 +1757,14 @@ stands, decided 2026-10-27; details in the sections named.
     (class 82) are there. Text 285 is free elsewhere; 994 clashes.
   - **The hero's frames:** the axe's state draws the hero with frames 6 and 7 of his
     shape (tile 1; 0x4471f0), the hammer's with 8 and 9 (0x447330), by the step's
-    parity. The hero shape has 12 frames in III and IV but only 6 in Junior, I and
-    II, so there he is invisible while holding them (an index past the table). A fix
-    would give that episode's hero III's frames 6–9 (`withShapes` can write a shape
-    with more frames; the editor cannot yet; colours as for any copied shape).
+    parity, the bridle's (state 12, 0x447590) 10 or 11 by direction; all other
+    states draw the episode's own. The hero shape has 12 frames in III and IV but
+    only 6 in Junior, I and II, so there he was invisible while holding them (an
+    index past the table). **Fixed** (2026-11-06): a tile type copy appends the
+    source hero's missing frames (`Game.withHeroStates`, below; drawn in the
+    episode's hero colours, 7, 8, 1 instead of III's 7, 13, 1: III's tool poses in
+    I's green coat). IV's hero is another figure with 12 frames of its own, so there
+    the axe shows IV's frames 6 and 7.
   - **Tried in the game by the user (2026-11-06), in episode I:** III's hammer,
     timber and bridge build bridges; the hero is invisible in hammer mode, which Esc
     ends (using the hammer again does not). The item bar (Enter, 0x42dda0) lists the
@@ -1786,9 +1791,23 @@ stands, decided 2026-10-27; details in the sections named.
     12 (the axe's, hammer's and bridle's icons, III's 0x35 in states 0–2); IV 3, 9.
     So in IV every other state crashes: the axe (10), hammer (11), bridle (12) and
     whatever II's states 4–7 are (not tried); not I's pill, which sets the hero's
-    mode (+0x50), not his state. A fix sets that byte (a `code` change of the data)
-    to a state of class 135's type the episode has, best with III's icons copied
-    there.
+    mode (+0x50), not his state. **Fixed** (2026-11-06), see "Hero states copied"
+    below.
+  - **Hero states copied** (`hero-states.ts`, `Game.withHeroStates`, called by
+    `withTileTypes`, so mods, kits and the editor's copies get it): classes that put
+    the hero into a state (`CLASS_HERO_STATES`, calls of 0x4477f0 with a constant:
+    17 → 3, 20 → 2, 25 → 6, 42 → 8, 103 → 1, 127 → 4, 129 → 5, 166 (bridle) → 12,
+    179 (axe) → 10, 180 (hammer) → 11, 221 → 9; two calls in II's code with 4 and 5
+    belong to no class) bring, where the episode lacks them and the source has
+    them, the state's icon (the source's class-135 frame appended to the episode's
+    class-135 shape, unless one alike is there, at most 16 frames as the class draws
+    `state & 0xf`; the icon byte set to it) and the hero's frames. III's axe, hammer
+    and bridle in IV: icons 5, 6, 7 (IV's class 135 has 4 frames), in I 8, 9, 10.
+    **Verified with the driver** (`pnpm test:game`): III's axe copied into I and IV,
+    taken and used, leaves the hero in state 10 with the game running, draws him
+    with frame 6 or 7 and the status line with the icon; without the copy's extras
+    the hero is not drawn in I and IV hangs. Open: II's and IV's 0x19 (class 25)
+    sets state 6, for which IV has no icon (would it crash IV's own game? not tried).
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,
@@ -2193,6 +2212,7 @@ Roughly by value for the editor.
 | 0x41f450, 0x44ab20, 0x40a690 | Junior's ZIEL; episode II's ship sailing off; II entering room 600 (text 900)  |
 | 0x41546b, 0x416640, 0x416700 | episode III: Judith healed (bit 0x4); her handler; the ending (text 442)       |
 | 0x446920, 0x446de0           | episode IV's ending: the helicopter's tick; text 1970's `#n` markers           |
+| 0x4477f0, 0x4830f0, 0x4831a8 | set the hero's state; its 13 objects; their icons (`hero-states.ts`)           |
 
 ## Gotchas
 

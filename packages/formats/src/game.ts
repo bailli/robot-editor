@@ -7,6 +7,14 @@ import {
 import { decodeCp437, encodeCp437 } from "./cp437.ts";
 import { crunch, uncrunch } from "./crunched.ts";
 import { EVENT_TEXT, readEventTable, withEventEntries } from "./events.ts";
+import {
+  CLASS_HERO_STATES,
+  HERO_ICON_CLASS,
+  HERO_STATE_FRAMES,
+  HERO_TYPE,
+  readHeroStateIcons,
+  withHeroStateIcons,
+} from "./hero-states.ts";
 import { musicPieces, withMusicPieces } from "./music.ts";
 import { type Rgb, episodePalette } from "./palette.ts";
 import { type PeImage, parsePe } from "./pe.ts";
@@ -15,7 +23,7 @@ import { type RoomName, roomName } from "./room-names.ts";
 import { cryptScene } from "./scene-crypt.ts";
 import { type Room, parseScene, serializeScene } from "./scene.ts";
 import { type ScriptKeyword, readScriptKeywords, scriptConstants } from "./script.ts";
-import { type ShapeTable, parseShapes, withShapes } from "./shapes.ts";
+import { type Frame, type Shape, type ShapeTable, parseShapes, withShapes } from "./shapes.ts";
 import { type Texts, parseObjectNames, parseTexts, withTextEntry } from "./texts.ts";
 
 export const EPISODES = [0, 1, 2, 3, 4] as const;
@@ -207,8 +215,9 @@ export class Game {
    * entry, the _Rob_object shape, the description (text entry n), the line of the sound
    * table (its sound only where `episode` has that piece, else the target's stays: a mod
    * copies the piece first, kind music) and the first take (event table entry n and its
-   * text 1800 + n, eventTextsId). Other texts a class shows (messages, hints) and code
-   * that checks the episode are the caller's.
+   * text 1800 + n, eventTextsId), and what the hero states the classes set need
+   * (withHeroStates). Other texts a class shows (messages, hints) and code that checks
+   * the episode are the caller's.
    */
   withTileTypes(episode: number, from: number, types: ReadonlyMap<number, number>): Uint8Array {
     const source = this.episode(from);
@@ -244,7 +253,74 @@ export class Game {
       const own = soundLine(sounds, to)[1];
       sounds = withSoundLine(sounds, to, pieces.has(sound.replace(/^!/, "")) ? sound : own, note);
     }
-    return game.withText(soundsId(episode), sounds);
+    game = new Game(game.withText(soundsId(episode), sounds));
+    const ids = pairs.flatMap(([, of]) => source.classes.classes.get(of)?.id ?? []);
+    return game.withHeroStates(episode, from, ids);
+  }
+
+  /**
+   * A copy of the exe in which `episode` has what the hero states that the classes
+   * `classIds` set need (hero-states.ts), taken from episode `from` where `episode` lacks
+   * it: the state's status-line icon (the frame of class 135's type that `from` shows,
+   * appended to the episode's unless it has one alike; without an icon IV crashes) and
+   * the hero's frames the state draws (appended from `from`'s hero; without them the
+   * hero is not drawn). What `from` lacks too stays missing.
+   */
+  withHeroStates(episode: number, from: number, classIds: Iterable<number>): Uint8Array {
+    const states = [...new Set([...classIds].flatMap((id) => CLASS_HERO_STATES.get(id) ?? []))];
+    const [target, source] = [this.episode(episode), this.episode(from)];
+    const shapes = new Map<number, Shape>();
+
+    const icons = readHeroStateIcons(this.image, episode);
+    const sourceIcons = readHeroStateIcons(this.image, from);
+    const iconType = target.classes.typeOfClass.get(HERO_ICON_CLASS);
+    const sourceIconType = source.classes.typeOfClass.get(HERO_ICON_CLASS);
+    let iconShape = iconType === undefined ? undefined : target.objects[iconType];
+    const sourceIconShape =
+      sourceIconType === undefined ? undefined : source.objects[sourceIconType];
+    const newIcons = new Map<number, number>();
+    for (const state of states.toSorted((a, b) => a - b)) {
+      const icon = sourceIcons[state] ?? 0;
+      // class 135 draws frame state & 0xf (FrameMethod.NIBBLE)
+      const frame = sourceIconShape?.frames[(icon - 1) & 0xf];
+      if (icons[state] !== 0 || icon === 0 || !frame || !iconShape || iconType === undefined) {
+        continue;
+      }
+      if (!sameGeometry(iconShape, sourceIconShape)) continue;
+      let k = iconShape.frames.findIndex((f) => sameFrame(f, frame));
+      if (k < 0) {
+        if (iconShape.frames.length > 0xf) continue;
+        iconShape = { ...iconShape, frames: [...iconShape.frames, frame] };
+        shapes.set(iconType, iconShape);
+        k = iconShape.frames.length - 1;
+      }
+      newIcons.set(state, k + 1);
+    }
+
+    const hero = target.objects[HERO_TYPE];
+    const sourceHero = source.objects[HERO_TYPE];
+    const needed = Math.max(
+      0,
+      ...states.flatMap((s) => HERO_STATE_FRAMES.get(s) ?? []).map((f) => f + 1),
+    );
+    if (hero && sourceHero && sameGeometry(hero, sourceHero) && hero.frames.length < needed) {
+      if (sourceHero.frames.length >= needed) {
+        shapes.set(HERO_TYPE, {
+          ...hero,
+          frames: [...hero.frames, ...sourceHero.frames.slice(hero.frames.length, needed)],
+        });
+      }
+    }
+
+    if (shapes.size === 0 && newIcons.size === 0) return this.image.data.slice();
+    let image = this.image;
+    if (shapes.size > 0) {
+      const resource = this.resource("SHAPES", shapesId(episode));
+      image = parsePe(
+        replaceResource(image, resource, withShapes(resource.data, "_Rob_object", shapes)),
+      );
+    }
+    return withHeroStateIcons(image, episode, newIcons);
   }
 
   /** The sound of line n of the episode's sound table (event table entry n), "" if none. */
@@ -305,4 +381,14 @@ function soundLine(text: string, n: number): [string, string, string] {
     text,
   );
   return [match?.[0] ?? "", match?.[1] ?? "", match?.[2]?.trim() ?? ""];
+}
+
+function sameGeometry(a: Shape, b: Shape | undefined): b is Shape {
+  return !!b && a.width === b.width && a.height === b.height && a.bytesPerRow === b.bytesPerRow;
+}
+
+function sameFrame(a: Frame, b: Frame): boolean {
+  const same = (p: Uint8Array | null, q: Uint8Array | null | undefined) =>
+    p === null || !q ? p === (q ?? null) : p.length === q.length && p.every((x, j) => x === q[j]);
+  return a.word === b.word && a.planes.every((p, i) => same(p, b.planes[i]));
 }

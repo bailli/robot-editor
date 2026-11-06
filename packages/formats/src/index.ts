@@ -405,3 +405,13 @@ export { KITS, kitChanges, kitExample, planKit } from "./kits.ts";
 export type { Kit, KitExample, KitOptions, KitPlan } from "./kits.ts";
 export { heroSteps } from "./walkable.ts";
 export type { HeroStep } from "./walkable.ts";
+export {
+  CLASS_HERO_STATES,
+  HERO_ICON_CLASS,
+  HERO_STATE_FRAMES,
+  HERO_STATE_ICONS,
+  HERO_STATES,
+  HERO_TYPE,
+  readHeroStateIcons,
+  withHeroStateIcons,
+} from "./hero-states.ts";

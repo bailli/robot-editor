@@ -12,6 +12,7 @@ import {
   EVENT_TEXT,
   GATE_CLASS,
   Game,
+  HERO_ICON_CLASS,
   KITS,
   type Kit,
   type KitPlan,
@@ -27,6 +28,7 @@ import {
   ROOM_WIDTH,
   type Room,
   STAIRS_CLASS,
+  TRANSPARENT,
   applyMod,
   backdropRoom,
   emptyMod,
@@ -39,12 +41,14 @@ import {
   readEpisodeFlags,
   readEpisodeStart,
   readEventTable,
+  readHeroStateIcons,
   readMusic,
   renderRoom,
   robotSprite,
   robotSpriteCount,
   roomActors,
   roomCircuit,
+  shapePixels,
   withConsole,
   withExitMode,
   withRoomScript,
@@ -1144,4 +1148,62 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     assert.ok(seen.edited.length > 100, "our render shows no room 15");
     assert.deepEqual(seen.game, [HERO], "the game draws as we do");
   }, 60_000);
+
+  for (const [episode, type] of [
+    [1, 0x4c],
+    [4, 0x6e],
+  ] as const) {
+    test(`episode ${episode}: III's axe used shows the hero with it and its icon`, async () => {
+      // the copy brings the state's icon (IV crashed without it) and, in I, the hero's
+      // frames 6 and 7 (without them he was not drawn)
+      const start = readEpisodeStart(game.image, episode);
+      const area = { x0: start.x + 1, x1: start.x + 4, y0: start.y, y1: start.y };
+      const changes = { tileTypes: [{ episode, from: 3, types: [[type, 0x61]] as const }] };
+      const mod = startRoomMod(game, episode, changes, area, start, (set) => {
+        set(start.x + 2, start.y, type);
+      });
+      // what the game should draw: the hero's frame 6 or 7, the state's icon (class 135's
+      // type in state icon - 1), compared by the low 4 bits where the shape has pixels
+      const moddedGame = new Game(applyMod(game.image, mod));
+      const modded = moddedGame.episode(episode);
+      const shape = (t: number | undefined) => {
+        const found = t === undefined ? undefined : modded.objects[t];
+        assert.ok(found);
+        return found;
+      };
+      const hero = shape(1);
+      const iconShape = shape(modded.classes.typeOfClass.get(HERO_ICON_CLASS));
+      const icon = readHeroStateIcons(moddedGame.image, episode)[10] ?? 0;
+      const heroFrames = [6, 7]
+        .filter((f) => f < hero.frames.length)
+        .map((f) => shapePixels(hero, f));
+      const iconPixels = icon > 0 ? shapePixels(iconShape, (icon - 1) & 0xf) : undefined;
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(episode);
+          await d.pickUp("right", (h) => h.x >= start.x + 2);
+          await d.putDown("use"); // the rucksack's only item: "Benutzen"
+          await d.run(300); // IV crashed about a second after the use
+          const frame = await d.frame();
+          const shows = (pixels: Uint8Array | undefined, x0: number, y0: number) =>
+            !!pixels &&
+            pixels.every((c, k) => {
+              const at = (y0 + Math.floor(k / 16)) * frame.width + x0 + (k % 16);
+              return c === TRANSPARENT || ((frame.indices[at] ?? 0) & 0xf) === c;
+            });
+          const [x, y] = [(start.x + 2) * 16, start.y * 12];
+          return {
+            state: (await d.peek((await d.u32(0x53e9ac)) + 0x10, 1))[0],
+            running: await d.running(),
+            drawn: heroFrames.some((f) => shows(f, x, y)),
+            // the status line: row 0
+            icon: Array.from({ length: frame.width - 15 }, (_, x0) => x0).some((x0) =>
+              shows(iconPixels, x0, 0),
+            ),
+          };
+        }),
+      );
+      assert.deepEqual(seen, { state: 10, running: true, drawn: true, icon: true });
+    }, 60_000);
+  }
 });
