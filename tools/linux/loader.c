@@ -289,7 +289,11 @@ static void *load_image(const char *path) {
   for (WORD i = 0; i < sections; i++, section += 40) {
     DWORD va = rd32(section + 12), raw_size = rd32(section + 16), raw = rd32(section + 20);
     DWORD virtual_size = rd32(section + 8);
-    DWORD n = raw_size < virtual_size || !virtual_size ? raw_size : virtual_size;
+    /* As Windows maps it: the raw data up to the section's virtual size rounded up to whole
+       pages. Code patched in after the used part of .text (mods put new code there, e.g.
+       0x465e60) lies beyond VirtualSize but within that page. */
+    DWORD mapped = (virtual_size + 0xfff) & ~0xfffu;
+    DWORD n = raw_size < mapped || !virtual_size ? raw_size : mapped;
     if (va + n > image_size || raw + n > (DWORD)size) fatal("%s: bad section %d", path, i);
     memcpy(image + va, file + raw, n);
   }
@@ -319,6 +323,17 @@ static void on_fault(int sig, siginfo_t *info, void *context) {
     }
   }
   say("%s", line);
+  /* The words at the stack pointer, and the chain of frame pointers with their returns. */
+  n = snprintf(line, sizeof line, "  at esp-32..:");
+  for (int i = -8; i < 12; i++) n += snprintf(line + n, sizeof line - (size_t)n, " %08x", sp[i]);
+  say("%s", line);
+  n = snprintf(line, sizeof line, "  frames:");
+  const DWORD *bp = (const DWORD *)(uintptr_t)r[REG_EBP];
+  for (int i = 0; i < 8 && bp && (uintptr_t)bp > (uintptr_t)sp - 0x10000 &&
+                  (uintptr_t)bp < (uintptr_t)sp + 0x100000 && n < (int)sizeof line - 12;
+       i++, bp = (const DWORD *)(uintptr_t)bp[0])
+    n += snprintf(line + n, sizeof line - (size_t)n, " %08x", bp[1]);
+  say("%s", line);
   _exit(71);
 }
 
@@ -337,13 +352,17 @@ static void on_stop(int sig) {
 /* ---- Main ---- */
 
 int main(int argc, char **argv) {
-  int a = 1, list = 0, set = 0;
+  int a = 1, list = 0, set = 0, serve = 0, port = 0;
   if (getenv("ROBOT_TRACE")) tracing = 1;
   for (; a < argc && argv[a][0] == '-'; a++) {
     if (!strcmp(argv[a], "--trace")) {
       tracing = 1;
     } else if (!strcmp(argv[a], "--settings")) {
       list = 1;
+    } else if (!strcmp(argv[a], "--serve")) {
+      serve = 1;
+    } else if (!strcmp(argv[a], "--port") && a + 1 < argc) {
+      port = atoi(argv[++a]);
     } else if (!strcmp(argv[a], "--set") && a + 1 < argc) {
       if (settings_set(argv[++a])) return 64;
       set = 1;
@@ -356,9 +375,11 @@ int main(int argc, char **argv) {
   if (a >= argc) {
     if (set) return 0; /* only settings written */
     fprintf(stderr, "usage: robot [--trace] [--set NAME=VALUE]... GameOfRobot.exe [ARGS...]\n"
+                    "       robot --serve [--port N] GameOfRobot.exe   run for a test driver (driver.c)\n"
                     "       robot --settings          the game's settings and what they do\n");
     return 64;
   }
+  if (serve) driver_enable(port); /* before anything touches SDL or the clock */
   static char exe[PATH_MAX], root[PATH_MAX];
   if (!realpath(argv[a], exe)) fatal("cannot find %s", argv[a]);
   exe_host_path = exe;
@@ -381,6 +402,7 @@ int main(int argc, char **argv) {
   typedef void(WINAPI * entry_fn)(void);
   entry_fn entry = (entry_fn)load_image(exe);
   thread_enter();
+  if (serve) driver_start();
   trace("entering the game at 0x%08x", (unsigned)(uintptr_t)entry);
   entry();
   return 0; /* the game ends with ExitProcess */

@@ -14,6 +14,7 @@
     "format:check": "prettier --check --cache .",
     "test": "vitest run",
     "test:game": "ROBOT_GAME_TESTS=1 vitest run packages/tools/test/driver.test.ts",
+    "test:game:native": "ROBOT_GAME_TESTS=1 ROBOT_NATIVE=1 vitest run packages/tools/test/driver.test.ts",
     "test:without-game": "vitest run packages/formats/test/cp437.test.ts packages/formats/test/omf.test.ts packages/tools/test/tools.test.ts packages/editor/test/script-view.test.ts packages/editor/test/patch.test.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "robot": "node packages/tools/src/robot.ts",

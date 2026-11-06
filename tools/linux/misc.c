@@ -16,9 +16,7 @@
 /* ---- WINMM ---- */
 
 static DWORD WINAPI timeGetTime(void) {
-  struct timespec t;
-  clock_gettime(CLOCK_MONOTONIC, &t);
-  return (DWORD)((uint64_t)t.tv_sec * 1000 + (uint64_t)t.tv_nsec / 1000000);
+  return clock_ms();
 }
 
 #define MMSYSERR_NODRIVER 6

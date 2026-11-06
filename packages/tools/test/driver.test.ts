@@ -54,19 +54,25 @@ import {
   withRoomScript,
 } from "@robot/formats";
 
-import { Driver } from "../src/driver.ts";
+import { Driver, NATIVE } from "../src/driver.ts";
 import { ROOT, loadGame } from "../src/game.ts";
 import { calmRoom } from "../src/patch.ts";
 import { readIndexedPng } from "../src/png.ts";
 import { differingCells } from "../src/shots.ts";
 
 /**
- * Runs the real game under Wine through the proxy DLL (see driver.ts). Opt-in, as it
- * starts Wine for every test: `pnpm proxy` once, then `pnpm test:game`.
+ * Runs the real game under Wine through the proxy DLL (see driver.ts), or with
+ * ROBOT_NATIVE=1 through the native Linux wrapper. Opt-in, as it starts the game for every
+ * test: `pnpm proxy` once, then `pnpm test:game`; or `pnpm wrapper`, then
+ * `pnpm test:game:native`.
  */
 const enabled = process.env["ROBOT_GAME_TESTS"] === "1";
-const built = existsSync(new URL("tools/wine/proxy/ddraw.dll", ROOT));
-const HINT = "`pnpm proxy`, then `pnpm test:game` (needs Wine, Xvfb, harness.py setup)";
+const built = existsSync(
+  new URL(NATIVE ? "tools/linux/robot" : "tools/wine/proxy/ddraw.dll", ROOT),
+);
+const HINT = NATIVE
+  ? "`pnpm wrapper`, then `pnpm test:game:native`"
+  : "`pnpm proxy`, then `pnpm test:game` (needs Wine, Xvfb, harness.py setup)";
 
 async function withGame<T>(exe: string | undefined, use: (d: Driver) => Promise<T>): Promise<T> {
   const d = await Driver.start(exe ? { exe } : {});
@@ -77,17 +83,26 @@ async function withGame<T>(exe: string | undefined, use: (d: Driver) => Promise<
   }
 }
 
-/** The game's own screenshots in the Wine prefix (Documents/Robot/…), by modification time. */
-function gameScreenshots(): Map<string, number> {
-  const users = fileURLToPath(new URL(".wine/prefix/drive_c/users", ROOT));
+/**
+ * The game's own screenshots, by modification time: in the Wine prefix (Documents/Robot/…),
+ * or natively below the game's directory (it has no Documents folder there).
+ */
+function gameScreenshots(d: Driver): Map<string, number> {
   const found = new Map<string, number>();
-  for (const user of existsSync(users) ? readdirSync(users) : []) {
-    const dir = join(users, user, "Documents", "Robot");
-    if (!existsSync(dir)) continue;
+  const collect = (dir: string) => {
+    if (!existsSync(dir)) return;
     for (const file of readdirSync(dir, { recursive: true, encoding: "utf8" })) {
       const path = join(dir, file);
       if (file.endsWith(".png")) found.set(path, statSync(path).mtimeMs);
     }
+  };
+  if (d.gameDir) {
+    collect(d.gameDir);
+    return found;
+  }
+  const users = fileURLToPath(new URL(".wine/prefix/drive_c/users", ROOT));
+  for (const user of existsSync(users) ? readdirSync(users) : []) {
+    collect(join(users, user, "Documents", "Robot"));
   }
   return found;
 }
@@ -408,14 +423,14 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
       await d.hold("right", 30);
       await d.run(20);
       const frame = await d.frame();
-      const before = gameScreenshots();
+      const before = gameScreenshots(d);
       await d.key("control", true);
       await d.key("alt", true);
       await d.hold("P".charCodeAt(0), 5);
       await d.key("alt", false);
       await d.key("control", false);
       await d.run(50);
-      const saved = [...gameScreenshots()].filter(([file, time]) => before.get(file) !== time);
+      const saved = [...gameScreenshots(d)].filter(([file, time]) => before.get(file) !== time);
       assert.equal(saved.length, 1, "the game saved one screenshot");
       const [file] = saved[0] ?? [""];
       const shot = readIndexedPng(file);

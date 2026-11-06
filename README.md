@@ -113,6 +113,13 @@ display and prints `ready PORT DISPLAY TOKEN` once the game waits for its first 
 `Driver.start()` does that and connects, `Driver.connect(PORT)` connects to a game
 served by hand (the protocol is one text line per command, see `proxy.c`).
 
+Without Wine, the native Linux wrapper (below) speaks the same protocol:
+`tools/linux/robot --serve GAME.exe` prints `ready PORT - TOKEN`, and
+`Driver.start({ native: true })` (or `ROBOT_NATIVE=1`) runs it with a copy of the exe in a
+fresh directory:
+
+    pnpm wrapper && pnpm test:game:native   the same tests on the native wrapper
+
 `python3 tools/wine/harness.py play --console` runs the game to be played with the
 proxy holding the mutex that turns on the game's command console: type e.g.
 `SCENE 42 20 14`, `TAKE GOLD` or `ROBOTOFF` and Return (the commands are in STATUS.md;
@@ -195,6 +202,7 @@ caller's address.
 - `pnpm test` – tests only (Vitest; `pnpm exec vitest` to watch)
 - `pnpm typecheck`, `pnpm lint` – the type check and ESLint alone
 - `pnpm test:game` – the tests that run the game (Wine, proxy; see above)
+- `pnpm test:game:native` – the same tests on the native Linux wrapper (`pnpm wrapper`)
 - `pnpm proxy` – build the proxy DLL (see above)
 - `pnpm wrapper` – build the native Linux wrapper (see above)
 - `pnpm test:without-game` – the tests that need no game data (what CI runs)

@@ -1,6 +1,10 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, type ChildProcessByStdio, spawn } from "node:child_process";
+import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { type Socket, connect } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
+import type { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import { type Rgb, SCREEN_WIDTH } from "@robot/formats";
@@ -16,9 +20,27 @@ import { type IndexedImage, writeIndexedPng } from "./png.ts";
  * keys pressed between steps reach the game before the next one. Runs are repeatable.
  * Every answer comes when the game is idle again (the last step drawn and presented,
  * the keys sent so far handled), so reads never see a half-drawn frame.
+ *
+ * The native Linux wrapper (tools/linux, `pnpm wrapper`) speaks the same protocol
+ * (`robot --serve`): `Driver.start({ native: true })`, or ROBOT_NATIVE=1, runs the game
+ * with it instead of Wine, a copy of the exe in a fresh directory with its own settings.
  */
 
 const HARNESS = fileURLToPath(new URL("tools/wine/harness.py", ROOT));
+const WRAPPER = fileURLToPath(new URL("tools/linux/robot", ROOT));
+const EXE = fileURLToPath(new URL("reference/GameOfRobot.exe", ROOT));
+
+/** Whether `Driver.start` runs the native wrapper rather than Wine by default. */
+export const NATIVE = process.env["ROBOT_NATIVE"] === "1";
+
+export interface StartOptions {
+  /** The exe to run (default reference/GameOfRobot.exe). */
+  exe?: string;
+  /** The port to serve on (default a free one). */
+  port?: number;
+  /** The native wrapper instead of Wine (default: ROBOT_NATIVE=1). */
+  native?: boolean;
+}
 
 /** Windows virtual-key codes of keys the game uses (letters and digits: their ASCII codes). */
 export const VK = {
@@ -62,6 +84,8 @@ export interface HeroState {
   y: number;
 }
 
+/** The picture's size in the window (scaled 640 × 348, see `click`). */
+const PICTURE_SIZE = 0x474db4;
 const ROOM = 0x4fe2fc;
 const HERO = 0x53e9ac;
 /** The score, kept obfuscated: ~[+4] ^ [+0] ^ 0x7895321e (0x42b600). */
@@ -88,6 +112,11 @@ export class Driver {
   private readonly socket: Socket;
   private readonly server: ChildProcess | undefined;
   private readonly serverExit: Promise<void>;
+  /**
+   * The directory the game runs in (its C:\, where it keeps saves and screenshots) when
+   * this driver started the native wrapper; removed on `close`.
+   */
+  gameDir: string | undefined;
 
   private constructor(socket: Socket, server: ChildProcess | undefined) {
     this.socket = socket;
@@ -117,15 +146,35 @@ export class Driver {
   }
 
   /**
-   * Starts the game with the proxy on a virtual display (needs Wine, Xvfb and the proxy)
-   * on a free port, unless `port` is given.
+   * Starts the game with the proxy on a virtual display (needs Wine, Xvfb and the proxy),
+   * or natively with the wrapper (needs `pnpm wrapper`), on a free port unless `port` is
+   * given.
    */
-  static async start(options: { exe?: string; port?: number } = {}): Promise<Driver> {
-    const args = ["-I", HARNESS, "serve"];
-    if (options.port !== undefined) args.push("--port", String(options.port));
-    if (options.exe) args.push("--exe", options.exe);
-    // stdin a pipe: serve ends with the game when it closes, also if this process dies
-    const server = spawn("python3", args, { stdio: ["pipe", "pipe", "inherit"] });
+  static async start(options: StartOptions = {}): Promise<Driver> {
+    let server: ChildProcessByStdio<Writable, Readable, null>;
+    let gameDir: string | undefined;
+    if (options.native ?? NATIVE) {
+      gameDir = mkdtempSync(join(tmpdir(), "robot-native-"));
+      const exe = join(gameDir, "GameOfRobot.exe");
+      copyFileSync(options.exe ?? EXE, exe);
+      const args = ["--serve"];
+      if (options.port !== undefined) args.push("--port", String(options.port));
+      args.push(exe);
+      // stdin a pipe: the wrapper ends when it closes, also if this process dies
+      server = spawn(WRAPPER, args, {
+        stdio: ["pipe", "pipe", "inherit"],
+        env: { ...process.env, ROBOT_REGISTRY: join(gameDir, "registry.reg") },
+      });
+    } else {
+      const args = ["-I", HARNESS, "serve"];
+      if (options.port !== undefined) args.push("--port", String(options.port));
+      if (options.exe) args.push("--exe", options.exe);
+      // stdin a pipe: serve ends with the game when it closes, also if this process dies
+      server = spawn("python3", args, { stdio: ["pipe", "pipe", "inherit"] });
+    }
+    const removeGameDir = () => {
+      if (gameDir) rmSync(gameDir, { recursive: true, force: true });
+    };
     const exited = new Promise<void>((resolve) => {
       server.once("exit", () => {
         resolve();
@@ -134,7 +183,9 @@ export class Driver {
     // ready PORT DISPLAY TOKEN
     const ready = new Promise<{ port: number; token: string }>((resolve, reject) => {
       server.on("exit", (code) => {
-        reject(new Error(`harness.py serve ended (${String(code)})`));
+        reject(
+          new Error(`${gameDir ? "robot --serve" : "harness.py serve"} ended (${String(code)})`),
+        );
       });
       createInterface({ input: server.stdout }).on("line", (line) => {
         const [word, port, , token] = line.split(" ");
@@ -143,10 +194,13 @@ export class Driver {
     });
     try {
       const { port, token } = await ready;
-      return await Driver.connect(port, token, server);
+      const driver = await Driver.connect(port, token, server);
+      driver.gameDir = gameDir;
+      return driver;
     } catch (error) {
       server.kill();
       await exited; // its cleanup done, the next start finds no game of this one
+      removeGameDir();
       throw error;
     }
   }
@@ -224,9 +278,18 @@ export class Driver {
     await this.run(after);
   }
 
-  /** A left click at client coordinates of the game window. */
+  /**
+   * A left click at picture coordinates (640 × 348). The game's window shows the picture
+   * scaled by a factor it chooses by the screen's size (Wine's 1024 × 768 desktop: 1 × 1.25,
+   * the native wrapper: 1 × 1); the click goes to the window's coordinates of that point,
+   * by the picture size the game itself uses (0x474db4, 0x474db8).
+   */
   async click(x: number, y: number, after = 50): Promise<void> {
-    await this.command(`mouse ${String(x)} ${String(y)}`);
+    const size = new DataView((await this.peek(PICTURE_SIZE, 8)).buffer);
+    const width = size.getUint32(0, true) || 640;
+    const height = size.getUint32(4, true) || 348;
+    const at = [Math.round((x * width) / 640), Math.round((y * height) / 348)];
+    await this.command(`mouse ${String(at[0])} ${String(at[1])}`);
     await this.command("button left down");
     await this.run(5);
     await this.command("button left up");
@@ -378,7 +441,7 @@ export class Driver {
    */
   async startEpisode(episode: number): Promise<HeroState> {
     await this.until(async () => (await this.status()).tick > 100); // the menu is up
-    await this.click(147, 124 + 51 * episode, 100);
+    await this.click(147, Math.round((124 + 51 * episode) * 0.8), 100); // the episode's button
     for (let presses = 0; presses < 8; presses++) {
       const hero = await this.hero();
       if (hero && (await this.running())) return hero;
@@ -396,5 +459,6 @@ export class Driver {
     this.socket.end();
     this.server?.kill();
     await this.serverExit;
+    if (this.gameDir) rmSync(this.gameDir, { recursive: true, force: true });
   }
 }

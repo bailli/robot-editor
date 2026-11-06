@@ -1642,6 +1642,12 @@ static void WINAPI Sleep(DWORD ms) {
 static void WINAPI GetLocalTime(SYSTEMTIME *st) {
   struct timespec ts;
   struct tm tm;
+  if (driver_active()) { /* the driver's fixed date and its virtual time of day */
+    DWORD ms = clock_ms(), s = ms / 1000;
+    *st = (SYSTEMTIME){2026, 1, 4, 1, (WORD)(s / 3600 % 24), (WORD)(s / 60 % 60), (WORD)(s % 60),
+                       (WORD)(ms % 1000)};
+    return;
+  }
   clock_gettime(CLOCK_REALTIME, &ts);
   time_t secs = ts.tv_sec;
   localtime_r(&secs, &tm);
@@ -1661,6 +1667,10 @@ static BOOL WINAPI QueryPerformanceFrequency(LARGE_INTEGER *f) {
 }
 
 static BOOL WINAPI QueryPerformanceCounter(LARGE_INTEGER *c) {
+  if (driver_active()) { /* virtual: the clock's milliseconds at 1000000 Hz */
+    c->QuadPart = (LONGLONG)clock_ms() * 1000;
+    return TRUE;
+  }
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
   c->QuadPart = (LONGLONG)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;

@@ -103,4 +103,12 @@ void wrapper_setting_set(const char *name, DWORD value);
    Returns its data in the mapped image and its size, or NULL. */
 const void *resource_find(LPCSTR type, LPCSTR name, DWORD *size);
 
+/* The driver protocol (driver.c, `--serve`): a test driver steps the game on a virtual clock. */
+int driver_active(void);
+/* One clock for the whole wrapper: virtual ms in serve mode, else CLOCK_MONOTONIC ms. */
+DWORD clock_ms(void);
+void driver_enable(int port);  /* the command line's --serve [--port N]; before anything else */
+void driver_start(void);       /* once the image is loaded: patch it, listen, say `ready` */
+BOOL driver_async_key(int vk); /* a key or button the driver injected is down */
+
 #endif

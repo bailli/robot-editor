@@ -163,4 +163,8 @@ struct menu {
 
 struct menu *menu_of(HMENU h); /* or NULL */
 
+/* Whether any message (a due timer or a dirty window too) waits for the game's thread:
+   driver.c's idle test. */
+BOOL message_pending(void);
+
 #endif

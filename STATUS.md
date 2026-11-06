@@ -2127,8 +2127,9 @@ for Windows' own UI (headless dialogs, SDL message boxes, the wrapper's shortcut
 **Milestones 1–3 and sound reached** (2026-11-06): the game runs in an SDL window, plays
 and sounds (checked under Xvfb with xdotool: episode chosen by key and by mouse, the game
 started, the hero walked, the accelerators, fullscreen on and off, the shortcuts, the
-dialogs, the screenshot, quitting; the sound recorded with SDL's `disk` driver). Not there
-yet: the driver's protocol.
+dialogs, the screenshot, quitting; the sound recorded with SDL's `disk` driver). **The
+driver's protocol** too: `pnpm test:game:native` passes all 35 game tests without Wine, as
+`pnpm test:game` does under Wine (2026-11-06).
 
 - **Picture:** in a window the game presents with GDI (WM_PAINT's `StretchDIBits`, 640 ×
   348 palette indices), shown scaled; Alt+Enter (command 4007, only once an episode runs)
@@ -2236,9 +2237,34 @@ and, when it is restored from the taskbar while the icon exists, sends the icon'
 callback with WM_LBUTTONDBLCLK: the game shows its window and removes the icon (checked
 under Xvfb with an isolated KWin).
 
-**Next:** the driver's protocol so that `pnpm test:game` can run without Wine. Untested:
-restarting the sound after a changed `SampleRate`/`DisableOpl` (the release path). The
-player-name prompt is the game's own (drawn, not a dialog).
+**The driver** (`driver.c`, `robot --serve [--port N] GAME.exe`, used by
+`Driver.start({ native: true })` or `ROBOT_NATIVE=1`): proxy.c's protocol and behaviour,
+answered by the wrapper itself. The main loop's call at 0x405bde and the DirectDraw present
+calls (0x402379, 0x437270) are redirected as by the proxy; one clock (`clock_ms`) gives
+timeGetTime, QueryPerformanceCounter, GetLocalTime and the USER32 timers their virtual
+time (timers keep their cadence, as the proxy's); `peek`/`poke` go through
+`process_vm_readv`/`writev`, so bad addresses answer an error; no sound and no window
+(`ROBOT_SERVE_WINDOW` shows one), the keyboard state follows a key message when the game
+takes it, typed letters become WM_CHAR in `TranslateMessage` (SDL's text input is absent).
+`Driver.start` copies the exe into a fresh directory with its own settings file and
+removes it on `close` (`gameDir`: there the game keeps its screenshots).
+
+- **The window's scale** is the game's choice when `WndScaleX`/`WndScaleY` are not set:
+  the table at 0x47474c lists screen sizes with scales in 1/256 (X, Y; 640 × 400 at 1 × 1,
+  800 × 480 at 1 × 1.25, 1280 × 768 at 1.5 × 2, …) and 0x4034xx takes the largest that fits
+  the screen; 0x401000 makes the picture's size in the window from it (0x474db4 = scale X ×
+  640 / 256, 0x474db8 = scale Y × 348 / 256), and the game divides mouse positions by it.
+  Under the harness's 1024 × 768 Wine desktop that is 640 × 435, in the wrapper 640 × 348:
+  `Driver.click` takes picture coordinates and converts them with 0x474db4/0x474db8.
+- **Sections are mapped as Windows does:** the raw data up to the virtual size rounded up
+  to whole pages. Mods place code after the used part of `.text` (e.g. the room-255 ending
+  check jumps to 0x465e60, past `VirtualSize` 0x64e55); copying only `VirtualSize` bytes
+  left zeros there.
+
+**Next:** untested: restarting the sound after a changed `SampleRate`/`DisableOpl` (the
+release path). No SEH: a hardware fault in the game ends the wrapper (Windows would run
+the game's exception handlers; none was needed so far). The player-name prompt is the
+game's own (drawn, not a dialog).
 
 ## Open items and leads
 

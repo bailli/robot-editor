@@ -86,8 +86,8 @@ int dsound_audio_available(void);
 int dsound_audio_available(void) {
   if (!audio_probed) {
     audio_probed = 1;
-    audio_ok = SDL_InitSubSystem(SDL_INIT_AUDIO) == 0;
-    if (!audio_ok) say("sound: SDL audio is not available (%s): silent", SDL_GetError());
+    audio_ok = !driver_active() && SDL_InitSubSystem(SDL_INIT_AUDIO) == 0; /* silent under a driver */
+    if (!audio_ok && !driver_active()) say("sound: SDL audio is not available (%s): silent", SDL_GetError());
   }
   return audio_ok;
 }

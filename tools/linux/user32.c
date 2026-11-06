@@ -33,11 +33,6 @@
 BYTE key_state[256];
 POINT mouse_client;
 
-static DWORD now_ms(void) {
-  struct timespec t;
-  clock_gettime(CLOCK_MONOTONIC, &t);
-  return (DWORD)((uint64_t)t.tv_sec * 1000 + (uint64_t)t.tv_nsec / 1000000);
-}
 
 /* ---- Classes ---- */
 
@@ -541,7 +536,7 @@ static HBRUSH WINAPI GetSysColorBrush(INT index) {
 /* ---- Keyboard and mouse state ---- */
 
 static SHORT WINAPI GetAsyncKeyState(INT vk) {
-  return key_state[vk & 0xff] & 0x80 ? (SHORT)0x8000 : 0;
+  return key_state[vk & 0xff] & 0x80 || driver_async_key(vk & 0xff) ? (SHORT)0x8000 : 0;
 }
 
 static SHORT WINAPI GetKeyState(INT vk) {
@@ -782,7 +777,7 @@ static UINT_PTR WINAPI SetTimer(HWND hwnd, UINT_PTR id, UINT interval, void *pro
   timers[i].id = id;
   timers[i].interval = interval < 10 ? 10 : interval;
   timers[i].proc = proc;
-  timers[i].due = now_ms() + timers[i].interval;
+  timers[i].due = clock_ms() + timers[i].interval;
   pthread_mutex_unlock(&queue_lock);
   trace("SetTimer %u every %u ms", (unsigned)id, interval);
   return id;
@@ -791,14 +786,17 @@ static UINT_PTR WINAPI SetTimer(HWND hwnd, UINT_PTR id, UINT interval, void *pro
 /* A due timer's WM_TIMER, or a dirty window's WM_PAINT, when the queue has nothing else;
    call with queue_lock held. Sets *wait_ms to the time to the next timer. */
 static BOOL synthesize(MSG *out, HWND hwnd, UINT first, UINT last, BOOL remove, DWORD *wait_ms) {
-  DWORD now = now_ms();
+  DWORD now = clock_ms();
   *wait_ms = 0xffffffff;
   for (int i = 0; i < timer_count; i++) {
     MSG m = {timers[i].hwnd, WM_TIMER, timers[i].id, (LPARAM)(uintptr_t)timers[i].proc, now,
              {0, 0}};
     if (!matches(&m, hwnd, first, last)) continue;
     if ((int32_t)(now - timers[i].due) >= 0) {
-      if (remove) timers[i].due = now + timers[i].interval;
+      if (remove && driver_active()) /* keeps its cadence on the virtual clock, as the proxy */
+        while ((int32_t)(now - timers[i].due) >= 0) timers[i].due += timers[i].interval;
+      else if (remove)
+        timers[i].due = now + timers[i].interval;
       *out = m;
       return TRUE;
     }
@@ -823,7 +821,7 @@ BOOL post_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     return FALSE;
   }
   queue[(queue_head + queue_count++) % QUEUE_SIZE] =
-      (MSG){hwnd, msg, wparam, lparam, now_ms(), {mouse_client.x, mouse_client.y}};
+      (MSG){hwnd, msg, wparam, lparam, clock_ms(), {mouse_client.x, mouse_client.y}};
   pthread_mutex_unlock(&queue_lock);
   return TRUE;
 }
@@ -854,7 +852,7 @@ static BOOL take(MSG *out, HWND hwnd, UINT first, UINT last, BOOL remove) {
     return TRUE;
   }
   if (quit_posted && (!first || (WM_QUIT >= first && WM_QUIT <= last))) {
-    *out = (MSG){NULL, WM_QUIT, (WPARAM)quit_code, 0, now_ms(), {0, 0}};
+    *out = (MSG){NULL, WM_QUIT, (WPARAM)quit_code, 0, clock_ms(), {0, 0}};
     if (remove) quit_posted = 0;
     return TRUE;
   }
@@ -863,6 +861,20 @@ static BOOL take(MSG *out, HWND hwnd, UINT first, UINT last, BOOL remove) {
 
 #define PM_REMOVE 1
 
+/* Under the driver a key message follows Windows: the thread's keyboard state (GetKeyState,
+   the accelerators, TranslateMessage) takes the key when the game takes the message, not
+   when it was posted; GetAsyncKeyState has it at once (driver.c). Without a driver the
+   state is SDL's (sdl.c) and nothing is done here. */
+static void key_taken(const MSG *m) {
+  if (!driver_active()) return;
+  UINT t = m->message;
+  if (t != WM_KEYDOWN && t != WM_KEYUP && t != WM_SYSKEYDOWN && t != WM_SYSKEYUP) return;
+  BYTE down = t == WM_KEYDOWN || t == WM_SYSKEYDOWN ? 0x80 : 0;
+  UINT vk = m->wParam & 0xff;
+  key_state[vk] = (BYTE)(down | (key_state[vk] & 1));
+  if (vk >= VK_SHIFT && vk <= VK_MENU) key_state[0xa0 + 2 * (vk - VK_SHIFT)] = down; /* left */
+}
+
 static BOOL WINAPI PeekMessageA(MSG *msg, HWND hwnd, UINT first, UINT last, UINT flags) {
   DWORD wait_ms;
   screen_poll();
@@ -870,7 +882,14 @@ static BOOL WINAPI PeekMessageA(MSG *msg, HWND hwnd, UINT first, UINT last, UINT
   BOOL got = take(msg, hwnd, first, last, flags & PM_REMOVE) ||
              synthesize(msg, hwnd, first, last, flags & PM_REMOVE, &wait_ms);
   pthread_mutex_unlock(&queue_lock);
+  if (got && (flags & PM_REMOVE)) key_taken(msg);
   return got;
+}
+
+/* For the driver (driver.c): whether a message waits, whatever its kind. */
+BOOL message_pending(void) {
+  MSG m;
+  return PeekMessageA(&m, NULL, 0, 0, 0);
 }
 
 static BOOL WINAPI GetMessageA(MSG *msg, HWND hwnd, UINT first, UINT last) {
@@ -885,7 +904,27 @@ static BOOL WINAPI GetMessageA(MSG *msg, HWND hwnd, UINT first, UINT last) {
     /* Input arrives as SDL events; other threads' posts are seen within 10 ms. */
     screen_wait(wait_ms < 10 ? (int)wait_ms : 10);
   }
+  key_taken(msg);
   return msg->message != WM_QUIT;
+}
+
+/* The character of a printable key on a US keyboard, from the thread's keyboard state; -1 for
+   none. Only under the driver, whose keys come as messages: otherwise SDL's text input gives
+   the characters (sdl.c). */
+static int typed_char(UINT vk) {
+  BOOL shift = (key_state[VK_SHIFT] & 0x80) != 0;
+  if (key_state[VK_CONTROL] & 0x80 || key_state[VK_MENU] & 0x80) return -1;
+  if (vk >= 'A' && vk <= 'Z') return (int)(shift ? vk : vk + 32);
+  if (vk >= '0' && vk <= '9') return shift ? ")!@#$%^&*("[vk - '0'] : (int)vk;
+  if (vk >= 0x60 && vk <= 0x69) return (int)('0' + vk - 0x60);
+  if (vk == 0x20) return ' ';
+  static const char plain[] = ";=,-./`", shifted[] = ":+<_>?~";
+  static const BYTE plain_vk[] = {0xba, 0xbb, 0xbc, 0xbd, 0xbe, 0xbf, 0xc0};
+  for (int i = 0; i < 7; i++)
+    if (vk == plain_vk[i]) return shift ? shifted[i] : plain[i];
+  static const char brackets[] = "[\\]'", brackets_shifted[] = "{|}\"";
+  if (vk >= 0xdb && vk <= 0xde) return shift ? brackets_shifted[vk - 0xdb] : brackets[vk - 0xdb];
+  return -1;
 }
 
 /* WM_CHAR for the keys whose character SDL's text input does not give (it gives the printable
@@ -896,6 +935,7 @@ static BOOL WINAPI TranslateMessage(const MSG *msg) {
     int c = -1;
     if (vk == VK_BACK || vk == VK_TAB || vk == VK_RETURN || vk == VK_ESCAPE) c = (int)vk;
     else if (key_state[VK_CONTROL] & 0x80 && vk >= 'A' && vk <= 'Z') c = (int)(vk - 'A' + 1);
+    else if (driver_active()) c = typed_char(vk);
     if (c < 0) return FALSE;
     post_message(msg->hwnd, WM_CHAR, (WPARAM)c, msg->lParam);
     return TRUE;
@@ -910,7 +950,7 @@ static BOOL WINAPI TranslateMessage(const MSG *msg) {
 static LRESULT WINAPI DispatchMessageA(const MSG *msg) {
   if (msg->message == WM_TIMER && msg->lParam) {
     typedef void(WINAPI * timerproc)(HWND, UINT, UINT_PTR, DWORD);
-    ((timerproc)(uintptr_t)msg->lParam)(msg->hwnd, WM_TIMER, msg->wParam, now_ms());
+    ((timerproc)(uintptr_t)msg->lParam)(msg->hwnd, WM_TIMER, msg->wParam, clock_ms());
     return 0;
   }
   return send_message(msg->hwnd, msg->message, msg->wParam, msg->lParam);
