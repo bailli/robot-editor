@@ -268,50 +268,6 @@ export function freeTileTypes(exe: PeImage, episode: number): number[] {
 }
 
 /**
- * Types with a class the episode never uses, which a copy may take where the free types
- * do not suffice (II has none): [type, its class object]. Checked by hand (2026-11-06):
- * no room, record, script or dealer of the episode uses them, their descriptions are
- * empty and no code places, takes or compares their classes (84, 132, 133, 52). Other
- * types II's rooms leave unused are not: the code places them (the wizard's door, the
- * fireman, the beam), draws with them (class 135, the hero-state icons) or compares
- * them (the hero's doubles).
- */
-export const REUSABLE_TYPES: ReadonlyMap<
-  number,
-  readonly (readonly [type: number, object: number])[]
-> = new Map([
-  [
-    2,
-    [
-      [0x4b, 0x4c7730],
-      [0x75, 0x4c782c],
-      [0x76, 0x4c77a4],
-      [0x7e, 0x4c7764],
-    ],
-  ],
-]);
-
-/**
- * The types a copy can go to: the free ones (freeTileTypes), then the episode's
- * REUSABLE_TYPES that still hold their class.
- */
-export function spareTileTypes(exe: PeImage, episode: number): number[] {
-  const table = readClassTable(exe, episode);
-  const reusable = (REUSABLE_TYPES.get(episode) ?? []).filter(
-    ([type, object]) => table[type]?.object === object,
-  );
-  return [
-    ...table.flatMap((entry, type) => (entry.object === EMPTY_CLASS_OBJECT ? [type] : [])),
-    ...reusable.map(([type]) => type),
-  ];
-}
-
-/** Whether `type` is one of the episode's REUSABLE_TYPES (a class it never uses). */
-export function isReusableType(episode: number, type: number): boolean {
-  return (REUSABLE_TYPES.get(episode) ?? []).some(([t]) => t === type);
-}
-
-/**
  * A copy of the exe whose class table for `episode` holds `entries` at the given tile
  * types (null: unused, as the game's unused entries). Any class object works in any
  * episode, e.g. readClassTable(exe, 2)[0x51] puts episode II's oracle into another; it

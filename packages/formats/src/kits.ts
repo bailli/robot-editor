@@ -1,4 +1,4 @@
-import { classTexts, isReusableType, spareTileTypes } from "./classes.ts";
+import { classTexts, freeTileTypes } from "./classes.ts";
 import { WOODS_CUT_THROUGH, readEpisodeFlags } from "./episode-flags.ts";
 import { EVENT_TEXT, FIRST_EVENT_ENTRY, readEventTable, spareEventEntries } from "./events.ts";
 import { type Game, eventTextsId, textsId } from "./game.ts";
@@ -217,8 +217,6 @@ export interface KitPlan {
   }[];
   /** Entries of quiet events whose text (1800 + n) is removed: no spare entry was left. */
   silenced: number[];
-  /** Copied types that replace a class the episode never uses (REUSABLE_TYPES). */
-  reused: number[];
   /** The episode's flags with the kit's (Kit.flags), where they lack some. */
   flags?: number;
   /** Why the kit cannot be added, if it cannot. */
@@ -229,10 +227,7 @@ export interface KitPlan {
 export interface KitOptions {
   /** The exe the types, texts and events come from (default `game`). */
   source?: Game;
-  /**
-   * Types a copy can go to (default: no class, or a class the episode never uses
-   * (REUSABLE_TYPES), and no room uses them); reusable ones are taken last.
-   */
+  /** Types a copy can go to (default: no class and no room uses them). */
   free?: readonly number[];
   /** Event entries a copy can go to (default spareEventEntries). */
   spare?: readonly number[];
@@ -266,20 +261,15 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     const id = classes.get(type)?.id ?? 0;
     (here.has(id) ? present : wanted).push(type);
   }
-  const spare = options.free ?? unusedFreeTypes(game, episode);
-  // the free types first, the same number where it is free; then classes never used
-  const free = spare.filter((t) => !isReusableType(episode, t));
+  const free = options.free ?? unusedFreeTypes(game, episode);
   const same = new Set(wanted.filter((t) => free.includes(t)));
-  const rest = [
-    ...free.filter((t) => !same.has(t)),
-    ...spare.filter((t) => isReusableType(episode, t)),
-  ];
+  const rest = free.filter((t) => !same.has(t));
   const types: [number, number][] = [];
   const problems: string[] = [];
   for (const of of wanted) {
     const to = same.has(of) ? of : rest.shift();
     if (to === undefined) {
-      problems.push(`${wanted.length} free tile types needed, ${spare.length} left`);
+      problems.push(`${wanted.length} free tile types needed, ${free.length} left`);
       break;
     }
     types.push([to, of]);
@@ -375,7 +365,6 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     textCopies,
     moved,
     silenced,
-    reused: types.flatMap(([to]) => (isReusableType(episode, to) ? [to] : [])),
   };
   if (flags !== undefined) plan.flags = flags;
   if (problems.length > 0) plan.problem = problems.join("; ");
@@ -383,9 +372,8 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
 }
 
 /**
- * Types without a class, or with one the episode never uses (spareTileTypes), that no
- * room of the episode uses: in its maps or in the cells its logic records hold (an
- * oracle's object, what a teleporter or a circuit node shows).
+ * Types without a class that no room of the episode uses: in its maps or in the cells its
+ * logic records hold (an oracle's object, what a teleporter or a circuit node shows).
  */
 function unusedFreeTypes(game: Game, episode: number): number[] {
   const used = new Set<number>();
@@ -395,7 +383,7 @@ function unusedFreeTypes(game: Game, episode: number): number[] {
       for (const at of recordCellOffsets(data[0])) used.add(data[at]);
     }
   }
-  return spareTileTypes(game.image, episode).filter(
+  return freeTileTypes(game.image, episode).filter(
     (t) => t !== 0 && t !== LOGIC_CELL && !used.has(t),
   );
 }

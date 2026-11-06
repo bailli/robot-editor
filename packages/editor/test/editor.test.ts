@@ -959,8 +959,7 @@ describe("Editor and tile types from other episodes", () => {
 
   test("refused: no free type, no class there, a copy of a copy, a type rooms use", () => {
     const editor = new Editor(game);
-    // II has no type without a class, only those of classes it never uses
-    expect(editor.freeTileTypes(2)).toEqual([0x4b, 0x75, 0x76, 0x7e]);
+    expect(editor.freeTileTypes(2)).toEqual([]);
     expect(() => editor.setTileType(2, 43, 0x50, { from: 1, of: 0x42 })).toThrow(/not free/);
     expect(() => editor.setTileType(3, 41, 0x59, { from: 3, of: 0x42 })).toThrow(/another/);
     expect(() => editor.setTileType(3, 41, 0x59, { from: 0, of: 0x50 })).toThrow(/no class/);
@@ -1412,7 +1411,7 @@ describe("Editor and kits", () => {
   const ivRoom = readEpisodeStart(game.image, 4).room;
   const kit = (key: string) => defined(KITS.find((k) => k.key === key));
 
-  test("axe & bridges in IV: the flag with the kit in one undo step; II reuses types", () => {
+  test("axe & bridges in IV: the flag with the kit in one undo step; not in II", () => {
     const editor = new Editor(game);
     const axe = kit("axe");
     const flags = editor.episodeFlags(4);
@@ -1428,15 +1427,8 @@ describe("Editor and kits", () => {
     expect(editor.tileTypeCopies(4)).toEqual([]);
     editor.redo();
     expect(editor.episodeFlags(4)).toBe((flags | 0x20000) >>> 0);
-    // II: its unused classes' types make room; the copy form offers them last
-    expect(editor.freeTileTypes(2)).toEqual([0x4b, 0x75, 0x76, 0x7e]);
-    editor.addKit(2, 15, axe);
-    expect(editor.tileTypeCopies(2).map((c) => [c.to, c.of])).toEqual([
-      [0x4b, 0x61],
-      [0x75, 0x62],
-      [0x76, 0x2b],
-      [0x7e, 0x6e],
-    ]);
+    // II has no free type: the kit cannot be added there
+    expect(() => editor.addKit(2, 15, axe)).toThrow(/free tile types needed/);
   });
 
   test("oracles in IV: types, texts, chosen events and their texts in one undo step", () => {

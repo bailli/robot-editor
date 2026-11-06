@@ -58,6 +58,7 @@ import {
   eventTableLength,
   eventTextsId,
   exitMode,
+  freeTileTypes,
   kitChanges,
   kitExample,
   movedRecord,
@@ -89,7 +90,6 @@ import {
   scriptPlacedObjects,
   sha256,
   spareEventEntries,
-  spareTileTypes,
   textChanges,
   textEntryProblem,
   textsId,
@@ -611,14 +611,13 @@ export class Editor {
   }
 
   /**
-   * The types a copy can go to: those without a class in the exe as loaded, then those
-   * whose class the episode never uses (REUSABLE_TYPES, II's), that no room of the
-   * episode uses, and those that are copies already (a copy there replaces it).
+   * The types a copy can go to: those without a class in the exe as loaded that no room
+   * of the episode uses, and those that are copies already (a copy there replaces it).
    */
   freeTileTypes(episode: number): number[] {
     const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
     const used = new Set(this.rooms(episode).flatMap((room) => [...roomTypes(room)]));
-    return spareTileTypes(this.pristine.image, episode).filter(
+    return freeTileTypes(this.pristine.image, episode).filter(
       (type) => copied.has(type) || (!used.has(type) && !FIXED_TYPES.includes(type)),
     );
   }

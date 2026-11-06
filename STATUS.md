@@ -1569,9 +1569,7 @@ Supported:
   and III have oracles, I and II circuits: "has … already"), each at the same number
   where free, else the first free type no copy has (free: no class, and no room's map
   or record cells, `recordCellOffsets`, hold it; `Editor.freeTileTypes` and removing a
-  copy look at both too; where none is left, II's types of classes it never uses,
-  `REUSABLE_TYPES`, `spareTileTypes`, last, shown as "Replaces classes … never uses"
-  and in the copy form); the texts the kit's classes show
+  copy look at both too); the texts the kit's classes show
   that the episode lacks (`classTexts`, for classes it does not have by itself, so a
   type copied by hand still gets them); the events its table lacks, in spare entries
   the mod does not set yet (`Editor.kitPlan`). Where they do not all fit (IV: four
@@ -1855,13 +1853,17 @@ stands, decided 2026-10-27; details in the sections named.
     with states 6–9 (low nibble) get an animation task. Water's step handler shows text
     230 only while NoSwim (0x4fe3c4) is set, or under III's flag 0x4000000 without
     state bit 0x10; the kit copies 230 for scripts that set NoSwim.
-  - **II's free types**: II has no type without a class; the kits and the copy form
-    take its types of classes it never uses (`REUSABLE_TYPES`: 0x4b class 84, 0x75
-    class 132, 0x76 class 133, 0x7e class 52; empty descriptions, in no room, record,
-    script or dealer list, no code places, takes or compares them), so axe & bridges
-    goes to II too (its events without points: II has no spare entry). Other types
-    II's rooms do not use are referenced by code: class 135 (the hero-state icons),
-    the wizard's door, the fireman, the beam, the hero's doubles (3–5), class 13.
+  - **II has no free type**, so no kit with types to copy goes to II (axe & bridges
+    would need 4). The types no room of II uses are the game's own pictures, not free:
+    0x4b (class 84) the dealer's pointing hand (read at 0x448759 in the dealer's code),
+    0x75 (class 132) the red border of a box (states 3 and 7 at 0x43ec93, 0x44005d), 0x76
+    (class 133) key caps (Pos1, Bild↑, End, Bild↓, the arrows), 0x7e (class 52) a pair
+    of eyes (4 frames in I and II, none elsewhere); for the last two no code or text
+    naming them was found yet (the user noticed them; a fallback reusing all four was
+    taken out again, 2026-11-06). Others are referenced by code: class 135 (the
+    hero-state icons), the wizard's door, the fireman, the beam, the hero's doubles
+    (3–5), class 13. Open: room for copies in II (replacing a class of II's that a fan
+    episode does not need, chosen by the author).
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,

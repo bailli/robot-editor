@@ -66,7 +66,7 @@ export class KitsView {
       element(
         "p",
         "hint",
-        "A kit copies what a feature of another episode needs in one undo step: its tile types (to free types; in II, which has none, to types of classes it never uses), the episode flags it needs, the texts its classes show, the events its code raises (to entries the game never uses) and the pieces of music their sounds need. Kits share the spare entries (IV has four: oracles and circuits together). The parts show below, each removable on its own.",
+        "A kit copies what a feature of another episode needs in one undo step: its tile types (to free types), the episode flags it needs, the texts its classes show, the events its code raises (to entries the game never uses) and the pieces of music their sounds need. Kits share the spare entries (IV has four: oracles and circuits together). The parts show below, each removable on its own.",
       ),
     ];
   }
@@ -116,14 +116,6 @@ export class KitsView {
         `Tile types: ${types.length > 0 ? types.join(", ") : "none to copy"}${present.length > 0 ? ` (has: ${present.join(", ")})` : ""}`,
       ),
     );
-    if (plan.reused.length > 0) {
-      box.append(
-        line(
-          "reused",
-          `Replaces classes ${name(episode)} never uses: ${plan.reused.map(hex2).join(", ")} (no free type left)`,
-        ),
-      );
-    }
     if (plan.texts.length > 0) {
       // the kit's own texts (Kit.texts) say when the game shows them
       const own = plan.texts.filter((n) => kit.texts?.includes(n));

@@ -32,7 +32,6 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
     textCopies: [],
     moved: [],
     silenced: [],
-    reused: [],
   });
   // II and III have them
   expect(planKit(game, 3, oracles)).toMatchObject({ types: [], present: [0x50, 0x51] });
@@ -182,11 +181,9 @@ test("goal: Junior's, its text moved to 1700 (a code patch); event 298 without a
     { resource: 1011, from: 1011, entries: [[1700, 994]] },
     { resource: 1111, from: 1011, entries: [[1700, 994]] },
   ]);
-  // II has no spare entry: its text 1970 would go; it has no free type either, so the
-  // goal takes the first of the types whose class II never uses
+  // II has no spare entry: its text 1970 would go (II has no free type either)
   const ii = planKit(game, 2, goal);
-  expect(ii).toMatchObject({ moved: [], silenced: [170], types: [[0x4b, 0x32]], reused: [0x4b] });
-  expect(ii.problem).toBeUndefined();
+  expect(ii).toMatchObject({ moved: [], silenced: [170], problem: /free tile types/ });
   expect(kitChanges(game, 2, goal, ii).texts).toEqual([
     { resource: 1210, entry: 1970, variants: null },
   ]);
@@ -252,20 +249,10 @@ test("axe & bridges: tools, timber, bridge; the timber's text moved; flag 0x2000
       { resource: 1310, from: 1310, entries: [[1701, 994]] },
       { resource: 1410, from: 1310, entries: [[1701, 994]] },
     ],
-    reused: [],
     flags: 0x22312ccd | 0x20000,
   });
-  // II has no free type: the classes it never uses make room; no spare entry
-  expect(planKit(game, 2, axe)).toMatchObject({
-    types: [
-      [0x4b, 0x61],
-      [0x75, 0x62],
-      [0x76, 0x2b],
-      [0x7e, 0x6e],
-    ],
-    reused: [0x4b, 0x75, 0x76, 0x7e],
-    without: [335, 331],
-  });
+  // II has no free type (its types without rooms are the game's own pictures)
+  expect(planKit(game, 2, axe).problem).toMatch(/4 free tile types needed, 0 left/);
   // Junior gets III's woods and river too
   expect(planKit(game, 0, axe).types.map(([, of]) => of)).toEqual([
     0x61, 0x62, 0x2b, 0x6e, 0x4c, 0x12,
