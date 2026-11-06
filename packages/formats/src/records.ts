@@ -1,7 +1,7 @@
 import { ACTOR_CLASS_NAMES, actorKindClass, recordActorKind } from "./actors.ts";
 import type { EpisodeClasses } from "./classes.ts";
 import { type PeImage, readVa } from "./pe.ts";
-import type { LogicRecord } from "./scene.ts";
+import { type LogicRecord, ROOM_HEIGHT, ROOM_WIDTH } from "./scene.ts";
 
 /**
  * What logic records do (the 10 data bytes; data[0] is the type). A logic cell shows the
@@ -130,25 +130,32 @@ export interface RoomCell {
  * and 5 while byte 5 is set; an oracle's or teleporter's target, offset 4 room | x << 10
  * and byte 6, while it is in room `from.room`) are moved by `to` where they lie in the
  * area `from` (the cells w × h from (x, y) of room `from.room`): to.x - from.x across,
- * to.y - from.y down, into room `to.room`. Positions outside the area stay.
+ * to.y - from.y down, into room `to.room`. Positions outside the area stay, as do those
+ * that would leave the room (the cells pasted there are dropped too) or, for stairs, land
+ * on row 0 (byte 5 unset). Throws a RangeError for a room the 10 bits cannot hold.
  */
 export function movedRecord(
   data: Uint8Array,
   from: RoomCell & { w: number; h: number },
   to: RoomCell,
 ): Uint8Array {
+  if (!Number.isInteger(to.room) || to.room < 0 || to.room > 0x3ff)
+    throw new RangeError(`room ${to.room}: a record holds rooms 0-1023`);
   const out = data.slice();
   const inside = (x: number, y: number) =>
     x >= from.x && y >= from.y && x < from.x + from.w && y < from.y + from.h;
   const [dx, dy] = [to.x - from.x, to.y - from.y];
+  const inRoom = (x: number, y: number) => x >= 0 && y >= 0 && x < ROOM_WIDTH && y < ROOM_HEIGHT;
   const type = out[0];
   if (type === 11 && out[5] && inside(out[4], out[5])) {
-    out[4] = out[4] + dx;
-    out[5] = out[5] + dy;
+    if (inRoom(out[4] + dx, out[5] + dy) && out[5] + dy > 0) {
+      out[4] = out[4] + dx;
+      out[5] = out[5] + dy;
+    }
   } else if (type === 12 || type === 13) {
     const target = out[4] | (out[5] << 8);
     const [room, x, y] = [target & 0x3ff, target >> 10, out[6]];
-    if (room === from.room && inside(x, y)) {
+    if (room === from.room && inside(x, y) && inRoom(x + dx, y + dy)) {
       const moved = to.room | ((x + dx) << 10);
       out[4] = moved & 0xff;
       out[5] = moved >> 8;

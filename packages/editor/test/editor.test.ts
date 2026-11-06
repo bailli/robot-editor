@@ -1701,6 +1701,24 @@ describe("Editor and kit examples", () => {
     const oracle = Uint8Array.from([12, 0, 0, 0, elsewhere & 0xff, elsewhere >> 8, 1, 0, 0, 0]);
     expect([...movedRecord(oracle, area, { room: 41, x: 10, y: 10 })]).toEqual([...oracle]);
   });
+
+  test("records keep positions a paste would move off the room or onto row 0", () => {
+    const area = { room: 41, x: 0, y: 0, w: 7, h: 3 };
+    // stairs at (2, 2): to (36, 30) off the bottom, to (2, 0) the unset row
+    const node = Uint8Array.from([11, 0, 0, 0, 2, 2, 0, 0, 0, 0]);
+    expect([...movedRecord(node, area, { room: 41, x: 34, y: 28 }).slice(4, 6)]).toEqual([2, 2]);
+    expect([...movedRecord(node, { ...area, y: 2 }, { room: 41, x: 0, y: 0 }).slice(4, 6)]).toEqual(
+      [2, 2],
+    );
+    // an oracle's target at (1, 1) pasted 2 to the left: x would be -1
+    const target = 41 | (1 << 10);
+    const oracle = Uint8Array.from([12, 0, 0, 0, target & 0xff, target >> 8, 1, 0, 0, 0]);
+    expect([...movedRecord(oracle, area, { room: 41, x: -2, y: 0 })]).toEqual([...oracle]);
+    // moved within the room it goes along, into the room pasted into
+    const moved = movedRecord(oracle, area, { room: 300, x: 10, y: 5 });
+    expect([(moved[4] ?? 0) | ((moved[5] ?? 0) << 8), moved[6]]).toEqual([300 | (11 << 10), 6]);
+    expect(() => movedRecord(oracle, area, { room: 1024, x: 0, y: 0 })).toThrow(RangeError);
+  });
 });
 
 describe("Editor and the episode's settings", () => {
