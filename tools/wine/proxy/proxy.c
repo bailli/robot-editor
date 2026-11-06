@@ -338,8 +338,21 @@ static void redirect_call(BYTE *call, void *hook) {
   write_code(call + 1, &rel, 4);
 }
 
+/* Whether the process is the game: its main module at 0x400000, as large as the game's, so
+ * the addresses below can be read at all (DxDiag and any other process that loads this
+ * DLL with the variables inherited are left alone). */
+static BOOL is_game(void) {
+  const BYTE *base = (const BYTE *)GetModuleHandleA(NULL);
+  if (base != (const BYTE *)0x400000) return FALSE;
+  const IMAGE_DOS_HEADER *dos = (const IMAGE_DOS_HEADER *)base;
+  const IMAGE_NT_HEADERS32 *nt = (const IMAGE_NT_HEADERS32 *)(base + dos->e_lfanew);
+  return dos->e_magic == IMAGE_DOS_SIGNATURE && nt->Signature == IMAGE_NT_SIGNATURE &&
+         nt->OptionalHeader.SizeOfImage > 0x437620 - 0x400000 + 5;
+}
+
 static BOOL patch_game(void) {
   static const DWORD present_calls[] = PRESENT_CALLS;
+  if (!is_game()) return FALSE;
   BYTE *step_call = call_at(STEP_CALL, STEP_TARGET);
   BYTE *present_call[2] = {call_at(present_calls[0], PRESENT_TARGET), call_at(present_calls[1], PRESENT_TARGET)};
   if (!step_call || !present_call[0] || !present_call[1]) return FALSE; /* not the exe we know */
@@ -402,6 +415,13 @@ static int hex(char c) {
 static int up_or_down(const char *word) { return !strcmp(word, "up") ? 1 : !strcmp(word, "down") ? 0 : -1; }
 
 static char token[64]; /* ROBOT_PROXY_TOKEN */
+
+/* A virtual-key code given in decimal, 1-254; 0 if it is none (not cut to a byte). */
+static UINT virtual_key(const char *text) {
+  char *end;
+  unsigned long vk = strtoul(text, &end, 10);
+  return *text && !*end && vk >= 1 && vk <= 254 ? (UINT)vk : 0;
+}
 
 /* One command line → one answer line ("ok …" or "error …"). Commands:
  *   hello TOKEN                      ok robot-proxy VERSION (first, see `serve`)
@@ -477,8 +497,12 @@ static void command(char *line, char *out, size_t size) {
     snprintf(out, size, "error no game window yet");
   } else if ((!strcmp(word, "key") || !strcmp(word, "button")) && up_or_down(arg2) < 0) {
     snprintf(out, size, "error %s needs down or up", word);
+  } else if (!strcmp(word, "key") && !virtual_key(arg1)) {
+    snprintf(out, size, "error key needs a virtual-key code 1-254");
+  } else if (!strcmp(word, "button") && strcmp(arg1, "left") && strcmp(arg1, "right")) {
+    snprintf(out, size, "error button needs left or right");
   } else if (!strcmp(word, "key")) {
-    UINT vk = strtoul(arg1, NULL, 10) & 0xff;
+    UINT vk = virtual_key(arg1);
     BOOL up = up_or_down(arg2);
     keys[vk] = !up;
     post(up ? WM_KEYUP : WM_KEYDOWN, vk, key_lparam(vk, up));

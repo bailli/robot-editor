@@ -331,6 +331,13 @@ static int memory_write(void *at, const void *from, size_t len) {
   return process_vm_writev(getpid(), &local, 1, &remote, 1, 0) == (ssize_t)len;
 }
 
+/* A virtual-key code given in decimal, 1-254; 0 if it is none (not cut to a byte). */
+static UINT virtual_key(const char *text) {
+  char *end;
+  unsigned long vk = strtoul(text, &end, 10);
+  return *text && !*end && vk >= 1 && vk <= 254 ? (UINT)vk : 0;
+}
+
 /* One command line -> one answer line ("ok ..." or "error ..."). Commands:
      hello TOKEN                      ok robot-proxy VERSION (first, see `serve`)
      status                           ok tick=... ms=... steps=... frames=... (frames presented)
@@ -411,8 +418,12 @@ static void command(char *line, char *out, size_t size) {
     snprintf(out, size, "error no game window yet");
   } else if ((!strcmp(word, "key") || !strcmp(word, "button")) && up_or_down(arg2) < 0) {
     snprintf(out, size, "error %s needs down or up", word);
+  } else if (!strcmp(word, "key") && !virtual_key(arg1)) {
+    snprintf(out, size, "error key needs a virtual-key code 1-254");
+  } else if (!strcmp(word, "button") && strcmp(arg1, "left") && strcmp(arg1, "right")) {
+    snprintf(out, size, "error button needs left or right");
   } else if (!strcmp(word, "key")) {
-    UINT vk = (UINT)strtoul(arg1, NULL, 10) & 0xff;
+    UINT vk = virtual_key(arg1);
     int up = up_or_down(arg2);
     injected[vk] = !up;
     post(window, up ? WM_KEYUP : WM_KEYDOWN, vk, key_lparam(vk, up));
