@@ -2282,21 +2282,28 @@ removes it on `close` (`gameDir`: there the game keeps its screenshots).
   after a second unless the wrapper has ended (its log's last lines then). Without any
   video driver the wrapper ends at once ("no video"), unless `SDL_VIDEODRIVER=dummy`.
 - **Wrapper against Wine** (`pnpm test:game:cross`, the same input on both): the hero, the
-  game tick and the virtual time are the same in all five episodes; the frames are the same
-  in Junior and II, not yet in I, III and IV. Sprites' colour cycling follows the frames
-  presented (WM_PAINT), not the game clock, so a different number of repaints shows as
-  other sprite colours (positions equal). Found and fixed (2026-11-06): `InvalidateRect`
+  game tick, the virtual time and every frame are the same in all five episodes
+  (2026-11-06; the colours compared are those a frame uses). Sprites' colour cycling
+  follows the frames presented (WM_PAINT), not the game clock, so a different number of
+  repaints shows as other sprite colours. What it took: **the game's random sequence**
+  (its generator 0x436870, state 0x482318, a constant start value; MSVC's `rand` is never
+  seeded and barely used) — Windows and Wine send WM_GETMINMAXINFO when the game sizes its
+  window after creating it (and at creation, before WM_NCCREATE, when the game still lets
+  it pass), and the game answers it (0x4038c0) with its console check 0x43c2a0, whose
+  string decoder 0x431d60 draws from the generator and reseeds it with that draw; without
+  the message the sequence was one step off from the start, so the title screens chose
+  other wipes (rows instead of columns), which repaint a different number of times. The
+  wrapper sends it as Wine does (a thick frame, or neither popup nor child; on creation and
+  on SetWindowPos/MoveWindow changing the size). Found by reading the state with `peek` on
+  both backends and replaying the generator. Also fixed on the way: `InvalidateRect`
   ignored its rectangle — Windows repaints only for a non-empty part inside the client
   area, and the game invalidates empty ones while a box is open (the wrapper repainted
   every step there); `GetDeviceCaps(LOGPIXELSX/Y)` answered 0 — the game scales the
   screen's size by DPI / 96 (app+0x620, 0x403432) before choosing its window's scale, so
   it took 1 × 1; now 96, and under the driver the wrapper reports the harness's 1024 × 768
-  desktop, so the game picks 1 × 1.25 (640 × 435) as under Wine. Left: after choosing an
-  episode the title screen wipes in, a 16-pixel column per step from the right
-  (`InvalidateRect` x..x+16, the full height); under Wine the repaints stop after 34 of the
-  40 columns (the last, leftmost ones give none), in the wrapper all 40 repaint; the first
-  box differs too (Wine 30 repaints in 155 steps, the wrapper 13). Next step: Wine's own
-  trace of window updates (`WINEDEBUG=+win`) for that wipe. The palette's last 32 slots
+  desktop, so the game picks 1 × 1.25 (640 × 435) as under Wine. Wine repaints once more
+  with an empty box after each real repaint (`WINEDEBUG=+win`); the game draws nothing
+  then, so it counts no frame. The palette's last 32 slots
   differ as well: the game's DIB_PAL_COLORS table holds leftover words of its own memory
   there (unused by the frames; the test compares only the colours a frame uses).
 - **Closing the window** sends WM_SYSCOMMAND/SC_CLOSE first, as Windows does for the close
@@ -2304,7 +2311,7 @@ removes it on `close` (`gameDir`: there the game keeps its screenshots).
   otherwise (WM_CLOSE, 0x403aca, is no question: it closes). Its SC_* cases there: 0x1069
   (to the tray), SC_MINIMIZE (to the tray with `MinimizeToTray`), SC_CLOSE.
 
-**Next:** the remaining frame differences against Wine (above). Untested: restarting the sound after a changed `SampleRate`/`DisableOpl` (the
+**Next:** untested: restarting the sound after a changed `SampleRate`/`DisableOpl` (the
 release path). No SEH: a hardware fault in the game ends the wrapper (Windows would run
 the game's exception handlers; none was needed so far). The player-name prompt is the
 game's own (drawn, not a dialog).

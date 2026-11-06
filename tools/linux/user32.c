@@ -173,6 +173,9 @@ void client_size(const struct window *w, int *width, int *height) {
   if (*height < 0) *height = 0;
 }
 
+static BOOL asks_min_max(DWORD style);
+static void min_max(HWND hwnd, DWORD style, INT *width, INT *height);
+
 static HWND WINAPI CreateWindowExA(DWORD exstyle, LPCSTR class_name, LPCSTR title, DWORD style,
                                    INT x, INT y, INT width, INT height, HWND parent, HMENU menu,
                                    HINSTANCE instance, LPVOID param) {
@@ -200,6 +203,12 @@ static HWND WINAPI CreateWindowExA(DWORD exstyle, LPCSTR class_name, LPCSTR titl
   trace("CreateWindowExA %s \"%s\" style 0x%x ex 0x%x at %d,%d %dx%d -> %p", c->name, w->title,
         style, exstyle, x, y, width, height, hwnd);
 
+  /* As Windows: the size limits first (the game has no app object yet and lets this pass). */
+  if (asks_min_max(style)) {
+    min_max(hwnd, style, &width, &height);
+    w->rect.right = x + width;
+    w->rect.bottom = y + height;
+  }
   CREATESTRUCTA cs = {param, instance, menu,        parent,   height,  width,
                       y,     x,        (LONG)style, w->title, c->name, exstyle};
   if (!send_message(hwnd, WM_NCCREATE, 0, (LPARAM)(uintptr_t)&cs)) {
@@ -300,12 +309,50 @@ static void moved(HWND hwnd, struct window *w) {
   send_message(hwnd, WM_SIZE, 0, (LPARAM)((ch & 0xffff) << 16 | (cw & 0xffff)));
 }
 
+typedef struct {
+  POINT ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize;
+} MINMAXINFO;
+_Static_assert(sizeof(MINMAXINFO) == 40, "MINMAXINFO");
+
+#define WM_GETMINMAXINFO 0x0024
+#define WS_POPUP_OR_CHILD (WS_POPUP | WS_CHILD)
+
+/* Whether Windows asks this window for its size limits (Wine: a thick frame, or neither a
+   popup nor a child; at creation and when SetWindowPos changes the size). The game answers
+   WM_GETMINMAXINFO with its console check, which draws from its random generator (the
+   string decoder 0x431d60): without the message its random sequence differs from the one
+   under Windows and Wine from the start (other title wipes, sprite colours). */
+static BOOL asks_min_max(DWORD style) {
+  return (style & WS_THICKFRAME) || !(style & WS_POPUP_OR_CHILD);
+}
+
+/* WM_GETMINMAXINFO with the defaults Windows fills in; the size clamped to its track limits. */
+static void min_max(HWND hwnd, DWORD style, INT *width, INT *height) {
+  int screen_w, screen_h, l, t, r, b;
+  screen_desktop(&screen_w, &screen_h);
+  struct window probe = {.style = style};
+  decorations(&probe, &l, &t, &r, &b);
+  MINMAXINFO info = {{0, 0},
+                     {screen_w + l + r, screen_h + l + r},
+                     {-l, -l},
+                     {112, 27}, /* SM_CXMINTRACK, SM_CYMINTRACK */
+                     {screen_w + 12, screen_h + 12}};
+  send_message(hwnd, WM_GETMINMAXINFO, 0, (LPARAM)(uintptr_t)&info);
+  if (!width) return;
+  if (*width < info.ptMinTrackSize.x) *width = info.ptMinTrackSize.x;
+  if (*height < info.ptMinTrackSize.y) *height = info.ptMinTrackSize.y;
+  if (*width > info.ptMaxTrackSize.x) *width = info.ptMaxTrackSize.x;
+  if (*height > info.ptMaxTrackSize.y) *height = info.ptMaxTrackSize.y;
+}
+
 static BOOL WINAPI SetWindowPos(HWND hwnd, HWND after, INT x, INT y, INT cx, INT cy, UINT flags) {
   (void)after;
   struct window *w = win(hwnd);
   if (!w) return FALSE;
   trace("SetWindowPos %d,%d %dx%d flags 0x%x", x, y, cx, cy, flags);
   int width = w->rect.right - w->rect.left, height = w->rect.bottom - w->rect.top;
+  if (!(flags & 1) && asks_min_max(w->style)) min_max(hwnd, w->style, &cx, &cy);
+  if (!win(hwnd)) return FALSE;
   if (!(flags & 2)) w->rect.left = x, w->rect.top = y; /* SWP_NOMOVE */
   if (!(flags & 1)) width = cx, height = cy;          /* SWP_NOSIZE */
   w->rect.right = w->rect.left + width;
@@ -322,6 +369,8 @@ static BOOL WINAPI MoveWindow(HWND hwnd, INT x, INT y, INT cx, INT cy, BOOL repa
   struct window *w = win(hwnd);
   if (!w) return FALSE;
   trace("MoveWindow %d,%d %dx%d", x, y, cx, cy);
+  if (asks_min_max(w->style)) min_max(hwnd, w->style, &cx, &cy);
+  if (!win(hwnd)) return FALSE;
   w->rect = (RECT){x, y, x + cx, y + cy};
   moved(hwnd, w);
   if (repaint) invalidate(w, NULL);
