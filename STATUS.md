@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-11-06.
+Setup and commands are in the [README](README.md). Last updated: 2026-11-07.
 
 ## Goal and approach
 
@@ -1435,7 +1435,9 @@ Supported:
 - logic records: clicking a magenta cell (or any cell with the Inspect tool) opens an
   inspector with the record's fields per type (cells with previews: click takes the
   current tile, right-click paints with the cell; target room with
-  "Go", arrival position, a travelling actor picked from the episode's actors, spawner radius/period, a native's object, price and chatter,
+  "Go", which marks the cell it leads to with a bullseye until another room is shown
+  (Ctrl+click on a teleporter, oracle or travelling actor in the room does the same,
+  `recordTarget`), arrival position, a travelling actor picked from the episode's actors, spawner radius/period, a native's object, price and chatter,
   circuit stairs, an oracle's symbol, its hint shown (330 + n: the cell's state sets it) with its text, "Symbol found", a teleporter's condition and message,
   …, "Gone after leaving" (byte 1 bit 5, every type)) and the raw
   bytes; change the type (listed by number), add a record to a plain cell
@@ -1564,7 +1566,7 @@ Supported:
   outside initialised sections, in `.rsrc`, over another patch's bytes, bytes the exe
   holds already, more than 4096 (`codeProblem`). Each one undo step making a new base.
   A mod opens only where the exe holds each patch's `expect`
-- kits (tab Kits since 2026-11-06, with the tile types, events, music and code below them; each kit folded to a line saying what adding it would do, `<details>`, opened ones stay open; `kits-view.ts`; `kits.ts`: `KITS`, `planKit`, `kitChanges`): oracles
+- kits (tab Kits since 2026-11-06, with the tile types, events, music and code below them; each kit folded to a line saying what adding it would do, `<details>` with an arrow that turns when opened, opened ones stay open; `kits-view.ts`; `kits.ts`: `KITS`, `planKit`, `kitChanges`): oracles
   (II's tangram 0x50 and oracle 0x51, events 262–271), circuits (I's letter 0x25,
   gate 0x42, bulb 0x43, stairs 0x3d; event 293) and the goal (Junior's 0x32, its text
   994 moved to 1700, `Kit.textMove`: a code change, `KitPlan.code`, and copies into

@@ -139,7 +139,23 @@ interface RecordType {
   type: number;
   name: string;
   fields: readonly Field[];
+  /** Where the record leads: its target room (0: none) and the cell there. */
+  target?: (d: Uint8Array) => RecordTarget;
 }
+
+/** Where a record leads: a teleporter or oracle the hero, a travelling actor itself. */
+export interface RecordTarget {
+  room: number;
+  x: number;
+  y: number;
+}
+
+/** Target room, packed x and byte 6: where a teleporter or an oracle puts the hero. */
+const arrival = (d: Uint8Array): RecordTarget => ({
+  room: targetRoom.get(d),
+  x: packedX.get(d),
+  y: d[6],
+});
 
 /** The record types by number and their fields (see records.ts in @robot/formats). */
 export const RECORD_TYPES: readonly RecordType[] = (
@@ -147,6 +163,7 @@ export const RECORD_TYPES: readonly RecordType[] = (
     {
       type: 13,
       name: "Teleporter",
+      target: arrival,
       fields: [
         cell(2, "Cell"),
         {
@@ -205,6 +222,7 @@ export const RECORD_TYPES: readonly RecordType[] = (
     {
       type: 12,
       name: "Oracle",
+      target: arrival,
       fields: [
         cell(
           2,
@@ -241,6 +259,7 @@ export const RECORD_TYPES: readonly RecordType[] = (
     {
       type: 8,
       name: "Travelling actor",
+      target: (d) => ({ room: targetRoom.get(d), x: d[6], y: d[7] }),
       fields: [
         cell(2, "Cell", "placed when the room is entered"),
         targetRoom,
@@ -343,11 +362,18 @@ export const RECORD_TYPES: readonly RecordType[] = (
   .map((t) => ({ ...t, fields: [...t.fields, goneAfterLeaving] }))
   .sort((a, b) => a.type - b.type);
 
+/** Where a record leads (teleporter, oracle, travelling actor), undefined: nowhere. */
+export function recordTarget(data: Uint8Array): RecordTarget | undefined {
+  const target = RECORD_TYPES.find((t) => t.type === data[0])?.target?.(data);
+  return target && target.room !== 0 ? target : undefined;
+}
+
 export interface RecordViewEvents {
   change(data: Uint8Array): void;
   add(type: number): void;
   remove(): void;
-  go(room: number): void;
+  /** Shows the room, the cell given marked as where the record leads. */
+  go(room: number, cell?: { x: number; y: number }): void;
   /** A canvas showing a cell value. */
   preview(value: number): HTMLCanvasElement;
   /** The tile the editor paints with. */
@@ -589,8 +615,15 @@ export class RecordView {
     if (textId !== undefined) extras.push(...this.textNodes(textId));
     if (field.kind === "room" && value !== 0) {
       const go = element("button", undefined, "Go");
+      const target = recordTarget(data);
+      go.title = target
+        ? `Show room ${target.room}, (${target.x}, ${target.y}) marked (Ctrl+click on the cell in the room does the same)`
+        : `Show room ${value}`;
+      // read when clicked: a kept button keeps its listener (patchChildren)
       go.addEventListener("click", () => {
-        this.events.go(field.get(this.data));
+        const now = recordTarget(this.data);
+        if (now) this.events.go(now.room, now);
+        else this.events.go(field.get(this.data));
       });
       extras.push(go);
     }

@@ -4,7 +4,7 @@ import { page, userEvent } from "vitest/browser";
 import { ROOM_WIDTH, displayText, readEventTable } from "@robot/formats";
 
 import { hex } from "../src/format.ts";
-import { app, bytes, clickCell, game, useApp } from "./app-setup.ts";
+import { app, bytes, clickCell, fireAt, game, useApp } from "./app-setup.ts";
 import { defined, firstDifference } from "./game.ts";
 
 useApp();
@@ -40,6 +40,33 @@ describe("logic records", () => {
       await userEvent.keyboard("{Enter}");
       expect(defined(app.editor).isEdited(2, 55)).toBe(false);
     }
+  });
+
+  test("Go and Ctrl+click follow a teleporter, its arrival cell marked", async () => {
+    app.showEpisode(2, 55);
+    const index = teleporterCell();
+    const room = defined(app.editor).room(2, 55);
+    const record = defined(room.records.find((r) => r.slot === (room.base[index] ?? 0) >> 8));
+    const d = record.data;
+    const target = (d[4] | (d[5] << 8)) & 0x3ff;
+    const arrival = d[6] * ROOM_WIDTH + (d[5] >> 2);
+    expect(target).not.toBe(55);
+    // Ctrl+click in the room: no tool is used, no cell selected
+    fireAt("mousedown", index, { ctrlKey: true });
+    expect(app.roomId).toBe(target);
+    expect(app.view.arrivalCell()).toBe(arrival);
+    expect(app.selected).toBeUndefined();
+    expect(defined(app.editor).isEdited(2, 55)).toBe(false);
+    // shown again after an edit, the mark stays; another room drops it
+    app.showRoom(target);
+    expect(app.view.arrivalCell()).toBe(arrival);
+    app.showRoom(55);
+    expect(app.view.arrivalCell()).toBeUndefined();
+    // Go in the record does the same
+    await clickCell(index);
+    await page.getByRole("button", { name: "Go" }).click();
+    expect(app.roomId).toBe(target);
+    expect(app.view.arrivalCell()).toBe(arrival);
   });
 
   test("loading an exe again leaves nothing selected", async () => {

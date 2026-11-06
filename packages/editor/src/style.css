@@ -1826,6 +1826,8 @@ button.link {
 
 .kit summary {
   cursor: pointer;
+  position: relative;
+  padding-left: 1em;
   display: flex;
   flex-wrap: wrap;
   gap: 2px 8px;
@@ -1843,6 +1845,20 @@ button.link {
 
 .kit[open] > summary {
   margin-bottom: 2px;
+}
+
+/* a flex summary has no marker of its own: an arrow that turns when the kit opens */
+.kit > summary::before {
+  content: "▸";
+  color: var(--muted);
+  position: absolute;
+  left: 0;
+  width: 0.8em;
+  transition: transform 0.1s;
+}
+
+.kit[open] > summary::before {
+  transform: rotate(90deg);
 }
 
 .kit-line {

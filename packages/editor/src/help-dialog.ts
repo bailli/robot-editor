@@ -38,6 +38,10 @@ const HELP: readonly HelpGroup[] = [
     rows: [
       ["Left button", "Use the tool: paint (drag for lines), fill, select an area, inspect"],
       ["Right button / Alt+click", "Pick the cell's tile"],
+      [
+        "Ctrl+click",
+        "Follow a teleporter, oracle or travelling actor to its room, the cell it leads to marked",
+      ],
       ["Ctrl+Z", "Undo"],
       ["Ctrl+Y / Ctrl+Shift+Z", "Redo"],
       ["Ctrl+S", "Save the exe"],

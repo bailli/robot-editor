@@ -134,6 +134,8 @@ export class RoomView {
   private selected: number | undefined;
   /** The hero's start cell, if the episode starts in the shown room. */
   private start: number | undefined;
+  /** Where the record followed to this room leads (a teleporter's arrival cell). */
+  private arrival: number | undefined;
   private grid = false;
   private actors: readonly RoomActor[] = [];
   private areas: readonly PlacementArea[] = [];
@@ -200,6 +202,18 @@ export class RoomView {
     if (index === this.start) return;
     this.start = index;
     this.drawMarks();
+  }
+
+  /** Marks the cell a followed teleporter (oracle, travelling actor) leads to; undefined: none. */
+  setArrival(index: number | undefined): void {
+    if (index === this.arrival) return;
+    this.arrival = index;
+    this.drawMarks();
+  }
+
+  /** The marked arrival cell, for tests. */
+  arrivalCell(): number | undefined {
+    return this.arrival;
   }
 
   /** The marks canvas as RGBA (actors, grid, selection), for tests. */
@@ -404,6 +418,27 @@ export class RoomView {
       g.fillText("S", x + w / 2, y + h * 0.75);
       g.textAlign = "left";
     }
+    if (this.arrival !== undefined) {
+      // a bullseye: where the hero lands
+      const cx = (this.arrival % ROOM_WIDTH) * w + w / 2;
+      const cy = Math.floor(this.arrival / ROOM_WIDTH) * h + h / 2;
+      const r = Math.max(w, h) * 0.75;
+      g.lineWidth = 3;
+      g.strokeStyle = "rgb(255 255 255 / 0.8)";
+      g.beginPath();
+      g.arc(cx, cy, r + 2.5, 0, 2 * Math.PI);
+      g.stroke();
+      g.strokeStyle = ARRIVAL;
+      for (const k of [1, 0.45]) {
+        g.beginPath();
+        g.arc(cx, cy, r * k, 0, 2 * Math.PI);
+        g.stroke();
+      }
+      g.fillStyle = ARRIVAL;
+      g.beginPath();
+      g.arc(cx, cy, 2.5, 0, 2 * Math.PI);
+      g.fill();
+    }
     if (this.floating) {
       const { x, y, image } = this.floating;
       const [fw, fh] = [(image.width / TILE_WIDTH) * w, (image.height / TILE_HEIGHT) * h];
@@ -453,6 +488,8 @@ export class RoomView {
 const ACTOR = "rgb(230 30 30)";
 /** The hero's start cell. */
 const START = "rgb(0 170 60)";
+/** Where a followed teleporter leads. */
+const ARRIVAL = "rgb(220 0 200)";
 
 /** Circuit colours: a signal that is on, off, or none (the trace failed). */
 const SIGNAL = { on: "rgb(255 180 0)", off: "rgb(40 110 255)", none: "rgb(140 140 140)" };

@@ -14,6 +14,7 @@ import {
   KEYWORD_FUNCTION,
   LETTER_CLASS,
   LOGIC_CELL,
+  type LogicRecord,
   MAX_ROOMS,
   NAMED_ROOMS,
   NOTE_CLASS,
@@ -125,7 +126,7 @@ import { KitsView } from "./kits-view.ts";
 import { MapView } from "./map-view.ts";
 import { MusicView } from "./music-view.ts";
 import { type NewRoomCheck, NewRoomDialog } from "./new-room-dialog.ts";
-import { RecordView } from "./record-view.ts";
+import { RecordView, recordTarget } from "./record-view.ts";
 import {
   CellCache,
   type Highlight,
@@ -277,6 +278,8 @@ export class App {
   private keptText: string | undefined;
   private painting = false;
   private lastRoom: string | undefined;
+  /** The room (episode and id) whose arrival cell is marked (follow). */
+  private arrivalRoom: string | undefined;
   private lastPainted: number | undefined;
   /** The cell an area selection started at, while dragging. */
   private selectFrom: number | undefined;
@@ -610,8 +613,8 @@ export class App {
       this.need().removeRecord(this.episode, this.roomId, selected.layer, selected.index);
       this.afterRecordEdit();
     },
-    go: (room) => {
-      if (this.need().hasRoom(this.episode, room)) this.showRoom(room);
+    go: (room, cell) => {
+      this.follow(room, cell);
     },
     preview: (value) => this.cellPreview(value),
     tile: () => this.tile,
@@ -1490,6 +1493,30 @@ export class App {
     this.showRoom(id);
   }
 
+  /**
+   * Shows the room a record leads to (Go, Ctrl+click), the cell it leads to marked until
+   * another room is shown.
+   */
+  private follow(room: number, cell?: { x: number; y: number }): void {
+    if (!this.need().hasRoom(this.episode, room)) {
+      this.setStatus(`There is no room ${room} in this episode`, true);
+      return;
+    }
+    this.showRoom(room);
+    if (!cell || cell.x >= ROOM_WIDTH || cell.y * ROOM_WIDTH + cell.x >= ROOM_CELLS) return;
+    this.arrivalRoom = `${this.episode} ${room}`;
+    this.view.setArrival(cell.y * ROOM_WIDTH + cell.x);
+  }
+
+  /** The logic record of the cell at `index` (base first, as the game reads it). */
+  private recordAt(index: number): LogicRecord | undefined {
+    const room = this.need().room(this.episode, this.roomId);
+    return [room.base[index] ?? 0, room.overlay[index] ?? 0]
+      .filter((c) => (c & 0xff) === LOGIC_CELL)
+      .map((c) => room.records.find((r) => r.slot === c >> 8))
+      .find((r) => r !== undefined);
+  }
+
   showRoom(id: number): void {
     const editor = this.need();
     // an exit or a script may lead to a room that was deleted: stay where we are
@@ -1504,6 +1531,11 @@ export class App {
     // their rows are replaced without a mouseleave
     this.view.setAreas([]);
     this.view.setHighlights([]);
+    // the arrival mark stays while its room is shown (after an edit, too)
+    if (this.arrivalRoom !== `${this.episode} ${id}`) {
+      this.arrivalRoom = undefined;
+      this.view.setArrival(undefined);
+    }
     this.view.show(room, this.roomCache(room), this.backdrop(room));
     this.refreshConnections();
     const key = `${this.episode} ${id}`;
@@ -2376,6 +2408,14 @@ export class App {
       const index = this.view.cellAt(event);
       if (index === undefined) return;
       event.preventDefault();
+      // Ctrl+click: follow a teleporter (oracle, travelling actor) to where it leads
+      if (!this.pasting && event.button === 0 && (event.ctrlKey || event.metaKey)) {
+        const record = this.recordAt(index);
+        const target = record && recordTarget(record.data);
+        if (target) this.follow(target.room, target);
+        else this.setStatus("Ctrl+click follows a teleporter, oracle or travelling actor");
+        return;
+      }
       if (this.pasting) {
         if (event.button === 0) this.pasteClip(index, event.shiftKey);
         else this.stopPasting();
@@ -3610,14 +3650,15 @@ export class App {
     // figure spaces pad the coordinates, so "base" stays in place from cell to cell
     const pad = (n: number) => String(n).padStart(2, "\u2007");
     this.cellInfo.textContent = `(${pad(x)}, ${pad(y)})  base ${hex(base)}  overlay ${hex(overlay)}`;
-    const record = [base, overlay]
-      .filter((c) => (c & 0xff) === LOGIC_CELL)
-      .map((c) => room.records.find((r) => r.slot === c >> 8))
-      .find((r) => r !== undefined);
+    const record = this.recordAt(index);
     if (record) {
       const classes = this.editor.game.episode(this.episode).classes;
       this.cellInfo.textContent += `  · ${describeRecord(record, classes).summary}`;
+      const target = recordTarget(record.data);
+      if (target) this.cellInfo.textContent += `  · Ctrl+click: go to room ${target.room}`;
     }
+    if (this.view.arrivalCell() === index)
+      this.cellInfo.textContent += "  · the followed record leads here";
     // actors from a record: the record's summary above says what they do
     const actor = this.actors.find((a) => a.cell === index && !a.record);
     if (actor) this.cellInfo.textContent += `  · actor: ${actorOrigin(actor)}`;
