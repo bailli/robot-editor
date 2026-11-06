@@ -1696,7 +1696,7 @@ static WORD rd16(const BYTE *p) {
 /* Looks `key` (id, "#id" or name) up in the resource directory at `dir`; returns the entry's
    offset field (high bit: a subdirectory) or 0 if absent. */
 static DWORD res_entry(const BYTE *root, DWORD root_size, DWORD dir, LPCSTR key) {
-  if (dir + 16 > root_size) return 0;
+  if ((uint64_t)dir + 16 > root_size) return 0; /* 64-bit sums: no wrap */
   long id = -1;
   if ((uintptr_t)key < 0x10000) {
     id = (long)(uintptr_t)key;
@@ -1706,7 +1706,7 @@ static DWORD res_entry(const BYTE *root, DWORD root_size, DWORD dir, LPCSTR key)
     if (end != key + 1 && !*end) id = v;
   }
   int named_count = rd16(root + dir + 12), id_count = rd16(root + dir + 14);
-  if (dir + 16 + 8u * (DWORD)(named_count + id_count) > root_size) return 0;
+  if ((uint64_t)dir + 16 + 8u * (uint64_t)(named_count + id_count) > root_size) return 0;
   const BYTE *entries = root + dir + 16;
   for (int i = 0; i < named_count + id_count; i++) {
     DWORD name = rd32(entries + 8 * i), data = rd32(entries + 8 * i + 4);
@@ -1716,9 +1716,9 @@ static DWORD res_entry(const BYTE *root, DWORD root_size, DWORD dir, LPCSTR key)
     }
     if (i >= named_count || !(name & RES_HIGH)) continue;
     DWORD off = name & ~RES_HIGH;
-    if (off + 2 > root_size) continue;
+    if ((uint64_t)off + 2 > root_size) continue;
     size_t len = rd16(root + off);
-    if (off + 2 + 2 * len > root_size || len != strlen(key)) continue;
+    if ((uint64_t)off + 2 + 2 * (uint64_t)len > root_size || len != strlen(key)) continue;
     size_t k = 0;
     for (; k < len; k++) {
       WORD c = rd16(root + off + 2 + 2 * k);
@@ -1735,7 +1735,7 @@ static const BYTE *res_lookup(LPCSTR type, LPCSTR name, DWORD *error) {
   const BYTE *opt = image + rd32(image + 0x3c) + 24;
   DWORD rva = rd32(opt + 96 + 16), size = rd32(opt + 96 + 20);
   *error = E_RES_TYPE;
-  if (!rva) return NULL;
+  if (!rva || (uint64_t)rva + size > rd32(opt + 56) /* SizeOfImage */) return NULL;
   const BYTE *root = image + rva;
   DWORD t = res_entry(root, size, 0, type);
   if (!t || !(t & RES_HIGH)) return NULL;
@@ -1743,9 +1743,12 @@ static const BYTE *res_lookup(LPCSTR type, LPCSTR name, DWORD *error) {
   DWORD n = res_entry(root, size, t & ~RES_HIGH, name);
   if (!n || !(n & RES_HIGH)) return NULL;
   DWORD lang = n & ~RES_HIGH;
-  if (lang + 16 > size || rd16(root + lang + 12) + rd16(root + lang + 14) == 0) return NULL;
+  if ((uint64_t)lang + 24 > size || rd16(root + lang + 12) + rd16(root + lang + 14) == 0)
+    return NULL;
   DWORD data = rd32(root + lang + 16 + 4);
-  if ((data & RES_HIGH) || data + 16 > size) return NULL;
+  if ((data & RES_HIGH) || (uint64_t)data + 16 > size) return NULL;
+  /* the bytes it points to lie in the image too */
+  if ((uint64_t)rd32(root + data) + rd32(root + data + 4) > rd32(opt + 56)) return NULL;
   return root + data;
 }
 

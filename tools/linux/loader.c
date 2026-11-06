@@ -230,18 +230,36 @@ static WORD rd16(const BYTE *p) {
   return v;
 }
 
-static void bind_imports(BYTE *image, DWORD directory) {
+/* Whether `n` bytes at `rva` lie in the image (sums in 64 bits: no wrap). */
+static int in_image(DWORD rva, uint64_t n, DWORD image_size) { return (uint64_t)rva + n <= image_size; }
+
+/* A NUL-ended name at `rva` within the image, else fatal. */
+static const char *image_name(const BYTE *image, DWORD rva, DWORD image_size) {
+  if (!in_image(rva, 1, image_size) || !memchr(image + rva, 0, image_size - rva))
+    fatal("the exe's imports name something outside the image");
+  return (const char *)image + rva;
+}
+
+static void bind_imports(BYTE *image, DWORD directory, DWORD image_size) {
   int missing_count = 0;
-  for (BYTE *desc = image + directory; rd32(desc + 0xc); desc += 20) {
-    const char *dll = (const char *)image + rd32(desc + 0xc);
+  for (DWORD at = directory;; at += 20) {
+    if (!in_image(at, 20, image_size)) fatal("the exe's import table runs out of the image");
+    BYTE *desc = image + at;
+    if (!rd32(desc + 0xc)) break;
+    const char *dll = image_name(image, rd32(desc + 0xc), image_size);
     DWORD names = rd32(desc) ? rd32(desc) : rd32(desc + 0x10);
-    DWORD *iat = (DWORD *)(image + rd32(desc + 0x10));
-    for (DWORD *entry = (DWORD *)(image + names); *entry; entry++, iat++) {
+    DWORD iat_at = rd32(desc + 0x10);
+    for (DWORD k = 0;; k++) {
+      if (!in_image(names, 4 * ((uint64_t)k + 1), image_size) ||
+          !in_image(iat_at, 4 * ((uint64_t)k + 1), image_size))
+        fatal("the exe's imports of %s run out of the image", dll);
+      DWORD *entry = (DWORD *)(image + names) + k, *iat = (DWORD *)(image + iat_at) + k;
+      if (!*entry) break;
       char key[64];
       if (*entry & 0x80000000u)
         snprintf(key, sizeof key, "#%u", *entry & 0xffff);
       else
-        snprintf(key, sizeof key, "%s", (const char *)image + *entry + 2);
+        snprintf(key, sizeof key, "%s", image_name(image, *entry + 2, image_size));
       char *full = NULL;
       if (asprintf(&full, "%s!%s", dll, key) < 0) fatal("no memory");
       void *fn = find_export(dll, key);
@@ -269,17 +287,25 @@ static void *load_image(const char *path) {
   fclose(f);
 
   if (size < 0x40 || rd16(file) != 0x5a4d) fatal("%s is not an exe", path);
-  const BYTE *pe = file + rd32(file + 0x3c);
+  /* every header field is checked against the file before it is used */
+  DWORD pe_at = rd32(file + 0x3c);
+  if ((uint64_t)pe_at + 24 + 0x60 + 16 * 8 > (uint64_t)size) fatal("%s is not a 32-bit PE", path);
+  const BYTE *pe = file + pe_at;
   if (rd32(pe) != 0x4550 || rd16(pe + 4) != 0x14c) fatal("%s is not a 32-bit PE", path);
   WORD sections = rd16(pe + 6);
   const BYTE *opt = pe + 24;
   if (rd16(opt) != 0x10b) fatal("%s: not PE32", path);
+  if ((uint64_t)pe_at + 24 + rd16(pe + 20) + 40 * (uint64_t)sections > (uint64_t)size)
+    fatal("%s: the section table runs out of the file", path);
   DWORD entry = rd32(opt + 16);
   DWORD base = rd32(opt + 28);
   DWORD image_size = rd32(opt + 56);
   DWORD headers_size = rd32(opt + 60);
   DWORD imports = rd32(opt + 96 + 8);
   if (base != IMAGE_BASE) fatal("%s: image base 0x%x, expected 0x%x", path, base, IMAGE_BASE);
+  if (headers_size > (DWORD)size || headers_size > image_size || entry >= image_size ||
+      !in_image(imports, 20, image_size))
+    fatal("%s: bad headers", path);
 
   BYTE *image = mmap((void *)(uintptr_t)base, image_size, PROT_READ | PROT_WRITE | PROT_EXEC,
                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
@@ -294,11 +320,12 @@ static void *load_image(const char *path) {
        0x465e60) lies beyond VirtualSize but within that page. */
     DWORD mapped = (virtual_size + 0xfff) & ~0xfffu;
     DWORD n = raw_size < mapped || !virtual_size ? raw_size : mapped;
-    if (va + n > image_size || raw + n > (DWORD)size) fatal("%s: bad section %d", path, i);
+    if ((uint64_t)va + n > image_size || (uint64_t)raw + n > (uint64_t)size)
+      fatal("%s: bad section %d", path, i);
     memcpy(image + va, file + raw, n);
   }
   free(file);
-  bind_imports(image, imports);
+  bind_imports(image, imports, image_size);
   return image + entry;
 }
 
