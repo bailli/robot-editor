@@ -203,6 +203,12 @@ export interface ClassEntry {
 /** The oracles' class (tile 0x51 in episodes II and III). */
 export const ORACLE_CLASS = 0x60;
 
+/** III's timber (tile 0x2b), which the axe leaves on felled woods. */
+export const TIMBER_CLASS = 158;
+
+/** III's hammer (tile 0x62), which builds bridges from timber. */
+export const HAMMER_CLASS = 180;
+
 /** Junior's goal, class 50 (tile 0x32 in Junior; in I, II and IV that tile is the expert field). */
 export const GOAL_CLASS = 0x32;
 
@@ -210,12 +216,17 @@ export const GOAL_CLASS = 0x32;
  * Entries of the episode's texts (textsId) a class shows beyond its description and
  * first take, by class id: the oracle its hints (message 330 + n, n from its record,
  * walked into eastwards) and its death message 945 (southwards); the goal its text 994
- * (0x41f450), whose closing ends the game. Known from the code and tried in the game;
- * other classes' messages exist in every episode or are not traced.
+ * (0x41f450), whose closing ends the game; III's timber (class 158) its message 994 when
+ * the hero carries enough (0x415b00); III's hammer (class 180) text 285 where its state
+ * cannot build (0x447370, hero state 11). Known from the code and tried in the game;
+ * other classes' messages exist in every episode or are not traced. Junior's, I's and
+ * II's 994 is other text (Junior's goal, a joke), which the timber shows there.
  */
 const CLASS_TEXTS: ReadonlyMap<number, readonly number[]> = new Map([
   [ORACLE_CLASS, [...Array.from({ length: 16 }, (_, n) => 330 + n), 945]],
   [GOAL_CLASS, [994]],
+  [TIMBER_CLASS, [994]],
+  [HAMMER_CLASS, [285]],
 ]);
 
 /** The text entries class `id` shows beyond its description and first take (CLASS_TEXTS). */

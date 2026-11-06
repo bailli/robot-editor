@@ -8,6 +8,7 @@ import {
   ORACLE_VANISHES_NORTH,
   ROBOTS_KEEP_COLOURS,
   TELEPORT_POINT_CLEARED,
+  WOODS_CUT_THROUGH,
 } from "@robot/formats";
 
 import { button, element } from "./dom.ts";
@@ -124,6 +125,11 @@ const FLAGS = [
     HOUSE_EDGES_BLOCK_INSIDE,
     "House cells in states 9+ block from room 100 on",
     "Only episode III: there tile 0x53 in state 10 is the void around the caves. Without it the hero walks onto such cells, as he does below room 100.",
+  ],
+  [
+    WOODS_CUT_THROUGH,
+    "Felled woods let the hero through",
+    "Only episode III's do: woods the axe felled (state 10) take the hero on a coin flip (a failed step costs food), other actors always. Without it they block, and the timber the axe leaves on them cannot be taken. No original room has felled woods outside III.",
   ],
 ] as const;
 

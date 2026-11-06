@@ -56,7 +56,7 @@ test("tile type 0 and floors take the hero, walls do not", () => {
   expect(step(2, 0x02)).toBe("walk");
 });
 
-test("woods: states 4 and 5 need the cutting tool, 10 only where flag 0x20000 is set", () => {
+test("woods: states 4 and 5 need the boots, 10 only where flag 0x20000 is set", () => {
   expect(step(2, WOODS)).toBe("block");
   expect(step(2, WOODS | (4 << 8))).toBe("depends");
   expect(step(2, WOODS | (5 << 8))).toBe("depends");

@@ -20,7 +20,7 @@
  * that turn into actors when the room is entered leave an empty cell (tile type 0).
  */
 import { ACTOR_LOAD_METHODS, type EpisodeClasses } from "./classes.ts";
-import { HOUSE_EDGES_BLOCK_INSIDE } from "./episode-flags.ts";
+import { HOUSE_EDGES_BLOCK_INSIDE, WOODS_CUT_THROUGH } from "./episode-flags.ts";
 import { teleporterCondition } from "./records.ts";
 import { LOGIC_CELL, type Room } from "./scene.ts";
 
@@ -43,8 +43,6 @@ const walk: Rule = () => "walk";
 const block: Rule = () => "block";
 const depends: Rule = () => "depends";
 
-/** Episode III's flag: woods in state 10 can be cut through too (0x413c50). */
-const WOODS_CUT_THROUGH = 0x20000;
 /** Episode III's flag: water takes the hero only in states with bit 0x10 (0x427e40). */
 const WATER_NEEDS_BIT = 0x4000000;
 
@@ -64,9 +62,10 @@ const RULES: ReadonlyMap<number, Rule> = new Map<number, Rule>([
   [0x438d00, block],
   [0x446f10, block],
   [0x424f90, block],
-  // woods (class 0x5b): states 4 and 5 (the ways through), and 10 with flag 0x20000, take
-  // him only while he carries the hiking boots (item 0x86, SHOE) and then on a coin flip
-  // (0x436890(0, 1)); other actors walk them freely; the other states never
+  // woods (class 0x5b): states 4 and 5 (the ways through) take him only while he carries
+  // the hiking boots (item 0x86, SHOE), 10 (felled) with flag 0x20000 with or without
+  // them, each step on a coin flip (0x436890(0, 1); a failed one costs a unit of food);
+  // other actors walk them freely; the other states never
   [
     0x413c50,
     (state, { flags }) =>

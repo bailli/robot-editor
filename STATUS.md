@@ -260,9 +260,10 @@ Files in `packages/formats/src`:
   handlers: 0x41eca0 returns 1 (235 classes), 0x438d00, 0x446f10 (0) and 0x424f90 (2)
   block, the rest look at the state, the direction, the episode flags, the rucksack,
   chance or game variables. Decoded: **woods** (class 0x5b, 0x413c50) block, but in
-  states 4 and 5, the ways through them (and 10 with flag 0x20000, only III's), the hero
-  passes only while carrying the hiking boots (item 0x86, SHOE), and then each step only
-  on a coin flip (0x436890(0, 1)); other actors walk them freely. Sand (0x41f9d0) blocks
+  states 4 and 5, the ways through them, the hero passes only while carrying the hiking
+  boots (item 0x86, SHOE), in state 10 (felled by the axe) with flag 0x20000 (only
+  III's) with or without them, each step only on a coin flip (0x436890(0, 1); a failed
+  one costs a unit of food, 0x447c60(−1) on 0x4fe300); other actors walk them freely. Sand (0x41f9d0) blocks
   from state 8 on (low nibble). Water (0x427e40) takes him unless NoSwim is set (only
   episode II's scripts do: rooms 23, 603, 683); with flag 0x4000000 (only III) only in
   states with bit 0x10; Junior's water (0x427e30) blocks. III's cave walls walk in
@@ -488,7 +489,8 @@ Files in `packages/formats/src`:
   colours (only III; else the constructor 0x445bd0 rolls three distinct colours 8–14
   into actor +0x30), 0x400 the arrival at an edge (see open item 5), 0x2000 the
   Teleport() point is cleared on entering a room (all but III), 0x4000 and 0x8000
-  oracles vanish after north and after east (only II), 0x40000 house cells (class 98,
+  oracles vanish after north and after east (only II), 0x20000 felled woods take the
+  hero (only III; the only reader, 0x413c50, see "Axe and hammer"), 0x40000 house cells (class 98,
   tile 0x53) in states from 9 on block in rooms from 100 on (only III, whose caves
   have the void around them in state 10; the step-on handler 0x413d30 lets the hero on
   such cells otherwise), 0x80000 doors into buildings need no key (only III). The others are not traced. **Verified under
@@ -1478,7 +1480,7 @@ Supported:
   an edited dealer then lacks. The tiles, names and drawings follow at once; the tile
   list offers a copy in each state its shape has a frame for and each state its type has
   in the source episode's rooms (a letter's state is its character: I's 0 and 1, A–Z). A copy
-  whose class shows texts of its own (`classTexts`, so far the oracle: hints 330 + n and 945) that the episode lacks gets "Texts", which copies those its source has (II's
+  whose class shows texts of its own (`classTexts`: the oracle's hints 330 + n and 945, III's timber 994 and hammer 285) that the episode lacks gets "Texts", which copies those its source has (II's
   oracle: 331, 332, 334, 339, 945) in one undo step. **Tried in
   the game** (by hand): Junior's book copied to IV and placed next to the start, taken:
   its first-take box came and its points were added
@@ -1738,7 +1740,11 @@ stands, decided 2026-10-27; details in the sections named.
     handler 0x424f90 just blocks, in every episode): the cell becomes state 10,
     timber (class 158, III's 0x2b) is put on it (0x433300) and event 335 is raised.
     Woods in state 10 are a way only with episode flag 0x20000 (only III's; 0x413c50),
-    and then each step on a coin flip, boots or not; elsewhere a felled stretch blocks.
+    and then each step on a coin flip, boots or not; elsewhere a felled stretch blocks,
+    so the timber on it cannot be taken (the user, IV, 2026-11-06). The flag has no
+    other reader, and no room outside III has woods in state 10, so setting it in II
+    or IV changes only stretches the axe fells (`WOODS_CUT_THROUGH`; the editor's
+    Episode tab offers it).
   - **Timber** fills a counter (0x4fe3c6): taking a piece adds 20 (0x415b00; full at
     80, then message 994, III's "Du schleppst schon genug Bauholz…", which is Junior's
     goal and a joke in I and II), dropping it takes 20 (0x417c90).
@@ -1835,6 +1841,10 @@ stands, decided 2026-10-27; details in the sections named.
   dealer's in Junior, I and II and III's compass "too dark"; 960 is III's ladder and
   the robot pushing elsewhere; 991 the word warning in I, errors in III and IV, none
   in II; 994 III's timber, Junior's goal, a joke in I and II.
+  **Tried by the user (2026-11-06):** III's timber in IV shows no message at 80 units
+  (IV has no 994); the editor's "Texts" now offers the timber's 994 and the hammer's
+  285 (`TIMBER_CLASS`, `HAMMER_CLASS` in `classTexts`) where the episode lacks them,
+  so in IV, not in Junior, I and II, whose own 994 shows instead.
 - **Classes that need other classes** (scan, code only, 2026-11-06): constant class
   numbers given to "carries" 0x42bcd0, take 0x42c010/0x42c2e0, place 0x433300, set a
   cell 0x4332a0, put 0x433420, compared after the cell readers 0x433230/0x433110 or a
@@ -1872,7 +1882,7 @@ stands, decided 2026-10-27; details in the sections named.
     which every episode has, but only II and III have the text. The first survey also
     named II's money, phone card, credit card, telephone, skateboard, road and traffic,
     III's bridle, pipes and timber, and IV's punch card and cylinders; those came from
-    neighbouring vtables and tables and were wrong. Event 110 is Junior's 0x32. The editor's copy of a type offers only `classTexts` (oracle, goal), in the
+    neighbouring vtables and tables and were wrong. Event 110 is Junior's 0x32. The editor's copy of a type offers only `classTexts` (oracle, goal, timber, hammer), in the
     first language only, and skips a number the episode already uses for another text
     (III's 991).
 - **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").

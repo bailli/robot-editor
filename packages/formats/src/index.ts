@@ -5,6 +5,8 @@ export {
   FrameMethod,
   BLINK_LOAD_METHOD,
   GOAL_CLASS,
+  HAMMER_CLASS,
+  TIMBER_CLASS,
   ORACLE_CLASS,
   HATCHING_LOAD_METHODS,
   SAND_DESCRIBE_METHOD,
@@ -252,6 +254,7 @@ export {
   ORACLE_VANISHES_NORTH,
   ROBOTS_KEEP_COLOURS,
   TELEPORT_POINT_CLEARED,
+  WOODS_CUT_THROUGH,
   readEpisodeFlags,
   withEpisodeFlags,
 } from "./episode-flags.ts";

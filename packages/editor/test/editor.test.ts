@@ -1253,6 +1253,18 @@ describe("Editor and texts from other episodes", () => {
     expect(editor.classTextsToCopy(defined(editor.tileTypeCopies(3)[0]))).toEqual([]);
   });
 
+  test("III's timber and hammer bring their messages where the episode lacks them", () => {
+    const editor = new Editor(game);
+    editor.setTileType(4, ivRoom, 0x6d, { from: 3, of: 0x2b });
+    editor.setTileType(4, ivRoom, 0x6e, { from: 3, of: 0x62 });
+    const texts = editor.tileTypeCopies(4).map((c) => editor.classTextsToCopy(c));
+    // "Du schleppst schon genug Bauholz…", the bridge's "in dieser Richtung …"
+    expect(texts).toEqual([[994], [285]]);
+    // I has a 994 of its own (a joke), which stays
+    editor.setTileType(1, 43, 0x4c, { from: 3, of: 0x2b });
+    expect(editor.classTextsToCopy(defined(editor.tileTypeCopies(1)[0]))).toEqual([]);
+  });
+
   test("event texts are not listed here and stay when a text copy goes", () => {
     const editor = new Editor(game);
     editor.copyEvent(4, ivRoom, 197, { from: 2, of: 135 });

@@ -12,7 +12,8 @@
  * 0x400 the arrival at an edge stays on the edge cell (0x44c5a0), 0x2000 the
  * Teleport() point is cleared on entering a room (0x439426; all but III), 0x4000 an
  * oracle vanishes after sending the hero (north), 0x8000 after its hint (east; both
- * 0x412ae0, only II's), 0x40000 house cells (class 98) in states from 9 on block in
+ * 0x412ae0, only II's), 0x20000 felled woods (class 91 in state 10) take the hero on a
+ * coin flip (0x413c50, only III's), 0x40000 house cells (class 98) in states from 9 on block in
  * rooms from 100 on (0x413d45, only III's: the void around its caves), 0x80000 doors
  * in need no key (0x413daa, only III's).
  * withEpisodeFlags changes the constant.
@@ -28,6 +29,12 @@ export const TELEPORT_POINT_CLEARED = 0x2000;
 export const ORACLE_VANISHES_NORTH = 0x4000;
 /** An oracle walked into eastwards vanishes once it has shown its hint. */
 export const ORACLE_VANISHES_EAST = 0x8000;
+/**
+ * Felled woods (class 91 in state 10, where the axe put timber) take the hero on a coin
+ * flip, a failed step costing a unit of food, and other actors always (0x413c50); without
+ * it they block, and the timber on them cannot be taken.
+ */
+export const WOODS_CUT_THROUGH = 0x20000;
 /** House cells (class 98) in states from 9 on block in rooms from 100 on (0x413d45). */
 export const HOUSE_EDGES_BLOCK_INSIDE = 0x40000;
 /** Doors into buildings take the hero without the key 0x0f15 (0x413daa). */
