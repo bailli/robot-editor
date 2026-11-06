@@ -26,6 +26,7 @@ What is decoded, what the editor supports and what is still open: [STATUS.md](ST
 - `tools/wine/harness.py` – runs the real game under Wine for reference screenshots
 - `tools/wine/proxy` – the proxy DLL (`ddraw.dll`, C) the driver uses to step the game;
   it also turns on the game's hidden command console
+- `tools/linux` – the native Linux wrapper (C): runs `GameOfRobot.exe` without Wine
 
 ## Editor
 
@@ -129,6 +130,21 @@ await d.screenshot("room.png"); // the last frame presented, 640 × 348
 await d.close();
 ```
 
+## Native Linux wrapper (in progress)
+
+`tools/linux` runs the unchanged `GameOfRobot.exe` as a 32-bit Linux program: it maps the
+exe at its base and supplies the Windows functions it imports itself (state in
+[STATUS.md](STATUS.md), "Native Linux wrapper"). It needs the 32-bit toolchain and SDL2
+(`apt install gcc-multilib libsdl2-dev:i386`):
+
+    pnpm wrapper                                         build tools/linux/robot
+    tools/linux/robot [--trace] reference/GameOfRobot.exe
+
+`--trace` (or `ROBOT_TRACE=1`) logs every call into the wrapper; `ROBOT_SHOT=FILE.ppm`
+writes the last frame when the wrapper is stopped (Ctrl+C); `ROBOT_CONSOLE=1` turns the
+game's command console on. A function the wrapper does not have yet stops it, naming the
+function and the caller's address.
+
 ## Resources
 
 - The official info booklets ("Infohefte", German) for episodes I–IV, with very specific
@@ -147,6 +163,7 @@ await d.close();
 - `pnpm typecheck`, `pnpm lint` – the type check and ESLint alone
 - `pnpm test:game` – the tests that run the game (Wine, proxy; see above)
 - `pnpm proxy` – build the proxy DLL (see above)
+- `pnpm wrapper` – build the native Linux wrapper (see above)
 - `pnpm test:without-game` – the tests that need no game data (what CI runs)
 - `pnpm snapshots` – record changed outputs in `packages/formats/test/__snapshots__/`
   (review the diff)

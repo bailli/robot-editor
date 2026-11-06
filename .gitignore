@@ -19,3 +19,6 @@ shots/
 
 # Proxy DLL for the driver (built by `pnpm proxy`)
 tools/wine/proxy/ddraw.dll
+
+# Native Linux wrapper (built by `pnpm wrapper`)
+tools/linux/robot

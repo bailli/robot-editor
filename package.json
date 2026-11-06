@@ -18,6 +18,7 @@
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "robot": "node packages/tools/src/robot.ts",
     "proxy": "i686-w64-mingw32-gcc -O2 -Wall -Wextra -shared -static-libgcc -s -o tools/wine/proxy/ddraw.dll tools/wine/proxy/proxy.c tools/wine/proxy/proxy.def -lws2_32 -lgdi32",
+    "wrapper": "gcc -m32 -no-pie -O1 -g -fno-omit-frame-pointer -mstackrealign -Wall -Wextra -o tools/linux/robot tools/linux/*.c -lSDL2 -lpthread",
     "editor": "pnpm --filter @robot/editor dev"
   },
   "devDependencies": {

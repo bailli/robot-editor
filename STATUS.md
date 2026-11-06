@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-11-02.
+Setup and commands are in the [README](README.md). Last updated: 2026-11-06.
 
 ## Goal and approach
 
@@ -62,7 +62,8 @@ for episodes I–IV.
 | `packages/editor`       | `@robot/editor`: the browser editor (Vite, static build; CodeMirror 6 for the script source)       |
 | `packages/tools/src`    | `@robot/tools`: CLI `pnpm robot …` (render, compare, eval, patch, shots, script, start, play, mod) |
 | `tools/wine/harness.py` | the only Python: drives the real game under Wine/Xvfb/xdotool; `serve` runs it for the driver      |
-| `tools/wine/proxy`      | the only C: proxy `ddraw.dll` for the driver and the command console (mingw-w64, `pnpm proxy`)     |
+| `tools/wine/proxy`      | C: proxy `ddraw.dll` for the driver and the command console (mingw-w64, `pnpm proxy`)              |
+| `tools/linux`           | C: the native Linux wrapper, the exe without Wine (`gcc -m32`, SDL2, `pnpm wrapper`)               |
 | `shots.json`            | per reference screenshot: hash, palette offset, cells where our render still differs               |
 
 Files in `packages/formats/src`:
@@ -1665,8 +1666,8 @@ stands, decided 2026-10-27; details in the sections named.
   only its own data; see "The mod format" below.
 - **Rejected:** `WorldOfRobot.DLL` for episode data (see "Where resources come from":
   the exe only falls back to it for resources it lacks, and code-side changes need the
-  exe anyway). **Deferred:** a native Linux wrapper instead of Wine (keys, time, DirectDraw
-  and GDI are few imports, but worth it only to run without Wine), a decompilation
+  exe anyway). **Started 2026-11-06:** a native Linux wrapper instead of Wine (see "Native
+  Linux wrapper"). **Deferred:** a decompilation
   (only if playing in the editor in the browser becomes a goal; incremental path: a
   loader that replaces functions one by one), the proxy as an in-memory mod loader (the
   plan is in "The mod format", "Two forms"; the only place that says how).
@@ -2105,6 +2106,52 @@ By hand or with the screenshot harness:
   map to be taken: a shovel given by `Take()` in a script did not show up in the
   rucksack. Episode IV's status line shows the room and the hero's cell
   (`[183,26/15]`); `SetNight(0)` lights a dark room.
+
+## Native Linux wrapper (`tools/linux`)
+
+Started 2026-11-06: `GameOfRobot.exe`, unchanged, as a 32-bit Linux program (`pnpm
+wrapper`, usage in the README). `loader.c` maps the image at 0x400000 (it has no
+relocations), binds all 196 imports to our functions by name or ordinal, gives each thread
+a thread information block through an LDT entry in %fs (the C runtime's SEH chain at
+fs:0), and jumps to the entry point; a function not written yet stops with its name and
+the caller. One file per DLL: `kernel32.c` (C runtime plumbing: heap, VirtualAlloc, files
+with `C:\` = the exe's directory and names matched without regard to case, code pages
+1252/437, events, mutexes, threads, resources), `user32.c` (classes, windows, the message
+queue with timers and WM_PAINT, menus as data, string tables, wsprintf), `gdi32.c`,
+`ddraw.c` (DirectDraw objects: surfaces in memory, 32-bit XRGB), `misc.c` (the rest).
+
+**Milestone 1 reached** (2026-11-06): the game starts, passes its checks, reads its
+settings and runs its main loop; the episode selection screen (640 × 348) comes out
+through `StretchDIBits` the same as under Wine, about 100 frames a second. Nothing is shown
+yet. What the start needs, found on the way:
+
+- **DirectDraw is required**, even though the game presents with GDI: without
+  `DirectDrawCreate` it stops ("DirectDraw Init FAILED", DX error, "Basis init"). It wants
+  IDirectDraw2 (QueryInterface), `SetCooperativeLevel(DDSCL_NORMAL)`, `GetCaps`, the
+  primary surface (whose pixel format decides: above 8 bits it converts its frame through
+  a colour table of its own, 0x436b70) and two 640 × 400 offscreen surfaces.
+- **The DirectX check** (the SDK's GetDXVersion): DxDiag over COM (CLSID a65b8071…), else
+  the file versions of `ddraw.dll`, `d3d8.dll`, `d3d9.dll`, `dpnet.dll` and others in
+  `C:\WINDOWS\SYSTEM32`; none found means "No DirectX detected" and the end. The wrapper
+  answers 4.09.00.0904 (9.0c). The footer's version (`V0.99 RC46`) is the exe's own
+  version resource, `\StringFileInfo\<translation>\FileVersion`.
+- **Frames** come from WM_PAINT's `StretchDIBits` with `DIB_PAL_COLORS`: the colour table
+  holds indices into the palette selected into the DC (`CreatePalette`, `SelectPalette`).
+- **Single instance:** an event and then a mutex both named `Robot32`; the second create
+  fails (a name clash between types, error 6), as on Windows, and the game goes on.
+- **The console mutex** `Robot32Command` is created and closed, then created again: named
+  objects must go with their last handle, or the console is always on.
+- **Registry** (`HKCU\Software\TOM-Productions\Robot`): read are `RessourcePath`,
+  `WndScaleX`, `WndScaleY`, `NoMusic`, `NoSound`, `NoEffects`, `DoorNumbers`, `AltShapes`,
+  `AltBeam`, `MinimizeToTray`, `NestWarn`, `GoldWarn`, `CurrentEpisode`; written
+  `FilePathSV1`… (save paths, after `SHGetFolderPathA` is not found in shell32). The
+  wrapper's registry is empty and drops writes.
+
+**Next:** milestone 2, an SDL window with the frames, keys as WM_KEYDOWN/WM_KEYUP and
+WM_CHAR, the mouse, accelerators (`TranslateAcceleratorA`); then the registry in a file,
+dialogs (the player-name prompt, `DialogBoxParamA`), the menu, DirectSound on SDL audio
+(the game's OPL2 emulation only needs a sound buffer), and the driver's protocol so that
+`pnpm test:game` can run without Wine.
 
 ## Open items and leads
 
