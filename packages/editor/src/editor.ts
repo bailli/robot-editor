@@ -2744,10 +2744,8 @@ export class Editor {
     const present = value === after ? edit.added : edit.removed;
     if (edit.added || edit.removed) {
       const rooms = this.writableList(edit.episode).filter((r) => r.id !== edit.room);
-      if (present) {
-        this.owned.add(present);
-        rooms.push(present);
-      }
+      // not owned by that: a room removed untouched is the base's, copied when written
+      if (present) rooms.push(present);
       this.edited.set(
         edit.episode,
         rooms.sort((a, b) => a.id - b.id),

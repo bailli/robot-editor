@@ -638,6 +638,19 @@ describe("Editor room deletion", () => {
     expect(editor.rooms(1).some((r) => r.id === 44)).toBe(false);
   });
 
+  test("painting a room brought back by undo leaves the loaded exe's room as it was", () => {
+    const editor = new Editor(game);
+    const cell = game.room(1, 44).base[100];
+    editor.removeRoom(1, 44);
+    editor.undo();
+    editor.beginStroke(1, 44, "base");
+    editor.paint(100, cell === 0x0a ? 0x0b : 0x0a);
+    editor.endStroke();
+    expect(game.room(1, 44).base[100]).toBe(cell);
+    expect(editor.isEdited(1, 44)).toBe(true);
+    expect(editor.saveMod().changes.rooms.map((c) => c.id)).toEqual([44]);
+  });
+
   test("added rooms can be deleted; the title and start rooms cannot", () => {
     const editor = new Editor(game);
     editor.addRoom(3, 250, { copy: 41 });
