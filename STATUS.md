@@ -1755,9 +1755,13 @@ stands, decided 2026-10-27; details in the sections named.
     game.
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
-  to the one class whose vtable or 12-entry touch table reaches it, and dialogs to the
-  class that creates them; indirect uses are missed, e.g. the pen's 512 and the
-  chief's 443). **Known and tried:** letters 514 (magic words, I and II only) with
+  to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,
+  dialogs to the class that creates them, and the hero's 13 state objects; rerun over
+  the whole exe. Missed: numbers computed at run time (the pen's 512, the chief's 443,
+  notes, room names) and about 60 call sites in shared code, tasks, the magic words and
+  the computer's programs (0x451420), which belong to no class; branches only one
+  episode takes are not told apart; a number another episode uses for other text is
+  not reported, see the clashes below). **Known and tried:** letters 514 (magic words, I and II only) with
   the wand for flagged words and the pen 512 ("Was schreibst Du ?"); the wizard
   990–993 (991 is III's error message), his door class 80; the computer 550–555; the
   oracle 330–345 and 945; Junior's goal 994. **Candidates, not tried:** the slot
@@ -1768,6 +1772,14 @@ stands, decided 2026-10-27; details in the sections named.
   III's natives 0x2c 300, 319 and 444; the researcher 0x46 445 and 446; the chief 0x47
   440–442 and event 339; the lava 0x48 288; the decoy whistle 0x42 only event 345;
   IV's terminal 0x5b 520–524 and 965; the punch 0x5c 532; the sliding door 0x61 533.
+  The rerun adds: II's and III's food (0x56, 0x57) and the bones 985 (too much
+  eaten; IV has the classes but not the text); 0x58 949 ("Aaaaah !"); the hammer
+  (hero state 11) 285; the thief 0x40 (I, II) 513, also reached from the hero; the
+  notes (class 15) 973 and 974, IV's cassette in the mini recorder (only when 0x4c73dc
+  is set, 0x4066a0; not traced). **Clashes** (same number, other text): 507 is the
+  dealer's in Junior, I and II and III's compass "too dark"; 960 is III's ladder and
+  the robot pushing elsewhere; 991 the word warning in I, errors in III and IV, none
+  in II; 994 III's timber, Junior's goal, a joke in I and II.
   Text 230 (no swimming) is shown by the river 0x12 (class 55) and water (class 82),
   which every episode has, but only II and III have the text. The first survey also
   named II's money, phone card, credit card, telephone, skateboard, road and traffic,
