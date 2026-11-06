@@ -959,7 +959,8 @@ describe("Editor and tile types from other episodes", () => {
 
   test("refused: no free type, no class there, a copy of a copy, a type rooms use", () => {
     const editor = new Editor(game);
-    expect(editor.freeTileTypes(2)).toEqual([]);
+    // II has no type without a class, only those of classes it never uses
+    expect(editor.freeTileTypes(2)).toEqual([0x4b, 0x75, 0x76, 0x7e]);
     expect(() => editor.setTileType(2, 43, 0x50, { from: 1, of: 0x42 })).toThrow(/not free/);
     expect(() => editor.setTileType(3, 41, 0x59, { from: 3, of: 0x42 })).toThrow(/another/);
     expect(() => editor.setTileType(3, 41, 0x59, { from: 0, of: 0x50 })).toThrow(/no class/);
@@ -1410,6 +1411,33 @@ describe("Editor and text entries", () => {
 describe("Editor and kits", () => {
   const ivRoom = readEpisodeStart(game.image, 4).room;
   const kit = (key: string) => defined(KITS.find((k) => k.key === key));
+
+  test("axe & bridges in IV: the flag with the kit in one undo step; II reuses types", () => {
+    const editor = new Editor(game);
+    const axe = kit("axe");
+    const flags = editor.episodeFlags(4);
+    expect(editor.addKit(4, ivRoom, axe)).toBeDefined();
+    expect(editor.episodeFlags(4)).toBe((flags | 0x20000) >>> 0);
+    expect(editor.tileTypeCopies(4).map((c) => c.of)).toEqual([0x61, 0x62, 0x6e, 0x2b]);
+    // saved as a mod, it gives the exe the editor writes
+    const mod = editor.saveMod();
+    expect(mod.changes.flags).toEqual([{ episode: 4, flags: (flags | 0x20000) >>> 0 }]);
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    editor.undo();
+    expect(editor.episodeFlags(4)).toBe(flags);
+    expect(editor.tileTypeCopies(4)).toEqual([]);
+    editor.redo();
+    expect(editor.episodeFlags(4)).toBe((flags | 0x20000) >>> 0);
+    // II: its unused classes' types make room; the copy form offers them last
+    expect(editor.freeTileTypes(2)).toEqual([0x4b, 0x75, 0x76, 0x7e]);
+    editor.addKit(2, 15, axe);
+    expect(editor.tileTypeCopies(2).map((c) => [c.to, c.of])).toEqual([
+      [0x4b, 0x61],
+      [0x75, 0x62],
+      [0x76, 0x2b],
+      [0x7e, 0x6e],
+    ]);
+  });
 
   test("oracles in IV: types, texts, chosen events and their texts in one undo step", () => {
     const editor = new Editor(game);

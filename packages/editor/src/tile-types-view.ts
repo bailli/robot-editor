@@ -1,4 +1,4 @@
-import { EPISODES } from "@robot/formats";
+import { EPISODES, isReusableType } from "@robot/formats";
 
 import { button, element, select } from "./dom.ts";
 import type { TileTypeCopy } from "./editor.ts";
@@ -156,7 +156,7 @@ export class TileTypesView {
       "To type",
       context.free.map((t) => [
         String(t),
-        `${hex2(t)}${context.copies.some((c) => c.to === t) ? " (replaces its copy)" : ""}`,
+        `${hex2(t)}${context.copies.some((c) => c.to === t) ? " (replaces its copy)" : isReusableType(episode, t) ? " (replaces a class the episode never uses)" : ""}`,
       ]),
       String(choice.to),
     );

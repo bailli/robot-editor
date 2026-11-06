@@ -1206,4 +1206,150 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
       assert.deepEqual(seen, { state: 10, running: true, drawn: true, icon: true });
     }, 60_000);
   }
+
+  /** The map word (class | state << 8) at (x, y) and the hero's state (hero +0x10). */
+  const cellAt = async (d: Driver, x: number, y: number) => {
+    const b = await d.peek(MAP + 2 * (x + y * ROOM_WIDTH), 2);
+    return new DataView(b.buffer, b.byteOffset).getUint16(0, true);
+  };
+  const heroState = async (d: Driver) => (await d.peek((await d.u32(0x53e9ac)) + 0x10, 1))[0];
+  /** Holds `key` a little at a time until `done` holds for the hero (coin flips, boxes). */
+  const reach = async (
+    d: Driver,
+    key: "left" | "right" | "up" | "down",
+    done: (h: { x: number; y: number }) => boolean,
+    most = 30,
+  ) => {
+    for (let k = 0; k < most; k++) {
+      const hero = await d.hero();
+      if (hero && done(hero)) break;
+      await d.hold(key, 20);
+      await d.run(10);
+      await d.closeBoxes();
+    }
+    return d.hero();
+  };
+
+  test("episode IV: the axe & bridges kit fells woods, takes timber, builds a bridge", async () => {
+    // the example at (6, 14): axe (6, 14), hammer (6, 16), woods x = 8, river x = 11
+    const mod = exampleMod(game, 4, "axe", { x: 6, y: 14 }, { x: 4, y: 14 });
+    const WOOD = 0x4fe3c6;
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(4);
+        await d.pickUp("right", (h) => h.x >= 6);
+        await d.pickUp("down", (h) => h.y >= 16);
+        // the rucksack's first item, "Benutzen": the axe
+        await d.press("return", 100);
+        await d.press("return", 100);
+        const axe = await heroState(d);
+        // into the woods: felled (event 335's bonus box), then onto them with the flag,
+        // a step on a coin flip, which takes the timber
+        await reach(d, "right", (h) => h.x >= 7);
+        await d.hold("right", 20);
+        await d.run(20);
+        const boxes = await d.closeBoxes();
+        await reach(d, "right", (h) => h.x >= 8);
+        const wood = (await d.peek(WOOD, 1))[0];
+        const felled = await cellAt(d, 8, 16);
+        // Esc ends the axe's state; the rucksack now lists the wood first, then axe, hammer
+        await d.press("escape", 50);
+        const after = await heroState(d);
+        await d.press("return", 100);
+        await d.press("right", 100);
+        await d.press("right", 100);
+        await d.press("return", 100);
+        const hammer = await heroState(d);
+        // five hits finish the bridge (a unit of wood each), then the hero walks over it
+        await reach(d, "right", (h) => h.x >= 12, 20);
+        return {
+          axe,
+          boxes,
+          wood,
+          felled,
+          after,
+          hammer,
+          hero: await d.hero(),
+          left: (await d.peek(WOOD, 1))[0],
+        };
+      }),
+    );
+    assert.deepEqual(seen, {
+      axe: 10,
+      boxes: 1,
+      wood: 20,
+      felled: 0x0a5b,
+      after: 0,
+      hammer: 11,
+      hero: { room: seen.hero?.room, x: 12, y: 16 },
+      left: 15,
+    });
+  }, 120_000);
+
+  test("episode I: the woods & boots kit, the boots take the hero through the way", async () => {
+    // the example at (6, 14): boots (6, 15), woods x = 7..10, its way in row 15
+    const mod = exampleMod(game, 1, "woods", { x: 6, y: 14 }, { x: 4, y: 15 });
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(1);
+        await d.pickUp("right", (h) => h.x >= 6);
+        return reach(d, "right", (h) => h.x >= 11, 60);
+      }),
+    );
+    // past the woods (x = 7..10), on their way's row
+    assert.ok(seen && seen.x >= 11 && seen.y === 15, JSON.stringify(seen));
+  }, 120_000);
+
+  test("Junior: the fire & bucket kit, filled against the current, puts out fires", async () => {
+    // the example at (6, 13): a river in row 13 with a current east (water at x = 9),
+    // the bucket (6, 15), fires at (11, 14) and (11, 15)
+    const mod = exampleMod(game, 0, "fire", { x: 6, y: 13 }, { x: 4, y: 15 });
+    const kitGame = new Game(applyMod(game.image, mod)).episode(0).classes;
+    const ash = kitGame.typeOfClass.get(136);
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(0);
+        await d.pickUp("right", (h) => h.x >= 6);
+        // into the river, then west against the current
+        await reach(d, "up", (h) => h.y <= 13);
+        await d.hold("left", 60);
+        const slot = new DataView((await d.peek(0x4fe0c2, 2)).buffer).getUint16(0, true);
+        // out of the river and along row 15 to the fires
+        await reach(d, "down", (h) => h.y >= 15);
+        await reach(d, "right", (h) => h.x >= 10);
+        const by = await d.hero();
+        await d.putDown("use");
+        return {
+          slot,
+          by,
+          cells: [await cellAt(d, 11, 14), await cellAt(d, 11, 15)].map((c) => c & 0xff),
+          bucket: new DataView((await d.peek(0x4fe0c2, 2)).buffer).getUint16(0, true),
+        };
+      }),
+    );
+    assert.ok(ash !== undefined);
+    assert.deepEqual(seen, {
+      slot: 0x176,
+      by: { room: 43, x: 10, y: 15 },
+      cells: [136, 136],
+      bucket: 0x76,
+    });
+  }, 120_000);
+
+  test("Junior: the swimming kit's river carries the hero along its current", async () => {
+    // the example at (6, 13): a river in rows 13 and 14, the current east (water at
+    // (8, 13)), the flippers at (6, 15)
+    const mod = exampleMod(game, 0, "swimming", { x: 6, y: 13 }, { x: 5, y: 14 });
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        await d.startEpisode(0);
+        await d.hold("right", 20);
+        const in_ = await d.hero();
+        await d.run(150);
+        return { in: in_, carried: await d.hero() };
+      }),
+    );
+    assert.equal(seen.in?.x, 6);
+    assert.ok((seen.carried?.x ?? 0) > 6, JSON.stringify(seen));
+  }, 120_000);
 });

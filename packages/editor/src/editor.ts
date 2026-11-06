@@ -58,7 +58,6 @@ import {
   eventTableLength,
   eventTextsId,
   exitMode,
-  freeTileTypes,
   kitChanges,
   kitExample,
   movedRecord,
@@ -90,6 +89,7 @@ import {
   scriptPlacedObjects,
   sha256,
   spareEventEntries,
+  spareTileTypes,
   textChanges,
   textEntryProblem,
   textsId,
@@ -611,13 +611,14 @@ export class Editor {
   }
 
   /**
-   * The types a copy can go to: those without a class in the exe as loaded that no room
-   * of the episode uses, and those that are copies already (a copy there replaces it).
+   * The types a copy can go to: those without a class in the exe as loaded, then those
+   * whose class the episode never uses (REUSABLE_TYPES, II's), that no room of the
+   * episode uses, and those that are copies already (a copy there replaces it).
    */
   freeTileTypes(episode: number): number[] {
     const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
     const used = new Set(this.rooms(episode).flatMap((room) => [...roomTypes(room)]));
-    return freeTileTypes(this.pristine.image, episode).filter(
+    return spareTileTypes(this.pristine.image, episode).filter(
       (type) => copied.has(type) || (!used.has(type) && !FIXED_TYPES.includes(type)),
     );
   }
@@ -748,6 +749,7 @@ export class Editor {
   /**
    * One undo step (shown in room `room`) that makes a new base with these changes: text
    * entries edited here stay as they are. `check` may refuse the new base by throwing.
+   * `more`: edits done and undone with it, after it (a kit's flags).
    */
   private rebase(
     episode: number,
@@ -755,6 +757,7 @@ export class Editor {
     changes: BaseChanges,
     check?: (base: Game) => void,
     edits: readonly TextChange[] = [],
+    more: readonly Edit[] = [],
   ): Edit {
     changes = { ...changes, music: this.neededMusic(changes) };
     const base = this.baseWith(changes);
@@ -788,8 +791,10 @@ export class Editor {
       },
     };
     this.apply(step, after);
-    this.push(step);
-    return step;
+    for (const edit of more) this.apply(edit, after);
+    const edit = more.length > 0 ? { ...step, parts: [step, ...more] } : step;
+    this.push(edit);
+    return edit;
   }
 
   /**
@@ -1222,6 +1227,7 @@ export class Editor {
       hasText: (n) => texts?.has(n) === true,
       hasEntry: (resource, n) => this.textEntries(resource)?.entries.has(n) === true,
       hasEventText: (n) => eventTexts?.has(n) === true,
+      flags: this.episodeFlags(episode),
       ...(events ? { events } : {}),
     });
   }
@@ -1247,9 +1253,9 @@ export class Editor {
 
   /**
    * Adds `kit` to the episode (kitPlan: tile types, texts, events and their texts; quiet
-   * events moved, or their texts removed as edits) as one undo step that makes a new base
-   * (rebase); undefined if it has nothing to add. Throws a RangeError where the plan has
-   * a problem.
+   * events moved, or their texts removed as edits; the flags it needs) as one undo step
+   * that makes a new base (rebase); undefined if it has nothing to add. Throws a
+   * RangeError where the plan has a problem.
    */
   addKit(episode: number, room: number, kit: Kit, events?: readonly number[]): Edit | undefined {
     this.endStroke();
@@ -1257,7 +1263,11 @@ export class Editor {
     if (plan.problem) throw new RangeError(plan.problem);
     const { types, texts, events: given, code, textCopies, moved, silenced } = plan;
     const parts: readonly (readonly unknown[])[] = [types, texts, given, code, textCopies];
-    if ([...parts, moved, silenced].every((p) => p.length === 0)) return undefined;
+    const flags =
+      plan.flags === undefined
+        ? undefined
+        : { before: this.episodeFlags(episode), after: plan.flags };
+    if ([...parts, moved, silenced].every((p) => p.length === 0) && !flags) return undefined;
     const changes = kitChanges(this.pristine, episode, kit, plan);
     let copyTexts: readonly CopyTextsChange[] = this.changes.copyTexts;
     for (const c of changes.copyTexts) {
@@ -1289,6 +1299,7 @@ export class Editor {
       },
       undefined,
       changes.texts,
+      flags ? [{ episode, room, layer: "base", changes: [], flags }] : [],
     );
   }
 

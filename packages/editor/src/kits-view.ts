@@ -62,7 +62,7 @@ export class KitsView {
       element(
         "p",
         "hint",
-        "A kit copies what a feature of another episode needs in one undo step: its tile types (to free types), the texts its classes show, the events its code raises (to entries the game never uses) and the pieces of music their sounds need. Kits share the spare entries (IV has four: oracles and circuits together). The parts show below, each removable on its own.",
+        "A kit copies what a feature of another episode needs in one undo step: its tile types (to free types; in II, which has none, to types of classes it never uses), the episode flags it needs, the texts its classes show, the events its code raises (to entries the game never uses) and the pieces of music their sounds need. Kits share the spare entries (IV has four: oracles and circuits together). The parts show below, each removable on its own.",
       ),
     ];
   }
@@ -88,7 +88,7 @@ export class KitsView {
     const own = plan.present.length === kit.types.length && plan.lacking.length === 0;
     const quiet =
       plan.moved.length + plan.silenced.length + plan.code.length + plan.textCopies.length;
-    if (own && plan.texts.length === 0 && quiet === 0) {
+    if (own && plan.texts.length === 0 && quiet === 0 && plan.flags === undefined) {
       box.append(line("own", `${name(episode)} has ${kit.name.toLowerCase()} already.`));
       box.append(this.exampleBar(context, kit));
       return box;
@@ -101,7 +101,25 @@ export class KitsView {
         `Tile types: ${types.length > 0 ? types.join(", ") : "none to copy"}${present.length > 0 ? ` (has: ${present.join(", ")})` : ""}`,
       ),
     );
-    if (plan.texts.length > 0) box.append(line("texts", `Texts: ${plan.texts.join(", ")}`));
+    if (plan.reused.length > 0) {
+      box.append(
+        line(
+          "reused",
+          `Replaces classes ${name(episode)} never uses: ${plan.reused.map(hex2).join(", ")} (no free type left)`,
+        ),
+      );
+    }
+    if (plan.texts.length > 0) {
+      // the kit's own texts (Kit.texts) say when the game shows them
+      const own = plan.texts.filter((n) => kit.texts?.includes(n));
+      const note = own.length > 0 && kit.textsNote ? ` (${own.join(", ")}: ${kit.textsNote})` : "";
+      box.append(line("texts", `Texts: ${plan.texts.join(", ")}${note}`));
+    }
+    if (plan.flags !== undefined && kit.flags !== undefined) {
+      box.append(
+        line("flags", `Episode flags: sets 0x${kit.flags.toString(16)} (${kit.flagsNote ?? ""})`),
+      );
+    }
     // a text the code shows by number, moved to one no episode has (textMove)
     for (const c of plan.textCopies) {
       const into = c.resource === c.from ? "its own" : "this episode’s";
@@ -181,7 +199,13 @@ export class KitsView {
         line("without", `Without points (no entry left): ${plan.without.map(label).join(", ")}`),
       );
     }
-    const empty = plan.types.length + plan.texts.length + plan.events.length + quiet === 0;
+    const empty =
+      plan.types.length +
+        plan.texts.length +
+        plan.events.length +
+        quiet +
+        (plan.flags === undefined ? 0 : 1) ===
+      0;
     const add = element("button", undefined, `Add ${kit.name.toLowerCase()}`);
     add.type = "button";
     add.disabled = empty || plan.problem !== undefined;

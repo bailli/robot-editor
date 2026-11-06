@@ -203,6 +203,9 @@ export interface ClassEntry {
 /** The oracles' class (tile 0x51 in episodes II and III). */
 export const ORACLE_CLASS = 0x60;
 
+/** Fire (II-IV 0x66): walked into, it kills the hero with text 947 (0x41ecf0). */
+export const FIRE_CLASS = 117;
+
 /** III's timber (tile 0x2b), which the axe leaves on felled woods. */
 export const TIMBER_CLASS = 158;
 
@@ -218,7 +221,8 @@ export const GOAL_CLASS = 0x32;
  * walked into eastwards) and its death message 945 (southwards); the goal its text 994
  * (0x41f450), whose closing ends the game; III's timber (class 158) its message 994 when
  * the hero carries enough (0x415b00); III's hammer (class 180) text 285 where its state
- * cannot build (0x447370, hero state 11). Known from the code and tried in the game;
+ * cannot build (0x447370, hero state 11); fire (class 117) its death message 947 (the
+ * hero's death handler 0x41ecf0 by class). Known from the code and tried in the game;
  * other classes' messages exist in every episode or are not traced. Junior's, I's and
  * II's 994 is other text (Junior's goal, a joke), which the timber shows there.
  */
@@ -227,6 +231,7 @@ const CLASS_TEXTS: ReadonlyMap<number, readonly number[]> = new Map([
   [GOAL_CLASS, [994]],
   [TIMBER_CLASS, [994]],
   [HAMMER_CLASS, [285]],
+  [FIRE_CLASS, [947]],
 ]);
 
 /** The text entries class `id` shows beyond its description and first take (CLASS_TEXTS). */
@@ -260,6 +265,50 @@ export function freeTileTypes(exe: PeImage, episode: number): number[] {
   return readClassTable(exe, episode).flatMap((entry, type) =>
     entry.object === EMPTY_CLASS_OBJECT ? [type] : [],
   );
+}
+
+/**
+ * Types with a class the episode never uses, which a copy may take where the free types
+ * do not suffice (II has none): [type, its class object]. Checked by hand (2026-11-06):
+ * no room, record, script or dealer of the episode uses them, their descriptions are
+ * empty and no code places, takes or compares their classes (84, 132, 133, 52). Other
+ * types II's rooms leave unused are not: the code places them (the wizard's door, the
+ * fireman, the beam), draws with them (class 135, the hero-state icons) or compares
+ * them (the hero's doubles).
+ */
+export const REUSABLE_TYPES: ReadonlyMap<
+  number,
+  readonly (readonly [type: number, object: number])[]
+> = new Map([
+  [
+    2,
+    [
+      [0x4b, 0x4c7730],
+      [0x75, 0x4c782c],
+      [0x76, 0x4c77a4],
+      [0x7e, 0x4c7764],
+    ],
+  ],
+]);
+
+/**
+ * The types a copy can go to: the free ones (freeTileTypes), then the episode's
+ * REUSABLE_TYPES that still hold their class.
+ */
+export function spareTileTypes(exe: PeImage, episode: number): number[] {
+  const table = readClassTable(exe, episode);
+  const reusable = (REUSABLE_TYPES.get(episode) ?? []).filter(
+    ([type, object]) => table[type]?.object === object,
+  );
+  return [
+    ...table.flatMap((entry, type) => (entry.object === EMPTY_CLASS_OBJECT ? [type] : [])),
+    ...reusable.map(([type]) => type),
+  ];
+}
+
+/** Whether `type` is one of the episode's REUSABLE_TYPES (a class it never uses). */
+export function isReusableType(episode: number, type: number): boolean {
+  return (REUSABLE_TYPES.get(episode) ?? []).some(([t]) => t === type);
 }
 
 /**

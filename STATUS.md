@@ -96,7 +96,7 @@ Files in `packages/formats/src`:
 | `events.ts`                  | the episodes' event tables: first takes and events, their points (`Enigma`); patching them      |
 | `dealer.ts`                  | the dealer's goods per episode: classes, prices, how many shown; patching them                  |
 | `mod.ts`, `sha256.ts`        | mods: keyed changes to the pristine exe, their JSON file, compiled to a patch and applied       |
-| `kits.ts`                    | kits: an episode's feature (oracles, circuits, goal) planned into another: types, texts, events |
+| `kits.ts`                    | kits: an episode's feature (oracles, circuits, fire) planned into another: types, texts, events |
 | `hero-states.ts`             | the hero's states: classes that set them, status-line icons, frames; patching                   |
 | `actors.ts`                  | where moving actors come from (map cells, hatcheries, bombs, scorpion sand, records, scripts)   |
 | `game.ts`                    | `Game`: loads an exe, episodes lazily, saves scenes, texts, tile types from other episodes      |
@@ -1557,12 +1557,21 @@ Supported:
   994 moved to 1700, `Kit.textMove`: a code change, `KitPlan.code`, and copies into
   the episode and Junior, `KitPlan.textCopies`; event 298 kept quiet,
   `Kit.quietEvents`: moved to a spare entry without text, `KitPlan.moved`, or its text
-  removed, `KitPlan.silenced`, as text edits in the same undo step; see Endings). Per kit what adding it to the shown
+  removed, `KitPlan.silenced`, as text edits in the same undo step; see Endings), and
+  from III (2026-11-06): woods & boots (0x4c, 0x4b), axe & bridges (axe 0x61, hammer
+  0x62, timber 0x2b, bridge 0x6e, woods and river where missing; events 335, 331; the
+  timber's 994 moved to 1701, push at 0x415b1f; `Kit.flags` 0x20000, `KitPlan.flags`,
+  set in the same undo step as an episode edit), fire & bucket (bucket 0x67, fire
+  0x66, ash 0x4f, river 0x12 and water 0x25 where missing; fire's 947 by
+  `classTexts`), swimming (flippers 0x60, river, water; `Kit.texts`: 230). See "Kits
+  from III" under Fan episodes. Per kit what adding it to the shown
   episode copies: the types whose class the episode lacks (stairs only to Junior; II
   and III have oracles, I and II circuits: "has … already"), each at the same number
   where free, else the first free type no copy has (free: no class, and no room's map
   or record cells, `recordCellOffsets`, hold it; `Editor.freeTileTypes` and removing a
-  copy look at both too); the texts the kit's classes show
+  copy look at both too; where none is left, II's types of classes it never uses,
+  `REUSABLE_TYPES`, `spareTileTypes`, last, shown as "Replaces classes … never uses"
+  and in the copy form); the texts the kit's classes show
   that the episode lacks (`classTexts`, for classes it does not have by itself, so a
   type copied by hand still gets them); the events its table lacks, in spare entries
   the mod does not set yet (`Editor.kitPlan`). Where they do not all fit (IV: four
@@ -1814,6 +1823,45 @@ stands, decided 2026-10-27; details in the sections named.
     with frame 6 or 7 and the status line with the icon; without the copy's extras
     the hero is not drawn in I and IV hangs. Open: II's and IV's 0x19 (class 25)
     sets state 6, for which IV has no icon (would it crash IV's own game? not tried).
+- **Kits from III** (2026-11-06; `kits.ts`, verified under Wine, `pnpm test:game`):
+  - **Woods & boots** (I): with the boots the hero gets through the woods' way (state
+    4), each step on a coin flip; without them he stops in front of it.
+  - **Axe & bridges** (IV): the axe used (state 10) fells woods in state 0 (bonus box
+    of event 335, 6000 points), the hero then gets onto the felled cell (flag 0x20000,
+    coin flips) and takes the timber (counter 20, then 0x0a5b on the map); Esc ends the
+    axe's state; with the hammer (state 11) five hits finish a bridge on the river
+    (state 2), a unit of wood each (20 → 15; event 331, 12000 points), and the hero
+    walks over it. The rucksack (Return) lists the wood first (from 20 units), then the
+    items; Right moves to the next, Return "Benutzen". The timber's message shows
+    only with the registry option **`GoldWarn`** (bit 0x40 of 0x4c5d88, set from the
+    registry at 0x403765; 0x42c320 checks it for gold, class 10, and timber, class
+    158): then, at 80 units, the timber stays and its message (now text 1701, III's
+    994 copied: "Du schleppst schon genug Bauholz…") shows in a box that lets the clock
+    run but takes the keys; without the option the timber silently stays.
+  - **Fire & bucket** (Junior, with III's river and water): the bucket fills while the
+    hero swims against the current (0x4276e7: slot word 0x76 → 0x176 when a drift
+    component and his swimming have opposite signs; always with flag 0x2000000), and
+    used (0x4142c0) it puts out every fire (class 117) in the 3 × 3 cells around him:
+    event 261 each (with flag 0x100000 also 75 points), the cell becomes ash (class
+    136, set with state 0), the bucket empty. At a tap (class 238) with event 325 new
+    it fills instead. Fire's hero touch lets him on, and the hero's death handler
+    0x41ecf0 (by class, table 0x41ee44/0x41ee28) gives text 947.
+  - **Swimming** (Junior): the copied river carries the hero east along a water cell's
+    current. **Currents**: entering a room (0x427f90) lists up to 40 water cells (class 82) as current points (0x4c78b8: x, y, the state's low nibble, its high nibble + 1);
+    the swim task (0x427450) sums each point's strength × direction / distance (low
+    nibble 0–7: N, NE, E, SE, S, SW, W, NW, table 0x481054; from 8 another kind, scaled
+    by distance), without points a drift of 3 north; the flippers (class 111) make the
+    hero's own strokes 3 or 5 instead of 1 (2 and 3 with flag 0x1000000). River cells
+    with states 6–9 (low nibble) get an animation task. Water's step handler shows text
+    230 only while NoSwim (0x4fe3c4) is set, or under III's flag 0x4000000 without
+    state bit 0x10; the kit copies 230 for scripts that set NoSwim.
+  - **II's free types**: II has no type without a class; the kits and the copy form
+    take its types of classes it never uses (`REUSABLE_TYPES`: 0x4b class 84, 0x75
+    class 132, 0x76 class 133, 0x7e class 52; empty descriptions, in no room, record,
+    script or dealer list, no code places, takes or compares them), so axe & bridges
+    goes to II too (its events without points: II has no spare entry). Other types
+    II's rooms do not use are referenced by code: class 135 (the hero-state icons),
+    the wizard's door, the fireman, the beam, the hero's doubles (3–5), class 13.
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,
@@ -1878,7 +1926,7 @@ stands, decided 2026-10-27; details in the sections named.
     the amulet (II 0x4f), 0x51 III's tangram 0x52, the natives III's 0x75.
     Outside classes (engine code, the hero, tasks): the red gem (0x447de0, 0x445db0),
     food (0x449100), the watch, III's sextant, the wizard and his door, the pen.
-    Text 230 (no swimming) is shown by the river 0x12 (class 55) and water (class 82),
+    Text 230 (no swimming; only while NoSwim is set, see "Kits from III") is shown by the river 0x12 (class 55) and water (class 82),
     which every episode has, but only II and III have the text. The first survey also
     named II's money, phone card, credit card, telephone, skateboard, road and traffic,
     III's bridle, pipes and timber, and IV's punch card and cylinders; those came from
@@ -2223,6 +2271,8 @@ Roughly by value for the editor.
 | 0x41546b, 0x416640, 0x416700 | episode III: Judith healed (bit 0x4); her handler; the ending (text 442)       |
 | 0x446920, 0x446de0           | episode IV's ending: the helicopter's tick; text 1970's `#n` markers           |
 | 0x4477f0, 0x4830f0, 0x4831a8 | set the hero's state; its 13 objects; their icons (`hero-states.ts`)           |
+| 0x427f90, 0x427450, 0x481054 | currents: water cells listed on entering; the swim step; 8 directions          |
+| 0x4142c0, 0x41ecf0, 0x4c5d88 | the bucket used; the hero's death by class; options (`GoldWarn` 0x40)          |
 
 ## Gotchas
 

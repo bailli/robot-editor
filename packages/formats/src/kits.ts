@@ -1,4 +1,5 @@
-import { classTexts, freeTileTypes } from "./classes.ts";
+import { classTexts, isReusableType, spareTileTypes } from "./classes.ts";
+import { WOODS_CUT_THROUGH, readEpisodeFlags } from "./episode-flags.ts";
 import { EVENT_TEXT, FIRST_EVENT_ENTRY, readEventTable, spareEventEntries } from "./events.ts";
 import { type Game, eventTextsId, textsId } from "./game.ts";
 import type { CodeChange, CopyTextsChange, ModChanges, TextChange } from "./mod.ts";
@@ -43,6 +44,18 @@ export interface Kit {
    * goal's box would come first, and closing its text then does not end the game.)
    */
   quietEvents?: readonly number[];
+  /**
+   * Texts of the episode's texts (textsId) the feature shows that no class it copies
+   * names (classTexts): the water's 230, whose class every episode with water has.
+   * Copied where the episode lacks them.
+   */
+  texts?: readonly number[];
+  /** When the game shows `texts`, for the view. */
+  textsNote?: string;
+  /** Episode flags (episode-flags.ts) the feature needs, set once it copies a type. */
+  flags?: number;
+  /** What the flags do, for the view. */
+  flagsNote?: string;
   /** What it takes in the rooms, for the view. */
   note: string;
   /** What its example (kitExample) holds, for the view. */
@@ -96,6 +109,78 @@ export const KITS: readonly Kit[] = [
       "Junior's goal, 3 × 2 cells: walked onto, it gives 10000 points where the episode has its event, shows text 1700 (Junior's “Du hast es geschafft!”, to write anew in the Texts tab) and ends the game once that is closed.",
     note: "Junior's goal (tile 0x32, states 0–5 its 3 × 2 parts) ends the game: walked onto, it shows its text, and closing it ends the game as running out of lives does (the rank, the high scores). Its code shows text 994 in every episode, so a code patch makes it 1700, which no episode has: Junior's goal text is copied there, into this episode and into Junior.",
   },
+  {
+    key: "woods",
+    name: "Woods & boots",
+    from: 3,
+    types: [
+      [0x4c, "woods"],
+      [0x4b, "hiking boots"],
+    ],
+    events: [],
+    example:
+      "Woods four cells across with a way through them (state 4) in the middle row, the hiking boots west of it: with them the hero gets through the way, a step on a coin flip.",
+    note: "Woods (tile 0x4c in II–IV) block; their ways through (states 4 and 5) take the hero while he carries the hiking boots, each step on a coin flip (0x413c50). Only for Junior and I, which have no woods.",
+  },
+  {
+    key: "axe",
+    name: "Axe & bridges",
+    from: 3,
+    types: [
+      [0x61, "axe"],
+      [0x62, "hammer"],
+      [0x2b, "timber"],
+      [0x6e, "bridge"],
+      [0x4c, "woods"],
+      [0x12, "river"],
+    ],
+    // felling (0x447230) and building (0x447370): 6000 and 12000 points in III
+    events: [335, 331],
+    // the timber's message when the hero carries enough (0x415b1f, push 994): 994 is
+    // Junior's goal and the README.TXT joke in I and II; 1701: no episode has it,
+    // nothing in the code or the scripts names it (II's and IV's texts from 1400 on
+    // are per room, and no episode has room 701)
+    textMove: { va: 0x415b20, from: 994, to: 1701 },
+    flags: WOODS_CUT_THROUGH,
+    flagsNote: "felled woods let the hero through, so he can take the timber",
+    example:
+      "The axe and the hammer, woods three cells high and a river (state 2) three cells high: used, the axe fells the woods the hero walks into and leaves timber there; the hammer builds a bridge into the river he walks into, a hit at a time (five to finish one), each taking a unit of the timber's 20.",
+    note: "III's axe fells woods (state 0) and leaves timber; with the timber the hammer builds bridges over rivers (state 2) and water. Brings the woods and a river where the episode has none, the hero's frames and icons for both tools, the timber's message (moved to text 1701, a code patch), the hammer's text 285, events 335 and 331 and the episode flag 0x20000.",
+  },
+  {
+    key: "fire",
+    name: "Fire & bucket",
+    from: 3,
+    types: [
+      [0x67, "bucket"],
+      [0x66, "fire"],
+      [0x4f, "ash"],
+      [0x12, "river"],
+      [0x25, "water (current)"],
+    ],
+    // a fire put out (0x4142c0): 2000 points in every episode
+    events: [261],
+    example:
+      "A river with a current east (a water cell, state 2) along the top, the bucket below it and two fires at the east end: swimming west, against the current, fills the bucket; used next to the fires it puts out those around the hero, which turn to ash.",
+    note: "The bucket fills while the hero swims against a river's current (0x427450) and, used, puts out the fires in the 3 × 3 cells around him (0x4142c0), which turn to ash. Fire kills the hero who walks into it (text 947). Brings a river and water (the current's markers) where the episode has none.",
+  },
+  {
+    key: "swimming",
+    name: "Swimming",
+    from: 3,
+    types: [
+      [0x60, "flippers"],
+      [0x12, "river"],
+      [0x25, "water (current)"],
+    ],
+    events: [],
+    // shown by water and rivers while a script's NoSwim is set (0x427e40)
+    texts: [230],
+    textsNote: "shown while a room's script sets NoSwim; without it the hero always swims",
+    example:
+      "A river two rows high with a current east (a water cell, state 2), the flippers south of it: the current carries the hero east, with the flippers he swims against it.",
+    note: "Rivers carry the hero along their current, which water cells set (direction by the state's low nibble, strength by its high one; 0x427f90); the flippers make him swim stronger (0x427450). Brings a river and water where the episode has none, and text 230, which water and rivers show while a room's script sets NoSwim.",
+  },
 ];
 
 /** What adding a kit to an episode does (planKit). */
@@ -132,6 +217,10 @@ export interface KitPlan {
   }[];
   /** Entries of quiet events whose text (1800 + n) is removed: no spare entry was left. */
   silenced: number[];
+  /** Copied types that replace a class the episode never uses (REUSABLE_TYPES). */
+  reused: number[];
+  /** The episode's flags with the kit's (Kit.flags), where they lack some. */
+  flags?: number;
   /** Why the kit cannot be added, if it cannot. */
   problem?: string;
 }
@@ -140,7 +229,10 @@ export interface KitPlan {
 export interface KitOptions {
   /** The exe the types, texts and events come from (default `game`). */
   source?: Game;
-  /** Types a copy can go to (default: no class and no room uses them). */
+  /**
+   * Types a copy can go to (default: no class, or a class the episode never uses
+   * (REUSABLE_TYPES), and no room uses them); reusable ones are taken last.
+   */
   free?: readonly number[];
   /** Event entries a copy can go to (default spareEventEntries). */
   spare?: readonly number[];
@@ -152,6 +244,8 @@ export interface KitOptions {
   hasEventText?: (n: number) => boolean;
   /** The lacking events to give entries, in order (default: as many as fit, in order). */
   events?: readonly number[];
+  /** The episode's flags (default: as in `game`). */
+  flags?: number;
 }
 
 /**
@@ -172,15 +266,20 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     const id = classes.get(type)?.id ?? 0;
     (here.has(id) ? present : wanted).push(type);
   }
-  const free = options.free ?? unusedFreeTypes(game, episode);
+  const spare = options.free ?? unusedFreeTypes(game, episode);
+  // the free types first, the same number where it is free; then classes never used
+  const free = spare.filter((t) => !isReusableType(episode, t));
   const same = new Set(wanted.filter((t) => free.includes(t)));
-  const rest = free.filter((t) => !same.has(t));
+  const rest = [
+    ...free.filter((t) => !same.has(t)),
+    ...spare.filter((t) => isReusableType(episode, t)),
+  ];
   const types: [number, number][] = [];
   const problems: string[] = [];
   for (const of of wanted) {
     const to = same.has(of) ? of : rest.shift();
     if (to === undefined) {
-      problems.push(`${wanted.length} free tile types needed, ${free.length} left`);
+      problems.push(`${wanted.length} free tile types needed, ${spare.length} left`);
       break;
     }
     types.push([to, of]);
@@ -191,20 +290,27 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
   const native = source.episode(episode).classes.typeOfClass;
   const move = kit.textMove;
   const texts = [
-    ...new Set(
-      kit.types
+    ...new Set([
+      ...kit.types
         .map(([type]) => classes.get(type)?.id ?? 0)
         .filter((id) => !native.has(id))
         .flatMap((id) => classTexts(id)),
-    ),
+      ...(kit.texts ?? []),
+    ]),
   ].filter((n) => sourceTexts?.has(n) === true && !hasText(n) && n !== move?.from);
   // the moved text: the push changed once, the entry copied where it is missing
   const code: CodeChange[] = [];
   const textCopies: CopyTextsChange[] = [];
   const foreign = kit.types.some(([type]) => !native.has(classes.get(type)?.id ?? 0));
+  const flagsNow = options.flags ?? readEpisodeFlags(game.image, episode);
+  const kitFlags = kit.flags ?? 0;
+  const flags =
+    foreign && (flagsNow & kitFlags) !== kitFlags ? (flagsNow | kitFlags) >>> 0 : undefined;
   if (move && foreign) {
     const imm = (n: number) => Uint8Array.of(n & 0xff, (n >> 8) & 0xff, n >> 16, n >>> 24);
-    const now = new DataView(readVa(game.image, move.va, 4).slice().buffer).getUint32(0, true);
+    // the bytes as a view of their own (a Buffer's slice shares its pool)
+    const at = readVa(game.image, move.va, 4);
+    const now = new DataView(at.buffer, at.byteOffset, 4).getUint32(0, true);
     if (now === move.from) code.push({ va: move.va, expect: imm(move.from), bytes: imm(move.to) });
     else if (now !== move.to) problems.push(`the code at 0x${move.va.toString(16)} is changed`);
     const hasEntry =
@@ -222,24 +328,24 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
   const held = new Set(readEventTable(game.image, episode).map((e) => e.id));
   const entryOf = (id: number) => table.findIndex((e, n) => n >= FIRST_EVENT_ENTRY && e.id === id);
   const lacking = kit.events.filter((id) => !held.has(id) && entryOf(id) >= 0);
-  const spare = [...(options.spare ?? spareEventEntries(episode))];
-  let chosen = options.events ?? lacking.slice(0, spare.length);
+  const spareEntries = [...(options.spare ?? spareEventEntries(episode))];
+  let chosen = options.events ?? lacking.slice(0, spareEntries.length);
   const notLacking = chosen.filter((id) => !lacking.includes(id));
   if (notLacking.length > 0)
     problems.push(`the episode has event ${notLacking.join(", ")} already or the kit has none`);
-  if (chosen.length > spare.length) {
-    problems.push(`${chosen.length} events chosen, ${spare.length} spare entries left`);
-    chosen = chosen.slice(0, spare.length);
+  if (chosen.length > spareEntries.length) {
+    problems.push(`${chosen.length} events chosen, ${spareEntries.length} spare entries left`);
+    chosen = chosen.slice(0, spareEntries.length);
   }
   const events = chosen
     .filter((id) => lacking.includes(id))
-    .map((id, k) => ({ entry: spare[k] ?? -1, of: entryOf(id), id }));
+    .map((id, k) => ({ entry: spareEntries[k] ?? -1, of: entryOf(id), id }));
   const given = new Set(events.map((e) => e.id));
   // quiet events: off entries with a text, to spare entries without one left by `events`
   const eventTexts = game.texts(eventTextsId(episode))?.entries;
   const hasEventText = options.hasEventText ?? ((n) => eventTexts?.has(n) === true);
   const own = readEventTable(game.image, episode);
-  const quietSpare = spare.slice(events.length).filter((n) => !hasEventText(EVENT_TEXT + n));
+  const quietSpare = spareEntries.slice(events.length).filter((n) => !hasEventText(EVENT_TEXT + n));
   const moved: KitPlan["moved"] = [];
   const silenced: number[] = [];
   for (const id of kit.quietEvents ?? []) {
@@ -269,14 +375,17 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     textCopies,
     moved,
     silenced,
+    reused: types.flatMap(([to]) => (isReusableType(episode, to) ? [to] : [])),
   };
+  if (flags !== undefined) plan.flags = flags;
   if (problems.length > 0) plan.problem = problems.join("; ");
   return plan;
 }
 
 /**
- * Types without a class that no room of the episode uses: in its maps or in the cells its
- * logic records hold (an oracle's object, what a teleporter or a circuit node shows).
+ * Types without a class, or with one the episode never uses (spareTileTypes), that no
+ * room of the episode uses: in its maps or in the cells its logic records hold (an
+ * oracle's object, what a teleporter or a circuit node shows).
  */
 function unusedFreeTypes(game: Game, episode: number): number[] {
   const used = new Set<number>();
@@ -286,7 +395,7 @@ function unusedFreeTypes(game: Game, episode: number): number[] {
       for (const at of recordCellOffsets(data[0])) used.add(data[at]);
     }
   }
-  return freeTileTypes(game.image, episode).filter(
+  return spareTileTypes(game.image, episode).filter(
     (t) => t !== 0 && t !== LOGIC_CELL && !used.has(t),
   );
 }
@@ -295,14 +404,14 @@ function unusedFreeTypes(game: Game, episode: number): number[] {
  * The mod changes a plan makes (tileTypes, events with the kit episode's points and
  * sounds, the pieces those sounds name that the episode lacks as music, the texts and
  * the events' texts as copyTexts; quiet events moved as events, their texts removed as
- * texts), for a mod or the editor to merge.
+ * texts; the episode's flags), for a mod or the editor to merge.
  */
 export function kitChanges(
   source: Game,
   episode: number,
   kit: Kit,
   plan: KitPlan,
-): Pick<ModChanges, "music" | "tileTypes" | "events" | "code" | "copyTexts" | "texts"> {
+): Pick<ModChanges, "music" | "tileTypes" | "events" | "code" | "copyTexts" | "texts" | "flags"> {
   const table = readEventTable(source.image, kit.from);
   const eventTexts = source.texts(eventTextsId(kit.from))?.entries;
   const withText = plan.events.filter((e) => eventTexts?.has(EVENT_TEXT + e.of) === true);
@@ -348,6 +457,7 @@ export function kitChanges(
       entry: EVENT_TEXT + n,
       variants: null,
     })),
+    flags: plan.flags === undefined ? [] : [{ episode, flags: plan.flags }],
   };
 }
 
@@ -369,6 +479,12 @@ export interface KitExample {
 /** Circuit pieces (tile 0x42's states, circuits.ts) and letters (0x25's: the character). */
 const [OR, WIRE_ACROSS, CORNER_DOWN, CORNER_UP, GATE_LEFT] = [0x00, 0x0a, 0x0c, 0x0d, 0x0e];
 const [ZERO, ONE] = [0x30, 0x31];
+/** Woods' way through (0x413c50: states 4 and 5). */
+const WOODS_WAY = 4;
+/** A river's open water, where the hammer builds (0x447370: state & 0xf = 2). */
+const RIVER_OPEN = 2;
+/** A water cell's current: direction east (0x481054: 2), strength 1 (high nibble 0). */
+const CURRENT_EAST = 2;
 
 /**
  * The example of `kit` for the episode as `game` has it (its types found by their class,
@@ -382,6 +498,14 @@ const [ZERO, ONE] = [0x30, 0x31];
  *   whose event (262 + n) the episode's table has and whose hint `hasText`, else the
  *   first with its event, else 0.
  * - goal (3 × 2): its six parts in the base layer, as in Junior's room 43.
+ * - woods (6 × 3): woods (state 0) four cells across, a way through them (state 4) in
+ *   the middle row, the hiking boots west of it.
+ * - axe (7 × 3): the axe and the hammer at x = 0, woods (state 0) at x = 2 and a river
+ *   (state 2) at x = 5, three cells high.
+ * - fire (7 × 3): a river (state 2) along the top with a water cell at x = 3 (a current
+ *   east), the bucket at (0, 2), fires at (5, 1) and (5, 2).
+ * - swimming (6 × 3): a river two rows high with a water cell at (2, 0) (a current
+ *   east), the flippers at (0, 2).
  */
 export function kitExample(
   game: Game,
@@ -419,6 +543,49 @@ export function kitExample(
     const w = 3;
     const base = Array.from({ length: 2 * w }, (_, k) => cell(0, k));
     return { w, h: 2, base, overlay: base.map(() => 0), records: [] };
+  }
+  if (kit.key === "woods") {
+    const [woods, boots] = types;
+    if (woods === undefined || boots === undefined) return undefined;
+    const w = 6;
+    const base = Array.from({ length: 3 * w }, (_, k) =>
+      k % w === 0 || k % w === w - 1 ? 0 : cell(0, Math.floor(k / w) === 1 ? WOODS_WAY : 0),
+    );
+    const overlay = base.map(() => 0);
+    overlay[w] = cell(1, 0);
+    return { w, h: 3, base, overlay, records: [] };
+  }
+  if (kit.key === "axe") {
+    if (types.some((t) => t === undefined)) return undefined;
+    const w = 7;
+    const base = Array.from({ length: 3 * w }, (_, k) =>
+      k % w === 2 ? cell(4, 0) : k % w === 5 ? cell(5, RIVER_OPEN) : 0,
+    );
+    const overlay = base.map(() => 0);
+    overlay[0] = cell(0, 0);
+    overlay[2 * w] = cell(1, 0);
+    return { w, h: 3, base, overlay, records: [] };
+  }
+  if (kit.key === "fire") {
+    if (types.some((t) => t === undefined)) return undefined;
+    const w = 7;
+    const base = Array.from({ length: 3 * w }, (_, k) =>
+      k === 3 ? cell(4, CURRENT_EAST) : k < w ? cell(3, RIVER_OPEN) : 0,
+    );
+    base[5 + w] = base[5 + 2 * w] = cell(1, 0);
+    const overlay = base.map(() => 0);
+    overlay[2 * w] = cell(0, 0);
+    return { w, h: 3, base, overlay, records: [] };
+  }
+  if (kit.key === "swimming") {
+    if (types.some((t) => t === undefined)) return undefined;
+    const w = 6;
+    const base = Array.from({ length: 3 * w }, (_, k) =>
+      k === 2 ? cell(2, CURRENT_EAST) : k < 2 * w ? cell(1, RIVER_OPEN) : 0,
+    );
+    const overlay = base.map(() => 0);
+    overlay[2 * w] = cell(0, 0);
+    return { w, h: 3, base, overlay, records: [] };
   }
   if (kit.key === "oracles") {
     const [tangram, oracle] = types;
