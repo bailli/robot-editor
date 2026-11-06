@@ -2270,11 +2270,14 @@ removes it on `close` (`gameDir`: there the game keeps its screenshots).
 - **Reference screenshots natively** (`shots.ts`): the driver starts the episode (or the
   patched room), runs `wait` (1 s of virtual time) and the `keys`, and copies the game's
   own Ctrl+Alt+P PNG from its directory (its palette has 225 entries, its name the room
-  name in code page 1252). All 31 screenshots retaken natively: the palettes and palette
-  offsets equal Wine's; the 11 static rooms give the same indices (`ep0`: the same
-  `shots.json` entry); the other 20 differ where actors or animated tiles are caught at
-  another moment (Wine after real-time waits, the wrapper after virtual steps) — retaking
-  them natively means a new, reviewed `shots.json`.
+  name in code page 1252). **`shots.json` is native since 2026-11-06:** taken the same way
+  under the driver, Wine and the wrapper give identical frames for all 31 screenshots, so
+  the native ones are the reference now (reproducible: virtual time). Against the earlier
+  ones from the Wine harness (real-time waits) the 11 static rooms are the same; the other
+  20 caught actors or animated tiles at other moments: their differing cells 736 → 612 in
+  all (e.g. `ep2-room123` 104 → 39, `ep1-room14` 92 → 29; up where actors now stand in
+  the open, e.g. `ep4-room183` 5 → 29). A checkout's `shots/` from the Wine harness no
+  longer matches: retake it (`pnpm robot shots`, `--room …` for the rest of `shots.json`).
 - **Playing** (`robot play`, the editor's "Test in game"): the wrapper on the user's
   display in `.native/play/` (saves stay; the user's settings file; `--mute` with SDL's
   dummy audio, `--console` with `ROBOT_CONSOLE`; the editor's Console chip patches the
