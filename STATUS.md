@@ -1765,7 +1765,9 @@ stands, decided 2026-10-27; details in the sections named.
     ends (using the hammer again does not). The timber count is not shown in the top
     bar as it is in III, although the code that lists it (the item bar 0x42dda0,
     entry for class 0x9e from 20 units on; its line "%d Stck", string 40009, 0x42e0d2)
-    checks no episode; not explained yet.
+    checks no episode; not explained yet. In **IV** using III's axe (taken
+    first) crashed the game; IV's hero has frames 6–9 and the use (0x416a10, the
+    state change 0x4477f0, 0x447840, 0x42c2e0) checks no episode; not explained yet.
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,
