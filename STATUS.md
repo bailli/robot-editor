@@ -1762,10 +1762,17 @@ stands, decided 2026-10-27; details in the sections named.
     with more frames; the editor cannot yet; colours as for any copied shape).
   - **Tried in the game by the user (2026-11-06), in episode I:** III's hammer,
     timber and bridge build bridges; the hero is invisible in hammer mode, which Esc
-    ends (using the hammer again does not). The timber count is not shown in the top
-    bar as it is in III, although the code that lists it (the item bar 0x42dda0,
-    entry for class 0x9e from 20 units on; its line "%d Stck", string 40009, 0x42e0d2)
-    checks no episode; not explained yet. In **IV** using III's axe (taken
+    ends (using the hammer again does not). The item bar (Enter, 0x42dda0) lists the
+    wood with its count ("%d Stck", string 40009; an entry from 20 units on), but the
+    status line does not show it as in III: the status line's **indicators** are
+    static objects made at start-up (0x435b10–0x436290: vtable, kind, the variable,
+    its last value; the wood's is 0x51bcfc on 0x4fe3c6, drawn as `@%04X%02d`, the
+    timber's tile type and the count, by 0x435ea0), and each episode's method returns
+    a null-terminated list of them (I 0x475710, II 0x476cc8, III 0x477c50, IV 0x478bd0,
+    Junior 0x479a00, another at 0x47a820). All have the same seven; III adds
+    0x4c6174, the wood 0x51bcfc and 0x4c6164, IV the room and cell 0x51bd44. Other
+    data follows each list, so showing the wood elsewhere means moving that
+    episode's list (its `mov eax, list`: I 0x408d10, II 0x409f40, IV 0x40d670). In **IV** using III's axe (taken
     first) crashed the game; IV's hero has frames 6–9 and the use (0x416a10, the
     state change 0x4477f0, 0x447840, 0x42c2e0) checks no episode; not explained yet.
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
