@@ -252,7 +252,7 @@ h2 {
   margin: 0 0 8px;
 }
 
-/* the last message, along the window's bottom edge */
+/* the cell under the mouse and the last message, along the window's bottom edge */
 .status-bar {
   flex: none;
   margin-top: auto;
@@ -267,19 +267,23 @@ h2 {
 }
 
 .status {
-  flex: 1 1 0;
+  flex: 0 1 auto;
   min-width: 8em;
+  max-width: 40%;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  text-align: right;
   color: var(--muted);
 }
 
+/* first and left-aligned: it starts at the same place whatever the cell */
 .cell-status {
+  flex: 1 1 0;
   display: flex;
   gap: 16px;
   min-width: 0;
-  max-width: 70%;
+  font-variant-numeric: tabular-nums;
 }
 
 .cell-status p {

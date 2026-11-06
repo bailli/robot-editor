@@ -1107,12 +1107,13 @@ export class App {
       ),
       this.welcome,
       this.workspace,
-      // the last message left, the cell under the mouse right
+      // the cell under the mouse left, where it starts in the same place for every
+      // cell; the last message right
       h(
         "footer",
         { class: "status-bar" },
-        this.status,
         h("div", { class: "cell-status" }, this.cellInfo, this.cellText),
+        this.status,
       ),
       this.newRoomDialog.element,
     );
@@ -3575,7 +3576,9 @@ export class App {
     const y = Math.floor(index / ROOM_WIDTH);
     const base = room.base[index] ?? 0;
     const overlay = room.overlay[index] ?? 0;
-    this.cellInfo.textContent = `(${x}, ${y})  base ${hex(base)}  overlay ${hex(overlay)}`;
+    // figure spaces pad the coordinates, so "base" stays in place from cell to cell
+    const pad = (n: number) => String(n).padStart(2, "\u2007");
+    this.cellInfo.textContent = `(${pad(x)}, ${pad(y)})  base ${hex(base)}  overlay ${hex(overlay)}`;
     const record = [base, overlay]
       .filter((c) => (c & 0xff) === LOGIC_CELL)
       .map((c) => room.records.find((r) => r.slot === c >> 8))
