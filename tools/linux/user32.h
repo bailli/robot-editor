@@ -94,7 +94,8 @@ struct window {
   HMENU menu;
   HMENU system_menu;
   RECT rect; /* the whole window: screen coordinates, or the parent's client ones for a child */
-  BOOL visible, dirty;
+  BOOL visible, dirty; /* dirty: `update` is not empty, a WM_PAINT is due */
+  RECT update;         /* the update region's bounds, client coordinates */
   char title[256]; /* the window text: WM_SETTEXT, WM_GETTEXT, GetWindowTextA */
   BYTE *extra;     /* cbWndExtra bytes (window_create: `extra` bytes) */
   int extra_size;

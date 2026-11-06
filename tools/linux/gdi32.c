@@ -39,6 +39,8 @@ static INT WINAPI GetDeviceCaps(HDC dc, INT index) {
   case 12: return 32;   /* BITSPIXEL */
   case 14: return 1;    /* PLANES */
   case 38: return 0x7e99; /* RASTERCAPS: no RC_PALETTE (0x100) */
+  case 88:                /* LOGPIXELSX */
+  case 90: return 96;     /* LOGPIXELSY: the game scales the screen's size by them / 96 */
   case 104: return 0;   /* SIZEPALETTE */
   case 116: return 60;  /* VREFRESH */
   }

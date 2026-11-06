@@ -291,6 +291,8 @@ static INT WINAPI GetWindowTextLengthA(HWND hwnd) {
   return (INT)send_message(hwnd, WM_GETTEXTLENGTH, 0, 0);
 }
 
+static void invalidate(struct window *w, const RECT *rect);
+
 static void moved(HWND hwnd, struct window *w) {
   int cw, ch;
   client_size(w, &cw, &ch);
@@ -322,7 +324,7 @@ static BOOL WINAPI MoveWindow(HWND hwnd, INT x, INT y, INT cx, INT cy, BOOL repa
   trace("MoveWindow %d,%d %dx%d", x, y, cx, cy);
   w->rect = (RECT){x, y, x + cx, y + cy};
   moved(hwnd, w);
-  if (repaint) w->dirty = TRUE;
+  if (repaint) invalidate(w, NULL);
   return TRUE;
 }
 
@@ -489,10 +491,35 @@ static INT WINAPI ReleaseDC(HWND hwnd, HDC dc) {
   return 1;
 }
 
+/* Adds to the update region (its bounds), clipped to the client area: as on Windows, an
+   empty rectangle or one outside the client area asks for no WM_PAINT. The game invalidates
+   such rectangles while a box is open; repainting anyway advanced the sprites' colour
+   cycling faster than under Windows/Wine. */
+static void invalidate(struct window *w, const RECT *rect) {
+  int cw, ch;
+  client_size(w, &cw, &ch);
+  RECT r = rect ? *rect : (RECT){0, 0, cw, ch};
+  trace("InvalidateRect %d,%d-%d,%d of %dx%d", r.left, r.top, r.right, r.bottom, cw, ch);
+  if (r.left < 0) r.left = 0;
+  if (r.top < 0) r.top = 0;
+  if (r.right > cw) r.right = cw;
+  if (r.bottom > ch) r.bottom = ch;
+  if (r.right <= r.left || r.bottom <= r.top) return;
+  if (!w->dirty) {
+    w->update = r;
+    w->dirty = TRUE;
+    return;
+  }
+  if (r.left < w->update.left) w->update.left = r.left;
+  if (r.top < w->update.top) w->update.top = r.top;
+  if (r.right > w->update.right) w->update.right = r.right;
+  if (r.bottom > w->update.bottom) w->update.bottom = r.bottom;
+}
+
 static BOOL WINAPI InvalidateRect(HWND hwnd, const RECT *rect, BOOL erase) {
-  (void)rect, (void)erase;
+  (void)erase;
   struct window *w = win(hwnd);
-  if (w) w->dirty = TRUE;
+  if (w) invalidate(w, rect);
   return TRUE;
 }
 
@@ -510,8 +537,11 @@ static HDC WINAPI BeginPaint(HWND hwnd, PAINTSTRUCT *ps) {
   memset(ps, 0, sizeof *ps);
   ps->hdc = GetDC(hwnd);
   if (w) {
+    if (w->dirty)
+      ps->rcPaint = w->update;
+    else
+      GetClientRect(hwnd, &ps->rcPaint);
     w->dirty = FALSE;
-    GetClientRect(hwnd, &ps->rcPaint);
   }
   return ps->hdc;
 }

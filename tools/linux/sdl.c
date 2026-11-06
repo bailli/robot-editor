@@ -174,7 +174,12 @@ void screen_title(const char *title) {
 
 void screen_desktop(int *width, int *height) {
   SDL_DisplayMode mode;
-  if (video() && SDL_GetDesktopDisplayMode(0, &mode) == 0) {
+  if (driver_active()) {
+    /* The harness's Wine desktop: the game picks its window's scale by the screen (1 × 1.25
+       here), and repaints and mouse positions follow that scale. */
+    *width = 1024;
+    *height = 768;
+  } else if (video() && SDL_GetDesktopDisplayMode(0, &mode) == 0) {
     *width = mode.w;
     *height = mode.h;
   } else {
@@ -407,7 +412,9 @@ void screen_poll(void) {
   while (SDL_PollEvent(&e)) {
     switch (e.type) {
     case SDL_QUIT:
-      if (main) post_message(main, WM_CLOSE, 0, 0);
+      /* The window's close button, as Windows sends it: SC_CLOSE first. While an episode
+         runs the game asks in its own box (0x403d6b); otherwise DefWindowProcA closes. */
+      if (main) post_message(main, WM_SYSCOMMAND, 0xf060 /* SC_CLOSE */, 0);
       break;
     case SDL_KEYDOWN:
     case SDL_KEYUP: key(&e.key); break;

@@ -2281,16 +2281,30 @@ removes it on `close` (`gameDir`: there the game keeps its screenshots).
   exe). The dev server runs one game at a time, ends the one it started before, answers
   after a second unless the wrapper has ended (its log's last lines then). Without any
   video driver the wrapper ends at once ("no video"), unless `SDL_VIDEODRIVER=dummy`.
-- **Wrapper against Wine** (`pnpm test:game:cross`, the same input on both; first run
-  2026-11-06): the hero, the game tick and the virtual time are the same in all five
-  episodes, the frames are not: under the driver the wrapper presents about 2.4 times as
-  many frames (555 against 232 in 920 steps, episode I), and sprites' colour cycling
-  follows the frames drawn, so their colours differ (positions equal). Which rate matches
-  Windows is open (to look into with Wine runs). The palette's last 32 slots differ too:
-  the game's DIB_PAL_COLORS table holds leftover words of its own memory there (unused by
-  the frames; the test compares only the colours a frame uses).
+- **Wrapper against Wine** (`pnpm test:game:cross`, the same input on both): the hero, the
+  game tick and the virtual time are the same in all five episodes; the frames are the same
+  in Junior and II, not yet in I, III and IV. Sprites' colour cycling follows the frames
+  presented (WM_PAINT), not the game clock, so a different number of repaints shows as
+  other sprite colours (positions equal). Found and fixed (2026-11-06): `InvalidateRect`
+  ignored its rectangle — Windows repaints only for a non-empty part inside the client
+  area, and the game invalidates empty ones while a box is open (the wrapper repainted
+  every step there); `GetDeviceCaps(LOGPIXELSX/Y)` answered 0 — the game scales the
+  screen's size by DPI / 96 (app+0x620, 0x403432) before choosing its window's scale, so
+  it took 1 × 1; now 96, and under the driver the wrapper reports the harness's 1024 × 768
+  desktop, so the game picks 1 × 1.25 (640 × 435) as under Wine. Left: after choosing an
+  episode the title screen wipes in, a 16-pixel column per step from the right
+  (`InvalidateRect` x..x+16, the full height); under Wine the repaints stop after 34 of the
+  40 columns (the last, leftmost ones give none), in the wrapper all 40 repaint; the first
+  box differs too (Wine 30 repaints in 155 steps, the wrapper 13). Next step: Wine's own
+  trace of window updates (`WINEDEBUG=+win`) for that wipe. The palette's last 32 slots
+  differ as well: the game's DIB_PAL_COLORS table holds leftover words of its own memory
+  there (unused by the frames; the test compares only the colours a frame uses).
+- **Closing the window** sends WM_SYSCOMMAND/SC_CLOSE first, as Windows does for the close
+  button: the game (0x403d6b) asks "Spiel abbrechen?" while an episode runs and closes
+  otherwise (WM_CLOSE, 0x403aca, is no question: it closes). Its SC_* cases there: 0x1069
+  (to the tray), SC_MINIMIZE (to the tray with `MinimizeToTray`), SC_CLOSE.
 
-**Next:** the frame rate under the driver (above). Untested: restarting the sound after a changed `SampleRate`/`DisableOpl` (the
+**Next:** the remaining frame differences against Wine (above). Untested: restarting the sound after a changed `SampleRate`/`DisableOpl` (the
 release path). No SEH: a hardware fault in the game ends the wrapper (Windows would run
 the game's exception handlers; none was needed so far). The player-name prompt is the
 game's own (drawn, not a dialog).
