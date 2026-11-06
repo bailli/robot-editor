@@ -127,7 +127,30 @@ static SHORT WINAPI hook_GetAsyncKeyState(int vk) { return keys[vk & 0xff] ? (SH
 
 /* A key message taken from the queue sets its key in the thread's keyboard state (the
  * left variant of Shift, Ctrl and Alt too), as Windows does for real input. */
+static BOOL take_step(void);
+static void fire_timers(void);
+
 static BOOL WINAPI hook_GetMessageA(MSG *msg, HWND hwnd, UINT first, UINT last) {
+  /* The game may wait here for a message outside `step`, e.g. for its 200 ms timer while
+   * 0x4c5d80 counts back up after a change of the display mode (0x403c23); time passes
+   * meanwhile on Windows. A granted step advances the virtual clock without running the
+   * game (its timers fire); with none granted the game is idle, as in `step`. (As the
+   * wrapper's driver_wait_message; not yet run under Wine.) */
+  for (;;) {
+    LONG seen = posted; /* read before looking, as in `step` */
+    MSG pending;
+    if (PeekMessageA(&pending, hwnd, first, last, PM_NOREMOVE)) break;
+    if (take_step()) {
+      now_ms += step_ms;
+      steps++;
+      fire_timers();
+      continue;
+    }
+    idle_steps = steps;
+    idle_posted = seen;
+    SetEvent(idle);
+    MsgWaitForMultipleObjects(1, &wake, FALSE, INFINITE, QS_ALLINPUT);
+  }
   BOOL result = real_GetMessageA(msg, hwnd, first, last);
   UINT m = msg->message;
   if (result > 0 && (m == WM_KEYDOWN || m == WM_KEYUP || m == WM_SYSKEYDOWN || m == WM_SYSKEYUP)) {

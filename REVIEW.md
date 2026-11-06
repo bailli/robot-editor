@@ -8,10 +8,10 @@ an entry once it is fixed or rejected; delete the file when it is empty.
 
 ## Native Linux wrapper (tools/linux, its TS side, CI)
 
-1. **Open, low: the proxy under Wine likely deadlocks on the way back from full screen** as
-   the wrapper did (fixed there, `driver_wait_message`). After Alt+Enter twice the game
-   waits in GetMessage for its 200 ms timer, but the proxy's timers only fire in `step`.
-   Not tried under Wine (Wine runs need the user's ok).
+1. **Not run under Wine: the proxy's full-screen fix.** Its GetMessageA hook now lets
+   granted steps pass as time while the game waits for a message, as the wrapper's
+   `driver_wait_message` does (the game test "Alt+Return … and back" passes natively).
+   Run `pnpm test:game:wine` once Wine runs are ok.
 2. **Not run under Wine: the proxy's `hello TOKEN` check.** The wrapper's was tried
    (no hello, a wrong token, an idle squatter, busy), and the proxy has the same code
    (it builds). harness.py's probe sends the token. Run `pnpm test:game:wine` once Wine

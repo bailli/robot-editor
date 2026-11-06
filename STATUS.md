@@ -2179,8 +2179,7 @@ wrapper is now the default for the game tests, the reference screenshots and pla
   game waits (0x4c5d80 below 0: the main loop at 0x405bcb steps only while it is above 0)
   until its 200 ms timer (0x403c23) counts it up, about 770 ms. Under the driver
   `GetMessageA` then waits on the virtual clock: each granted step passes as time
-  (`driver_wait_message`), else nothing would advance the timer; the proxy under Wine has
-  no such case yet (not tried there). Game test "Alt+Return … and back".
+  (`driver_wait_message`), else nothing would advance the timer; the proxy's GetMessageA hook does the same (not yet run under Wine). Game test "Alt+Return … and back".
 - **Input:** SDL keys become WM_KEYDOWN/WM_KEYUP with Windows virtual keys (Alt
   combinations WM_SYSKEY*, the keypad without Num Lock the navigation keys the game's
   diagonal moves use), typed text WM_CHAR in code page 1252; `TranslateAcceleratorA` reads
