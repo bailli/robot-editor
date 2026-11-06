@@ -29,18 +29,7 @@ an entry once it is fixed or rejected; delete the file when it is empty.
 
 ## tools, proxy, harness
 
-3. **Plausible: `proxy.c:341-347` (`patch_game`, `call_at`) reads 0x405bde in DllMain
-   of any process that loads the proxy** (DxDiag loads ddraw). That is an access
-   violation if it isn't mapped. Fix: check that the module is GameOfRobot.exe first.
-4. **Plausible: a race in `harness.py start_xvfb`** (~126-141) when two harnesses run.
-   The socket of another display can be taken for ours. Fix: `-displayfd`, or re-check
-   `poll()`.
-5. **Confirmed by reading: `harness.py shot`.** `xdo search --sync` has no timeout (and
-   the TS `spawnSync` has none either). There are no SIGTERM/SIGINT handlers, so Xvfb and
-   wine stay behind.
-6. `proxy.c:491-496 button`: any name other than "left" counts as the right button.
-7. `proxy.c:481 key`: VK `& 0xff` instead of a range check.
-8. **Plausible: real time leaks.** `hook_SetTimer` passes `hwnd == NULL` timers to the
-   real SetTimer. Sleep, WaitFor* and waveOut aren't virtual. Unverified.
-9. `driver.ts press/click/hold`: a throw between down and up leaves the key or button
-   held (benign while `withGame` closes the driver).
+1. **Not run under Wine:** the harness's Xvfb by `-displayfd`, `shot`'s window timeout and
+   signal handlers, and the proxy's `is_game` guard and argument checks. Xvfb was tried
+   by itself; the rest builds and compiles. Run `pnpm test:game:wine` and a
+   `ROBOT_WINE=1 pnpm robot shots 1` once Wine runs are ok.

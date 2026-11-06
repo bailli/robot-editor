@@ -312,8 +312,12 @@ export class Driver {
   /** Holds a key for `steps` steps. */
   async hold(key: Key | number, steps: number): Promise<void> {
     await this.key(key, true);
-    await this.run(steps);
-    await this.key(key, false);
+    try {
+      await this.run(steps);
+    } finally {
+      // also when the run fails: a driver used on is not left with the key down
+      await this.key(key, false).catch(() => undefined);
+    }
   }
 
   /** A short press, then `after` steps for the game to react. */
@@ -335,8 +339,11 @@ export class Driver {
     const at = [Math.round((x * width) / 640), Math.round((y * height) / 348)];
     await this.command(`mouse ${String(at[0])} ${String(at[1])}`);
     await this.command("button left down");
-    await this.run(5);
-    await this.command("button left up");
+    try {
+      await this.run(5);
+    } finally {
+      await this.command("button left up").catch(() => undefined);
+    }
     await this.run(after);
   }
 
@@ -428,11 +435,14 @@ export class Driver {
   /** Holds `key` until `done` holds for the hero; where he stands then. */
   async walk(key: Key, done: (hero: HeroState) => boolean): Promise<HeroState> {
     await this.key(key, true);
-    await this.until(async () => {
-      const hero = await this.hero();
-      return hero !== undefined && done(hero);
-    }, 3000);
-    await this.key(key, false);
+    try {
+      await this.until(async () => {
+        const hero = await this.hero();
+        return hero !== undefined && done(hero);
+      }, 3000);
+    } finally {
+      await this.key(key, false).catch(() => undefined);
+    }
     await this.run(20);
     const hero = await this.hero();
     if (!hero) throw new Error("no hero after walking");

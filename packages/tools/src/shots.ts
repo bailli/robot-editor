@@ -253,7 +253,13 @@ function wineShot(exe: string, episode: number, out: URL, options: ShotOptions) 
   const args = ["-I", HARNESS, "shot", String(episode), fileURLToPath(out), "--exe", exe];
   if (options.wait !== undefined) args.push("--wait", String(options.wait));
   if (options.keys?.length) args.push("--keys", ...options.keys);
-  const result = spawnSync("python3", args, { stdio: "inherit" });
+  // a hung harness is ended (SIGTERM: it stops the game and Xvfb on the way out)
+  const result = spawnSync("python3", args, {
+    stdio: "inherit",
+    timeout: 300_000,
+    killSignal: "SIGTERM",
+  });
+  if (result.error) throw new Error(`harness for ${fileURLToPath(out)}: ${result.error.message}`);
   if (result.status !== 0) throw new Error(`harness failed for ${fileURLToPath(out)}`);
 }
 

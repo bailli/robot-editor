@@ -43,6 +43,7 @@ of links into $HOME, and the Z: drive (the whole filesystem) is removed.
 import argparse
 import glob
 import os
+import select
 import shutil
 import signal
 import socket
@@ -126,23 +127,33 @@ def stop_process(process):
 
 
 def start_xvfb():
-    """Xvfb on a free display from :90 on, once it listens: the process and the display.
-    Another one taking the display first (between looking and starting) makes ours end,
-    and the next display is tried."""
-    for n in range(90, 120):
-        if os.path.exists(f"/tmp/.X11-unix/X{n}") or os.path.exists(f"/tmp/.X{n}-lock"):
-            continue
-        xvfb = subprocess.Popen(["Xvfb", f":{n}", "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    """Xvfb on a display of its own choosing, once it listens: the process and the
+    display. Xvfb picks a free one itself and names it on a pipe (-displayfd) only when
+    it is ready, so two harnesses never take each other's display."""
+    read_end, write_end = os.pipe()
+    try:
+        xvfb = subprocess.Popen(
+            ["Xvfb", "-displayfd", str(write_end), "-screen", "0", "1024x768x24",
+             "-nolisten", "tcp"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, pass_fds=(write_end,))
+    finally:
+        os.close(write_end)
+    try:
+        number = b""
         deadline = time.time() + 10
-        while xvfb.poll() is None:
-            if os.path.exists(f"/tmp/.X11-unix/X{n}"):
-                return xvfb, f":{n}"
-            if time.time() > deadline:
+        while not number.endswith(b"\n"):
+            left = deadline - time.time()
+            if left <= 0 or not select.select([read_end], [], [], left)[0]:
                 stop_process(xvfb)
                 raise RuntimeError("Xvfb did not start")
-            time.sleep(0.05)
-    raise RuntimeError("no free X display")
+            chunk = os.read(read_end, 16)
+            if not chunk:  # it ended without naming a display
+                stop_process(xvfb)
+                raise RuntimeError("Xvfb did not start")
+            number += chunk
+    finally:
+        os.close(read_end)
+    return xvfb, f":{int(number)}"
 
 
 def xdo(display, *args):
@@ -206,6 +217,13 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
     for d in screenshot_dir():
         shutil.rmtree(d)  # screenshots and saves, also those of games played with `play`
     shutil.copyfile(exe, os.path.join(GAME_DIR, "GameOfRobot.exe"))
+
+    def stop(*_):
+        raise SystemExit(1)
+
+    # killed (or Ctrl+C): the finally below still ends the game and Xvfb
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
     xvfb, display = start_xvfb()
     game = None
     try:
@@ -222,7 +240,12 @@ def shot(episode, out, exe=EXE, wait=1.0, keep=False, debug=None, keys=()):
                 step += 1
                 run("import", "-window", "root", os.path.join(debug, f"{step:02d}-{name}.png"), display=display)
 
-        window = xdo(display, "search", "--sync", "--name", "The Game of Robot").splitlines()[0]
+        # the window within a minute (Wine's first start in a prefix is slow), else give up
+        found = run("xdotool", "search", "--sync", "--name", "The Game of Robot", display=display,
+                    check=False, capture_output=True, text=True, timeout=60).stdout.split()
+        if not found:
+            raise RuntimeError("the game opened no window")
+        window = found[0]
         time.sleep(3)
         capture("start")
         advance(display, window, lambda: click(display, *EPISODE_BUTTONS[episode]),
