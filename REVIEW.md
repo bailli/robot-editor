@@ -16,29 +16,16 @@ an entry once it is fixed or rejected; delete the file when it is empty.
    (no hello, a wrong token, an idle squatter, busy), and the proxy has the same code
    (it builds). harness.py's probe sends the token. Run `pnpm test:game:wine` once Wine
    runs are ok.
-3. **Low: a closed handle can be freed under a waiter** (`kernel32.c:1471-1527`).
-   - `wait_objects` takes no reference. dsound's `signal_send` runs after unlocking.
-   - The game never triggers this today.
-4. **Low: the PE loader trusts header fields** (`loader.c:261-303`, `bind_imports`
-   233-259, `res_lookup` in `kernel32.c`).
-   - `e_lfanew`, `SizeOfHeaders` (the memcpy at 287), the section table, `va + n` wrap,
-     the imports and the resource offsets are unchecked.
-   - Reachable only with a malformed exe (e.g. one posted to "Test in game").
-   - Fix: validate every offset with 64-bit sums.
-5. **Low: CI `wrapper.yml`.**
-   - It has no setup-node (Node 22).
-   - The path filter lacks `package.json`.
-   - Deleting and then creating the release leaves none if create fails. Use
-     `gh release upload --clobber` and a moved tag instead.
-   - The zip drops the executable bit (the README says to chmod).
-6. **Simplification:**
+3. **Not run yet: CI `wrapper.yml`'s new release step** (the tag moved, the file
+   replaced with `--clobber`, the release created only where it is missing; the build
+   as a tar with its executable bit; setup-node; package.json in the paths). It runs on
+   the next push to main.
+4. **Simplification:**
    - The CP1252 table is in five copies (kernel32, user32, sdl, ui, settings).
    - `ddraw.c fill_vtable` is the same as `dsound.c fill`.
    - The `dsound.c:180` comment says libm is not linked, but `-lm` is, so `powf` would
      do.
    - `user32.c:341 min_max` has a dead `if (!width)`.
-
-## formats
 
 ## editor
 
