@@ -1772,9 +1772,23 @@ stands, decided 2026-10-27; details in the sections named.
     Junior 0x479a00, another at 0x47a820). All have the same seven; III adds
     0x4c6174, the wood 0x51bcfc and 0x4c6164, IV the room and cell 0x51bd44. Other
     data follows each list, so showing the wood elsewhere means moving that
-    episode's list (its `mov eax, list`: I 0x408d10, II 0x409f40, IV 0x40d670). In **IV** using III's axe (taken
-    first) crashed the game; IV's hero has frames 6–9 and the use (0x416a10, the
-    state change 0x4477f0, 0x447840, 0x42c2e0) checks no episode; not explained yet.
+    episode's list (its `mov eax, list`: I 0x408d10, II 0x409f40, IV 0x40d670).
+  - **In IV III's axe crashes the game** when used (the user; reproduced under Wine
+    2026-11-06: page fault reading 0x7D0 at 0x43A60E, about a second after the use):
+    the status line's indicator 0x51bcf0 (in every episode's list; 0x435c70,
+    0x435c90) shows an icon whenever the hero's state s is not 0: class 135's tile
+    type in state `table[s][episode] − 1`, the table at 0x4831a8 (6 bytes per state,
+    Junior, I, II, III, IV, the sixth list), written as `@%04X`. A 0 there makes
+    `type − 0x100`, printed `FFFFFF78`, read by the text renderer as type 0xFF, whose
+    class the unchecked lookup 0x43a5f0 takes from past the class table: in Junior,
+    I and II that reads 0 (no icon, no harm; the hammer works in I), in IV 0x7D0
+    (crash). Non-zero: Junior states 2, 3, 8; I 1, 2, 3, 7; II 1–7; III 1, 10, 11,
+    12 (the axe's, hammer's and bridle's icons, III's 0x35 in states 0–2); IV 3, 9.
+    So in IV every other state crashes: the axe (10), hammer (11), bridle (12) and
+    whatever II's states 4–7 are (not tried); not I's pill, which sets the hero's
+    mode (+0x50), not his state. A fix sets that byte (a `code` change of the data)
+    to a state of class 135's type the episode has, best with III's icons copied
+    there.
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,
