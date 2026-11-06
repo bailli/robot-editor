@@ -1,6 +1,17 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -15,6 +26,7 @@ import {
   renderRoom,
 } from "@robot/formats";
 
+import { Driver, type Key, NATIVE } from "./driver.ts";
 import { ROOT } from "./game.ts";
 import { calmRoom, patchedExe } from "./patch.ts";
 import { readIndexedPng } from "./png.ts";
@@ -118,7 +130,17 @@ export function renderShot(
 }
 
 function describe(game: Game, episode: number, room: number, file: string, patched: boolean): Shot {
-  const indices = readShot(file);
+  return describeIndices(game, episode, room, file, patched, readShot(file));
+}
+
+function describeIndices(
+  game: Game,
+  episode: number,
+  room: number,
+  file: string,
+  patched: boolean,
+  indices: Uint8Array,
+): Shot {
   const cells = differingCells(indices, renderShot(game, { episode, room, patched }));
   return {
     episode,
@@ -136,34 +158,144 @@ export function updateShot(game: Game, shot: Shot): Shot {
   return describe(game, shot.episode, shot.room, shot.file, !!shot.patched);
 }
 
+/** Virtual milliseconds per step of the screenshot driver (the Driver's default). */
+const STEP_MS = 7;
+
+/** What `--keys` and `--wait` of the harness mean: see harness.py `shot`. */
+export interface ShotOptions {
+  /** Seconds to wait in the room before the keys and the screenshot (default 1). */
+  wait?: number;
+  /** KEY, KEY:SECONDS (held that long, default 0.3) or wait:SECONDS (default 1). */
+  keys?: string[];
+  /** Where the PNG goes (default shots/ of the repository). */
+  outDir?: URL;
+}
+
+const KEY_NAMES: Partial<Record<string, Key>> = {
+  return: "return",
+  enter: "return",
+  shift: "shift",
+  control: "control",
+  ctrl: "control",
+  alt: "alt",
+  escape: "escape",
+  space: "space",
+  left: "left",
+  up: "up",
+  right: "right",
+  down: "down",
+};
+
+/** xdotool-style key names (as given to the harness) as the driver's keys. */
+function driverKey(name: string): Key | number {
+  const key = KEY_NAMES[name.toLowerCase()];
+  if (key) return key;
+  if (/^[a-z0-9]$/i.test(name)) return name.toUpperCase().charCodeAt(0);
+  throw new Error(`unknown key "${name}"`);
+}
+
+const steps = (seconds: number) => Math.round((seconds * 1000) / STEP_MS);
+
 /**
- * Takes a screenshot with the Wine harness: of the episode's start room (room
- * undefined; the room is then the best-matching render) or of any room via a patched
- * exe. Needs Wine, Xvfb and xdotool (see tools/wine/harness.py).
+ * Gets a driven game into the room like the harness: starts the episode (the title menu,
+ * the player-name dialog and the room banner closed), waits, presses the keys.
  */
-export function takeShot(game: Game, episode: number, room?: number): Shot {
+async function enterRoom(d: Driver, episode: number, options: ShotOptions): Promise<void> {
+  await d.startEpisode(episode);
+  await d.run(steps(options.wait ?? 1));
+  for (const key of options.keys ?? []) {
+    const [name = "", seconds] = key.split(":");
+    if (name === "wait") {
+      await d.run(steps(seconds ? Number(seconds) : 1));
+      continue;
+    }
+    await d.hold(driverKey(name), steps(seconds ? Number(seconds) : 0.3));
+    await d.run(steps(0.5));
+  }
+}
+
+/**
+ * The PNGs below `dir`, as byte paths: their names hold the room's name in the game's code
+ * page (not UTF-8).
+ */
+function pngFiles(dir: Buffer): Buffer[] {
+  return readdirSync(dir, { encoding: "buffer", withFileTypes: false }).flatMap((name) => {
+    const path = Buffer.concat([dir, Buffer.from("/"), name]);
+    if (name.toString("latin1").endsWith(".png")) return [path];
+    return statSync(path).isDirectory() ? pngFiles(path) : [];
+  });
+}
+
+/** Natively: the game on virtual time, its last frame written as the PNG. */
+async function nativeShot(exe: string, episode: number, out: URL, options: ShotOptions) {
+  const d = await Driver.start({ exe, native: true });
+  try {
+    await enterRoom(d, episode, options);
+    // the game's own screenshot command (Ctrl+Alt+P), like the harness: its PNG, not ours
+    await d.key("control", true);
+    await d.key("alt", true);
+    await d.hold("P".charCodeAt(0), 5);
+    await d.key("alt", false);
+    await d.key("control", false);
+    await d.run(50);
+    const saved = pngFiles(Buffer.from(d.gameDir ?? ""));
+    const file = saved[0] ?? Buffer.alloc(0);
+    if (saved.length !== 1) {
+      throw new Error(`the game saved ${String(saved.length)} screenshots, not one`);
+    }
+    copyFileSync(file, out);
+  } finally {
+    await d.close();
+  }
+}
+
+function wineShot(exe: string, episode: number, out: URL, options: ShotOptions) {
+  const args = ["-I", HARNESS, "shot", String(episode), fileURLToPath(out), "--exe", exe];
+  if (options.wait !== undefined) args.push("--wait", String(options.wait));
+  if (options.keys?.length) args.push("--keys", ...options.keys);
+  const result = spawnSync("python3", args, { stdio: "inherit" });
+  if (result.status !== 0) throw new Error(`harness failed for ${fileURLToPath(out)}`);
+}
+
+/**
+ * Takes a screenshot: of the episode's start room (room undefined; the room is then the
+ * best-matching render) or of any room via a patched exe. Natively with the Driver (the
+ * game on virtual time, its last frame as the PNG, no Wine needed); with ROBOT_WINE=1
+ * with the Wine harness (needs Wine, Xvfb and xdotool, see tools/wine/harness.py, and
+ * deletes the prefix's saved games and screenshots). The Shot's file is always
+ * `shots/NAME.png`, whatever `outDir` is.
+ */
+export async function takeShot(
+  game: Game,
+  episode: number,
+  room?: number,
+  options: ShotOptions = {},
+): Promise<Shot> {
   const stem = room === undefined ? `ep${episode}` : `ep${episode}-room${room}`;
   const file = `shots/${stem}.png`;
-  mkdirSync(new URL("shots/", ROOT), { recursive: true });
-  mkdirSync(new URL(".wine/", ROOT), { recursive: true });
-  const exe = new URL(room === undefined ? "reference/GameOfRobot.exe" : `.wine/${stem}.exe`, ROOT);
-  if (room !== undefined) writeFileSync(exe, patchedExe(game, episode, room));
-  const result = spawnSync(
-    "python3",
-    [
-      "-I",
-      HARNESS,
-      "shot",
-      String(episode),
-      fileURLToPath(new URL(file, ROOT)),
-      "--exe",
-      fileURLToPath(exe),
-    ],
-    { stdio: "inherit" },
-  );
-  if (result.status !== 0) throw new Error(`harness failed for ${stem}`);
-  if (room !== undefined) return describe(game, episode, room, file, true);
-  const indices = readShot(file);
+  const outDir = options.outDir ?? new URL("shots/", ROOT);
+  mkdirSync(outDir, { recursive: true });
+  const out = new URL(`${stem}.png`, outDir);
+  let exe = fileURLToPath(new URL("reference/GameOfRobot.exe", ROOT));
+  let temp: string | undefined;
+  if (room !== undefined) {
+    if (NATIVE) {
+      temp = mkdtempSync(join(tmpdir(), "robot-shot-"));
+      exe = join(temp, `${stem}.exe`);
+    } else {
+      mkdirSync(new URL(".wine/", ROOT), { recursive: true });
+      exe = fileURLToPath(new URL(`.wine/${stem}.exe`, ROOT));
+    }
+    writeFileSync(exe, patchedExe(game, episode, room));
+  }
+  try {
+    if (NATIVE) await nativeShot(exe, episode, out, options);
+    else wineShot(exe, episode, out, options);
+  } finally {
+    if (temp) rmSync(temp, { recursive: true, force: true });
+  }
+  const indices = readIndexedPng(out).indices;
+  if (room !== undefined) return describeIndices(game, episode, room, file, true, indices);
   const ep = game.episode(episode);
   const best = ep.rooms
     .map((r) => ({
@@ -171,5 +303,5 @@ export function takeShot(game: Game, episode: number, room?: number): Shot {
       n: differingCells(indices, renderShot(game, { episode, room: r.id })).length,
     }))
     .reduce((a, b) => (b.n < a.n ? b : a));
-  return describe(game, episode, best.id, file, false);
+  return describeIndices(game, episode, best.id, file, false, indices);
 }

@@ -26,6 +26,12 @@ static BOOL video(void) {
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) == 0) {
       state = 1;
     } else {
+      /* Playing without a picture is no use: only a run that asked for no window (the
+         driver's, SDL_VIDEODRIVER=dummy) goes on without one. */
+      const char *driver = getenv("SDL_VIDEODRIVER");
+      if (!driver_active() && !(driver && !strcmp(driver, "dummy")))
+        fatal("no video: %s (no display? SDL_VIDEODRIVER=dummy runs without a window)",
+              SDL_GetError());
       state = -1;
       say("robot: no video (%s): running without a window", SDL_GetError());
     }

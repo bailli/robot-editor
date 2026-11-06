@@ -14,8 +14,9 @@ the exe itself; findings are checked three ways where possible:
    neighbouring room, scenes re-encode byte for byte).
 2. **Code:** the game's own routines, read with `objdump -d -M intel` (addresses below are
    virtual addresses in the exe; `.text` file offset = address − 0x400000).
-3. **The real game:** screenshots under Wine (`tools/wine/harness.py`, `pnpm robot shots`),
-   compared pixel by pixel with our renderer. The harness runs the game silently and can
+3. **The real game:** screenshots (`pnpm robot shots`: natively with the Linux wrapper
+   since 2026-11-06, under Wine with `tools/wine/harness.py` before and with
+   `ROBOT_WINE=1`), compared pixel by pixel with our renderer. The harness runs the game silently and can
    press keys before the screenshot (`--keys`), e.g. to walk the hero somewhere. The
    **driver** (`packages/tools/src/driver.ts`, see "Input, time and the driver") runs the
    game step by step on virtual time instead and reads its memory: where the hero is,
@@ -41,8 +42,14 @@ for episodes I–IV.
   tests need `reference/GameOfRobot.exe`; the few that don't are listed in
   `pnpm test:without-game` (add new data-free test files there), which is what CI runs.
   `pnpm test:game` runs the tests that start the real game through the driver (opt-in:
-  they need Wine, Xvfb and the proxy DLL; each game test takes about 4 s, Wine's start
-  included).
+  they need the native wrapper, `pnpm wrapper`; well under a second per start).
+  `pnpm test:game:wine` runs them under Wine (Xvfb, the proxy DLL; about 4 s per test),
+  `pnpm test:game:cross` compares the two (see "Native Linux wrapper"); before
+  2026-11-06 `pnpm test:game` meant Wine (the "verified under Wine" notes below).
+  `ROBOT_WINE=1` selects Wine for the driver, `robot shots`, `robot play` and the
+  editor's "Test in game". Wrapper test runs never show a window or play sound on the
+  desktop: `SDL_VIDEODRIVER=dummy`, or `x11` with a private Xvfb (SDL falls back to the
+  desktop's Wayland otherwise), and `SDL_AUDIODRIVER=dummy`.
 - **Git:** commit freely; subject within ~72 characters, a short body when more
   needs saying (not a longer subject), **no attribution footer**; linear history
   (`merge.ff=only`, rebase on pull), never merge commits. Identity: bailli. **Never push**: only the user pushes to `origin` (GitHub).
@@ -2128,8 +2135,8 @@ for Windows' own UI (headless dialogs, SDL message boxes, the wrapper's shortcut
 and sounds (checked under Xvfb with xdotool: episode chosen by key and by mouse, the game
 started, the hero walked, the accelerators, fullscreen on and off, the shortcuts, the
 dialogs, the screenshot, quitting; the sound recorded with SDL's `disk` driver). **The
-driver's protocol** too: `pnpm test:game:native` passes all 35 game tests without Wine, as
-`pnpm test:game` does under Wine (2026-11-06).
+driver's protocol** too: all 35 game tests pass natively as under Wine (2026-11-06); the
+wrapper is now the default for the game tests, the reference screenshots and playing.
 
 - **Picture:** in a window the game presents with GDI (WM_PAINT's `StretchDIBits`, 640 ×
   348 palette indices), shown scaled; Alt+Enter (command 4007, only once an episode runs)
@@ -2237,8 +2244,8 @@ and, when it is restored from the taskbar while the icon exists, sends the icon'
 callback with WM_LBUTTONDBLCLK: the game shows its window and removes the icon (checked
 under Xvfb with an isolated KWin).
 
-**The driver** (`driver.c`, `robot --serve [--port N] GAME.exe`, used by
-`Driver.start({ native: true })` or `ROBOT_NATIVE=1`): proxy.c's protocol and behaviour,
+**The driver** (`driver.c`, `robot --serve [--port N] GAME.exe`, used by `Driver.start`
+unless `ROBOT_WINE=1`): proxy.c's protocol and behaviour,
 answered by the wrapper itself. The main loop's call at 0x405bde and the DirectDraw present
 calls (0x402379, 0x437270) are redirected as by the proxy; one clock (`clock_ms`) gives
 timeGetTime, QueryPerformanceCounter, GetLocalTime and the USER32 timers their virtual
@@ -2260,8 +2267,30 @@ removes it on `close` (`gameDir`: there the game keeps its screenshots).
   to whole pages. Mods place code after the used part of `.text` (e.g. the room-255 ending
   check jumps to 0x465e60, past `VirtualSize` 0x64e55); copying only `VirtualSize` bytes
   left zeros there.
+- **Reference screenshots natively** (`shots.ts`): the driver starts the episode (or the
+  patched room), runs `wait` (1 s of virtual time) and the `keys`, and copies the game's
+  own Ctrl+Alt+P PNG from its directory (its palette has 225 entries, its name the room
+  name in code page 1252). All 31 screenshots retaken natively: the palettes and palette
+  offsets equal Wine's; the 11 static rooms give the same indices (`ep0`: the same
+  `shots.json` entry); the other 20 differ where actors or animated tiles are caught at
+  another moment (Wine after real-time waits, the wrapper after virtual steps) — retaking
+  them natively means a new, reviewed `shots.json`.
+- **Playing** (`robot play`, the editor's "Test in game"): the wrapper on the user's
+  display in `.native/play/` (saves stay; the user's settings file; `--mute` with SDL's
+  dummy audio, `--console` with `ROBOT_CONSOLE`; the editor's Console chip patches the
+  exe). The dev server runs one game at a time, ends the one it started before, answers
+  after a second unless the wrapper has ended (its log's last lines then). Without any
+  video driver the wrapper ends at once ("no video"), unless `SDL_VIDEODRIVER=dummy`.
+- **Wrapper against Wine** (`pnpm test:game:cross`, the same input on both; first run
+  2026-11-06): the hero, the game tick and the virtual time are the same in all five
+  episodes, the frames are not: under the driver the wrapper presents about 2.4 times as
+  many frames (555 against 232 in 920 steps, episode I), and sprites' colour cycling
+  follows the frames drawn, so their colours differ (positions equal). Which rate matches
+  Windows is open (to look into with Wine runs). The palette's last 32 slots differ too:
+  the game's DIB_PAL_COLORS table holds leftover words of its own memory there (unused by
+  the frames; the test compares only the colours a frame uses).
 
-**Next:** untested: restarting the sound after a changed `SampleRate`/`DisableOpl` (the
+**Next:** the frame rate under the driver (above). Untested: restarting the sound after a changed `SampleRate`/`DisableOpl` (the
 release path). No SEH: a hardware fault in the game ends the wrapper (Windows would run
 the game's exception handlers; none was needed so far). The player-name prompt is the
 game's own (drawn, not a dialog).

@@ -22,23 +22,28 @@ import { type IndexedImage, writeIndexedPng } from "./png.ts";
  * the keys sent so far handled), so reads never see a half-drawn frame.
  *
  * The native Linux wrapper (tools/linux, `pnpm wrapper`) speaks the same protocol
- * (`robot --serve`): `Driver.start({ native: true })`, or ROBOT_NATIVE=1, runs the game
- * with it instead of Wine, a copy of the exe in a fresh directory with its own settings.
+ * (`robot --serve`); `Driver.start` runs the game with it unless ROBOT_WINE=1 (or
+ * `{ native: false }`), a copy of the exe in a fresh directory with its own settings.
  */
 
 const HARNESS = fileURLToPath(new URL("tools/wine/harness.py", ROOT));
-const WRAPPER = fileURLToPath(new URL("tools/linux/robot", ROOT));
 const EXE = fileURLToPath(new URL("reference/GameOfRobot.exe", ROOT));
 
-/** Whether `Driver.start` runs the native wrapper rather than Wine by default. */
-export const NATIVE = process.env["ROBOT_NATIVE"] === "1";
+/**
+ * Whether the game runs natively (the wrapper) rather than under Wine: the default for the
+ * driver, the reference screenshots and playing; ROBOT_WINE=1 selects Wine.
+ */
+export const NATIVE = process.env["ROBOT_WINE"] !== "1";
+
+/** The native wrapper's binary (built by `pnpm wrapper`). */
+export const WRAPPER_BINARY = fileURLToPath(new URL("tools/linux/robot", ROOT));
 
 export interface StartOptions {
   /** The exe to run (default reference/GameOfRobot.exe). */
   exe?: string;
   /** The port to serve on (default a free one). */
   port?: number;
-  /** The native wrapper instead of Wine (default: ROBOT_NATIVE=1). */
+  /** The native wrapper rather than Wine (default: yes, unless ROBOT_WINE=1). */
   native?: boolean;
 }
 
@@ -161,7 +166,7 @@ export class Driver {
       if (options.port !== undefined) args.push("--port", String(options.port));
       args.push(exe);
       // stdin a pipe: the wrapper ends when it closes, also if this process dies
-      server = spawn(WRAPPER, args, {
+      server = spawn(WRAPPER_BINARY, args, {
         stdio: ["pipe", "pipe", "inherit"],
         env: { ...process.env, ROBOT_REGISTRY: join(gameDir, "registry.reg") },
       });

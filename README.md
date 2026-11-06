@@ -60,9 +60,12 @@ the resource section (the exe's signature is dropped). Logic cells (magenta) ref
 the room's logic records and cannot be painted over (the inspector and the area tools change them). The room's name is edited in the
 field next to the title, where "Delete room…" deletes it; "New room…" (or a + on the map)
 adds a room with walls and exits, empty or as a copy of another room. "Test in game" starts the game in the shown room with all
-edits (the hero at the selected cell): under `pnpm editor` in Wine on this display
-(after `python3 tools/wine/harness.py setup`; choose the episode in the game),
-otherwise the exe is downloaded. With the Console chip next to it, that exe has the
+edits (the hero at the selected cell): under `pnpm editor` with the native wrapper on this
+display (after `pnpm wrapper`; `ROBOT_WINE=1 pnpm editor`: in Wine, after `python3
+tools/wine/harness.py setup`; choose the episode in the game), otherwise the exe is
+downloaded. One game at a time (a new test ends the one before); it runs in
+`.native/play/`, where saves and screenshots stay, with your settings; the wrapper's
+messages are in `.native/play/wrapper.log`. With the Console chip next to it, that exe has the
 game's command console on (`SCENE 42 20 14`, `TAKE KEY(3)`, `ROBOTOFF`, …; the ? next to it lists the commands). `pnpm --filter @robot/editor build`
 makes a static build in `packages/editor/dist/`.
 
@@ -72,21 +75,33 @@ makes a static build in `packages/editor/dist/`.
     pnpm robot compare EPISODE ROOM SHOT.png [--diff OUT.png]
     pnpm robot eval [--types]                               where renders still differ from the game
     pnpm robot patch EPISODE ROOM OUT.exe                   exe that starts in (a copy of) ROOM
-    pnpm robot shots [EPISODE ...]                          screenshot start rooms (needs Wine)
-    pnpm robot shots --room EPISODE ROOM ...                screenshot any rooms (needs Wine)
+    pnpm robot shots [EPISODE ...]                          screenshot start rooms (the game)
+    pnpm robot shots --room EPISODE ROOM ...                screenshot any rooms (the game)
     pnpm robot shots --update                               recompute shots.json
     pnpm robot script EPISODE ROOM                          a room's script: source and disassembly
     pnpm robot script EPISODE ROOM SOURCE OUT.exe           exe whose ROOM runs the script in SOURCE
     pnpm robot start EPISODE ROOM OUT.exe [--at X,Y]        exe whose episode starts in ROOM
-    pnpm robot play EPISODE ROOM [--at X,Y] [--mute]        play the episode from ROOM (needs Wine)
+    pnpm robot play EPISODE ROOM [--at X,Y] [--mute] [--console]
+                                                            play the episode from ROOM
     pnpm robot mod apply MOD OUT.exe                        the exe a mod (JSON, see STATUS) makes
+
+The commands that run the game (`shots`, `play`, the game tests) use the native Linux
+wrapper (`pnpm wrapper`, see below); `ROBOT_WINE=1` runs them under Wine instead (see the
+next sections). `play` runs the game on this display in `.native/play/` (saves and
+screenshots stay there) with your settings; `--mute` plays it silently without changing
+them, `--console` turns the game's command console on.
 
 ## Reference screenshots from the real game
 
-`tools/wine/harness.py` runs `GameOfRobot.exe` under Wine (WineHQ `wine-stable`) on a
-virtual display (`Xvfb`, `xdotool`) and saves the game's own screenshot: palette indices,
-so comparisons are exact. Set it up once with `python3 tools/wine/harness.py setup`; the
-prefix in `.wine/` does not link into `$HOME` and has no `Z:` drive.
+`pnpm robot shots` runs `GameOfRobot.exe` with the native wrapper through the driver (on
+virtual time, no window) and saves the game's own screenshot (Ctrl+Alt+P): palette
+indices, so comparisons are exact. With `ROBOT_WINE=1` it uses `tools/wine/harness.py`
+instead, the game under Wine (WineHQ `wine-stable`) on a virtual display (`Xvfb`,
+`xdotool`), which deletes the prefix's saves and screenshots first. Set that up once with
+`python3 tools/wine/harness.py setup`; the prefix in `.wine/` does not link into `$HOME`
+and has no `Z:` drive. In rooms with actors or animated tiles the two catch them at other
+moments (Wine after real-time waits, the wrapper after virtual steps); static rooms give
+the same file.
 
 `pnpm robot shots` stores screenshots in `shots/` (not committed) and records in
 `shots.json` (committed) where our renderer still differs from the game. Any room can be
@@ -100,25 +115,28 @@ animations and other runtime effects differ from a static render by nature.
 
 `packages/tools/src/driver.ts` runs the real game for tests: on virtual time (nothing
 happens between commands, so runs repeat exactly), with keys and clicks sent between
-steps, reading where the hero is and in which room. It needs the proxy DLL, a
-`ddraw.dll` placed next to the exe that Wine loads instead of its own (it also copies
-every frame the game presents: its palette indices, as in the game's screenshots); build it once
-with the mingw-w64 cross-compiler (`apt install gcc-mingw-w64-i686`):
+steps, reading where the hero is and in which room. By default it runs the native Linux
+wrapper (`tools/linux/robot --serve`, below), with a copy of the exe in a fresh directory:
 
-    pnpm proxy          build tools/wine/proxy/ddraw.dll
-    pnpm test:game      the tests that run the game (Wine, Xvfb, harness.py setup)
+    pnpm wrapper          build tools/linux/robot
+    pnpm test:game        the tests that run the game
+
+Under Wine (`ROBOT_WINE=1`, the cross-check) it needs the proxy DLL, a `ddraw.dll` placed
+next to the exe that Wine loads instead of its own (it also copies every frame the game
+presents: its palette indices, as in the game's screenshots); build it once with the
+mingw-w64 cross-compiler (`apt install gcc-mingw-w64-i686`):
+
+    pnpm proxy            build tools/wine/proxy/ddraw.dll
+    pnpm test:game:wine   the same tests under Wine (Xvfb, harness.py setup)
+    pnpm test:game:cross  the same input on both: the same frames, tick and hero
 
 `python3 tools/wine/harness.py serve` starts the game with the proxy on a virtual
 display and prints `ready PORT DISPLAY TOKEN` once the game waits for its first step;
 `Driver.start()` does that and connects, `Driver.connect(PORT)` connects to a game
 served by hand (the protocol is one text line per command, see `proxy.c`).
 
-Without Wine, the native Linux wrapper (below) speaks the same protocol:
-`tools/linux/robot --serve GAME.exe` prints `ready PORT - TOKEN`, and
-`Driver.start({ native: true })` (or `ROBOT_NATIVE=1`) runs it with a copy of the exe in a
-fresh directory:
-
-    pnpm wrapper && pnpm test:game:native   the same tests on the native wrapper
+The native wrapper speaks the same protocol: `tools/linux/robot --serve GAME.exe` prints
+`ready PORT - TOKEN`.
 
 `python3 tools/wine/harness.py play --console` runs the game to be played with the
 proxy holding the mutex that turns on the game's command console: type e.g.
@@ -201,8 +219,9 @@ caller's address.
   lint result stale, `rm -r node_modules/.cache/eslint` lints everything again)
 - `pnpm test` – tests only (Vitest; `pnpm exec vitest` to watch)
 - `pnpm typecheck`, `pnpm lint` – the type check and ESLint alone
-- `pnpm test:game` – the tests that run the game (Wine, proxy; see above)
-- `pnpm test:game:native` – the same tests on the native Linux wrapper (`pnpm wrapper`)
+- `pnpm test:game` – the tests that run the game (the native wrapper, `pnpm wrapper`)
+- `pnpm test:game:wine` – the same tests under Wine (proxy; see above)
+- `pnpm test:game:cross` – the wrapper against Wine: the same frames for the same input
 - `pnpm proxy` – build the proxy DLL (see above)
 - `pnpm wrapper` – build the native Linux wrapper (see above)
 - `pnpm test:without-game` – the tests that need no game data (what CI runs)

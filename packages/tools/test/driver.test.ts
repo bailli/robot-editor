@@ -61,18 +61,17 @@ import { readIndexedPng } from "../src/png.ts";
 import { differingCells } from "../src/shots.ts";
 
 /**
- * Runs the real game under Wine through the proxy DLL (see driver.ts), or with
- * ROBOT_NATIVE=1 through the native Linux wrapper. Opt-in, as it starts the game for every
- * test: `pnpm proxy` once, then `pnpm test:game`; or `pnpm wrapper`, then
- * `pnpm test:game:native`.
+ * Runs the real game through the native Linux wrapper, or with ROBOT_WINE=1 under Wine
+ * through the proxy DLL (see driver.ts). Opt-in, as it starts the game for every test:
+ * `pnpm wrapper` once, then `pnpm test:game`; or `pnpm proxy`, then `pnpm test:game:wine`.
  */
 const enabled = process.env["ROBOT_GAME_TESTS"] === "1";
 const built = existsSync(
   new URL(NATIVE ? "tools/linux/robot" : "tools/wine/proxy/ddraw.dll", ROOT),
 );
 const HINT = NATIVE
-  ? "`pnpm wrapper`, then `pnpm test:game:native`"
-  : "`pnpm proxy`, then `pnpm test:game` (needs Wine, Xvfb, harness.py setup)";
+  ? "`pnpm wrapper`, then `pnpm test:game`"
+  : "`pnpm proxy`, then `pnpm test:game:wine` (needs Wine, Xvfb, harness.py setup)";
 
 async function withGame<T>(exe: string | undefined, use: (d: Driver) => Promise<T>): Promise<T> {
   const d = await Driver.start(exe ? { exe } : {});

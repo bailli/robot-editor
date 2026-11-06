@@ -7,13 +7,14 @@
  *                                                    compare a game screenshot with our render
  *   robot eval [--types]                             differing cells of all screenshots in shots.json
  *   robot patch EPISODE ROOM OUT.exe                 exe that starts in (a copy of) ROOM
- *   robot shots [EPISODE ...]                        screenshot the start rooms (Wine harness)
+ *   robot shots [EPISODE ...]                        screenshot the start rooms (the game; ROBOT_WINE=1: Wine)
  *   robot shots --room EPISODE ROOM ...              screenshot any rooms via patched exes
  *   robot shots --update                             recompute shots.json from the screenshots
  *   robot script EPISODE ROOM                        a room's script: source and disassembly
  *   robot script EPISODE ROOM SOURCE OUT.exe         exe whose ROOM runs the script in SOURCE
  *   robot start EPISODE ROOM OUT.exe [--at X,Y]      exe whose episode starts in ROOM (the hero at X, Y)
- *   robot play EPISODE ROOM [--at X,Y] [--mute]      play the episode from ROOM in the game (Wine)
+ *   robot play EPISODE ROOM [--at X,Y] [--mute] [--console]
+ *                                                    play the episode from ROOM in the game
  *   robot mod apply MOD OUT.exe                      the exe a mod (JSON, see mod.ts) makes
  *
  * Options: --exe PATH (default reference/GameOfRobot.exe).
@@ -24,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import {
+  EPISODE_NAMES,
   ModError,
   applyMod,
   disassemble,
@@ -36,6 +38,7 @@ import {
   withRoomScript,
 } from "@robot/formats";
 
+import { NATIVE, WRAPPER_BINARY } from "./driver.ts";
 import { ROOT, loadGame } from "./game.ts";
 import { patchedExe } from "./patch.ts";
 import { writeIndexedPng } from "./png.ts";
@@ -62,6 +65,7 @@ const { values, positionals } = parseArgs({
     update: { type: "boolean", default: false },
     at: { type: "string" },
     mute: { type: "boolean", default: false },
+    console: { type: "boolean", default: false },
   },
 });
 const [command, ...args] = positionals;
@@ -186,10 +190,10 @@ switch (command) {
     } else if (values.room) {
       if (args.length < 2) usage();
       const episode = int(0);
-      for (let i = 1; i < args.length; i++) add(takeShot(g, episode, int(i)));
+      for (let i = 1; i < args.length; i++) add(await takeShot(g, episode, int(i)));
     } else {
       const episodes = args.length > 0 ? args.map((_, i) => int(i)) : [0, 1, 2, 3, 4];
-      for (const episode of episodes) add(takeShot(g, episode));
+      for (const episode of episodes) add(await takeShot(g, episode));
     }
     break;
   }
@@ -221,14 +225,39 @@ switch (command) {
   }
   case "play": {
     const [episode, room] = [int(0), int(1)];
+    if (NATIVE) {
+      // the wrapper on this display, in a persistent folder (saves and screenshots stay);
+      // the user's own settings apply (ROBOT_REGISTRY); runs until the game ends
+      if (!existsSync(WRAPPER_BINARY)) {
+        console.error("build the wrapper first: pnpm wrapper");
+        process.exitCode = 1;
+        break;
+      }
+      if (!process.env["DISPLAY"]) {
+        console.error("no DISPLAY to show the game on");
+        process.exitCode = 1;
+        break;
+      }
+      const dir = new URL(".native/play/", ROOT);
+      mkdirSync(dir, { recursive: true });
+      const nativeExe = fileURLToPath(new URL("GameOfRobot.exe", dir));
+      writeFileSync(nativeExe, startExe(episode, room));
+      const env = { ...process.env };
+      if (values.mute) env["SDL_AUDIODRIVER"] = "dummy"; // not the saved settings
+      if (values.console) env["ROBOT_CONSOLE"] = "1";
+      console.log(`choose ${EPISODE_NAMES[episode] ?? String(episode)} in the game`);
+      const played = spawnSync(WRAPPER_BINARY, [nativeExe], { stdio: "inherit", env });
+      process.exitCode = played.status ?? 1;
+      break;
+    }
     const exe = new URL(".wine/play.exe", ROOT);
     mkdirSync(new URL(".wine/", ROOT), { recursive: true });
     writeFileSync(exe, startExe(episode, room));
     const harness = fileURLToPath(new URL("tools/wine/harness.py", ROOT));
     const args = ["-I", harness, "play", String(episode), "--exe", fileURLToPath(exe)];
-    const result = spawnSync("python3", values.mute ? [...args, "--mute"] : args, {
-      stdio: "inherit",
-    });
+    if (values.mute) args.push("--mute");
+    if (values.console) args.push("--console");
+    const result = spawnSync("python3", args, { stdio: "inherit" });
     process.exitCode = result.status ?? 1;
     break;
   }

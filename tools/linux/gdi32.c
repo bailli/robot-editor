@@ -122,8 +122,11 @@ static INT WINAPI StretchDIBits(HDC dc, INT x, INT y, INT width, INT height, INT
     const struct palette *p = handle_get(selected, HANDLE_OTHER);
     if (!p) fatal("StretchDIBits with palette colours but no palette selected");
     for (int i = 0; i < colours && i < 256; i++) {
-      WORD index = (WORD)(table[2 * i] | table[2 * i + 1] << 8);
-      const PALETTEENTRY *e = &p->entries[index < p->count ? index : 0];
+      /* The low byte, the entries past the palette's end black: as the proxy reads them under
+         Wine (the game's table has stray words in its unused last 32 slots). */
+      WORD index = (WORD)(table[2 * i] | table[2 * i + 1] << 8) & 0xff;
+      static const PALETTEENTRY black;
+      const PALETTEENTRY *e = index < p->count ? &p->entries[index] : &black;
       frame_colours[i] = (DWORD)e->peRed << 16 | (DWORD)e->peGreen << 8 | e->peBlue;
     }
   }

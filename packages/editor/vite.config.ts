@@ -1,6 +1,15 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { createReadStream, existsSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { playwright } from "@vitest/browser-playwright";
@@ -9,6 +18,11 @@ import { defineConfig } from "vitest/config";
 
 const ROOT = new URL("../../", import.meta.url);
 const REFERENCE_EXE = new URL("reference/GameOfRobot.exe", ROOT);
+/** ROBOT_WINE=1 plays under Wine (as packages/tools/src/driver.ts decides), else natively. */
+const NATIVE = process.env["ROBOT_WINE"] !== "1";
+const WRAPPER = fileURLToPath(new URL("tools/linux/robot", ROOT));
+/** The native game's folder: persistent, so its saves and screenshots stay between plays. */
+const NATIVE_PLAY_DIR = new URL(".native/play/", ROOT);
 const HARNESS = new URL("tools/wine/harness.py", ROOT);
 const MAX_EXE_BYTES = 8 << 20; // the game's exe has about 2 MB
 /** How long the harness has to refuse playing before the game counts as started. */
@@ -33,13 +47,76 @@ function referenceExe(): Plugin {
 }
 
 /**
- * In development, POST /play?episode=N with an exe runs it in the game under Wine on
- * this display (tools/wine/harness.py play): the editor's "Test in game". Only the
+ * In development, POST /play?episode=N with an exe runs it in the game on this display:
+ * natively with the wrapper (one game at a time: it ends the earlier one), or with
+ * ROBOT_WINE=1 under Wine (tools/wine/harness.py play): the editor's "Test in game". Only the
  * editor's own page may: any other site open in the browser could post an exe here too.
  */
-function playInWine(): Plugin {
+function playGame(): Plugin {
+  /** The game this server started natively. */
+  let current: ChildProcess | undefined;
+  /** Plays one after the other: each ends its predecessor's game and takes its folder. */
+  let queue: Promise<unknown> = Promise.resolve();
+
+  const stopCurrent = async () => {
+    const old = current;
+    current = undefined;
+    if (!old) return;
+    if (old.exitCode !== null || old.signalCode !== null) return;
+    const gone = new Promise<void>((resolve) => {
+      old.once("exit", () => {
+        resolve();
+      });
+    });
+    old.kill("SIGTERM");
+    const timer = setTimeout(() => old.kill("SIGKILL"), 2000);
+    await gone;
+    clearTimeout(timer);
+  };
+
+  /** Starts the wrapper with `bytes`: resolves with an error text, or undefined once it runs. */
+  const playNative = async (
+    bytes: Buffer,
+    logError: (text: string) => void,
+  ): Promise<string | undefined> => {
+    if (!existsSync(WRAPPER)) return "the wrapper is not built: run pnpm wrapper";
+    if (!process.env["DISPLAY"]) return "no DISPLAY to show the game on";
+    await stopCurrent();
+    mkdirSync(NATIVE_PLAY_DIR, { recursive: true });
+    const exe = fileURLToPath(new URL("GameOfRobot.exe", NATIVE_PLAY_DIR));
+    const logPath = fileURLToPath(new URL("wrapper.log", NATIVE_PLAY_DIR));
+    writeFileSync(exe, bytes);
+    // the wrapper's messages go to a file: it needs no reader, however long the game runs
+    const log = openSync(logPath, "w");
+    const game = spawn(WRAPPER, [exe], { detached: true, stdio: ["ignore", log, log] });
+    closeSync(log);
+    current = game;
+    game.unref();
+    const tail = () => readFileSync(logPath, "utf8").trim().split("\n").slice(-5).join("\n");
+    return new Promise((resolve) => {
+      let settled = false;
+      const started = setTimeout(() => {
+        settled = true;
+        resolve(undefined);
+      }, PLAY_REFUSAL_MS);
+      game.on("error", (error) => {
+        clearTimeout(started);
+        resolve(error.message);
+      });
+      game.on("exit", (code, signal) => {
+        if (current === game) current = undefined;
+        if (code === 0 || signal !== null) return;
+        const text = tail() || `the wrapper ended with code ${String(code)}`;
+        clearTimeout(started);
+        if (settled)
+          logError(text); // a crash later: only the server's log
+        else resolve(text);
+      });
+    });
+  };
+
   return {
-    name: "play-in-wine",
+    name: "play-game",
     apply: "serve",
     configureServer(server) {
       server.middlewares.use("/play", (req, res) => {
@@ -58,7 +135,7 @@ function playInWine(): Plugin {
           fail(403, "only the editor's page may run the game");
           return;
         }
-        if (!existsSync(new URL(".wine/prefix/", ROOT))) {
+        if (!NATIVE && !existsSync(new URL(".wine/prefix/", ROOT))) {
           fail(503, "no Wine prefix: run python3 tools/wine/harness.py setup");
           return;
         }
@@ -76,6 +153,23 @@ function playInWine(): Plugin {
           }
           if (bytes.subarray(0, 2).toString("latin1") !== "MZ") {
             fail(400, "not the game's exe: no MZ header");
+            return;
+          }
+          if (NATIVE) {
+            const logError = (text: string) => {
+              server.config.logger.error(`play: ${text}`);
+            };
+            queue = queue
+              .then(() => playNative(bytes, logError))
+              .then((error) => {
+                if (error === undefined) {
+                  res.statusCode = 202;
+                  res.end();
+                } else {
+                  logError(error);
+                  fail(500, error);
+                }
+              });
             return;
           }
           // a file per request: the harness copies it into the game's folder, while an
@@ -119,7 +213,7 @@ function playInWine(): Plugin {
 
 export default defineConfig({
   base: "./",
-  plugins: [referenceExe(), playInWine()],
+  plugins: [referenceExe(), playGame()],
   test: {
     name: "editor",
     include: ["test/**/*.test.ts"],

@@ -22,3 +22,5 @@ tools/wine/proxy/ddraw.dll
 
 # Native Linux wrapper (built by `pnpm wrapper`)
 tools/linux/robot
+# Native game for "Test in game" / robot play: its exe, saves, screenshots, wrapper.log
+.native/
