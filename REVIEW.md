@@ -20,12 +20,6 @@ an entry once it is fixed or rejected; delete the file when it is empty.
    replaced with `--clobber`, the release created only where it is missing; the build
    as a tar with its executable bit; setup-node; package.json in the paths). It runs on
    the next push to main.
-4. **Simplification:**
-   - The CP1252 table is in five copies (kernel32, user32, sdl, ui, settings).
-   - `ddraw.c fill_vtable` is the same as `dsound.c fill`.
-   - The `dsound.c:180` comment says libm is not linked, but `-lm` is, so `powf` would
-     do.
-   - `user32.c:341 min_max` has a dead `if (!width)`.
 
 ## editor
 

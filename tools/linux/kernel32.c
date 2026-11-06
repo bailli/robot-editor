@@ -1014,11 +1014,42 @@ static const WORD cp437_high[128] = {
     0x00b0, 0x2219, 0x00b7, 0x221a, 0x207f, 0x00b2, 0x25a0, 0x00a0,
 };
 
+/* 0x80..0x9f of code page 1252 as Unicode (the rest below 0x100 is Latin-1; the five holes
+   map to the C1 control of the same number). The wrapper's one copy (wrapper.h). */
 static const WORD cp1252_high[32] = {
     0x20ac, 0x0081, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160,
     0x2039, 0x0152, 0x008d, 0x017d, 0x008f, 0x0090, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
     0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x009d, 0x017e, 0x0178,
 };
+
+unsigned cp1252_unicode(BYTE c) { return c >= 0x80 && c < 0xa0 ? cp1252_high[c - 0x80] : c; }
+
+int unicode_cp1252(unsigned u) {
+  if (u < 0x80 || (u >= 0xa0 && u < 0x100)) return (int)u;
+  for (int i = 0; i < 32; i++)
+    if (cp1252_high[i] == u) return 0x80 + i;
+  return -1;
+}
+
+char *cp1252_utf8(const char *s, size_t n) {
+  char *out = malloc(3 * n + 1), *o = out;
+  if (!out) fatal("out of memory");
+  for (size_t i = 0; i < n && s[i]; i++) {
+    unsigned u = cp1252_unicode((BYTE)s[i]);
+    if (u < 0x80) {
+      *o++ = (char)u;
+    } else if (u < 0x800) {
+      *o++ = (char)(0xc0 | u >> 6);
+      *o++ = (char)(0x80 | (u & 0x3f));
+    } else {
+      *o++ = (char)(0xe0 | u >> 12);
+      *o++ = (char)(0x80 | (u >> 6 & 0x3f));
+      *o++ = (char)(0x80 | (u & 0x3f));
+    }
+  }
+  *o = 0;
+  return out;
+}
 
 /* The code page behind a CP_* value: 1252 or 437. */
 static int code_page(UINT cp) {

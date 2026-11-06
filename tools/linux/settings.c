@@ -71,14 +71,11 @@ static HKEY read_key(const char *path) {
 
 static void close_key(HKEY key) { ((close_fn)find_export("advapi32.dll", "RegCloseKey"))(key); }
 
-/* Code page 1252 to UTF-8 for the terminal (Latin-1 is enough for names). */
-static void print_latin1(const BYTE *s, DWORD n) {
-  for (DWORD i = 0; i < n && s[i]; i++) {
-    if (s[i] < 0x80)
-      putchar(s[i]);
-    else
-      printf("%c%c", 0xc0 | s[i] >> 6, 0x80 | (s[i] & 0x3f));
-  }
+/* Code page 1252 to UTF-8 for the terminal. */
+static void print_cp1252(const BYTE *s, DWORD n) {
+  char *utf8 = cp1252_utf8((const char *)s, n);
+  fputs(utf8, stdout);
+  free(utf8);
 }
 
 int settings_list(void) {
@@ -104,7 +101,7 @@ int settings_list(void) {
       } else {
         data[size] = 0;
         putchar('"');
-        print_latin1(data, size);
+        print_cp1252(data, size);
         printf("\"  ");
       }
     } else {
@@ -149,12 +146,17 @@ int settings_set(const char *assignment) {
     size = 0;
     for (const BYTE *p = (const BYTE *)text; *p && size < sizeof data - 1;) {
       unsigned c = *p++;
-      if (c >= 0xc0 && c < 0xe0 && (*p & 0xc0) == 0x80) c = (c & 0x1f) << 6 | (*p++ & 0x3f);
-      if (c >= 0x100) {
-        fprintf(stderr, "robot: %s: only Latin-1 characters fit\n", s->name);
+      if (c >= 0xc0) {
+        int more = c >= 0xf0 ? 3 : c >= 0xe0 ? 2 : 1;
+        c &= 0x3f >> more;
+        for (; more && (*p & 0xc0) == 0x80; more--) c = c << 6 | (*p++ & 0x3f);
+      }
+      int b = unicode_cp1252(c);
+      if (b < 0) {
+        fprintf(stderr, "robot: %s: only characters of code page 1252 fit\n", s->name);
         return 1;
       }
-      data[size++] = (BYTE)c;
+      data[size++] = (BYTE)b;
     }
     data[size++] = 0;
   }

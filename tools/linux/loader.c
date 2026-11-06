@@ -216,6 +216,15 @@ static void *make_missing_thunk(const char *name) {
 
 void *missing_function(const char *name) { return make_missing_thunk(name); }
 
+void fill_vtable(void **vtable, int slots, const char *interface, const char *const *methods) {
+  for (int i = 0; i < slots; i++) {
+    if (vtable[i]) continue;
+    char *name = NULL;
+    if (asprintf(&name, "%s::%s", interface, methods[i]) < 0) fatal("no memory");
+    vtable[i] = missing_function(name);
+  }
+}
+
 /* push [esp]; push name; mov eax, traced; call eax; add esp, 8; mov eax, fn; jmp eax */
 static void *make_trace_thunk(const char *name, void *fn) {
   BYTE *t = thunk_alloc(32);

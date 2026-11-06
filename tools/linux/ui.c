@@ -78,43 +78,13 @@ typedef int32_t INT_PTR;
 
 /* ---- Text: code page 1252 and UTF-16 (dialog templates) ---- */
 
-/* 0x80..0x9f of code page 1252 as Unicode (the rest below 0x100 is Latin-1; the five holes
-   map to the C1 control of the same number). */
-static const uint16_t cp1252_high[32] = {
-    0x20ac, 0x0081, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160,
-    0x2039, 0x0152, 0x008d, 0x017d, 0x008f, 0x0090, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
-    0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x009d, 0x017e, 0x0178};
-
-static unsigned cp1252_unicode(unsigned char c) {
-  return c >= 0x80 && c < 0xa0 ? cp1252_high[c - 0x80] : c;
-}
-
 /* A malloc'd UTF-8 copy of a code page 1252 string. */
-static char *cp1252_to_utf8(const char *s) {
-  char *out = malloc(strlen(s) * 3 + 1), *p = out;
-  for (; *s; s++) {
-    unsigned u = cp1252_unicode((unsigned char)*s);
-    if (u < 0x80) {
-      *p++ = (char)u;
-    } else if (u < 0x800) {
-      *p++ = (char)(0xc0 | u >> 6);
-      *p++ = (char)(0x80 | (u & 0x3f));
-    } else {
-      *p++ = (char)(0xe0 | u >> 12);
-      *p++ = (char)(0x80 | (u >> 6 & 0x3f));
-      *p++ = (char)(0x80 | (u & 0x3f));
-    }
-  }
-  *p = 0;
-  return out;
-}
+static char *cp1252_to_utf8(const char *s) { return cp1252_utf8(s, strlen(s)); }
 
 /* One UTF-16 unit as a code page 1252 byte ('?' when it has none). */
 static char unicode_to_cp1252(unsigned u) {
-  if (u < 0x80 || (u >= 0xa0 && u < 0x100)) return (char)u;
-  for (int i = 0; i < 32; i++)
-    if (cp1252_high[i] == u) return (char)(0x80 + i);
-  return '?';
+  int b = unicode_cp1252(u);
+  return b < 0 ? '?' : (char)b;
 }
 
 /* ---- MessageBoxA ---- */

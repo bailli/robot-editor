@@ -442,18 +442,6 @@ static HRESULT WINAPI dd_CreateClipper(struct face *self, DWORD flags, void **ou
 
 /* ---- Vtables ---- */
 
-static void fill_vtable(void **vtable, int slots, const char *interface,
-                        const char *const *methods) {
-  for (int i = 0; i < slots; i++) {
-    if (vtable[i]) continue;
-    size_t n = strlen(interface) + strlen(methods[i]) + 3;
-    char *name = malloc(n);
-    strcpy(name, interface);
-    strcat(name, "::");
-    strcat(name, methods[i]);
-    vtable[i] = missing_function(name);
-  }
-}
 
 static void make_vtables(void) {
   if (vtable_dd1[0]) return;

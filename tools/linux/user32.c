@@ -344,7 +344,6 @@ static void min_max(HWND hwnd, DWORD style, INT *width, INT *height) {
                      {112, 27}, /* SM_CXMINTRACK, SM_CYMINTRACK */
                      {screen_w + 12, screen_h + 12}};
   send_message(hwnd, WM_GETMINMAXINFO, 0, (LPARAM)(uintptr_t)&info);
-  if (!width) return;
   if (*width < info.ptMinTrackSize.x) *width = info.ptMinTrackSize.x;
   if (*height < info.ptMinTrackSize.y) *height = info.ptMinTrackSize.y;
   if (*width > info.ptMaxTrackSize.x) *width = info.ptMaxTrackSize.x;
@@ -1187,29 +1186,12 @@ static BOOL WINAPI CloseClipboard(void) { return TRUE; }
 
 /* CF_TEXT (1) in code page 1252, as UTF-8; the handle is GlobalAlloc's (a pointer here). */
 static HANDLE WINAPI SetClipboardData(UINT format, HANDLE data) {
-  static const WORD cp1252[32] = {
-      0x20ac, 0x81,   0x201a, 0x192,  0x201e, 0x2026, 0x2020, 0x2021, 0x2c6,  0x2030, 0x160,
-      0x2039, 0x152,  0x8d,   0x17d,  0x8f,   0x90,   0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
-      0x2013, 0x2014, 0x2dc,  0x2122, 0x161,  0x203a, 0x153,  0x9d,   0x17e,  0x178};
   if (format != 1 || !data) {
     trace("SetClipboardData format %u: not supported", format);
     return data;
   }
-  const BYTE *s = data;
-  size_t n = strlen((const char *)s);
-  char *utf8 = malloc(3 * n + 1), *o = utf8;
-  for (; *s; s++) {
-    unsigned c = *s >= 0x80 && *s < 0xa0 ? cp1252[*s - 0x80] : *s;
-    if (c < 0x80) {
-      *o++ = (char)c;
-    } else if (c < 0x800) {
-      *o++ = (char)(0xc0 | c >> 6), *o++ = (char)(0x80 | (c & 0x3f));
-    } else {
-      *o++ = (char)(0xe0 | c >> 12), *o++ = (char)(0x80 | (c >> 6 & 0x3f));
-      *o++ = (char)(0x80 | (c & 0x3f));
-    }
-  }
-  *o = 0;
+  size_t n = strlen((const char *)data);
+  char *utf8 = cp1252_utf8(data, n);
   SDL_SetClipboardText(utf8);
   trace("SetClipboardData: %zu bytes of text", n);
   free(utf8);

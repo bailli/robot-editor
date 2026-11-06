@@ -177,13 +177,7 @@ static void fire_crossed(const struct buffer *b, DWORD old, struct signals *s) {
 static float gain_of(LONG hundredths_db) {
   if (hundredths_db <= -10000) return 0;
   if (hundredths_db >= 0) return 1;
-  /* 10^(db/20) = 2^e without libm (not linked): split e into an integer and a fraction */
-  float e = (float)hundredths_db * 0.0016609640f;
-  int n = (int)e - (e < (float)(int)e);
-  float f = e - (float)n; /* 0 <= f < 1: 2^f by a cubic fit, within 0.1% */
-  float g = 1.0f + f * (0.6951f + f * (0.2262f + f * 0.0787f));
-  while (n++ < 0) g *= 0.5f;
-  return g;
+  return powf(10.0f, (float)hundredths_db / 2000.0f); /* 10^(dB / 20) */
 }
 
 static int sample_at(const struct buffer *b, DWORD byte_pos, int channel) {
@@ -631,17 +625,6 @@ static HRESULT WINAPI ds_CreateSoundBuffer(struct dsound *ds, const DSBUFFERDESC
 
 /* ---- Entry points ---- */
 
-static void fill(void **vtable, int slots, const char *interface, const char *const *names) {
-  for (int i = 0; i < slots; i++) {
-    if (vtable[i]) continue;
-    size_t n = strlen(interface) + strlen(names[i]) + 3;
-    char *name = malloc(n);
-    strcpy(name, interface);
-    strcat(name, "::");
-    strcat(name, names[i]);
-    vtable[i] = missing_function(name);
-  }
-}
 
 static void make_vtables(void) {
   if (vtable_ds[0]) return;
@@ -658,7 +641,7 @@ static void make_vtables(void) {
   void **n = vtable_notify;
   n[0] = notify_QueryInterface, n[1] = notify_AddRef, n[2] = notify_Release;
   n[3] = notify_SetNotificationPositions;
-  fill(n, 4, "IDirectSoundNotify", notify_methods);
+  fill_vtable(n, 4, "IDirectSoundNotify", notify_methods);
 
   void **v = vtable_buffer;
   v[0] = buffer_QueryInterface, v[1] = buffer_AddRef, v[2] = buffer_Release;
@@ -667,11 +650,11 @@ static void make_vtables(void) {
   v[9] = buffer_GetStatus, v[11] = buffer_Lock, v[12] = buffer_Play;
   v[13] = buffer_SetCurrentPosition, v[14] = buffer_SetFormat, v[15] = buffer_SetVolume;
   v[16] = buffer_SetPan, v[17] = buffer_SetFrequency, v[18] = buffer_Stop, v[19] = buffer_Unlock;
-  fill(v, 21, "IDirectSoundBuffer", buffer_methods);
+  fill_vtable(v, 21, "IDirectSoundBuffer", buffer_methods);
 
   void **d = vtable_ds;
   d[1] = ds_AddRef, d[2] = ds_Release, d[3] = ds_CreateSoundBuffer, d[6] = ds_SetCooperativeLevel;
-  fill(d, 11, "IDirectSound", ds_methods);
+  fill_vtable(d, 11, "IDirectSound", ds_methods);
   d[0] = ds_QueryInterface; /* set last: vtable_ds[0] says the tables are done */
 }
 

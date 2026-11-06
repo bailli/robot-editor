@@ -165,18 +165,9 @@ void screen_show(int how) {
 /* Window titles are code page 1252; the game's are ASCII but for a few letters. */
 void screen_title(const char *title) {
   if (!window) return;
-  char utf8[512], *o = utf8;
-  for (const BYTE *s = (const BYTE *)title; *s && o < utf8 + sizeof utf8 - 3; s++) {
-    if (*s < 0x80) {
-      *o++ = (char)*s;
-    } else if (*s >= 0xa0) {
-      *o++ = (char)(0xc0 | *s >> 6), *o++ = (char)(0x80 | (*s & 0x3f));
-    } else {
-      *o++ = '?';
-    }
-  }
-  *o = 0;
+  char *utf8 = cp1252_utf8(title, strlen(title));
   SDL_SetWindowTitle(window, utf8);
+  free(utf8);
 }
 
 void screen_desktop(int *width, int *height) {
@@ -329,10 +320,6 @@ static void text(const char *utf8) {
   HWND main = main_window();
   if (!main || key_state[VK_LMENU] & 0x80 || (key_state[VK_CONTROL] & 0x80 && !(key_state[VK_RMENU] & 0x80)))
     return;
-  static const WORD cp1252[32] = {
-      0x20ac, 0x81,   0x201a, 0x192,  0x201e, 0x2026, 0x2020, 0x2021, 0x2c6,  0x2030, 0x160,
-      0x2039, 0x152,  0x8d,   0x17d,  0x8f,   0x90,   0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
-      0x2013, 0x2014, 0x2dc,  0x2122, 0x161,  0x203a, 0x153,  0x9d,   0x17e,  0x178};
   for (const BYTE *s = (const BYTE *)utf8; *s;) {
     unsigned c = *s++;
     if (c >= 0xc0) {
@@ -340,9 +327,7 @@ static void text(const char *utf8) {
       c &= 0x3f >> more;
       for (; more && (*s & 0xc0) == 0x80; more--) c = c << 6 | (*s++ & 0x3f);
     }
-    int out = c < 0x80 || (c >= 0xa0 && c < 0x100) ? (int)c : -1;
-    for (int i = 0; out < 0 && i < 32; i++)
-      if (cp1252[i] == c) out = 0x80 + i;
+    int out = unicode_cp1252(c);
     if (out > 0) post_message(main, WM_CHAR, (WPARAM)out, 1);
   }
 }

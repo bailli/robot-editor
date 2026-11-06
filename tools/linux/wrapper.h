@@ -55,6 +55,8 @@ __attribute__((noreturn)) void fatal(const char *format, ...) __attribute__((for
 /* Code that stops the program naming `name` when the game calls it (for COM methods not
    written yet; `name` must stay valid). */
 void *missing_function(const char *name);
+/* A COM vtable's empty slots as missing functions named INTERFACE::METHOD (ddraw, dsound). */
+void fill_vtable(void **vtable, int slots, const char *interface, const char *const *methods);
 
 /* Handles: kernel objects behind an opaque HANDLE (never 0 or INVALID_HANDLE_VALUE).
    `data` belongs to the module that made the handle; `close` (may be NULL) frees it when
@@ -105,6 +107,12 @@ void wrapper_setting_set(const char *name, DWORD value);
    (an integer id below 0x10000, "#123", or a name, any case); the first language found.
    Returns its data in the mapped image and its size, or NULL. */
 const void *resource_find(LPCSTR type, LPCSTR name, DWORD *size);
+
+/* Code page 1252, the game's (kernel32.c): a byte as Unicode; Unicode as a byte (-1 where
+   it has none); the first `n` bytes of a string (up to its NUL) as malloc'd UTF-8. */
+unsigned cp1252_unicode(BYTE c);
+int unicode_cp1252(unsigned u);
+char *cp1252_utf8(const char *s, size_t n);
 
 /* The driver protocol (driver.c, `--serve`): a test driver steps the game on a virtual clock. */
 int driver_active(void);
