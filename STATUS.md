@@ -276,8 +276,8 @@ Files in `packages/formats/src`:
   type 1 record) is asked first, the base only if it lets him on; a teleporter with a
   condition depends on the rucksack, one with byte 1 bit 0 always takes him, otherwise
   the cell a record shows decides. Rated is the room as entered: what the player changes
-  is left out, e.g. in III trees cut down with the axe give wood for bridges over water
-  or, for a while, over lava (known from playing, not traced in the code).
+  is left out, e.g. in III woods felled with the axe give wood for bridges over water
+  or, for a while, over lava (see "Axe and hammer").
 - **The driver** (`driver.ts`, the proxy `tools/wine/proxy/proxy.c`, started by
   `harness.py serve`): the proxy replaces the system ddraw.dll next to the exe
   (`WINEDLLOVERRIDES=ddraw=n,b`; it forwards every export, as Wine's DxDiag, the game's
@@ -1726,6 +1726,33 @@ stands, decided 2026-10-27; details in the sections named.
   portable computer, and 0x41, the interface) works in another episode with both tile
   types and its texts 550–555 (the programs: GAME OF ROBOT, STERNCHEN, SUPERHIRN,
   MEMORY, the command replies) copied.
+- **Axe and hammer** (III's 0x61, class 179, use 0x416a10; 0x62, class 180, 0x416a80;
+  code only, 2026-11-06): using one puts the hero into state 10 or 11 of his 13 state
+  objects (0x4477f0, table 0x4830f0), not while he stands on river or water. The
+  states act on the cell he walks into, by class (the map holds classes):
+  - **The axe** (0x447230) fells only **woods** (class 91, tile 0x4c in II, III and IV)
+    in **state 0** (the impenetrable stretch), not the trees 0x0b (their hero
+    handler 0x424f90 just blocks, in every episode): the cell becomes state 10,
+    timber (class 158, III's 0x2b) is put on it (0x433300) and event 335 is raised.
+    Woods in state 10 are a way only with episode flag 0x20000 (only III's; 0x413c50),
+    and then each step on a coin flip, boots or not; elsewhere a felled stretch blocks.
+  - **Timber** fills a counter (0x4fe3c6): taking a piece adds 20 (0x415b00; full at
+    80, then message 994, III's "Du schleppst schon genug Bauholz…", which is Junior's
+    goal and a joke in I and II), dropping it takes 20 (0x417c90).
+  - **The hammer** (0x447370) builds with one unit of it: on the river (class 55)
+    only in state 2, the straight stretch (other states: text 285, "only at straight
+    shores", from state 5 "shallows"); on water (class 82) in any state; on lava
+    (class 171, III's 0x48) in states 0–2. It puts the unfinished bridge there (class
+    183, III's 0x6e; text 285 variant 3 if it cannot) and raises a bridge's state by
+    one up to 4, from which the hero walks on it (0x416b20, no episode flags), each
+    with event 331.
+  - **Elsewhere:** only III has these classes. A copied axe needs woods (II and IV
+    have them) and III's timber in a free type, or the timber has no tile type
+    (0x4c70e0 is built from the episode's classes); the felled woods block unless
+    the episode gets flag 0x20000 (`flags`). A copied hammer needs the timber and the
+    bridge 0x6e; rivers (all episodes, Junior's 0x12 is another class) and water
+    (class 82) are there. Text 285 is free elsewhere; 994 clashes. Not tried in the
+    game.
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable or 12-entry touch table reaches it, and dialogs to the
