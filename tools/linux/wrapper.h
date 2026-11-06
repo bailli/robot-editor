@@ -71,6 +71,9 @@ enum handle_kind {
 HANDLE handle_new(enum handle_kind kind, void *data, void (*close)(void *data));
 /* The data of a live handle of this kind (any kind: 0), or NULL. */
 void *handle_get(HANDLE h, enum handle_kind kind);
+/* As handle_get, calling `hold` on the data while the handle cannot be closed (a reference
+   for an object used after, which a CloseHandle meanwhile must not free). */
+void *handle_hold(HANDLE h, enum handle_kind kind, void (*hold)(void *data));
 enum handle_kind handle_kind(HANDLE h); /* 0 if not a live handle */
 BOOL handle_close(HANDLE h);            /* FALSE if not a live handle */
 

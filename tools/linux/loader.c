@@ -110,6 +110,16 @@ void *handle_get(HANDLE h, enum handle_kind kind) {
   return data;
 }
 
+void *handle_hold(HANDLE h, enum handle_kind kind, void (*hold)(void *data)) {
+  int i = slot_of(h);
+  if (i < 0) return NULL;
+  pthread_mutex_lock(&handles_lock);
+  void *data = handles[i].kind && (!kind || handles[i].kind == kind) ? handles[i].data : NULL;
+  if (data) hold(data); /* before a CloseHandle can drop the handle's own reference */
+  pthread_mutex_unlock(&handles_lock);
+  return data;
+}
+
 enum handle_kind handle_kind(HANDLE h) {
   int i = slot_of(h);
   return i < 0 ? 0 : handles[i].kind;

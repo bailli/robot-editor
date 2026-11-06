@@ -1380,6 +1380,18 @@ static struct obj *find_named(const char *name) {
   return NULL;
 }
 
+static void obj_hold(void *data) {
+  pthread_mutex_lock(&sync_lock);
+  ((struct obj *)data)->refs++;
+  pthread_mutex_unlock(&sync_lock);
+}
+
+/* The handle's object with a reference of the caller's (obj_release when done), or NULL. */
+static struct obj *obj_get(HANDLE h, enum handle_kind kind) {
+  pthread_once(&sync_once, sync_init);
+  return handle_hold(h, kind, obj_hold);
+}
+
 /* Creates (or opens, for a name already taken) an event or mutex; sets the last error. */
 static HANDLE create_object(enum handle_kind kind, const char *name, int manual, int initial) {
   pthread_once(&sync_once, sync_init);
@@ -1427,7 +1439,7 @@ static HANDLE WINAPI CreateMutexA(LPVOID security, BOOL initial_owner, LPCSTR na
 }
 
 static BOOL WINAPI SetEvent(HANDLE h) {
-  struct obj *o = handle_get(h, HANDLE_EVENT);
+  struct obj *o = obj_get(h, HANDLE_EVENT);
   if (!o) {
     set_error(ERROR_INVALID_HANDLE);
     return FALSE;
@@ -1436,11 +1448,12 @@ static BOOL WINAPI SetEvent(HANDLE h) {
   o->signaled = 1;
   pthread_cond_broadcast(&sync_cond);
   pthread_mutex_unlock(&sync_lock);
+  obj_release(o);
   return TRUE;
 }
 
 static BOOL WINAPI ResetEvent(HANDLE h) {
-  struct obj *o = handle_get(h, HANDLE_EVENT);
+  struct obj *o = obj_get(h, HANDLE_EVENT);
   if (!o) {
     set_error(ERROR_INVALID_HANDLE);
     return FALSE;
@@ -1448,6 +1461,7 @@ static BOOL WINAPI ResetEvent(HANDLE h) {
   pthread_mutex_lock(&sync_lock);
   o->signaled = 0;
   pthread_mutex_unlock(&sync_lock);
+  obj_release(o);
   return TRUE;
 }
 
@@ -1474,12 +1488,14 @@ static DWORD wait_objects(DWORD n, const HANDLE *handles, BOOL all, DWORD ms) {
     set_error(ERROR_INVALID_PARAMETER);
     return WAIT_FAILED;
   }
+  /* each with a reference: a CloseHandle while we wait must not free it */
   for (DWORD i = 0; i < n; i++) {
     enum handle_kind k = handle_kind(handles[i]);
     objs[i] = (k == HANDLE_EVENT || k == HANDLE_MUTEX || k == HANDLE_THREAD)
-                  ? handle_get(handles[i], k)
+                  ? obj_get(handles[i], k)
                   : NULL;
     if (!objs[i]) {
+      for (DWORD j = 0; j < i; j++) obj_release(objs[j]);
       if (handles[i] == (HANDLE)(intptr_t)-2) fatal("waiting on the current thread");
       set_error(ERROR_INVALID_HANDLE);
       return WAIT_FAILED;
@@ -1523,6 +1539,7 @@ static DWORD wait_objects(DWORD n, const HANDLE *handles, BOOL all, DWORD ms) {
       break;
   }
   pthread_mutex_unlock(&sync_lock);
+  for (DWORD i = 0; i < n; i++) obj_release(objs[i]);
   return result;
 }
 
