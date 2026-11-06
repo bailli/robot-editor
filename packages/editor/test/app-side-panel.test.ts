@@ -203,3 +203,20 @@ test("a script being edited marks its tab until applied or cancelled", async () 
   app.load(bytes);
   expect(tab("script").badge).toBe("●");
 });
+
+test("the column's edge takes arrow keys; tabs name their panels", async () => {
+  const handle = page.getByRole("separator", { name: "Width of the side column" });
+  const aside = document.querySelector<HTMLElement>(".side-panel");
+  const before = aside?.getBoundingClientRect().width ?? 0;
+  (handle.element() as HTMLElement).focus();
+  await userEvent.keyboard("{ArrowLeft}{ArrowLeft}");
+  expect(aside?.getBoundingClientRect().width).toBe(before + 32);
+  // the room stayed: the keys were the edge's
+  await expect.element(page.getByRole("heading", { name: "Robot I – room 43" })).toBeVisible();
+  await userEvent.keyboard("{ArrowRight}{ArrowRight}"); // as before, also the width kept
+  expect(aside?.getBoundingClientRect().width).toBe(before);
+  const tab = page.getByRole("tab", { name: "Tiles" }).element();
+  expect(
+    document.getElementById(tab.getAttribute("aria-controls") ?? "")?.getAttribute("role"),
+  ).toBe("tabpanel");
+});

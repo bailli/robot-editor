@@ -1374,6 +1374,8 @@ export class App {
     if (this.keeping) {
       this.keptText = undefined;
       this.options.store?.keepExe({ bytes, name }).catch((error: unknown) => {
+        // the store still holds the exe before: work on this one must not join it
+        this.stopKeeping();
         this.setStatus(`Cannot keep ${name} in this browser: ${message(error)}`, true);
       });
     }
@@ -2249,9 +2251,11 @@ export class App {
   save(): Uint8Array | undefined {
     const editor = this.need();
     try {
+      // the mod first: if it cannot be made, the editor does not count as saved either
+      // (with a mod, saving means saving the mod, Editor.dirty)
+      const text = this.modFile === undefined ? modJson(editor.asMod()) : undefined;
       const bytes = editor.save();
-      // with a mod, saving means saving the mod (Editor.dirty)
-      if (this.modFile === undefined) this.savedText = modJson(editor.asMod());
+      if (text !== undefined) this.savedText = text;
       download(bytes, this.fileName);
       this.setStatus(`Saved ${this.fileName}${this.draftsNote()}`);
       this.refreshButtons();
@@ -2506,9 +2510,10 @@ export class App {
         if (event.key === "Escape") {
           if (this.pasting) this.stopPasting();
           else if (this.area) this.setArea(undefined);
-          else if (this.sidePanel.shown === "texts" && this.textsView.isOpen)
-            this.textsView.close();
-          else if (this.selected) this.select(undefined);
+          // a typed draft is not dropped by a key pressed outside its fields
+          else if (this.sidePanel.shown === "texts" && this.textsView.isOpen) {
+            if (!this.textsView.drafting) this.textsView.close();
+          } else if (this.selected) this.select(undefined);
         } else if (event.key === "Delete" && !ctrl) {
           this.clearArea();
         } else if (ctrl && !event.shiftKey && !event.altKey && key === "c") {

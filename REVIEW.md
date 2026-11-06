@@ -63,20 +63,9 @@ an entry once it is fixed or rejected; delete the file when it is empty.
 
 ## editor
 
-5. **Smaller:**
-   - `save()` (`app.ts:2247`) marks the editor saved before `modJson(asMod())`, which can
-     throw.
-   - When `keepExe` fails (`app.ts:1374`), later `keepWork` still writes work for the new
-     exe, so a reload pairs it with the old exe.
-   - `work-store.ts`: no onblocked/onversionchange.
-   - `cell-data-field.ts` ~170: "New" opens the text editor even when `set()` refused the
-     value.
-   - `side-panel.ts`: the resize handle is mouse-only; tabs lack aria-controls and
-     aria-labelledby.
-   - Escape (`app.ts:2441`) closes the texts view and drops a draft without asking.
-   - Not read by the reviewer: record-view, room-view, kits-view, events-view,
-     music-view, settings-view, code-view, circuit-view, dealer-view, episode-view,
-     tile-types-view, help-dialog, script-view.
+1. **Not reviewed yet:** record-view, room-view, kits-view, events-view, music-view,
+   settings-view, code-view, circuit-view, dealer-view, episode-view, tile-types-view,
+   help-dialog and script-view. The reviewer did not read them.
 
 ## tools, proxy, harness
 

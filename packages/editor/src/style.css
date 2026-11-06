@@ -1274,6 +1274,11 @@ header button.pressed {
   cursor: col-resize;
 }
 
+.side-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
 .side-header {
   display: flex;
   flex-wrap: wrap;

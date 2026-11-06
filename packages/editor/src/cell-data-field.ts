@@ -82,9 +82,10 @@ export class CellDataField {
   }
 
   /** Writes `data` into the cell, or says why it cannot (and shows the cell's again). */
-  private set(data: CellData): void {
+  /** Sets the cell's data; false where it was refused (and said why). */
+  private set(data: CellData): boolean {
     const classes = this.classes;
-    if (!classes) return;
+    if (!classes) return false;
     let value: number;
     try {
       value = withCellData(this.value, data, classes);
@@ -92,9 +93,10 @@ export class CellDataField {
       if (!(error instanceof RangeError)) throw error;
       this.events.refused(error.message);
       this.show(this.value, classes, this.episode);
-      return;
+      return false;
     }
     if (value !== this.value) this.events.change(value);
+    return true;
   }
 
   private build(kind: CellData["kind"], classes: EpisodeClasses): Controls {
@@ -196,7 +198,9 @@ export class CellDataField {
           );
           return;
         }
-        this.set({ kind: "note", message: free, read: step.checked ? "step" : "carry" });
+        // refused: no message of the note's to write
+        if (!this.set({ kind: "note", message: free, read: step.checked ? "step" : "carry" }))
+          return;
         this.events.editText(textsId(this.episode), free);
       },
     );

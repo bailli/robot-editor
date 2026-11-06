@@ -1716,7 +1716,7 @@ describe("Editor and kit examples", () => {
     expect([...movedRecord(oracle, area, { room: 41, x: -2, y: 0 })]).toEqual([...oracle]);
     // moved within the room it goes along, into the room pasted into
     const moved = movedRecord(oracle, area, { room: 300, x: 10, y: 5 });
-    expect([(moved[4] ?? 0) | ((moved[5] ?? 0) << 8), moved[6]]).toEqual([300 | (11 << 10), 6]);
+    expect([moved[4] | (moved[5] << 8), moved[6]]).toEqual([300 | (11 << 10), 6]);
     expect(() => movedRecord(oracle, area, { room: 1024, x: 0, y: 0 })).toThrow(RangeError);
   });
 });

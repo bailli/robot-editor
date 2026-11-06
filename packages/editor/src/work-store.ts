@@ -55,10 +55,18 @@ export class WorkStore {
         request.result.createObjectStore(STORE);
       };
       request.onsuccess = () => {
-        resolve(new WorkStore(request.result, name));
+        const db = request.result;
+        // a later version opened in another tab: this one gives way instead of blocking it
+        db.onversionchange = () => {
+          db.close();
+        };
+        resolve(new WorkStore(db, name));
       };
       request.onerror = () => {
         reject(request.error ?? new Error(`cannot open ${name}`));
+      };
+      request.onblocked = () => {
+        reject(new Error(`${name} is held open by another tab in an older version`));
       };
     });
   }

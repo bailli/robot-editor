@@ -42,7 +42,11 @@ export class SidePanel {
     this.bar.setAttribute("role", "tablist");
     const handle = document.createElement("div");
     handle.className = "side-handle";
-    handle.title = "Drag to make the column wider or narrower";
+    handle.title = "Drag (or focus and press ← →) to make the column wider or narrower";
+    handle.tabIndex = 0;
+    handle.setAttribute("role", "separator");
+    handle.setAttribute("aria-orientation", "vertical");
+    handle.setAttribute("aria-label", "Width of the side column");
     this.element.append(handle, this.bar);
     for (const tab of tabs) {
       const button = document.createElement("button");
@@ -55,6 +59,8 @@ export class SidePanel {
       badge.hidden = true;
       button.append(label, badge);
       button.setAttribute("role", "tab");
+      button.id = `side-tab-${tab.name}`;
+      button.setAttribute("aria-controls", `side-panel-${tab.name}`);
       button.title = `key ${this.tabs.size + 1}`;
       button.addEventListener("click", () => {
         this.show(tab.name);
@@ -62,23 +68,35 @@ export class SidePanel {
       const panel = document.createElement("div");
       panel.className = `side-content side-${tab.name}`;
       panel.setAttribute("role", "tabpanel");
+      panel.id = `side-panel-${tab.name}`;
       panel.setAttribute("aria-label", tab.label);
       panel.append(tab.content);
       this.tabs.set(tab.name, { button, badge, panel });
       this.bar.append(button);
       this.element.append(panel);
     }
+    const setWidth = (wanted: number) => {
+      const width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, wanted));
+      resize(width);
+      try {
+        localStorage.setItem(WIDTH_KEY, String(Math.round(width)));
+      } catch {
+        // storage unavailable: the width just is not remembered
+      }
+    };
+    // the column is right of the room: ← makes it wider
+    handle.addEventListener("keydown", (event) => {
+      const step = event.key === "ArrowLeft" ? 16 : event.key === "ArrowRight" ? -16 : 0;
+      if (step === 0) return;
+      event.preventDefault();
+      event.stopPropagation(); // not the room's arrow keys
+      setWidth(this.element.getBoundingClientRect().width + step);
+    });
     handle.addEventListener("mousedown", (event) => {
       event.preventDefault();
       const right = this.element.getBoundingClientRect().right;
       const move = (e: MouseEvent) => {
-        const width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, right - e.clientX));
-        resize(width);
-        try {
-          localStorage.setItem(WIDTH_KEY, String(Math.round(width)));
-        } catch {
-          // storage unavailable: the width just is not remembered
-        }
+        setWidth(right - e.clientX);
       };
       const up = () => {
         window.removeEventListener("mousemove", move);
