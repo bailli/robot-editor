@@ -233,7 +233,11 @@ GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, format check,
 `pnpm test:without-game`, the editor's build, the proxy DLL's build (MinGW) and a syntax
 check of `harness.py` on every push to `main` and every pull request, and publishes the
 editor's static build from `main` on GitHub Pages at https://bailli.github.io/robot-editor/
-(Settings → Pages → Source: GitHub Actions).
+(Settings → Pages → Source: GitHub Actions). `.github/workflows/wrapper.yml` builds the
+native Linux wrapper when `tools/linux/` changes (pushes to `main`, pull requests) and keeps
+it as the artifact `robot-linux-i386` of that run (a 32-bit program: it runs where SDL2 for
+i386 is installed, e.g. `apt install libsdl2-2.0-0:i386` after `dpkg --add-architecture
+i386`).
 
 TypeScript is restricted to erasable syntax, so Node.js (>= 22.18) runs the sources directly
 without a build step.
