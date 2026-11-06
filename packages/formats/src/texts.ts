@@ -175,13 +175,15 @@ export function textEntryProblem(variant: string): string | undefined {
 /**
  * A text resource (as decoded, see parseTexts) with entry `id` set to `variants`, or
  * removed (undefined). Headers sharing the entry's text keep it: the one before gets a
- * copy. A new entry is added at the end, before headers without text there.
+ * copy. A new entry is added at the end, before headers without text there. Variants are
+ * trimmed, as parseTexts reads them: what is written reads back the same.
  */
 export function withTextEntry(
   text: string,
   id: number,
-  variants: readonly string[] | undefined,
+  given: readonly string[] | undefined,
 ): string {
+  const variants = given?.map((v) => v.trim());
   const problem = variants?.map(textEntryProblem).find((p) => p !== undefined);
   if (problem) throw new RangeError(problem);
   const headers = [...text.matchAll(HEADER)];
