@@ -274,6 +274,14 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     }
     types.push([to, of]);
   }
+  // what the copied classes' hero states need and cannot have (IV crashes without an icon)
+  problems.push(
+    ...game.heroStatesLacking(
+      episode,
+      kit.from,
+      types.map(([, of]) => classes.get(of)?.id ?? 0),
+    ),
+  );
   const sourceTexts = source.texts(textsId(kit.from))?.entries;
   const hasText = options.hasText ?? ((n) => game.texts(textsId(episode))?.entries.has(n) === true);
   // the texts of every class the episode does not have by itself, copied by hand or not

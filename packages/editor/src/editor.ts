@@ -848,6 +848,9 @@ export class Editor {
     const source = this.pristine.episode(from).classes.classes.get(of);
     if (FIXED_TYPES.includes(of) || !source?.id)
       return `episode ${from} has no class at 0x${of.toString(16)}`;
+    // a hero state without its icon crashes IV; without the hero's frames he is not drawn
+    const lacking = this.game.heroStatesLacking(episode, from, [source.id]);
+    if (lacking.length > 0) return lacking.join("; ");
     return undefined;
   }
 

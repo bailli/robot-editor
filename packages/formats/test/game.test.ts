@@ -5,7 +5,12 @@ import { test } from "vitest";
 import { readClassTable } from "../src/classes.ts";
 import { readEventTable } from "../src/events.ts";
 import { EPISODES, Game, eventTextsId, roomNamesId, withSoundLine } from "../src/game.ts";
-import { HERO_ICON_CLASS, HERO_TYPE, readHeroStateIcons } from "../src/hero-states.ts";
+import {
+  HERO_ICON_CLASS,
+  HERO_TYPE,
+  readHeroStateIcons,
+  withHeroStateIcons,
+} from "../src/hero-states.ts";
 import { withTextEntry } from "../src/texts.ts";
 import { assertBytesEqual, exe } from "./data.ts";
 
@@ -162,6 +167,16 @@ test("withTileTypes leaves a hero state's icon the episode has, and others alone
     const e = g === i ? 1 : 4;
     assert.deepEqual(g.episode(e).objects.slice(0, 2), game.episode(e).objects.slice(0, 2));
   }
+});
+
+test("heroStatesLacking: nothing for the game's own classes, an icon neither episode has", () => {
+  // III's axe (class 179, state 10) into IV: icon and hero frames come along
+  assert.deepEqual(game.heroStatesLacking(4, 3, [179]), []);
+  // with III's icon of state 10 taken away, IV can get none (and would crash)
+  const without = new Game(withHeroStateIcons(game.image, 3, new Map([[10, 0]])));
+  assert.deepEqual(without.heroStatesLacking(4, 3, [179]), [
+    "hero state 10 gets no status-line icon (episode 3 has none)",
+  ]);
 });
 
 test("withTileTypes adds a sound line the episode lacks", () => {

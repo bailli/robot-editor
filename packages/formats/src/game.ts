@@ -259,14 +259,16 @@ export class Game {
   }
 
   /**
-   * A copy of the exe in which `episode` has what the hero states that the classes
-   * `classIds` set need (hero-states.ts), taken from episode `from` where `episode` lacks
-   * it: the state's status-line icon (the frame of class 135's type that `from` shows,
-   * appended to the episode's unless it has one alike; without an icon IV crashes) and
-   * the hero's frames the state draws (appended from `from`'s hero; without them the
-   * hero is not drawn). What `from` lacks too stays missing.
+   * What withHeroStates adds for the hero states the classes `classIds` set, and what it
+   * cannot (`lacking`, in words): an icon the state has in neither episode or that does
+   * not fit (another shape, 16 frames taken), the hero's frames where `from`'s hero lacks
+   * them too or is shaped otherwise.
    */
-  withHeroStates(episode: number, from: number, classIds: Iterable<number>): Uint8Array {
+  private heroStatePlan(
+    episode: number,
+    from: number,
+    classIds: Iterable<number>,
+  ): { shapes: Map<number, Shape>; newIcons: Map<number, number>; lacking: string[] } {
     const states = [...new Set([...classIds].flatMap((id) => CLASS_HERO_STATES.get(id) ?? []))];
     const [target, source] = [this.episode(episode), this.episode(from)];
     const shapes = new Map<number, Shape>();
@@ -279,17 +281,27 @@ export class Game {
     const sourceIconShape =
       sourceIconType === undefined ? undefined : source.objects[sourceIconType];
     const newIcons = new Map<number, number>();
+    const lacking: string[] = [];
     for (const state of states.toSorted((a, b) => a - b)) {
+      if (icons[state] !== 0) continue;
       const icon = sourceIcons[state] ?? 0;
       // class 135 draws frame state & 0xf (FrameMethod.NIBBLE)
       const frame = sourceIconShape?.frames[(icon - 1) & 0xf];
-      if (icons[state] !== 0 || icon === 0 || !frame || !iconShape || iconType === undefined) {
+      const none = `hero state ${state} gets no status-line icon`;
+      if (icon === 0 || !frame || !iconShape || iconType === undefined) {
+        lacking.push(`${none} (episode ${from} has none)`);
         continue;
       }
-      if (!sameGeometry(iconShape, sourceIconShape)) continue;
+      if (!sameGeometry(iconShape, sourceIconShape)) {
+        lacking.push(`${none} (the icons' shapes differ)`);
+        continue;
+      }
       let k = iconShape.frames.findIndex((f) => sameFrame(f, frame));
       if (k < 0) {
-        if (iconShape.frames.length > 0xf) continue;
+        if (iconShape.frames.length > 0xf) {
+          lacking.push(`${none} (all 16 icon frames are taken)`);
+          continue;
+        }
         iconShape = { ...iconShape, frames: [...iconShape.frames, frame] };
         shapes.set(iconType, iconShape);
         k = iconShape.frames.length - 1;
@@ -303,14 +315,38 @@ export class Game {
       0,
       ...states.flatMap((s) => HERO_STATE_FRAMES.get(s) ?? []).map((f) => f + 1),
     );
-    if (hero && sourceHero && sameGeometry(hero, sourceHero) && hero.frames.length < needed) {
-      if (sourceHero.frames.length >= needed) {
+    if (hero && hero.frames.length < needed) {
+      if (sourceHero && sameGeometry(hero, sourceHero) && sourceHero.frames.length >= needed) {
         shapes.set(HERO_TYPE, {
           ...hero,
           frames: [...hero.frames, ...sourceHero.frames.slice(hero.frames.length, needed)],
         });
+      } else {
+        lacking.push(`the hero lacks frames ${hero.frames.length}-${needed - 1} (not drawn then)`);
       }
     }
+    return { shapes, newIcons, lacking };
+  }
+
+  /**
+   * What withHeroStates cannot give the episode for the hero states the classes
+   * `classIds` set (episode IV crashes in a state without an icon), in words.
+   */
+  heroStatesLacking(episode: number, from: number, classIds: Iterable<number>): string[] {
+    return this.heroStatePlan(episode, from, classIds).lacking;
+  }
+
+  /**
+   * A copy of the exe in which `episode` has what the hero states that the classes
+   * `classIds` set need (hero-states.ts), taken from episode `from` where `episode` lacks
+   * it: the state's status-line icon (the frame of class 135's type that `from` shows,
+   * appended to the episode's unless it has one alike; without an icon IV crashes) and
+   * the hero's frames the state draws (appended from `from`'s hero; without them the
+   * hero is not drawn). What cannot be had stays missing
+   * (heroStatesLacking).
+   */
+  withHeroStates(episode: number, from: number, classIds: Iterable<number>): Uint8Array {
+    const { shapes, newIcons } = this.heroStatePlan(episode, from, classIds);
 
     if (shapes.size === 0 && newIcons.size === 0) return this.image.data.slice();
     let image = this.image;
