@@ -43,6 +43,11 @@ export const FrameMethod = {
   CUT: 0x426dc0,
   /** notes: frame 1 (a note) with state bit 7, else frame 0 (old writing, a cassette) */
   NOTE: 0x4216b0,
+  /**
+   * II's amulet: frame 4 (the amulet), plus frame k for each state bit k = 0..3 (a
+   * piece; its dots say which rocks it lets the hero cross)
+   */
+  PIECES: 0x410c40,
 } as const;
 
 export interface ObjectClass {

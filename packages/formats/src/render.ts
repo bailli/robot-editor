@@ -165,6 +165,21 @@ function addons(shape: Shape, state: number): Uint8Array {
   return pixels;
 }
 
+/**
+ * FrameMethod.PIECES (0x410c40): frame 4, then frame k as a sprite (0x428f70) for each
+ * state bit k: its pixels replace the amulet's (verified with II room 99's screenshot).
+ */
+function pieces(shape: Shape, state: number): Uint8Array {
+  const pixels = framePixels(shape, 4);
+  for (let k = 0; k < 4; k++) {
+    if (!(state & (1 << k))) continue;
+    framePixels(shape, k).forEach((c, i) => {
+      if (c !== TRANSPARENT) pixels[i] = c;
+    });
+  }
+  return pixels;
+}
+
 /** FrameMethod.CUT (0x426dc0). */
 function cut(shape: Shape, state: number): Uint8Array {
   if (state < 8) return xorFrame(white(), shape, state);
@@ -288,6 +303,9 @@ export function cellPixels(
       break;
     case FrameMethod.CUT:
       pixels = cut(shape, state);
+      break;
+    case FrameMethod.PIECES:
+      pixels = pieces(shape, state);
       break;
     default:
       pixels = framePixels(shape, state & 0xf);

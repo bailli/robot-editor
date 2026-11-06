@@ -10,6 +10,7 @@ import {
   SCREEN_WIDTH,
   backdropRoom,
   cellFrame,
+  cellPixels,
   renderRoom,
   shownCells,
   toRgba,
@@ -36,6 +37,20 @@ for (let episode = 0; episode < 5; episode++) {
     }
   });
 }
+
+test("II's amulet: frame 4 with a piece's dots drawn over it per state bit", () => {
+  const { objects, classes } = loadEpisode(2);
+  const amulet = (state: number) => cellPixels(0x4f | (state << 8), objects, classes);
+  // (2, 5) is the first piece's dot, (5, 5) the second's; colour 2 the amulet, 14 a dot
+  // (as in II room 99's screenshot, the whole amulet at (2, 27))
+  const at = (pixels: Uint8Array | undefined, x: number, y: number) => pixels?.[y * 16 + x];
+  assert.equal(at(amulet(0), 2, 5), 2);
+  assert.equal(at(amulet(1), 2, 5), 14);
+  assert.equal(at(amulet(1), 5, 5), 2);
+  assert.equal(at(amulet(2), 5, 5), 14);
+  assert.equal(at(amulet(15), 2, 5), 14);
+  assert.equal(at(amulet(15), 0, 5), 3); // the outline stays
+});
 
 test("teleporters with a condition: on colour 15 with the frame, or on black", () => {
   const { objects, rooms, classes } = loadEpisode(1);

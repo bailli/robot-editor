@@ -446,10 +446,12 @@ Files in `packages/formats/src`:
   terminal's 0x46a5fc), so reading past +0x5c attributes a dialog to the wrong class.
   Class 0 is the shared empty class (left out of the class→type table 0x4c70e0, 0x43b46a).
 - **Renderer:** draws base cells as tiles and overlay cells as sprites with each class's
-  frame method (13 methods incl. walls, terrain quarters, masks, doors, letters with the
-  game font, notes by state bit 7 (0x4216b0), underlays); logic cells show their
+  frame method (14 methods incl. walls, terrain quarters, masks, doors, letters with the
+  game font, notes by state bit 7 (0x4216b0), underlays, II's amulet: frame 4, with frame
+  k drawn over it as a sprite for each state bit k = 0–3, the pieces collected, 0x410c40;
+  verified with II room 99's screenshot); logic cells show their
   record's cell, circuit nodes with a BULB on top (see circuits), class 99 cells the
-  backdrop's (see room connections). **736 cells differ** in 31
+  backdrop's (see room connections). **611 cells differ** in 31
   reference screenshots (`pnpm robot eval`), most from runtime effects (see open items).
 - **Reference screenshots of any room** use a patched exe (`patch.ts`): the room in the
   start room's slot, without scripts and without anything that moves or kills
