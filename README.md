@@ -230,7 +230,7 @@ caller's address.
 - `pnpm format` – apply Prettier
 
 GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, format check,
-`pnpm test:without-game`, the editor's build, the proxy DLL's build (MinGW) and a syntax
+`pnpm test:without-game`, the editor's build and a syntax
 check of `harness.py` on every push to `main` and every pull request, and publishes the
 editor's static build from `main` on GitHub Pages at https://bailli.github.io/robot-editor/
 (Settings → Pages → Source: GitHub Actions). `.github/workflows/wrapper.yml` builds the
