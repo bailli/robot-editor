@@ -20,40 +20,23 @@ an entry once it is fixed or rejected; delete the file when it is empty.
      into the RWX image. A squatter also locks the real driver out ("busy").
    - Fix: require `hello TOKEN` as the first command, or use a Unix socket in the 0700
      game dir or an inherited socketpair. `proxy.c` probably has the same design.
-3. **Medium-low, confirmed by running: `Driver.start` without the built wrapper or
-   python3** (`packages/tools/src/driver.ts` ~169-226).
-   - `spawn` emits 'error' with no listener, so Node throws, `ready` never settles, and
-     the `robot-native-*` mkdtemp dir stays behind. Seen: `/tmp/robot-native-HgL5XQ` and
-     `-RWa4YY`.
-   - `takeShot` doesn't check for the binary (`robot play` does).
-   - Fix: check `existsSync(WRAPPER_BINARY)` with the "pnpm wrapper" hint,
-     `server.once("error", reject)`, and remove gameDir on that path. The tools reviewer
-     found the same.
-4. **Low-medium: test runs inherit the user's whole environment** (`driver.ts:171`
-   spreads process.env).
-   - `ROBOT_SERVE_WINDOW` would show test windows on the desktop.
-   - `ROBOT_IMPORT_REG` imports the user's settings.
-   - `ROBOT_CONSOLE`, `ROBOT_DIALOG_OK` and `ROBOT_SHOT` change tests.
-   - Fix: drop those, and force `SDL_VIDEODRIVER=dummy` and `SDL_AUDIODRIVER=dummy` from
-     TS. In C, make `ShellExecuteA` (`misc.c:219`) a no-op returning 33 while the driver
-     is active.
-5. **Low: expose in fullscreen** (`sdl.c:435`).
+3. **Low: expose in fullscreen** (`sdl.c:435`).
    - `SDL_WINDOWEVENT_EXPOSED` always calls `screen_present()`, which shows the GDI frame
      during DirectDraw fullscreen, resizes the texture to 640×348 and switches the mouse
      mapping.
    - Fix: re-show what is shown, or skip it while `showing_rgb`.
-6. **Low, plausible: `ExitProcess`** (`kernel32.c:1796`) calls `exit()` while the sound
+4. **Low, plausible: `ExitProcess`** (`kernel32.c:1796`) calls `exit()` while the sound
    and SDL audio threads still run. Fix: `fflush(NULL); _exit(code);`.
-7. **Low: a closed handle can be freed under a waiter** (`kernel32.c:1471-1527`).
+5. **Low: a closed handle can be freed under a waiter** (`kernel32.c:1471-1527`).
    - `wait_objects` takes no reference. dsound's `signal_send` runs after unlocking.
    - The game never triggers this today.
-8. **Low: the PE loader trusts header fields** (`loader.c:261-303`, `bind_imports`
+6. **Low: the PE loader trusts header fields** (`loader.c:261-303`, `bind_imports`
    233-259, `res_lookup` in `kernel32.c`).
    - `e_lfanew`, `SizeOfHeaders` (the memcpy at 287), the section table, `va + n` wrap,
      the imports and the resource offsets are unchecked.
    - Reachable only with a malformed exe (e.g. one posted to "Test in game").
    - Fix: validate every offset with 64-bit sums.
-9. **Low, semantics:**
+7. **Low, semantics:**
    - TranslateMessage appends WM_CHAR behind queued input (Windows reads posted messages
      first).
    - FOCUS_LOST (`sdl.c:438`) posts WM_KEYUP for VK 0xa0-0xa5 plus duplicates, and
@@ -61,17 +44,17 @@ an entry once it is fixed or rejected; delete the file when it is empty.
    - `ui_key` swallows only the key-down of a Ctrl+Shift shortcut.
    - `LB_INSERTSTRING(-1)` (`ui.c:319`) returns -1, not the index.
    - `serve()` spins if `accept` fails (EMFILE).
-10. **Low: `--settings` writes the registry file** (`settings.c:55`: `open_key` uses
-    RegCreateKeyExA). Fix: RegOpenKeyExA for reading.
-11. **Low: DirectX version** (`misc.c:69`). FileVersionLS 0x384 means 4.09.00.0900
-    (9.0), but STATUS and the comment say 0904 (9.0c, 0x388). Change one of them.
-12. **Low: CI `wrapper.yml`.**
+8. **Low: `--settings` writes the registry file** (`settings.c:55`: `open_key` uses
+   RegCreateKeyExA). Fix: RegOpenKeyExA for reading.
+9. **Low: DirectX version** (`misc.c:69`). FileVersionLS 0x384 means 4.09.00.0900
+   (9.0), but STATUS and the comment say 0904 (9.0c, 0x388). Change one of them.
+10. **Low: CI `wrapper.yml`.**
     - It has no setup-node (Node 22).
     - The path filter lacks `package.json`.
     - Deleting and then creating the release leaves none if create fails. Use
       `gh release upload --clobber` and a moved tag instead.
     - The zip drops the executable bit (the README says to chmod).
-13. **Simplification:**
+11. **Simplification:**
     - The CP1252 table is in five copies (kernel32, user32, sdl, ui, settings).
     - `ddraw.c fill_vtable` is the same as `dsound.c fill`.
     - The `dsound.c:180` comment says libm is not linked, but `-lm` is, so `powf` would
@@ -119,11 +102,6 @@ an entry once it is fixed or rejected; delete the file when it is empty.
 
 ## tools, proxy, harness
 
-1. `Driver.start`: no 'error' listener on spawn. See wrapper finding 3.
-2. **Confirmed: opt-in game tests pass without running.** `driver.test.ts` ~395 and
-   `backends.test.ts` use `describe.skipIf(!enabled || !built)`, so with
-   `ROBOT_GAME_TESTS=1` and no wrapper or ddraw.dll the run is green. Fix: when enabled
-   and not built, fail with the hint.
 3. **Plausible: `proxy.c:341-347` (`patch_game`, `call_at`) reads 0x405bde in DllMain
    of any process that loads the proxy** (DxDiag loads ddraw). That is an access
    violation if it isn't mapped. Fix: check that the module is GameOfRobot.exe first.
@@ -133,11 +111,9 @@ an entry once it is fixed or rejected; delete the file when it is empty.
 5. **Confirmed by reading: `harness.py shot`.** `xdo search --sync` has no timeout (and
    the TS `spawnSync` has none either). There are no SIGTERM/SIGINT handlers, so Xvfb and
    wine stay behind.
-6. **Plausible: `driver.ts close()`/`command()` have no timeout.** There is no SIGKILL
-   fallback, and after a vitest timeout `finally { close() }` never runs.
-7. `proxy.c:491-496 button`: any name other than "left" counts as the right button.
-8. `proxy.c:481 key`: VK `& 0xff` instead of a range check.
-9. **Plausible: real time leaks.** `hook_SetTimer` passes `hwnd == NULL` timers to the
+6. `proxy.c:491-496 button`: any name other than "left" counts as the right button.
+7. `proxy.c:481 key`: VK `& 0xff` instead of a range check.
+8. **Plausible: real time leaks.** `hook_SetTimer` passes `hwnd == NULL` timers to the
    real SetTimer. Sleep, WaitFor* and waveOut aren't virtual. Unverified.
-10. `driver.ts press/click/hold`: a throw between down and up leaves the key or button
-    held (benign while `withGame` closes the driver).
+9. `driver.ts press/click/hold`: a throw between down and up leaves the key or button
+   held (benign while `withGame` closes the driver).

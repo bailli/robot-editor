@@ -220,6 +220,11 @@ static HINSTANCE WINAPI ShellExecuteA(HWND hwnd, LPCSTR op, LPCSTR file, LPCSTR 
                                       LPCSTR dir, INT show) {
   (void)hwnd, (void)params, (void)dir, (void)show;
   if (!file) return (HINSTANCE)2;
+  /* a driven game opens nothing on the desktop: it reports success */
+  if (driver_active()) {
+    trace("ShellExecuteA %s %s: not under the driver", op ? op : "open", file);
+    return (HINSTANCE)33;
+  }
   if (op && strcasecmp(op, "open") != 0 && strcasecmp(op, "explore") != 0)
     fatal("ShellExecuteA: operation %s (%s) is not supported", op, file);
   int url = strncasecmp(file, "http:", 5) == 0 || strncasecmp(file, "https:", 6) == 0 ||

@@ -392,6 +392,11 @@ async function backdropCells(
   };
 }
 
+// asked for but not built: a failure, not a run that passes without playing
+test.runIf(enabled && !built)("the game tests need the build", () => {
+  assert.fail(`not built: ${HINT}`);
+});
+
 describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () => {
   const game = loadGame();
 

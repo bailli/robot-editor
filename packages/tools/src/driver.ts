@@ -1,5 +1,5 @@
 import { type ChildProcess, type ChildProcessByStdio, spawn } from "node:child_process";
-import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { type Socket, connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,6 +35,11 @@ const EXE = fileURLToPath(new URL("reference/GameOfRobot.exe", ROOT));
  */
 export const NATIVE = process.env["ROBOT_WINE"] !== "1";
 
+/** How long a command may go without an answer before the driver gives up. */
+const ANSWER_MS = 120_000;
+/** How long `close` waits for the game to end before killing it. */
+const KILL_MS = 10_000;
+
 /** The native wrapper's binary (built by `pnpm wrapper`). */
 export const WRAPPER_BINARY = fileURLToPath(new URL("tools/linux/robot", ROOT));
 
@@ -45,6 +50,26 @@ export interface StartOptions {
   port?: number;
   /** The native wrapper rather than Wine (default: yes, unless ROBOT_WINE=1). */
   native?: boolean;
+}
+
+/**
+ * The environment for a game the driver starts natively: the wrapper's settings that
+ * change what the game does are left out (`ROBOT_IMPORT_REG` would import the user's
+ * settings, `ROBOT_CONSOLE` turn the console on, …), so tests run alike everywhere;
+ * `ROBOT_SERVE_WINDOW` and `ROBOT_TRACE`, for watching and tracing a run, pass.
+ */
+function gameEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const name of [
+    "ROBOT_IMPORT_REG",
+    "ROBOT_CONSOLE",
+    "ROBOT_DIALOG_OK",
+    "ROBOT_SHOT",
+    "ROBOT_FULLSCREEN",
+    "ROBOT_HEADLESS",
+  ])
+    Reflect.deleteProperty(env, name);
+  return env;
 }
 
 /** Windows virtual-key codes of keys the game uses (letters and digits: their ASCII codes). */
@@ -159,6 +184,8 @@ export class Driver {
     let server: ChildProcessByStdio<Writable, Readable, null>;
     let gameDir: string | undefined;
     if (options.native ?? NATIVE) {
+      if (!existsSync(WRAPPER_BINARY))
+        throw new Error("the native wrapper is not built: run pnpm wrapper");
       gameDir = mkdtempSync(join(tmpdir(), "robot-native-"));
       const exe = join(gameDir, "GameOfRobot.exe");
       copyFileSync(options.exe ?? EXE, exe);
@@ -168,7 +195,7 @@ export class Driver {
       // stdin a pipe: the wrapper ends when it closes, also if this process dies
       server = spawn(WRAPPER_BINARY, args, {
         stdio: ["pipe", "pipe", "inherit"],
-        env: { ...process.env, ROBOT_REGISTRY: join(gameDir, "registry.reg") },
+        env: { ...gameEnv(), ROBOT_REGISTRY: join(gameDir, "registry.reg") },
       });
     } else {
       const args = ["-I", HARNESS, "serve"];
@@ -187,6 +214,8 @@ export class Driver {
     });
     // ready PORT DISPLAY TOKEN
     const ready = new Promise<{ port: number; token: string }>((resolve, reject) => {
+      // not started at all (no python3, the binary not executable): no exit follows
+      server.once("error", reject);
       server.on("exit", (code) => {
         reject(
           new Error(`${gameDir ? "robot --serve" : "harness.py serve"} ended (${String(code)})`),
@@ -204,7 +233,9 @@ export class Driver {
       return driver;
     } catch (error) {
       server.kill();
-      await exited; // its cleanup done, the next start finds no game of this one
+      // its cleanup done, the next start finds no game of this one (a process that never
+      // started has nothing to wait for)
+      if (server.pid !== undefined) await exited;
       removeGameDir();
       throw error;
     }
@@ -236,6 +267,7 @@ export class Driver {
 
   /** Sends one command line and returns the answer after "ok" (throws on "error"). */
   async command(line: string): Promise<string> {
+    let timer: NodeJS.Timeout | undefined;
     const answer = await new Promise<string>((resolve, reject) => {
       if (this.failure) {
         reject(this.failure);
@@ -243,6 +275,13 @@ export class Driver {
       }
       this.pending.push({ resolve, reject });
       this.socket.write(`${line}\n`);
+      // the game answers within its stall time (3 s without a step): no answer at all is
+      // a game that hangs; failing lets the caller close it
+      timer = setTimeout(() => {
+        this.fail(new Error(`no answer to ${line} in ${String(ANSWER_MS / 1000)} s`));
+      }, ANSWER_MS);
+    }).finally(() => {
+      clearTimeout(timer);
     });
     if (answer.startsWith("error")) throw new Error(`proxy: ${answer} (for ${line})`);
     return answer.replace(/^ok ?/, "");
@@ -463,7 +502,10 @@ export class Driver {
   async close(): Promise<void> {
     this.socket.end();
     this.server?.kill();
+    // a game that ignores SIGTERM is killed
+    const kill = setTimeout(() => this.server?.kill("SIGKILL"), KILL_MS);
     await this.serverExit;
+    clearTimeout(kill);
     if (this.gameDir) rmSync(this.gameDir, { recursive: true, force: true });
   }
 }

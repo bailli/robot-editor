@@ -59,6 +59,11 @@ async function play(native: boolean, episode: number): Promise<Seen> {
   }
 }
 
+// asked for but not built: a failure, not a run that passes without playing
+test.runIf(enabled && !built)("the game tests need the build", () => {
+  assert.fail(`not built: ${HINT}`);
+});
+
 describe.skipIf(!enabled || !built)(`the native wrapper against Wine (${HINT})`, () => {
   for (const episode of [0, 1, 2, 3, 4]) {
     test(`episode ${String(episode)}: the same frames, tick and hero`, async () => {
