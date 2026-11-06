@@ -110,5 +110,8 @@ DWORD clock_ms(void);
 void driver_enable(int port);  /* the command line's --serve [--port N]; before anything else */
 void driver_start(void);       /* once the image is loaded: patch it, listen, say `ready` */
 BOOL driver_async_key(int vk); /* a key or button the driver injected is down */
+long driver_posted(void);      /* how many messages the driver posted so far */
+/* GetMessageA with nothing to take under the driver: a granted step passes as time, or idle */
+void driver_wait_message(long seen);
 
 #endif

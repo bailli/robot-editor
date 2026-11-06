@@ -2169,7 +2169,15 @@ wrapper is now the default for the game tests, the reference screenshots and pla
   32 (8 bits with `UseTrueColor` 0, which the wrapper refuses), recreates its surfaces at
   that size, makes the window a popup at 0,0 and draws onto the primary surface, which the
   wrapper then shows instead (letterboxed); back with `SetCooperativeLevel(DDSCL_NORMAL)`
-  and `RestoreDisplayMode`.
+  and `RestoreDisplayMode`. In DirectDraw mode WM_PAINT presents by itself and passes the
+  message on to `DefWindowProcA` without BeginPaint (0x405310), which validates the
+  window as Windows does; the wrapper did not, so after Alt+Enter WM_PAINT came forever
+  and the game stood still (review finding, fixed 2026-11-06). Back in the window the
+  game waits (0x4c5d80 below 0: the main loop at 0x405bcb steps only while it is above 0)
+  until its 200 ms timer (0x403c23) counts it up, about 770 ms. Under the driver
+  `GetMessageA` then waits on the virtual clock: each granted step passes as time
+  (`driver_wait_message`), else nothing would advance the timer; the proxy under Wine has
+  no such case yet (not tried there). Game test "Alt+Return … and back".
 - **Input:** SDL keys become WM_KEYDOWN/WM_KEYUP with Windows virtual keys (Alt
   combinations WM_SYSKEY*, the keypad without Num Lock the navigation keys the game's
   diagonal moves use), typed text WM_CHAR in code page 1252; `TranslateAcceleratorA` reads

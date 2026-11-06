@@ -284,6 +284,12 @@ static LRESULT WINAPI DefWindowProcA(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
     if ((wparam & 0xfff0) == SC_CLOSE) send_message(hwnd, WM_CLOSE, 0, 0);
     return 0;
   case WM_CLOSE: window_destroy(hwnd); return 0;
+  /* validates the window, as BeginPaint/EndPaint would: in DirectDraw mode the game's
+     WM_PAINT presents itself and passes the message on without BeginPaint (0x405310);
+     left dirty, WM_PAINT would come forever and the main loop never steps the game */
+  case WM_PAINT:
+    if (w) w->dirty = FALSE;
+    return 0;
   case WM_SETCURSOR: return TRUE;
   case WM_ERASEBKGND: return TRUE;
   default: return 0;
@@ -974,12 +980,18 @@ BOOL message_pending(void) {
 static BOOL WINAPI GetMessageA(MSG *msg, HWND hwnd, UINT first, UINT last) {
   for (;;) {
     DWORD wait_ms;
+    long seen = driver_active() ? driver_posted() : 0; /* before looking, as `step` */
     screen_poll();
     pthread_mutex_lock(&queue_lock);
     BOOL got = take(msg, hwnd, first, last, TRUE) ||
                synthesize(msg, hwnd, first, last, TRUE, &wait_ms);
     pthread_mutex_unlock(&queue_lock);
     if (got) break;
+    /* on the virtual clock only granted steps make time pass */
+    if (driver_active()) {
+      driver_wait_message(seen);
+      continue;
+    }
     /* Input arrives as SDL events; other threads' posts are seen within 10 ms. */
     screen_wait(wait_ms < 10 ? (int)wait_ms : 10);
   }

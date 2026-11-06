@@ -416,6 +416,20 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     assert.deepEqual(ticks[1], ticks[0]);
   }, 60_000);
 
+  test("Alt+Return (full screen, DirectDraw) and back: the game keeps running", async () => {
+    await withGame(undefined, async (d) => {
+      await d.startEpisode(1);
+      for (let k = 0; k < 2; k++) {
+        await d.key("alt", true);
+        await d.hold("return", 5);
+        await d.key("alt", false);
+        // its WM_PAINT passes on to DefWindowProc without BeginPaint: that validates; back
+        // in the window it waits for its 200 ms timer to count 0x4c5d80 up (about 110 steps)
+        assert.ok(await d.running(300), `running after Alt+Return ${String(k + 1)}`);
+      }
+    });
+  }, 60_000);
+
   test("a frame is what the game's own screenshot (Ctrl+Alt+P) saves", async () => {
     await withGame(undefined, async (d) => {
       await d.startEpisode(1);

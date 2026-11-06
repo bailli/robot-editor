@@ -2,24 +2,18 @@
 
 Review of 40ac011..396297c (226 commits since the last review), by four reviewers (the
 native Linux wrapper with special care; formats; editor; tools, proxy and harness).
-None of these is fixed yet. "Confirmed" means a reviewer ran it or traced it in the code;
+Fixed entries are removed. "Confirmed" means a reviewer ran it or traced it in the code;
 "plausible" means it was only read. Each one needs verifying before it is fixed. Delete
 an entry once it is fixed or rejected; delete the file when it is empty.
 
 ## Native Linux wrapper (tools/linux, its TS side, CI)
 
-1. **High, confirmed by running: fullscreen freezes the game.**
-   - `user32.c:261-291`: `DefWindowProcA` has no `WM_PAINT` case. `synthesize()` at
-     `user32.c:885-891` keeps a window dirty until `BeginPaint`.
-   - In DirectDraw mode the game's WM_PAINT presents through 0x437450 and calls
-     DefWindowProcA (0x405310) without BeginPaint. Windows validates the window there; the
-     wrapper does not.
-   - Alt+Enter → SetWindowPos → WM_SIZE → InvalidateRect (0x4039b8). From then on every
-     PeekMessage returns WM_PAINT and 0x4016a0 never runs. The driver reports
-     `stalled ... left=5`.
-   - Fix: `case WM_PAINT: if (w) w->dirty = FALSE; return 0;`.
-   - Related, low: `synthesize` returns WM_TIMER before WM_PAINT, but Windows gives
-     WM_PAINT priority. `InvalidateRect(NULL, …)` (0x437373) is a no-op.
+1. **Open, low: the proxy under Wine likely deadlocks on the way back from full screen** as
+   the wrapper did (fixed there, `driver_wait_message`). After Alt+Enter twice the game
+   waits in GetMessage for its 200 ms timer, but the proxy's timers only fire in `step`.
+   Not tried under Wine (Wine runs need the user's ok).
+   - Related, low: the wrapper's `synthesize` returns WM_TIMER before WM_PAINT, but
+     Windows gives WM_PAINT priority. `InvalidateRect(NULL, …)` (0x437373) is a no-op.
 2. **Medium, confirmed by reading: the driver socket has no authentication**
    (`driver.c` 320-335, 453-514).
    - Any local process can connect first. `hello` hands out the token, and `poke` writes

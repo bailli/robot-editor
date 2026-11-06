@@ -151,6 +151,35 @@ static char __attribute__((cdecl)) step(void *app) {
   return original_step(app);
 }
 
+long driver_posted(void) {
+  pthread_mutex_lock(&lock);
+  long seen = posted;
+  pthread_mutex_unlock(&lock);
+  return seen;
+}
+
+/* GetMessageA found nothing to take: the game waits for a message outside `step`, e.g. for
+   its 200 ms timer while 0x4c5d80 counts back up after a change of the display mode
+   (0x403c23); on Windows time passes meanwhile. A granted step advances the virtual clock
+   without running the game (its timers come due); with none granted the game is idle, as in
+   `step`. `seen`: the messages posted before GetMessageA looked (driver_posted). */
+void driver_wait_message(long seen) {
+  pthread_mutex_lock(&lock);
+  if (take_step()) {
+    __atomic_store_n(&now_ms, now_ms + step_ms, __ATOMIC_RELAXED);
+    steps++;
+  } else if (posted == seen) {
+    idle_steps = steps;
+    idle_posted = seen;
+    pthread_cond_broadcast(&idle_cv);
+    if (show_window)
+      wait_on(&wake, 20);
+    else
+      pthread_cond_wait(&wake, &lock);
+  }
+  pthread_mutex_unlock(&lock);
+}
+
 /* Waits until the game is idle after `target` steps (and everything posted so far); false once
    it takes no step for STALL_MS (a long run that keeps stepping is no stall). */
 static int settle(DWORD target) {
