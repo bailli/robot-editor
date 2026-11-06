@@ -80,21 +80,6 @@ an entry once it is fixed or rejected; delete the file when it is empty.
 
 ## formats
 
-1. **High, confirmed with a repro: a second growing `withShapes` corrupts the shapes an
-   earlier copy appended** (`shapes.ts:206-218`, through `withTileTypes` and the mod's
-   `build`).
-   - Cause: the grown table is written, then the new frames right behind it. The first
-     frame's far-pointer fixup sits where `parseShapes` expects a descriptor's frames
-     pointer, so it reads bogus slots after the terminator. The next call's `length` is
-     inflated, and it writes "in place" over the earlier appended frames.
-   - Repro 1: `withTileTypes(0, 1, {0x61→0x61})`, then `{0x62}`, then `{0x63}`. 0x61 is
-     no longer equal to the source.
-   - Repro 2, as a mod: `tileTypes [{episode 0, from 1, [[0x61,0x61]]}, {episode 0, from
-2, [[0x63,0x63]]}]` corrupts 0x61. Kits from different episodes into one episode
-     trigger it.
-   - Fix: a hard stop after the terminator, or append frames first and the table last,
-     or track the extent instead of `parseShapes().length`.
-   - Add a test with two sequential growing calls.
 2. **Plausible: `movedRecord` wraps coordinates** (`records.ts:145-153`).
    - `out[4] + dx`, `out[5] + dy` and `y + dy` wrap in the Uint8Array.
    - For types 12 and 13, `(x + dx) << 10` can go negative or past 6 bits, and `to.room`

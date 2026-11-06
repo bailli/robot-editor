@@ -440,3 +440,15 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
   ).toThrow("texts[0].entry: not an integer");
   expect(readClassTable(game.image, 3)).toEqual(readClassTable(new Game(exe()).image, 3));
 });
+
+test("tile types into one episode from two others: both shapes as copied", () => {
+  // two changes, each growing Junior's shape table (review finding: the second wrote over
+  // the frames of the first)
+  const tileTypes = [
+    { episode: 0, from: 1, types: [[0x61, 0x61]] as [number, number][] },
+    { episode: 0, from: 2, types: [[0x63, 0x63]] as [number, number][] },
+  ];
+  const modded = new Game(applyMod(game.image, mod({ tileTypes })));
+  assert.deepEqual(modded.episode(0).objects[0x61], game.episode(1).objects[0x61]);
+  assert.deepEqual(modded.episode(0).objects[0x63], game.episode(2).objects[0x63]);
+});

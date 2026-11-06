@@ -15,7 +15,9 @@ import {
  *   u8  width            u8  height
  *   u16 0                u8  bytes per row        u8 frame count
  *   u16 ptr -> frames    u8[3] colours c0 c1 c2   u8 unknown
- * An all-zero descriptor is an empty slot. _Rob_object is indexed by map tile type.
+ * An all-zero descriptor is an empty slot; one of width 0 with other bytes set ends the
+ * table (withShapes puts TABLE_END after a grown one). _Rob_object is indexed by map tile
+ * type.
  *
  * Frame, 18 bytes: u16 unknown, then 4 far pointers to 1-bit planes
  * (height * bytesPerRow bytes, MSB = leftmost pixel); a pointer without fixup is empty.
@@ -51,6 +53,13 @@ export const TILE_BACKGROUND = 15;
 export const TRANSPARENT = 0xff;
 
 const DESCRIPTOR_SIZE = 12;
+/**
+ * The descriptor that ends a grown table: width 0 with the unknown byte set. An all-zero
+ * one would read as an empty slot, and the frames appended behind the table as more
+ * slots, which a later growth then took for slots in place and wrote over. The game only
+ * indexes the table by tile type (below 128), so it never reads it.
+ */
+const TABLE_END: readonly number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff];
 const FRAME_SIZE = 18;
 const PLANES = 4;
 /** A far pointer's fixup covers 4 bytes. */
@@ -187,7 +196,7 @@ function append(
  * from any resource (parseShapes). New frames and planes are appended to the segments
  * the resource already uses for them, with fixups of the kinds it already uses. Slots
  * within the table are rewritten in place; one beyond its end moves the table, grown
- * and followed by an empty descriptor, to the end of its segment (the old bytes stay
+ * and followed by TABLE_END, to the end of its segment (the old bytes stay
  * unused) and its public with it. Everything else is written back as it was (writeOmf).
  */
 export function withShapes(
@@ -215,6 +224,7 @@ export function withShapes(
     const old = module.segments[table.segment]?.data ?? new Uint8Array();
     const grown = new Uint8Array((slots + 1) * DESCRIPTOR_SIZE);
     grown.set(old.subarray(table.start, table.start + length * DESCRIPTOR_SIZE));
+    grown.set(TABLE_END, slots * DESCRIPTOR_SIZE);
     start = append(module, table.segment, grown);
     for (const f of module.fixups.filter(
       (f) =>

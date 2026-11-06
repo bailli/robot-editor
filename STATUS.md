@@ -418,7 +418,10 @@ Files in `packages/formats/src`:
   SHAPES resources come out byte for byte** (test). `withShapes` puts shapes (from any
   resource) into a table: frames and planes appended, slots inside rewritten in place,
   a slot beyond the end moves the grown table to the end of its segment (its public
-  with it). Appended data goes into LEDATA blocks of 1024 bytes, a block ending early
+  with it), ended by a descriptor of width 0 with its unknown byte set: an all-zero one
+  reads as an empty slot, so the frames appended behind the table read as more slots and
+  a second growth wrote over the first copy's frames (review finding, fixed 2026-11-06;
+  two kits from different episodes into one hit it). Appended data goes into LEDATA blocks of 1024 bytes, a block ending early
   where a frame's 4-byte far-pointer fixup would cross the boundary (every fixup must
   lie in one block; test). **Verified under Wine:** episode II's tangram (0x50) and oracle (0x51)
   shapes in Junior's grown `_Rob_object` are drawn by the game, cell for cell as our

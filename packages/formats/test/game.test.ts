@@ -80,6 +80,28 @@ test("withTileTypes: episode I's circuit pieces in episode III, all their data",
   }
 });
 
+test("withTileTypes one after another: the shapes copied before stay as they were", () => {
+  // each copy grows Junior's _Rob_object table; the frames appended behind a grown table
+  // must not be read as more of its slots (a later copy wrote over them)
+  let copied = game;
+  for (const [type, from] of [
+    [0x61, 1],
+    [0x62, 1],
+    [0x63, 2],
+  ] as const) {
+    copied = new Game(copied.withTileTypes(0, from, new Map([[type, type]])));
+  }
+  const objects = copied.episode(0).objects;
+  assert.deepEqual(objects[0x61], game.episode(1).objects[0x61]);
+  assert.deepEqual(objects[0x62], game.episode(1).objects[0x62]);
+  assert.deepEqual(objects[0x63], game.episode(2).objects[0x63]);
+  assert.equal(objects.length, 0x64);
+  // Junior's own shapes stay too
+  for (let type = 0; type < 0x61; type++) {
+    assert.deepEqual(objects[type] ?? null, game.episode(0).objects[type] ?? null, `${type}`);
+  }
+});
+
 test("withTileTypes: III's axe, hammer and bridle bring their icons and hero frames", () => {
   // III's 0x61, 0x62, 0x3e put the hero into states 10, 11, 12; III's icons for them are
   // frames 0-2 of its class-135 type (icons 1-3), which IV and I lack (icon 0)
