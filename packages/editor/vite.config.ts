@@ -40,7 +40,12 @@ function referenceExe(): Plugin {
           return;
         }
         res.setHeader("Content-Type", "application/octet-stream");
-        createReadStream(REFERENCE_EXE).pipe(res);
+        createReadStream(REFERENCE_EXE)
+          .on("error", (error) => {
+            server.config.logger.error(`reference exe: ${error.message}`);
+            res.destroy(error); // headers may be out: the transfer breaks off
+          })
+          .pipe(res);
       });
     },
   };
@@ -139,6 +144,10 @@ function playGame(): Plugin {
           fail(503, "no Wine prefix: run python3 tools/wine/harness.py setup");
           return;
         }
+        req.on("error", (error) => {
+          server.config.logger.error(`play: ${error.message}`);
+          if (!res.writableEnded) fail(400, "the exe did not arrive whole");
+        });
         const chunks: Buffer[] = [];
         let size = 0;
         req.on("data", (chunk: Buffer) => {
@@ -159,8 +168,11 @@ function playGame(): Plugin {
             const logError = (text: string) => {
               server.config.logger.error(`play: ${text}`);
             };
+            // a throw (a folder or file not written, spawn refused) answers this request
+            // and leaves the queue going for the next
             queue = queue
               .then(() => playNative(bytes, logError))
+              .catch((error: unknown) => (error instanceof Error ? error.message : String(error)))
               .then((error) => {
                 if (error === undefined) {
                   res.statusCode = 202;
