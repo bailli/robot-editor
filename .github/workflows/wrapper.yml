@@ -1,5 +1,6 @@
 # The native Linux wrapper (tools/linux): built when it changes and kept as an artifact,
 # robot-linux-i386 (a 32-bit Linux program; it needs SDL2 for i386 to run, see the README).
+# From main it also replaces the rolling pre-release linux-wrapper (a stable download link).
 name: Linux wrapper
 
 on:
@@ -37,3 +38,25 @@ jobs:
           name: robot-linux-i386
           path: tools/linux/robot
           if-no-files-found: error
+
+  # the rolling pre-release: its tag moves to the commit built, its file is replaced
+  release:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: robot-linux-i386
+      - name: Replace the pre-release linux-wrapper
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mv robot robot-linux-i386
+          gh release delete linux-wrapper --yes --cleanup-tag || true
+          gh release create linux-wrapper robot-linux-i386 --prerelease --target "$GITHUB_SHA" \
+            --title "Linux wrapper (latest build)" \
+            --notes "The native Linux wrapper built from ${GITHUB_SHA::7} (tools/linux, see the README). A 32-bit program: \`chmod +x robot-linux-i386\`; it needs SDL2 for i386 (\`dpkg --add-architecture i386\`, \`apt install libsdl2-2.0-0:i386\`). Run it with your own GameOfRobot.exe: \`./robot-linux-i386 GAME_DIR/GameOfRobot.exe\`."
