@@ -6,8 +6,8 @@
  * ROBOT_CONSOLE in the environment it turns on the game's command console (see
  * STATUS.md). Without ROBOT_PROXY_PORT it does nothing else. With it, it listens on
  * 127.0.0.1:PORT for a driver (one line per command, one line per answer, see
- * `command`; `hello` names ROBOT_PROXY_TOKEN, so a driver knows it has the game it
- * started) and puts the game on virtual time:
+ * `command`; the first must be `hello ROBOT_PROXY_TOKEN`, which only who started the
+ * game knows, or the connection is dropped) and puts the game on virtual time:
  *
  * - All game time comes from timeGetTime through 0x4016a0 (the main loop's call at
  *   0x405bde: elapsed clock units at 147 per second, at most 20 per call, then the
@@ -40,7 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define VERSION 1
+#define VERSION 2
 #define STEP_CALL 0x405bde /* call 0x4016a0 in the main loop */
 #define STEP_TARGET 0x4016a0
 #define GAME_TICK 0x51bb38 /* incremented once per clock unit by 0x4016a0 */
@@ -404,7 +404,7 @@ static int up_or_down(const char *word) { return !strcmp(word, "up") ? 1 : !strc
 static char token[64]; /* ROBOT_PROXY_TOKEN */
 
 /* One command line → one answer line ("ok …" or "error …"). Commands:
- *   hello                            ok robot-proxy VERSION TOKEN
+ *   hello TOKEN                      ok robot-proxy VERSION (first, see `serve`)
  *   status                           ok tick=… ms=… steps=… frames=… (frames presented)
  *   run N                            N steps; "stalled … left=K" if the game stops stepping
  *   stepms MS                        virtual milliseconds per step (default 7)
@@ -434,7 +434,7 @@ static void command(char *line, char *out, size_t size) {
   BOOL input = !strcmp(word, "key") || !strcmp(word, "mouse") || !strcmp(word, "button");
   char *rest;
   if (!strcmp(word, "hello")) {
-    snprintf(out, size, "ok robot-proxy %d %s", VERSION, token);
+    snprintf(out, size, "ok robot-proxy %d", VERSION);
   } else if (!strcmp(word, "run")) {
     LONG n = strtol(arg1, &rest, 10);
     if (n <= 0 || *rest) {
@@ -566,6 +566,7 @@ static DWORD WINAPI serve(void *param) {
   SOCKET client = INVALID_SOCKET;
   size_t used = 0;
   BOOL overlong = FALSE; /* dropping a line too long for `line`, up to its end */
+  int authed = 0;   /* the client said `hello TOKEN` */
   for (;;) {
     fd_set readable;
     FD_ZERO(&readable);
@@ -578,7 +579,7 @@ static DWORD WINAPI serve(void *param) {
     if (FD_ISSET(server, &readable)) {
       SOCKET other = accept(server, NULL, NULL);
       say("serve: accept %d", (int)other);
-      if (client != INVALID_SOCKET && other != INVALID_SOCKET && peer_closed(client)) {
+      if (client != INVALID_SOCKET && other != INVALID_SOCKET && (!authed || peer_closed(client))) {
         closesocket(client);
         client = INVALID_SOCKET;
       }
@@ -586,6 +587,7 @@ static DWORD WINAPI serve(void *param) {
         client = other;
         used = 0;
         overlong = FALSE;
+        authed = 0;
       } else if (other != INVALID_SOCKET) {
         send_all(other, "error busy: another driver is connected\n");
         closesocket(other);
@@ -607,6 +609,21 @@ static DWORD WINAPI serve(void *param) {
       if (overlong) {
         send_all(client, "error the command line is too long\n");
         overlong = FALSE;
+      } else if (!authed) {
+        /* the first command proves the driver started this game (it read TOKEN from our
+           output): anyone else on this machine is dropped before reading or writing it */
+        char word[16] = "", given[64] = "";
+        sscanf(line, "%15s %63s", word, given);
+        if (strcmp(word, "hello") || strcmp(given, token)) {
+          send_all(client, "error hello TOKEN first\n");
+          closesocket(client);
+          client = INVALID_SOCKET;
+          used = 0;
+          break;
+        }
+        authed = 1;
+        snprintf(answer, sizeof answer, "ok robot-proxy %d\n", VERSION);
+        send_all(client, answer);
       } else {
         command(line, answer, sizeof answer - 1);
         strcat(answer, "\n");

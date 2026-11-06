@@ -30,8 +30,9 @@ until the next `shot`, which deletes them. --console turns on the game's command
 by `pnpm proxy`) on virtual time and prints "ready PORT DISPLAY TOKEN" once the game
 waits in its main loop for the first step; a driver (packages/tools/src/driver.ts) then
 connects to 127.0.0.1:PORT, steps the game, presses keys and reads memory. The port is
-a free one unless --port is given; the proxy's `hello` names TOKEN, so a game of another
-checkout listening on the same port is not taken for this one. It stops when the game
+a free one unless --port is given; a driver's first command must be `hello TOKEN`, so no
+other process on this machine can drive the game, and a game of another checkout
+listening on the same port is not taken for this one. It stops when the game
 ends, on SIGTERM/SIGINT, or when its stdin is a pipe (a driver's) that closes.
 
 Requires Wine (WineHQ packages install to /opt/wine-stable), Xvfb and xdotool. `shot`
@@ -328,9 +329,9 @@ def proxy_ready(port, token):
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=10) as s:
             f = s.makefile("rw", newline="\n")
-            f.write("hello\n")
+            f.write(f"hello {token}\n")
             f.flush()
-            if f.readline().split()[3:] != [token]:  # ok robot-proxy VERSION TOKEN
+            if not f.readline().startswith("ok "):  # ok robot-proxy VERSION
                 return False
             f.write("status\n")
             f.flush()

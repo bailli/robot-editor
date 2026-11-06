@@ -14,12 +14,10 @@ an entry once it is fixed or rejected; delete the file when it is empty.
    Not tried under Wine (Wine runs need the user's ok).
    - Related, low: the wrapper's `synthesize` returns WM_TIMER before WM_PAINT, but
      Windows gives WM_PAINT priority. `InvalidateRect(NULL, …)` (0x437373) is a no-op.
-2. **Medium, confirmed by reading: the driver socket has no authentication**
-   (`driver.c` 320-335, 453-514).
-   - Any local process can connect first. `hello` hands out the token, and `poke` writes
-     into the RWX image. A squatter also locks the real driver out ("busy").
-   - Fix: require `hello TOKEN` as the first command, or use a Unix socket in the 0700
-     game dir or an inherited socketpair. `proxy.c` probably has the same design.
+2. **Not run under Wine: the proxy's `hello TOKEN` check.** The wrapper's was tried
+   (no hello, a wrong token, an idle squatter, busy), and the proxy has the same code
+   (it builds). harness.py's probe sends the token. Run `pnpm test:game:wine` once Wine
+   runs are ok.
 3. **Low: expose in fullscreen** (`sdl.c:435`).
    - `SDL_WINDOWEVENT_EXPOSED` always calls `screen_present()`, which shows the GDI frame
      during DirectDraw fullscreen, resizes the texture to 640×348 and switches the mouse

@@ -42,7 +42,7 @@
 #include "user32.h"
 #include "wrapper.h"
 
-#define VERSION 1
+#define VERSION 2
 #define STEP_CALL 0x405bde /* call 0x4016a0 in the main loop */
 #define STEP_TARGET 0x4016a0
 #define GAME_TICK 0x51bb38 /* incremented once per clock unit by 0x4016a0 */
@@ -332,7 +332,7 @@ static int memory_write(void *at, const void *from, size_t len) {
 }
 
 /* One command line -> one answer line ("ok ..." or "error ..."). Commands:
-     hello                            ok robot-proxy VERSION TOKEN
+     hello TOKEN                      ok robot-proxy VERSION (first, see `serve`)
      status                           ok tick=... ms=... steps=... frames=... (frames presented)
      run N                            N steps; "stalled ... left=K" if the game stops stepping
      stepms MS                        virtual milliseconds per step (default 7)
@@ -361,7 +361,7 @@ static void command(char *line, char *out, size_t size) {
   HWND window = main_window();
   char *rest;
   if (!strcmp(word, "hello")) {
-    snprintf(out, size, "ok robot-proxy %d %s", VERSION, token);
+    snprintf(out, size, "ok robot-proxy %d", VERSION);
   } else if (!strcmp(word, "run")) {
     long n = strtol(arg1, &rest, 10);
     if (n <= 0 || *rest) {
@@ -488,6 +488,7 @@ static void *serve(void *unused) {
   int client = -1;
   size_t used = 0;
   int overlong = 0; /* dropping a line too long for `line`, up to its end */
+  int authed = 0;   /* the client said `hello TOKEN` */
   for (;;) {
     struct pollfd fds[2] = {{listener, POLLIN, 0}, {client, POLLIN, 0}};
     if (poll(fds, client >= 0 ? 2 : 1, -1) <= 0) {
@@ -497,7 +498,8 @@ static void *serve(void *unused) {
     if (fds[0].revents) {
       int other = accept(listener, NULL, NULL);
       trace("driver: connection %d", other);
-      if (client >= 0 && other >= 0 && peer_closed(client)) {
+      if (other < 0) usleep(10000); /* e.g. out of descriptors: not spinning on it */
+      if (client >= 0 && other >= 0 && (!authed || peer_closed(client))) {
         close(client);
         client = -1;
       }
@@ -505,6 +507,7 @@ static void *serve(void *unused) {
         client = other;
         used = 0;
         overlong = 0;
+        authed = 0;
       } else if (other >= 0) {
         send_all(other, "error busy: another driver is connected\n");
         close(other);
@@ -526,6 +529,21 @@ static void *serve(void *unused) {
       if (overlong) {
         send_all(client, "error the command line is too long\n");
         overlong = 0;
+      } else if (!authed) {
+        /* the first command proves the driver started this game (it read TOKEN from our
+           output): anyone else on this machine is dropped before reading or writing it */
+        char word[16] = "", given[64] = "";
+        sscanf(line, "%15s %63s", word, given);
+        if (strcmp(word, "hello") || strcmp(given, token)) {
+          send_all(client, "error hello TOKEN first\n");
+          close(client);
+          client = -1;
+          used = 0;
+          break;
+        }
+        authed = 1;
+        snprintf(answer, sizeof answer, "ok robot-proxy %d\n", VERSION);
+        send_all(client, answer);
       } else {
         command(line, answer, sizeof answer - 2);
         strcat(answer, "\n");

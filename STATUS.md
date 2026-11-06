@@ -2559,7 +2559,11 @@ Roughly by value for the editor.
 - The proxy does nothing but forward unless `ROBOT_PROXY_PORT` is set;
   `ROBOT_PROXY_LOG=C:\…` makes it write a log (a path in the prefix, e.g.
   `C:\robot-drive\proxy.log`), including a port it could not listen on. `serve` picks a
-  free port and a token the proxy's `hello` must name, so two checkouts' games never
-  get mixed up; it reports ready only once the game waits for its first step.
+  free port and a token; a driver's first command must be `hello TOKEN` (protocol
+  version 2, the wrapper's `--serve` alike), else the connection is dropped, and a
+  connection that has not said it yet gives way to the next: no other process on the
+  machine can drive the game or read and write its memory (review finding), and two
+  checkouts' games never get mixed up; it reports ready only once the game waits for its
+  first step.
 - `run` answers "stalled" when the game stops stepping for 3 s: a message box or a
   modal dialog, or a crash (Wine's crash dialog is then on the virtual display).

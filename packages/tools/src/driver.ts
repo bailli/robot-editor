@@ -242,10 +242,11 @@ export class Driver {
   }
 
   /**
-   * Connects to a game served on `port` (e.g. by `harness.py serve` by hand); with
-   * `token`, only to the game that `serve` printed it for.
+   * Connects to a game served on `port` (e.g. by `harness.py serve` or `robot --serve` by
+   * hand), with the token they printed: the game takes no other command first, so only
+   * who started it drives it, and a game of another checkout on the port refuses.
    */
-  static async connect(port: number, token?: string, server?: ChildProcess): Promise<Driver> {
+  static async connect(port: number, token: string, server?: ChildProcess): Promise<Driver> {
     const driver = await new Promise<Driver>((resolve, reject) => {
       const socket = connect(port, "127.0.0.1", () => {
         socket.off("error", reject);
@@ -254,10 +255,9 @@ export class Driver {
       socket.once("error", reject);
     });
     try {
-      const hello = await driver.command("hello"); // robot-proxy VERSION TOKEN
-      if (token !== undefined && hello.split(" ")[2] !== token) {
-        throw new Error(`port ${String(port)} serves another game (${hello})`);
-      }
+      await driver.command(`hello ${token}`).catch((error: unknown) => {
+        throw new Error(`port ${String(port)} serves another game (${String(error)})`);
+      });
       return driver;
     } catch (error) {
       await driver.close();
