@@ -1767,16 +1767,32 @@ button.link {
   color: var(--edited);
 }
 
-/* Episode tab: the kits (kits-view.ts) */
+/* Kits tab: the kits (kits-view.ts), each folded to a line */
 .kit {
   display: grid;
   gap: 4px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
-.kit h4 {
+.kit summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+
+.kit-name {
   font-size: 13px;
-  margin: 0;
+  font-weight: 600;
+}
+
+.kit-summary {
+  color: var(--muted);
+}
+
+.kit[open] > summary {
+  margin-bottom: 2px;
 }
 
 .kit-line {

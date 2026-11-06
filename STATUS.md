@@ -1469,7 +1469,7 @@ Supported:
   browser's
 - save: downloads the exe with all edited episodes and texts (without a work store, see
   below, warns about unsaved changes on leave)
-- tile types from other episodes (tab Episode, `tile-types-view.ts`; mod kind
+- tile types from other episodes (tab Kits, `tile-types-view.ts`; mod kind
   `tileTypes`): the copies, each with its picture in this episode, removable (×, not
   while rooms use the type); a form: the episode (Junior … IV), a type with a class
   there (named, its picture in its own palette), the free type it goes to (the same
@@ -1484,7 +1484,7 @@ Supported:
   oracle: 331, 332, 334, 339, 945) in one undo step. **Tried in
   the game** (by hand): Junior's book copied to IV and placed next to the start, taken:
   its first-take box came and its points were added
-- events from other episodes (tab Episode, `events-view.ts`; mod kinds `events` and
+- events from other episodes (tab Kits, `events-view.ts`; mod kinds `events` and
   `copyTexts`): the entries the mod sets (entry ← episode and entry whose text it
   copies: event id, points), each removable (×: the entry as the exe has it, its text
   copy gone too); a form: the episode, one of its events (entries from 128 on, not its
@@ -1540,7 +1540,7 @@ Supported:
   type copy). Refused: a text the source lacks, an entry from 1800 on (event texts come
   with their events), an entry written here. Written over a copy, the written text wins
   (saveMod drops the copy); "Original" goes back to the copy. Copies into other resources (III's 1320) are kept from a mod but not listed
-- code patches (tab Episode, `code-view.ts`; mod kind `code`, all episodes; folded
+- code patches (tab Kits, `code-view.ts`; mod kind `code`, all episodes; folded
   while the mod has none, it opens when the first comes): the byte writes by address
   (`Editor.codePatches`): section, the bytes the exe holds there and those written, and
   a warning where edits made here write over some of them (the start, rucksack, flags,
@@ -1551,7 +1551,7 @@ Supported:
   outside initialised sections, in `.rsrc`, over another patch's bytes, bytes the exe
   holds already, more than 4096 (`codeProblem`). Each one undo step making a new base.
   A mod opens only where the exe holds each patch's `expect`
-- kits (tab Episode, `kits-view.ts`; `kits.ts`: `KITS`, `planKit`, `kitChanges`): oracles
+- kits (tab Kits since 2026-11-06, with the tile types, events, music and code below them; each kit folded to a line saying what adding it would do, `<details>`, opened ones stay open; `kits-view.ts`; `kits.ts`: `KITS`, `planKit`, `kitChanges`): oracles
   (II's tangram 0x50 and oracle 0x51, events 262–271), circuits (I's letter 0x25,
   gate 0x42, bulb 0x43, stairs 0x3d; event 293) and the goal (Junior's 0x32, its text
   994 moved to 1700, `Kit.textMove`: a code change, `KitPlan.code`, and copies into

@@ -22,10 +22,12 @@ export interface KitsContext {
 }
 
 /**
- * The Episode tab's kits (formats' KITS): per kit what adding it to the shown episode
- * copies (tile types, texts, events, music) and what it cannot (events without an entry),
- * with checkboxes for the events where the spare entries do not hold them all, and
- * "Add". Patched in place (patchChildren); the events chosen stay while the episode does.
+ * The Kits tab's kits (formats' KITS), each folded to its name and what adding it to the
+ * shown episode would do; opened, per kit what it copies (tile types, texts, events,
+ * music, flags) and what it cannot (events without an entry), with checkboxes for the
+ * events where the spare entries do not hold them all, and "Add". Patched in place
+ * (patchChildren); the events chosen stay while the episode does, the kits opened while
+ * the editor runs.
  */
 export class KitsView {
   readonly element = element("section", "start-view record-view tile-types-view");
@@ -34,6 +36,8 @@ export class KitsView {
   /** The events chosen per kit, for the episode shown. */
   private chosen = new Map<string, number[]>();
   private chosenEpisode = -1;
+  /** The kits shown opened. */
+  private readonly opened = new Set<string>();
 
   constructor(events: KitsViewEvents) {
     this.events = events;
@@ -70,14 +74,25 @@ export class KitsView {
   private renderKit(context: KitsContext, kit: Kit): HTMLElement {
     const { episode, names } = context;
     const name = (e: number) => names[e] ?? `episode ${e}`;
-    const box = element("div", "kit");
+    const box = element("details", "kit");
     box.dataset["key"] = kit.key;
+    if (this.opened.has(kit.key)) box.setAttribute("open", "");
+    // a kept element keeps this listener: it reads the element, not the state it was built in
+    box.addEventListener("toggle", () => {
+      if (box.open) this.opened.add(kit.key);
+      else this.opened.delete(kit.key);
+    });
     // the default plan holds as many events as fit: the most that can be chosen
     const fit = context.plan(kit);
     // ids that are not lacking (any more) are dropped
     const chosen = this.chosen.get(kit.key)?.filter((id) => fit.lacking.includes(id));
     const plan = chosen ? context.plan(kit, chosen) : fit;
-    box.append(element("h4", undefined, `${kit.name} from ${name(kit.from)}`));
+    const summary = element("summary");
+    summary.append(
+      element("span", "kit-name", `${kit.name} from ${name(kit.from)}`),
+      element("span", "kit-summary", kitSummary(plan, kit)),
+    );
+    box.append(summary);
     const line = (key: string, text: string) => {
       const p = element("p", "kit-line", text);
       p.dataset["key"] = key;
@@ -238,4 +253,21 @@ export class KitsView {
     bar.append(place);
     return bar;
   }
+}
+
+/** What adding the kit would do, in a few words, for its folded line. */
+function kitSummary(plan: KitPlan, kit: Kit): string {
+  if (plan.problem) return "cannot be added";
+  const own = plan.present.length === kit.types.length && plan.lacking.length === 0;
+  const quiet =
+    plan.moved.length + plan.silenced.length + plan.code.length + plan.textCopies.length;
+  const parts = [
+    plan.types.length > 0 ? `${plan.types.length} type${plan.types.length > 1 ? "s" : ""}` : "",
+    plan.texts.length > 0 ? `${plan.texts.length} text${plan.texts.length > 1 ? "s" : ""}` : "",
+    plan.events.length > 0 ? `${plan.events.length} event${plan.events.length > 1 ? "s" : ""}` : "",
+    plan.flags === undefined ? "" : "a flag",
+    quiet > 0 ? "a moved text" : "",
+  ].filter((p) => p !== "");
+  if (parts.length === 0) return own ? "has it" : "nothing left to add";
+  return `adds ${parts.join(", ")}`;
 }

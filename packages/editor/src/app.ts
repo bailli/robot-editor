@@ -842,15 +842,19 @@ export class App {
       {
         name: "episode",
         label: "Episode",
+        content: h("div", {}, this.episodeView.element, this.dealerView.element),
+      },
+      // what comes from other episodes: kits, and the copies they and the player make
+      {
+        name: "kits",
+        label: "Kits",
         content: h(
           "div",
           {},
-          this.episodeView.element,
           this.kitsView.element,
           this.tileTypesView.element,
           this.eventsView.element,
           this.musicView.element,
-          this.dealerView.element,
           this.codeView.element,
         ),
       },
@@ -3018,7 +3022,10 @@ export class App {
     return this.work;
   }
 
-  /** The Episode tab: where the episode starts, its dealer and the rooms he appears in. */
+  /**
+   * The Episode tab (where the episode starts, its settings, its dealer and the rooms he
+   * appears in) and the Kits tab (kits, copied tile types, events, music, code changes).
+   */
   private refreshEpisodeTab(): void {
     const editor = this.need();
     const start = editor.start(this.episode);
@@ -3112,6 +3119,14 @@ export class App {
       original: readDealer(editor.game.image, this.episode),
       capacity: editor.dealerCapacity(this.episode),
       rooms: this.dealerRooms(),
+    });
+    const copied =
+      editor.tileTypeCopies(this.episode).length +
+      editor.eventEntries(this.episode).length +
+      editor.musicCopies(this.episode).length;
+    this.sidePanel.setState("kits", {
+      ...(copied > 0 ? { badge: String(copied) } : {}),
+      title: `${copied} ${copied === 1 ? "copy" : "copies"} from other episodes (tile types, events, music)`,
     });
     this.sidePanel.setState("episode", {
       ...(edited ? { badge: "●" } : {}),

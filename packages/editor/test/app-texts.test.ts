@@ -188,7 +188,7 @@ test("jumps: a record's text, the cell's texts, a script's message, an event's t
   const ivRoom = readEpisodeStart(game.image, 4).room;
   app.editor?.copyEvent(4, ivRoom, 197, { from: 2, of: 135 });
   app.showEpisode(4, ivRoom);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   await page.getByRole("button", { name: "Write the text of entry 197" }).click();
   await expect.element(texts().getByRole("heading", { name: "Text 1997" })).toBeVisible();
   await expect.element(texts().getByText(/^Text of event entry 197/)).toBeVisible();

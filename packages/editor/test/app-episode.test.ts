@@ -210,9 +210,9 @@ test("the Episode tab sets the rucksack and the oracles' flags, undoably; the mo
   expect(tab("episode").badge).toBeUndefined();
 });
 
-test("the Episode tab copies tile types of other episodes, undoably; the mod keeps them", async () => {
+test("the Kits tab copies tile types of other episodes, undoably; the mod keeps them", async () => {
   app.showEpisode(0, 43);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   const types = page.getByRole("region", { name: "Tile types" });
   await expect
     .element(types.getByText("Robot Junior has no tile types of other episodes."))
@@ -251,7 +251,7 @@ test("the Episode tab copies tile types of other episodes, undoably; the mod kee
 
 test("the copy form's target: the same number where free, else the first type no copy has", async () => {
   app.showEpisode(0, 43);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   const types = page.getByRole("region", { name: "Tile types" });
   const to = types.getByLabelText("To type");
   await userEvent.selectOptions(types.getByLabelText("From episode"), "II");
@@ -276,10 +276,10 @@ test("the copy form's target: the same number where free, else the first type no
   expect(offered()).toContain(String(0x3a));
 });
 
-test("the Episode tab lists the music copied along; × takes a piece out, undoably", async () => {
+test("the Kits tab lists the music copied along; × takes a piece out, undoably", async () => {
   const start = app.editor?.start(4).room ?? 0;
   app.showEpisode(4, start);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   const music = page.getByRole("region", { name: "Music" });
   await expect.element(music.getByText(/has no music of other episodes/)).toBeVisible();
   const events = page.getByRole("region", { name: "Events" });
@@ -300,10 +300,10 @@ test("the Episode tab lists the music copied along; × takes a piece out, undoab
   expect(app.editor?.eventEntries(4)[0]?.sound).toBe("!ORACLE");
 });
 
-test("the Episode tab copies a piece of another episode's music; a room can play it", async () => {
+test("the Kits tab copies a piece of another episode's music; a room can play it", async () => {
   const start = app.editor?.start(4).room ?? 0;
   app.showEpisode(4, start);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   const music = page.getByRole("region", { name: "Music" });
   await userEvent.selectOptions(music.getByLabelText("From episode"), "II");
   // songs first
@@ -330,10 +330,10 @@ test("the Episode tab copies a piece of another episode's music; a room can play
   expect(app.editor?.game.musicPieces(4)).not.toContain("ORACLE");
 });
 
-test("the Episode tab copies events of other episodes to spare entries, undoably", async () => {
+test("the Kits tab copies events of other episodes to spare entries, undoably", async () => {
   const start = app.editor?.start(4).room ?? 0;
   app.showEpisode(4, start);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   const events = page.getByRole("region", { name: "Events" });
   await expect.element(events.getByText(/has no events of other episodes/)).toBeVisible();
   await userEvent.selectOptions(events.getByLabelText("From episode"), "II");
@@ -385,7 +385,7 @@ test("the Texts tab copies texts of other episodes, a copied class's in one go",
   const texts = page.getByRole("region", { name: "Texts" });
   await expect.element(texts.getByText(/has no texts of other episodes/)).toBeVisible();
   // II's oracle in Junior: its hints and death message come with "Texts"
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   await userEvent.selectOptions(types.getByLabelText("From episode"), "II");
   await userEvent.selectOptions(types.getByLabelText("Type"), String(0x51));
   await types.getByRole("button", { name: "Copy" }).click();
@@ -425,11 +425,15 @@ test("the Texts tab copies texts of other episodes, a copied class's in one go",
   expect(app.editor?.game).toBe(app.editor?.pristine);
 });
 
-test("the Episode tab adds kits: oracles with the symbols picked, then circuits", async () => {
+test("the Kits tab adds kits: oracles with the symbols picked, then circuits", async () => {
   const start = app.editor?.start(4).room ?? 0;
   app.showEpisode(4, start);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   const kits = page.getByRole("region", { name: "Kits" });
+  // folded to a line each; opened they stay open
+  await expect.element(kits.getByText("adds 2 types, 5 texts, 4 events")).toBeVisible();
+  await kits.getByText("Oracles from Robot II").click();
+  await kits.getByText("Circuits from Robot I").click();
   // four spare entries for ten symbols: the first four are ticked, a fifth cannot be
   const symbol = (n: number) => kits.getByRole("checkbox", { name: `symbol ${n} (${262 + n})` });
   await expect.element(symbol(3)).toBeChecked();
@@ -464,10 +468,11 @@ test("the Episode tab adds kits: oracles with the symbols picked, then circuits"
 
 test("a kit's example is placed like a paste, once the episode has the kit", async () => {
   app.showEpisode(3, 41);
-  await page.getByRole("tab", { name: "Episode" }).click();
-  const circuits = page.getByRole("region", { name: "Kits" }).getByRole("button", {
-    name: "Place example",
-  });
+  await page.getByRole("tab", { name: "Kits" }).click();
+  const kits = page.getByRole("region", { name: "Kits" });
+  await kits.getByText("Oracles from Robot II").click();
+  await kits.getByText("Circuits from Robot I").click();
+  const circuits = kits.getByRole("button", { name: "Place example" });
   // circuits: the second kit; III has oracles of its own, so their example is offered
   await expect.element(circuits.nth(1)).toBeDisabled();
   await expect.element(circuits.nth(0)).toBeEnabled();
@@ -492,8 +497,9 @@ test("a kit's example is placed like a paste, once the episode has the kit", asy
 
 test("slow copies lock the side panel until they are done, saying what runs", async () => {
   app.showEpisode(0, 43);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   const panel = app.sidePanel.element;
+  await page.getByRole("region", { name: "Kits" }).getByText("Circuits from Robot I").click();
   // a DOM click runs the handler at once: the panel is locked before the work starts
   defined(page.getByRole("button", { name: "Add circuits" }).element() as HTMLElement).click();
   expect(panel.inert).toBe(true);
@@ -513,7 +519,7 @@ test("undo, redo and episode changes wait while the side panel's work runs", asy
   editor.beginStroke(0, 43, "base");
   editor.paint(0, 0x0105);
   editor.endStroke();
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   const types = page.getByRole("region", { name: "Tile types" });
   await userEvent.selectOptions(types.getByLabelText("From episode"), "II");
   await userEvent.selectOptions(types.getByLabelText("Type"), String(0x51));

@@ -76,7 +76,7 @@ test("a broken mod or one for another exe changes nothing", () => {
   expect(app.editor).toBe(before);
 });
 
-test("the Episode tab lists the mod's code; × takes a patch out", async () => {
+test("the Kits tab lists the mod's code; × takes a patch out", async () => {
   // III's start method: the hero's x (c6 05 09 e3 4f 00 xx)
   const va = 0x40b466;
   const [x = 0] = readVa(game.image, va, 1);
@@ -86,7 +86,7 @@ test("the Episode tab lists the mod's code; × takes a patch out", async () => {
   };
   app.loadMod(modJson(mod), "code.robotmod.json");
   app.showEpisode(3, readEpisodeStart(game.image, 3).room);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   const code = page.getByRole("region", { name: "Code patches" });
   const was = x.toString(16).padStart(2, "0");
   // open, as the mod has a patch
@@ -99,7 +99,7 @@ test("the Episode tab lists the mod's code; × takes a patch out", async () => {
 
 test("without code patches the section stays folded; its form writes one", async () => {
   app.showEpisode(3, readEpisodeStart(game.image, 3).room);
-  await page.getByRole("tab", { name: "Episode" }).click();
+  await page.getByRole("tab", { name: "Kits" }).click();
   const code = page.getByRole("region", { name: "Code patches" });
   await expect.element(code.getByText("Code patches")).toBeVisible();
   expect(document.querySelector<HTMLDetailsElement>(".code-view")?.open).toBe(false);
