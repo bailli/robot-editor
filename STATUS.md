@@ -1780,13 +1780,46 @@ stands, decided 2026-10-27; details in the sections named.
   dealer's in Junior, I and II and III's compass "too dark"; 960 is III's ladder and
   the robot pushing elsewhere; 991 the word warning in I, errors in III and IV, none
   in II; 994 III's timber, Junior's goal, a joke in I and II.
-  Text 230 (no swimming) is shown by the river 0x12 (class 55) and water (class 82),
-  which every episode has, but only II and III have the text. The first survey also
-  named II's money, phone card, credit card, telephone, skateboard, road and traffic,
-  III's bridle, pipes and timber, and IV's punch card and cylinders; those came from
-  neighbouring vtables and tables and were wrong. Event 110 is Junior's 0x32. The editor's copy of a type offers only `classTexts` (oracle, goal), in the
-  first language only, and skips a number the episode already uses for another text
-  (III's 991).
+- **Classes that need other classes** (scan, code only, 2026-11-06): constant class
+  numbers given to "carries" 0x42bcd0, take 0x42c010/0x42c2e0, place 0x433300, set a
+  cell 0x4332a0, put 0x433420, compared after the cell readers 0x433230/0x433110 or a
+  class id call (vtable +0), vtable compares and fixed entries of 0x4c70e0, traced to
+  owners as in the text survey. Missed: jump tables on a class (the hammer's, found
+  by hand), classes in variables, shared state (counters, timers, the hero's modes).
+  Compares with small numbers may be states, not classes, and are left out here.
+  Links to a class some episodes lack (the class's types in brackets):
+  - **Items the hero must carry:** woods (II–IV 0x4c) the boots (II 0x77, III 0x4b,
+    IV 0x51); river and water (classes 55, 82, all) the fins (II–IV 0x60), the bucket
+    (II–IV 0x67), III's oxygen bottle 0x63 and red gem 0x44; letters the wand (I, II
+    0x3e); I's and II's seed 0x2a the sickle (0x2b); notes (class 15) the solution
+    book (Junior 0x08, I, II 0x3b) and IV's mini recorder 0x08; II's 0x5c the
+    skateboard 0x5d; IV's 0x2a the skates 0x2b; III's natives and 0x4e the red gem;
+    II's telephone 0x5f the phone card 0x62 (and money 0x59 on a cell); the postman
+    the phone card; the bus and the ship II's tickets 0x61 (states 1, 4; 3).
+  - **Classes placed or set:** the lamp (0x1b, all) puts flames (II–IV 0x66, state 12)
+    and looks for III's pipes 0x2a and torch 0x72; the bucket (II–IV 0x67) looks for
+    fire 0x66 and III's tap 0x41 and makes ash (II 0x79, III 0x4f, IV 0x65); the
+    machete (II, III 0x6a) turns the bones 0x68 into state 9; II's 0x69 sets sand; the travel
+    agency hands out the ticket 0x61; the axe and hammer (see "Axe and hammer").
+  - **Within one episode's set:** II's bones with the machete and the ticket; III's
+    0x1a with the researcher and the tap, 0x2e with the stool 0x32, the red gem with
+    its socket 0x22; IV's punch card with the punch 0x5c and reader 0x62, the
+    cylinders 0x68 with the electrodes, punch and sliding doors, 0x64 with arrows and
+    the revolving door 0x14, 0x37 with 0x3c; I's, II's and IV's beam, electrodes and
+    cable ends (0x23, 0x22, 0x27).
+  - **By name of type** (0x4c70e0, a text or description names the other type): food
+    and the bones name II's and III's toilet 0x58, the postman the credit card 0x63,
+    the false wall 0x19 the magic jumping boots (II 0x7a), II's and III's stones 0x4d
+    the amulet (II 0x4f), 0x51 III's tangram 0x52, the natives III's 0x75.
+    Outside classes (engine code, the hero, tasks): the red gem (0x447de0, 0x445db0),
+    food (0x449100), the watch, III's sextant, the wizard and his door, the pen.
+    Text 230 (no swimming) is shown by the river 0x12 (class 55) and water (class 82),
+    which every episode has, but only II and III have the text. The first survey also
+    named II's money, phone card, credit card, telephone, skateboard, road and traffic,
+    III's bridle, pipes and timber, and IV's punch card and cylinders; those came from
+    neighbouring vtables and tables and were wrong. Event 110 is Junior's 0x32. The editor's copy of a type offers only `classTexts` (oracle, goal), in the
+    first language only, and skips a number the episode already uses for another text
+    (III's 991).
 - **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
