@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ui.h"
 #include "wrapper.h"
 
 static HANDLE fake_object(void) { return handle_new(HANDLE_OTHER, NULL, NULL); }
@@ -134,6 +135,7 @@ static INT WINAPI StretchDIBits(HDC dc, INT x, INT y, INT width, INT height, INT
   frame_width = w;
   frame_height = h;
   if (frame_count++ == 0) trace("first frame: %dx%d", w, h);
+  screen_present();
   return h;
 }
 

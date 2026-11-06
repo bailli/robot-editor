@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ui.h"
 #include "wrapper.h"
 
 #define DD_OK 0
@@ -67,10 +68,57 @@ static ULONG WINAPI dd_Release(struct face *self) {
   return (ULONG)(self->dd->refs > 0 ? --self->dd->refs : 0);
 }
 
+/* The display mode the game set (exclusive fullscreen), 0 × 0 while windowed. */
+static int mode_width, mode_height;
+
+static HRESULT WINAPI dd_RestoreDisplayMode(struct face *self) {
+  (void)self;
+  if (mode_width) {
+    trace("IDirectDraw::RestoreDisplayMode");
+    mode_width = mode_height = 0;
+    screen_fullscreen(FALSE);
+  }
+  return DD_OK;
+}
+
+#define DDSCL_FULLSCREEN 0x1
+#define DDSCL_NORMAL 0x8
+
 static HRESULT WINAPI dd_SetCooperativeLevel(struct face *self, HWND window, DWORD flags) {
   trace("IDirectDraw::SetCooperativeLevel 0x%x", flags);
   self->dd->window = window;
   self->dd->cooperative = flags;
+  if (flags & DDSCL_NORMAL) dd_RestoreDisplayMode(self);
+  return DD_OK;
+}
+
+#define DDERR_INVALIDMODE ((HRESULT)0x88760078)
+
+/* Only 32-bit modes: the game then converts its picture itself, as in a window (with
+   UseTrueColor 0 it asks for 8 bits first and takes the refusal). The picture is scaled to
+   the desktop, the mode's size only says how large the primary surface is. */
+static HRESULT set_mode(struct face *self, DWORD width, DWORD height, DWORD bits) {
+  trace("IDirectDraw::SetDisplayMode %ux%ux%u", width, height, bits);
+  if (bits != 32 || !(self->dd->cooperative & DDSCL_FULLSCREEN) || width > 4096 || height > 4096)
+    return DDERR_INVALIDMODE;
+  mode_width = (int)width;
+  mode_height = (int)height;
+  screen_fullscreen(TRUE);
+  return DD_OK;
+}
+
+static HRESULT WINAPI dd1_SetDisplayMode(struct face *self, DWORD width, DWORD height, DWORD bits) {
+  return set_mode(self, width, height, bits);
+}
+
+static HRESULT WINAPI dd2_SetDisplayMode(struct face *self, DWORD width, DWORD height, DWORD bits,
+                                         DWORD refresh, DWORD flags) {
+  (void)refresh, (void)flags;
+  return set_mode(self, width, height, bits);
+}
+
+static HRESULT WINAPI dd_WaitForVerticalBlank(struct face *self, DWORD flags, HANDLE event) {
+  (void)self, (void)flags, (void)event;
   return DD_OK;
 }
 
@@ -82,10 +130,8 @@ static HRESULT WINAPI dd_GetCaps(struct face *self, DWORD *hal, DWORD *hel) {
   return DD_OK;
 }
 
-/* ---- Surfaces: 32-bit XRGB memory; the primary is the whole screen (windowed mode) ---- */
-
-#define SCREEN_WIDTH 1280
-#define SCREEN_HEIGHT 1024
+/* ---- Surfaces: 32-bit XRGB memory; the primary is the whole screen (the desktop in a
+   window, the mode in fullscreen) ---- */
 
 #define DDSD_CAPS 0x1
 #define DDSD_HEIGHT 0x2
@@ -159,7 +205,7 @@ static void *vtable_surface[SURFACE_SLOTS], *vtable_palette[PALETTE_SLOTS],
     *vtable_clipper[CLIPPER_SLOTS];
 
 /* How many times something was drawn onto the primary surface (the picture changed). */
-unsigned screen_updates;
+static void primary_changed(void);
 static struct surface *primary;
 
 static HRESULT WINAPI no_interface(void *self, const GUID *iid, void **out) {
@@ -217,7 +263,7 @@ static HRESULT WINAPI surface_Lock(struct surface *s, const RECT *rect, DDSURFAC
 
 static HRESULT WINAPI surface_Unlock(struct surface *s, void *rect) {
   (void)rect;
-  if (s == primary) screen_updates++;
+  if (s == primary) primary_changed();
   return DD_OK;
 }
 
@@ -240,7 +286,7 @@ static void copy_rect(struct surface *dst, int x, int y, const struct surface *s
     memcpy((BYTE *)dst->pixels + (y + row) * dst->pitch + x * 4,
            (BYTE *)src->pixels + (r.top + row) * src->pitch + r.left * 4,
            (size_t)(r.right - r.left) * 4);
-  if (dst == primary) screen_updates++;
+  if (dst == primary) primary_changed();
 }
 
 static HRESULT WINAPI surface_BltFast(struct surface *dst, DWORD x, DWORD y, struct surface *src,
@@ -259,7 +305,7 @@ static HRESULT WINAPI surface_Blt(struct surface *dst, const RECT *dst_rect, str
     for (int y = d.top < 0 ? 0 : d.top; y < d.bottom && y < dst->height; y++)
       for (int x = d.left < 0 ? 0 : d.left; x < d.right && x < dst->width; x++)
         dst->pixels[y * dst->pitch / 4 + x] = colour;
-    if (dst == primary) screen_updates++;
+    if (dst == primary) primary_changed();
     return DD_OK;
   }
   if (!src) fatal("Blt without a source, flags 0x%x", flags);
@@ -279,7 +325,7 @@ static HRESULT WINAPI surface_Blt(struct surface *dst, const RECT *dst_rect, str
       dst->pixels[ty * dst->pitch / 4 + tx] = src->pixels[sy * src->pitch / 4 + sx];
     }
   }
-  if (dst == primary) screen_updates++;
+  if (dst == primary) primary_changed();
   return DD_OK;
 }
 
@@ -295,6 +341,29 @@ static HRESULT WINAPI surface_SetPalette(struct surface *s, struct palette *p) {
   return DD_OK;
 }
 
+/* The mode as a surface description: the one set, or the desktop. */
+static HRESULT WINAPI dd_GetDisplayMode(struct face *self, DDSURFACEDESC *desc) {
+  (void)self;
+  struct surface screen = {0};
+  if (mode_width) {
+    screen.width = mode_width;
+    screen.height = mode_height;
+  } else {
+    screen_desktop(&screen.width, &screen.height);
+  }
+  screen.pitch = screen.width * 4;
+  describe(&screen, desc);
+  desc->dwFlags &= ~(DWORD)DDSD_CAPS;
+  return DD_OK;
+}
+
+/* Drawing onto the primary surface shows it, in fullscreen (in a window the game presents
+   with GDI). */
+static void primary_changed(void) {
+  if (mode_width && primary)
+    screen_present_rgb(primary->pixels, primary->width, primary->height, primary->pitch / 4);
+}
+
 static HRESULT WINAPI dd_CreateSurface(struct face *self, const DDSURFACEDESC *desc,
                                        struct surface **out, void *outer) {
   (void)self, (void)outer;
@@ -303,8 +372,12 @@ static HRESULT WINAPI dd_CreateSurface(struct face *self, const DDSURFACEDESC *d
   s->refs = 1;
   s->caps = desc->dwFlags & DDSD_CAPS ? desc->dwCaps : 0;
   if (s->caps & DDSCAPS_PRIMARYSURFACE) {
-    s->width = SCREEN_WIDTH;
-    s->height = SCREEN_HEIGHT;
+    if (mode_width) {
+      s->width = mode_width;
+      s->height = mode_height;
+    } else {
+      screen_desktop(&s->width, &s->height);
+    }
     primary = s;
   } else if ((desc->dwFlags & (DDSD_WIDTH | DDSD_HEIGHT)) == (DDSD_WIDTH | DDSD_HEIGHT)) {
     s->width = (int)desc->dwWidth;
@@ -394,8 +467,13 @@ static void make_vtables(void) {
     v[5] = dd_CreatePalette;
     v[6] = dd_CreateSurface;
     v[11] = dd_GetCaps;
+    v[19] = dd_RestoreDisplayMode;
+    v[22] = dd_WaitForVerticalBlank;
     v[20] = dd_SetCooperativeLevel;
   }
+  vtable_dd1[12] = vtable_dd2[12] = dd_GetDisplayMode;
+  vtable_dd1[21] = dd1_SetDisplayMode; /* 3 arguments */
+  vtable_dd2[21] = dd2_SetDisplayMode; /* 5 arguments */
   fill_vtable(vtable_dd1, DIRECTDRAW_SLOTS, "IDirectDraw", directdraw_methods);
   fill_vtable(vtable_dd2, DIRECTDRAW2_SLOTS, "IDirectDraw2", directdraw_methods);
 

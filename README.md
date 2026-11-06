@@ -130,20 +130,47 @@ await d.screenshot("room.png"); // the last frame presented, 640 × 348
 await d.close();
 ```
 
-## Native Linux wrapper (in progress)
+## Native Linux wrapper (in progress: no sound yet)
 
-`tools/linux` runs the unchanged `GameOfRobot.exe` as a 32-bit Linux program: it maps the
-exe at its base and supplies the Windows functions it imports itself (state in
-[STATUS.md](STATUS.md), "Native Linux wrapper"). It needs the 32-bit toolchain and SDL2
-(`apt install gcc-multilib libsdl2-dev:i386`):
+`tools/linux` runs the unchanged `GameOfRobot.exe` as a 32-bit Linux program in an SDL
+window: it maps the exe at its base and supplies the Windows functions it imports itself
+(state in [STATUS.md](STATUS.md), "Native Linux wrapper"). It needs the 32-bit toolchain
+and SDL2 (`apt install gcc-multilib libsdl2-dev:i386`):
 
     pnpm wrapper                                         build tools/linux/robot
-    tools/linux/robot [--trace] reference/GameOfRobot.exe
+    tools/linux/robot [--trace] GAME_DIR/GameOfRobot.exe
 
-`--trace` (or `ROBOT_TRACE=1`) logs every call into the wrapper; `ROBOT_SHOT=FILE.ppm`
-writes the last frame when the wrapper is stopped (Ctrl+C); `ROBOT_CONSOLE=1` turns the
-game's command console on. A function the wrapper does not have yet stops it, naming the
-function and the caller's address.
+`C:\` is the exe's directory: the game keeps its saves and screenshots there (`ROBOT
+I\Saves`, `ROBOT Junior\Screenshots`, …), so run a copy of the exe in a directory of its
+own rather than `reference/`. Settings (the game's registry values) are kept in
+`~/.config/robot/registry.reg` (`ROBOT_REGISTRY=FILE` for another), a text file in the
+style of Wine's `.reg`; the configuration dialog's values can be set there (`SampleRate`,
+`DisableOpl`, `Force640x480`, `UseTrueColor`, `AudioVolume`, `MinimizeToTray`, see
+STATUS.md). `ROBOT_IMPORT_REG=PREFIX/user.reg` takes the game's values from a Wine prefix
+when that file does not exist yet.
+
+Keys are the game's own (its help: F1; its menu: Return on the title screen; Alt+S, E, M,
+T, W, G, B, V toggle the options of the Windows menu, Alt+Enter fullscreen, Ctrl+Alt+P a
+screenshot). The Windows menu bar is not shown; its other commands are Ctrl+Shift+key:
+
+| Keys               | Command                                        |
+| ------------------ | ---------------------------------------------- |
+| Ctrl+Shift+1 … 5   | episode Junior, I, II, III, IV                 |
+| Ctrl+Shift+K       | configuration (runs unseen, see settings)      |
+| Ctrl+Shift+O       | open the game's files (`xdg-open`)             |
+| Ctrl+Shift+A, T, S | about ROBOT, TOM Productions, shareware        |
+| Ctrl+Shift+W, F, R | web site, forum, registration (`xdg-open`)     |
+| Ctrl+Shift+I       | system information (traced, runs unseen)       |
+| Ctrl+Shift+Q       | quit (as the menu's "Ende"; closing works too) |
+
+Options are environment variables: `ROBOT_SCALE=N` (window size, default 2 × 640 × 348),
+`ROBOT_FULLSCREEN=1`, `ROBOT_CONSOLE=1` (the game's command console), `ROBOT_HEADLESS=1`
+(message boxes answered with their default button), `ROBOT_DIALOG_OK=2041` (the dialogs
+with these ids are confirmed instead of cancelled). For debugging: `--trace` (or
+`ROBOT_TRACE=1`) logs every call into the wrapper; `ROBOT_SHOT=FILE.ppm` writes the last
+picture shown when the wrapper is stopped (Ctrl+C); `SDL_VIDEODRIVER=dummy` runs without a
+window. A function the wrapper does not have yet stops it, naming the function and the
+caller's address.
 
 ## Resources
 

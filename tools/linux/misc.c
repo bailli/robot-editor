@@ -1,12 +1,15 @@
-/* The small imports: WINMM, ADVAPI32, VERSION, ole32, SHELL32, COMCTL32, DSOUND (DDRAW is
-   ddraw.c). For now most of them report "not available", which the game handles: no
-   DirectSound (silent), no COM, an empty registry. */
+/* The small imports: WINMM, VERSION, ole32, SHELL32, COMCTL32, DSOUND (ADVAPI32 is
+   registry.c, DDRAW is ddraw.c). Some of them report "not available", which the game
+   handles: no DirectSound (silent), no COM. */
 #define _GNU_SOURCE
 #include <ctype.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "wrapper.h"
 
@@ -29,50 +32,6 @@ const struct export misc_winmm_exports[] = {
     {"timeGetTime", timeGetTime},
     {"waveOutGetDevCapsA", waveOutGetDevCapsA},
     {NULL, NULL},
-};
-
-/* ---- ADVAPI32: the registry, empty (settings are not kept yet) ---- */
-
-static HKEY fake_key(void) { return handle_new(HANDLE_OTHER, NULL, NULL); }
-
-static LONG WINAPI RegOpenKeyExA(HKEY key, LPCSTR sub, DWORD options, DWORD access, HKEY *out) {
-  (void)key, (void)options, (void)access, (void)out;
-  trace("RegOpenKeyExA %s: not found", sub ? sub : "");
-  return ERROR_FILE_NOT_FOUND;
-}
-
-static LONG WINAPI RegCreateKeyExA(HKEY key, LPCSTR sub, DWORD reserved, LPSTR cls, DWORD options,
-                                   DWORD access, void *security, HKEY *out, DWORD *disposition) {
-  (void)key, (void)reserved, (void)cls, (void)options, (void)access, (void)security;
-  trace("RegCreateKeyExA %s", sub ? sub : "");
-  *out = fake_key();
-  if (disposition) *disposition = 1; /* REG_CREATED_NEW_KEY */
-  return ERROR_SUCCESS;
-}
-
-static LONG WINAPI RegQueryValueExA(HKEY key, LPCSTR name, DWORD *reserved, DWORD *type,
-                                    BYTE *data, DWORD *size) {
-  (void)key, (void)reserved, (void)type, (void)data, (void)size;
-  trace("RegQueryValueExA %s: not found", name ? name : "");
-  return ERROR_FILE_NOT_FOUND;
-}
-
-static LONG WINAPI RegSetValueExA(HKEY key, LPCSTR name, DWORD reserved, DWORD type,
-                                  const BYTE *data, DWORD size) {
-  (void)key, (void)reserved, (void)data;
-  trace("RegSetValueExA %s (type %u, %u bytes): dropped", name ? name : "", type, size);
-  return ERROR_SUCCESS;
-}
-
-static LONG WINAPI RegCloseKey(HKEY key) {
-  handle_close(key);
-  return ERROR_SUCCESS;
-}
-
-const struct export misc_advapi32_exports[] = {
-    {"RegCloseKey", RegCloseKey},         {"RegCreateKeyExA", RegCreateKeyExA},
-    {"RegOpenKeyExA", RegOpenKeyExA},     {"RegQueryValueExA", RegQueryValueExA},
-    {"RegSetValueExA", RegSetValueExA},   {NULL, NULL},
 };
 
 /* ---- VERSION ----
@@ -230,16 +189,50 @@ const struct export misc_ole32_exports[] = {
 
 /* ---- SHELL32 ---- */
 
+/* Starts xdg-open on `target` without waiting (SIGCHLD is ignored, so no zombies). */
+static int open_with_xdg(const char *target) {
+  static int sigchld_ignored;
+  if (!sigchld_ignored) {
+    signal(SIGCHLD, SIG_IGN);
+    sigchld_ignored = 1;
+  }
+  pid_t pid = fork();
+  if (pid < 0) return 0;
+  if (pid == 0) {
+    for (int fd = 3; fd < 1024; fd++) close(fd);
+    char *argv[] = {"xdg-open", (char *)target, NULL};
+    execvp("xdg-open", argv);
+    _exit(127);
+  }
+  return 1;
+}
+
+/* The game opens web links (the TOM Productions site, forum, registration: "open" with a
+   URL it decodes at run time). Folders and files work too, as Windows paths. */
 static HINSTANCE WINAPI ShellExecuteA(HWND hwnd, LPCSTR op, LPCSTR file, LPCSTR params,
                                       LPCSTR dir, INT show) {
-  (void)hwnd, (void)dir, (void)show;
-  say("robot: the game asks to %s %s %s (not done)", op ? op : "open", file ? file : "",
-      params ? params : "");
-  return (HINSTANCE)2; /* SE_ERR_FNF: <= 32 is failure */
+  (void)hwnd, (void)params, (void)dir, (void)show;
+  if (!file) return (HINSTANCE)2;
+  if (op && strcasecmp(op, "open") != 0 && strcasecmp(op, "explore") != 0)
+    fatal("ShellExecuteA: operation %s (%s) is not supported", op, file);
+  int url = strncasecmp(file, "http:", 5) == 0 || strncasecmp(file, "https:", 6) == 0 ||
+            strncasecmp(file, "mailto:", 7) == 0;
+  char *target = url ? strdup(file) : host_path(file);
+  struct stat st;
+  HINSTANCE result = (HINSTANCE)33;
+  if (!url && stat(target, &st) != 0)
+    result = (HINSTANCE)2; /* SE_ERR_FNF */
+  else if (!open_with_xdg(target))
+    result = (HINSTANCE)31; /* SE_ERR_NOASSOC: cannot start the opener */
+  trace("ShellExecuteA %s %s: %s", op ? op : "open", file,
+        (uintptr_t)result > 32 ? "xdg-open" : "failed");
+  free(target);
+  return result;
 }
 
 static BOOL WINAPI Shell_NotifyIconA(DWORD message, void *data) {
-  (void)message, (void)data;
+  (void)data;
+  trace("Shell_NotifyIconA %u: no tray", message);
   return TRUE;
 }
 

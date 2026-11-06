@@ -2117,13 +2117,69 @@ fs:0), and jumps to the entry point; a function not written yet stops with its n
 the caller. One file per DLL: `kernel32.c` (C runtime plumbing: heap, VirtualAlloc, files
 with `C:\` = the exe's directory and names matched without regard to case, code pages
 1252/437, events, mutexes, threads, resources), `user32.c` (classes, windows, the message
-queue with timers and WM_PAINT, menus as data, string tables, wsprintf), `gdi32.c`,
-`ddraw.c` (DirectDraw objects: surfaces in memory, 32-bit XRGB), `misc.c` (the rest).
+queue with timers and WM_PAINT, key state, accelerators, menus as data, string tables,
+clipboard, wsprintf), `gdi32.c`, `ddraw.c` (DirectDraw objects: surfaces in memory, 32-bit
+XRGB, display modes), `registry.c` (the registry in a `.reg` file), `misc.c` (the rest);
+`sdl.c` is the screen and input, `ui.c` what stands in for Windows' own UI (headless
+dialogs, SDL message boxes, the wrapper's shortcuts).
 
-**Milestone 1 reached** (2026-11-06): the game starts, passes its checks, reads its
-settings and runs its main loop; the episode selection screen (640 × 348) comes out
-through `StretchDIBits` the same as under Wine, about 100 frames a second. Nothing is shown
-yet. What the start needs, found on the way:
+**Milestones 1–3 reached** (2026-11-06): the game runs in an SDL window and plays
+(checked under Xvfb with xdotool: episode chosen by key and by mouse, the game started, the
+hero walked, the accelerators, fullscreen on and off, the shortcuts, the dialogs, the
+screenshot, quitting). Not there yet: sound (DirectSound), the tray, the driver's protocol.
+
+- **Picture:** in a window the game presents with GDI (WM_PAINT's `StretchDIBits`, 640 ×
+  348 palette indices), shown scaled; Alt+Enter (command 4007, only once an episode runs)
+  switches DirectDraw to exclusive mode (`SetCooperativeLevel(0x11)`), sets 640 × 400 ×
+  32 (8 bits with `UseTrueColor` 0, which the wrapper refuses), recreates its surfaces at
+  that size, makes the window a popup at 0,0 and draws onto the primary surface, which the
+  wrapper then shows instead (letterboxed); back with `SetCooperativeLevel(DDSCL_NORMAL)`
+  and `RestoreDisplayMode`.
+- **Input:** SDL keys become WM_KEYDOWN/WM_KEYUP with Windows virtual keys (Alt
+  combinations WM_SYSKEY*, the keypad without Num Lock the navigation keys the game's
+  diagonal moves use), typed text WM_CHAR in code page 1252; `TranslateAcceleratorA` reads
+  the accelerator resource (1005) itself; the mouse is scaled to the client area. The
+  client area follows the game's own arithmetic: 646 × 392 = 640 × 348 plus a 3-pixel
+  frame, a 19-pixel caption and a 19-pixel menu bar.
+- **Stack alignment:** the game calls us with the stack aligned to 4 bytes; SDL's SSE code
+  needs 16 (a `movaps` crashed). The wrapper is built with `-mincoming-stack-boundary=2`.
+- **Windows' UI is not reproduced** (decided 2026-11-06): no menu bar (the menu is data;
+  the commands without an accelerator are Ctrl+Shift+key, README), dialogs run unseen and
+  are cancelled (`ROBOT_DIALOG_OK` confirms them instead), their settings live in the
+  registry file; message boxes are SDL's.
+- **Dialogs** (`DialogBoxParamA` at 0x42d6d8 and 0x42da20, template 2031 or 2041 + the
+  language index 0x4c5d84, which nothing writes: always German): **system information**
+  (2031, proc 0x42d570, menu command 0x10d1): a read-only edit filled line by line
+  (0x42d130: `EM_SETTABSTOPS`, then `EM_REPLACESEL`/`EM_SETSEL` per line, strings from 40001) and "In Zwischenablage" (clipboard). **Configuration** (2041, proc 0x42d6e0, command
+  0xfb2): OK writes REG_DWORDs under `HKCU\Software\TOM-Productions\Robot` (helpers
+  0x4288e0 get, 0x428890 set, 0x428740 the key): `SampleRate` (0 no sound, 22050, 32000,
+  44100; default 32000, 44100 when `~MHz` of `HKLM\Hardware\Description\System\
+CentralProcessor\0` ≥ 650; an invalid value is rewritten, 0x42cbe0), `DisableOpl` (1:
+  PC speaker emulation only), `Force640x480`, `UseTrueColor` (default 1), `MinimizeToTray`,
+  `AudioVolume` (default 230; the slider shows 255 − it, used clamped to 10..250, 0x4442e0;
+  its WM_VSCROLL tells the slider by `GetMenu(child)` = its id). A changed `SampleRate` or
+  `DisableOpl` restarts the sound. The beta dialog (2021/2022) is never opened.
+- **Menu** (MENU 2012 always, `LoadMenuA` at 0x402e34 and 0x405181; `WM_COMMAND` dispatch
+  0x403e2b, jump tables 0x4053b0 for 0xfa1–0xfb2 and 0x4053f8 with the byte table 0x405434
+  from 0x1005): the option toggles 0xfa5 (S), 0xfa8 (E), 0xfa6 (M), 0xfa9 (T), 0xfac (W),
+  0xfaa (G), 0xfad (B), 0xfab (V) with Alt+letter, each written to the registry;
+  fullscreen 0xfa7 (Alt+Enter, 0x401600) and 0x10c4; tray 0x1069 (F11, only with
+  `MinimizeToTray`); screenshot 0xfb0 (Ctrl+Alt+P); without accelerator: quit 0xfa1,
+  open the game files 0xfb1, configuration 0xfb2, episodes 0x1004–0x1008 (0x4013e0),
+  about ROBOT/TOM/shareware 0x10cd–0x10cf (in-game screens via 0x43ddc0), web site 0x10d0,
+  registration 0x10d2, forum 0x10d3 (`ShellExecuteA` of URLs kept obfuscated at 0x4746d0,
+  0x4746f4, 0x474720, decoded in place by 0x431d60), system information 0x10d1. The
+  2010/2011 menus' Deutsch/Englisch (0xfb4/0xfb5) have no handler.
+- **Message boxes:** "No DirectX detected" (0x404c50), the WorldOfRobot.DLL errors
+  (0x4059fe…0x405aa0), "Externe Ressource gefunden" (0x430ef5, yes/no, default no: whether
+  to use loose `.CRN` files from `RessourcePath`), "DirectDraw Init FAILED" (0x436e92), the
+  DirectSound errors (0x442486, 0x4427a5).
+- **Registry file:** `~/.config/robot/registry.reg` (or `ROBOT_REGISTRY`), Wine's `.reg`
+  style, written whole after each change. At its start the game writes the save and
+  screenshot paths (`FilePathSV1` … `FilePathSVJScreen`, relative: `.\ROBOT I\Saves\`), and
+  reads `Licensee` and `RessourcePath` again and again while it runs.
+
+What the start needs, found on the way to milestone 1:
 
 - **DirectDraw is required**, even though the game presents with GDI: without
   `DirectDrawCreate` it stops ("DirectDraw Init FAILED", DX error, "Basis init"). It wants
@@ -2144,14 +2200,12 @@ yet. What the start needs, found on the way:
 - **Registry** (`HKCU\Software\TOM-Productions\Robot`): read are `RessourcePath`,
   `WndScaleX`, `WndScaleY`, `NoMusic`, `NoSound`, `NoEffects`, `DoorNumbers`, `AltShapes`,
   `AltBeam`, `MinimizeToTray`, `NestWarn`, `GoldWarn`, `CurrentEpisode`; written
-  `FilePathSV1`… (save paths, after `SHGetFolderPathA` is not found in shell32). The
-  wrapper's registry is empty and drops writes.
+  `FilePathSV1`… (save paths, after `SHGetFolderPathA` is not found in shell32).
 
-**Next:** milestone 2, an SDL window with the frames, keys as WM_KEYDOWN/WM_KEYUP and
-WM_CHAR, the mouse, accelerators (`TranslateAcceleratorA`); then the registry in a file,
-dialogs (the player-name prompt, `DialogBoxParamA`), the menu, DirectSound on SDL audio
-(the game's OPL2 emulation only needs a sound buffer), and the driver's protocol so that
-`pnpm test:game` can run without Wine.
+**Next:** DirectSound on SDL audio (the game's OPL2 emulation only needs a sound buffer;
+`SampleRate`, `DisableOpl`, `AudioVolume` above), then the driver's protocol so that
+`pnpm test:game` can run without Wine. The player-name prompt is the game's own (drawn,
+not a dialog).
 
 ## Open items and leads
 

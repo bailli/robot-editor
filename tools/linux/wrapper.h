@@ -21,6 +21,7 @@ struct module {
 
 extern const struct export kernel32_exports[];
 extern const struct export user32_exports[];
+extern const struct export ui_exports[] __attribute__((weak)); /* more of USER32 (ui.c) */
 extern const struct export gdi32_exports[];
 extern const struct export misc_winmm_exports[];
 extern const struct export misc_advapi32_exports[];

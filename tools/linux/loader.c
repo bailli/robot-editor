@@ -53,6 +53,7 @@ void fatal(const char *format, ...) {
 
 static const struct module modules[] = {
     {"kernel32.dll", kernel32_exports},       {"user32.dll", user32_exports},
+    {"user32.dll", ui_exports},
     {"gdi32.dll", gdi32_exports},             {"winmm.dll", misc_winmm_exports},
     {"advapi32.dll", misc_advapi32_exports},  {"version.dll", misc_version_exports},
     {"ole32.dll", misc_ole32_exports},        {"shell32.dll", misc_shell32_exports},
@@ -62,7 +63,7 @@ static const struct module modules[] = {
 
 void *find_export(const char *dll, const char *name) {
   for (size_t m = 0; m < sizeof modules / sizeof *modules; m++) {
-    if (strcasecmp(modules[m].dll, dll) != 0) continue;
+    if (!modules[m].exports || strcasecmp(modules[m].dll, dll) != 0) continue;
     for (const struct export *e = modules[m].exports; e->name; e++)
       if (strcmp(e->name, name) == 0) return e->fn;
   }
@@ -244,7 +245,10 @@ static void bind_imports(BYTE *image, DWORD directory) {
       char *full = NULL;
       if (asprintf(&full, "%s!%s", dll, key) < 0) fatal("no memory");
       void *fn = find_export(dll, key);
-      if (!fn) missing_count++;
+      if (!fn) {
+        missing_count++;
+        trace("missing import %s", full);
+      }
       *iat = (DWORD)(uintptr_t)(!fn ? make_missing_thunk(full)
                                 : tracing ? make_trace_thunk(full, fn)
                                           : fn);
@@ -318,13 +322,13 @@ static void on_fault(int sig, siginfo_t *info, void *context) {
   _exit(71);
 }
 
-void write_frame(const char *path);
+void screen_write(const char *path);
 extern unsigned frame_count;
 
 static void on_stop(int sig) {
   const char *shot = getenv("ROBOT_SHOT");
   if (shot && frame_count) {
-    write_frame(shot);
+    screen_write(shot);
     say("robot: %u frames, the last written to %s", frame_count, shot);
   }
   _exit(128 + sig);
