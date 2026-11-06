@@ -28,7 +28,10 @@ function patchNode(a: Node, b: Node): void {
     if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue;
     return;
   }
-  for (const { name } of [...a.attributes]) if (!b.hasAttribute(name)) a.removeAttribute(name);
+  // a <details> stays as opened or closed by the user (a view that wants it open says so)
+  const kept = (name: string) => name === "open" && a instanceof HTMLDetailsElement;
+  for (const { name } of [...a.attributes])
+    if (!b.hasAttribute(name) && !kept(name)) a.removeAttribute(name);
   for (const { name, value } of b.attributes)
     if (a.getAttribute(name) !== value) a.setAttribute(name, value);
   // read before its options move over: b then falls back to its first one

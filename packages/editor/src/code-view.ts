@@ -128,6 +128,7 @@ export class CodeView {
       const remove = element("button", "danger", "×");
       remove.type = "button";
       remove.title = `The exe's own bytes at ${address(p.va)} again`;
+      remove.setAttribute("aria-label", `Remove the change at ${address(p.va)}`);
       remove.addEventListener("click", () => {
         this.events.remove(Number(row.dataset["key"]));
       });

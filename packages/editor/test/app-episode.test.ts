@@ -84,7 +84,10 @@ test("the Episode tab edits the dealer's goods, undoably; the mod keeps them", a
 
   // the last good goes; the current tile replaces the first one; fewer shown
   const rows = () => document.querySelectorAll(".dealer-good");
-  await dealer().getByRole("button", { name: "×" }).last().click();
+  await dealer()
+    .getByRole("button", { name: /^Stop selling good/ })
+    .last()
+    .click();
   expect(rows().length).toBe(26);
   app.setTile(0x0315);
   defined(rows()[0].querySelector("canvas") ?? undefined).dispatchEvent(
@@ -238,7 +241,7 @@ test("the Kits tab copies tile types of other episodes, undoably; the mod keeps 
   const saved = parseMod(app.saveMod() ?? "");
   expect(saved.changes.tileTypes).toEqual([{ episode: 0, from: 2, types: [[0x51, 0x51]] }]);
   // removed with ×, back with undo, gone with another
-  await types.getByRole("button", { name: "×" }).click();
+  await types.getByRole("button", { name: /^Make type 0x51 free again/ }).click();
   await app.idle();
   expect(app.editor?.tileTypeCopies(0)).toEqual([]);
   app.undo();
@@ -395,6 +398,12 @@ test("the Texts tab copies texts of other episodes, a copied class's in one go",
   expect(app.editor?.textCopies(0).map((c) => c.to)).toEqual([331, 332, 334, 339, 945]);
   expect(status()).toMatch(/Texts 331, 332, 334, 339, 945 of .* copied/);
   await expect.element(types.getByRole("button", { name: "Texts" })).not.toBeInTheDocument();
+  // the remove button is still the copy's (it took the Texts button's place before)
+  await page.getByRole("tab", { name: "Kits" }).click();
+  await types.getByRole("button", { name: /^Make type 0x51 free again/ }).click();
+  await app.idle();
+  expect(app.editor?.tileTypeCopies(0)).toEqual([]);
+  app.undo();
   await page.getByRole("tab", { name: "Texts" }).click();
   await expect.element(texts.getByText(/^945 ← II: /)).toBeVisible();
   // one undo step
@@ -575,14 +584,16 @@ test("II's own types: replaced by a copy where nothing holds on to them, with a 
   // the dealer's pointing hand is the game's: listed as held, with why
   expect(offered).not.toContain(String(0x4b));
   await expect.element(types.getByText(/^0x4b .*looks its type up/)).toBeInTheDocument();
+  // the list of those held stays open while the form changes
+  await types.getByText(/own types cannot be replaced/).click();
+  expect(document.querySelector<HTMLDetailsElement>("details.held-types")?.open).toBe(true);
   await userEvent.selectOptions(to, String(0x5d));
+  expect(document.querySelector<HTMLDetailsElement>("details.held-types")?.open).toBe(true);
   await expect.element(types.getByText(/Gives up .* it is gone from/)).toBeVisible();
   await expect.element(types.getByText(/^0x5c .*needs it \(the skateboard\)/)).toBeVisible();
   await types.getByRole("button", { name: "Copy" }).click();
   await app.idle();
   expect(app.editor?.replacingCopies(2)).toEqual([0x5d]);
   await expect.element(types.getByText(/0x5d ← Junior .* \(replaces /)).toBeVisible();
-  await expect
-    .element(types.getByRole("button", { name: "×" }))
-    .toHaveAttribute("title", expect.stringMatching(/its own class back/));
+  await expect.element(types.getByRole("button", { name: /its own class back/ })).toBeVisible();
 });

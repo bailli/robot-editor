@@ -466,6 +466,8 @@ export class ScriptView {
   }
 
   private render(): void {
+    // the room's outlines of a call under the mouse go with the view (no mouseleave comes)
+    if (this.code) this.events.hover(undefined, []);
     this.code?.destroy();
     this.code = undefined;
     const heading = document.createElement("h3");
@@ -563,8 +565,12 @@ export class ScriptView {
             if (at === null) return false;
             const argument = view.state
               .field(field)
+              // an argument's piece: at its first digit the "(" before it touches too
               .shown.find(
-                (s) => s.piece.at <= at && at <= s.piece.at + s.piece.text.length,
+                (s) =>
+                  s.argument !== undefined &&
+                  s.piece.at <= at &&
+                  at <= s.piece.at + s.piece.text.length,
               )?.argument;
             if (!argument) return false;
             if (!this.events.follow(argument.fn, argument.index, argument.args)) return false;

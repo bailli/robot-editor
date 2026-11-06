@@ -111,6 +111,9 @@ export class KitsView {
     const fit = context.plan(kit, undefined, replace);
     // ids that are not lacking (any more) are dropped
     const chosen = this.chosen.get(kit.key)?.filter((id) => fit.lacking.includes(id));
+    // kept as shown: Add sends what the view showed
+    if (chosen) this.chosen.set(kit.key, chosen);
+    if (this.replaced.has(kit.key)) this.replaced.set(kit.key, replace);
     const plan = chosen ? context.plan(kit, chosen, replace) : fit;
     const summary = element("summary");
     summary.append(

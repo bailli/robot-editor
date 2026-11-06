@@ -95,21 +95,24 @@ export class TileTypesView {
         this.events.copy(Number(row.dataset["key"]), undefined);
       });
       remove.classList.add("danger");
+      // keyed: "Texts" comes and goes before it, and a kept button keeps its listener
+      remove.dataset["key"] = "remove";
+      remove.setAttribute("aria-label", undo);
       row.append(this.events.preview(episode, c.to), text);
       const texts = context.classTexts(c);
       if (texts.length > 0) {
-        row.append(
-          button(
-            "Texts",
-            `Copy the texts its class shows from ${name(c.from)}: ${texts.join(", ")}`,
-            () => {
-              // the copy as shown now: a kept button keeps its listener
-              const now = this.context;
-              const copy = now?.copies.find((k) => k.to === Number(row.dataset["key"]));
-              if (now && copy) this.events.copyTexts(copy, now.classTexts(copy));
-            },
-          ),
+        const copyTexts = button(
+          "Texts",
+          `Copy the texts its class shows from ${name(c.from)}: ${texts.join(", ")}`,
+          () => {
+            // the copy as shown now: a kept button keeps its listener
+            const now = this.context;
+            const copy = now?.copies.find((k) => k.to === Number(row.dataset["key"]));
+            if (now && copy) this.events.copyTexts(copy, now.classTexts(copy));
+          },
         );
+        copyTexts.dataset["key"] = "texts";
+        row.append(copyTexts);
       }
       row.append(remove);
       list.append(row);
@@ -253,7 +256,15 @@ export class TileTypesView {
       element("span", "hint", `${context.free.length} free, ${replaceable.length} to replace`),
     );
     const nodes: Node[] = [...form, bar];
+    // the note's place is always there: the list after it keeps its element (and whether
+    // it is open; patchChildren matches by position)
     if (chosenOwn) nodes.push(this.giveUpNote(context, chosenOwn));
+    else {
+      const none = element("div", "give-up");
+      none.dataset["key"] = "give up";
+      none.hidden = true;
+      nodes.push(none);
+    }
     nodes.push(this.heldTypes(context));
     return nodes;
   }
@@ -262,7 +273,7 @@ export class TileTypesView {
   private giveUpNote(context: TileTypesContext, own: OwnType): HTMLElement {
     const episode = context.names[context.episode] ?? `episode ${context.episode}`;
     const note = element("div", "give-up");
-    note.dataset["key"] = `give up ${own.type}`;
+    note.dataset["key"] = "give up";
     note.append(
       element(
         "p",

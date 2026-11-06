@@ -108,8 +108,10 @@ export class DealerView {
     most.setAttribute("aria-label", "Shown at most");
     most.addEventListener("change", () => {
       const value = Number(most.value);
-      if (Number.isInteger(value)) this.change(() => undefined, value);
-      else most.value = String(this.dealer?.most ?? "");
+      // empty is no number; clamped, the change may change nothing: the field shows what
+      // the dealer holds then (a refresh need not follow)
+      if (most.value.trim() !== "" && Number.isInteger(value)) this.change(() => undefined, value);
+      most.value = String(this.dealer?.most ?? "");
     });
     const mostRow = element("label", "record-row");
     mostRow.dataset["key"] = "most";
@@ -245,6 +247,10 @@ export class DealerView {
     remove.classList.add("danger");
     remove.disabled = count <= MIN_SHOWN;
     if (remove.disabled) remove.title = `The dealer needs at least ${MIN_SHOWN} goods`;
+    // the glyphs are no names: each says which good
+    up.setAttribute("aria-label", `Move good ${n + 1} up`);
+    down.setAttribute("aria-label", `Move good ${n + 1} down`);
+    remove.setAttribute("aria-label", `Stop selling good ${n + 1}`);
     row.append(preview, name, price, up, down, remove);
     return row;
   }

@@ -61,7 +61,6 @@ export interface EpisodeContext {
 
 const cell = (start: EpisodeStart) => `(${start.x}, ${start.y})`;
 
-/** The oracle flags the view offers, with their labels. */
 /** A rule's checkbox: [now, as the exe has it]; `change` gets the new state. */
 function ruleRow(
   key: string,

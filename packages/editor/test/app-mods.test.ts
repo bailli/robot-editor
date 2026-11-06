@@ -91,7 +91,7 @@ test("the Kits tab lists the mod's code; × takes a patch out", async () => {
   const was = x.toString(16).padStart(2, "0");
   // open, as the mod has a patch
   await expect.element(code.getByText(`0x40b466 (.text): ${was} → 05`)).toBeVisible();
-  await code.getByRole("button", { name: "×" }).click();
+  await code.getByRole("button", { name: /^Remove the change at/ }).click();
   await expect.element(code.getByText(/0x40b466 \(\.text\)/)).not.toBeInTheDocument();
   expect(status()).toBe("The code at 0x40b466 is as the exe has it again");
   expect(app.editor?.saveMod().changes.code).toEqual([]);
