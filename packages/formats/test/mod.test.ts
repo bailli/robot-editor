@@ -309,6 +309,17 @@ test("music comes first: copied events and tile types sound with pieces the epis
   expect(modJson(parseMod(json))).toBe(json);
 });
 
+test("refused: a piece of music copied from a piece that is a copy itself", () => {
+  // IV gets II's ORACLE, then Junior IV's: whether it is there depends on the order
+  const chain = [
+    { episode: 4, from: 2, pieces: ["ORACLE"] },
+    { episode: 0, from: 4, pieces: ["ORACLE"] },
+  ];
+  expect(() => compileMod(game.image, mod({ music: chain }))).toThrow(
+    /music\[\d\] \(ORACLE\).*which is a copy itself/,
+  );
+});
+
 test("refused: a tile type copy of a type that is a copy itself", () => {
   const chain = [
     { episode: 1, from: 0, types: [[0x60, 0x25]] as const },

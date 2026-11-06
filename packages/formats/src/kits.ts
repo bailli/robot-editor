@@ -400,7 +400,11 @@ function unusedFreeTypes(game: Game, episode: number): number[] {
  * The mod changes a plan makes (tileTypes, events with the kit episode's points and
  * sounds, the pieces those sounds name that the episode lacks as music, the texts and
  * the events' texts as copyTexts; quiet events moved as events, their texts removed as
- * texts; the episode's flags), for a mod or the editor to merge.
+ * texts; the episode's flags), for a mod or the editor to merge. A plan for a second
+ * kit or episode is made against the game with the first one's changes (planKit's `game`,
+ * as the editor does): planned against the same exe, both would carry the moved text's
+ * code change and its copy (the goal kit's 0x41f45f and text 1700), which a mod refuses
+ * as changed twice.
  */
 export function kitChanges(
   source: Game,

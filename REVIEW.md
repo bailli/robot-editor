@@ -61,26 +61,6 @@ an entry once it is fixed or rejected; delete the file when it is empty.
 
 ## formats
 
-2. **Plausible: `movedRecord` wraps coordinates** (`records.ts:145-153`).
-   - `out[4] + dx`, `out[5] + dy` and `y + dy` wrap in the Uint8Array.
-   - For types 12 and 13, `(x + dx) << 10` can go negative or past 6 bits, and `to.room`
-     past 10 bits.
-   - A clip pasted over a room edge, or into a room id above 0x3ff, retargets stairs,
-     oracles or teleporters.
-   - Fix: refuse or leave the record unchanged.
-3. **Low, plausible: `withHeroStates` silently leaves an icon at 0** (`game.ts:286`
-   `continue` cases). An icon of 0 crashes IV. The same applies when the source hero has
-   too few frames. Fix: report it as a problem (KitPlan.problem or a throw).
-4. **Low: text variants lose leading and trailing whitespace on a round trip.**
-   `parseTexts` trims (`texts.ts:41`), but `textEntryProblem`/`withTextEntry` accept the
-   spaces. Fix: refuse or trim in `textEntryProblem`.
-5. **Low: `checkMod` doesn't guard music copies of copies** the way it does for
-   tileTypes. `withMusicPieces` reads `from` as earlier changes left it. Fix: forbid it,
-   or read from the pristine exe.
-6. **Low: `kitChanges` from plans against the pristine exe collide** (the goal kit for
-   two episodes: the same code change at 0x41f45f and copyTexts target 1700). The editor
-   avoids it; it matters only for other consumers.
-
 ## editor
 
 5. **Smaller:**

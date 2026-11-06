@@ -317,6 +317,17 @@ export function checkMod(mod: Mod): void {
       once(`type ${c.episode} ${to}`, `${where} (type ${to})`);
     }
   });
+  // copies read the exe as the earlier ones left it: a piece copied from a piece that is a
+  // copy itself would come or not by the order of the episodes
+  music.forEach((c, i) => {
+    for (const piece of c.pieces) {
+      need(
+        !keys.has(`music ${c.from} ${piece}`),
+        `music[${i}] (${piece})`,
+        `copies piece ${piece} of episode ${c.from}, which is a copy itself`,
+      );
+    }
+  });
   // copies read the exe as the earlier ones left it: a source that is a copy itself would
   // carry a third episode's type (the editor refuses it likewise)
   tileTypes.forEach((c, i) => {
