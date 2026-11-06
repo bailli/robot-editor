@@ -1725,7 +1725,9 @@ stands, decided 2026-10-27; details in the sections named.
   KILL and the wizard's door work there too. The **computer** (I and II: tile 8, the
   portable computer, and 0x41, the interface) works in another episode with both tile
   types and its texts 550–555 (the programs: GAME OF ROBOT, STERNCHEN, SUPERHIRN,
-  MEMORY, the command replies) copied.
+  MEMORY, the command replies) copied. II's flippers in I let the hero swim against the current; II's bucket in I
+  is filled by swimming (slowly; without the flippers he drifts with the current a
+  while) and puts out fires; the shovel digs things up there too (2026-11-06).
 - **Axe and hammer** (III's 0x61, class 179, use 0x416a10; 0x62, class 180, 0x416a80;
   code only, 2026-11-06): using one puts the hero into state 10 or 11 of his 13 state
   objects (0x4477f0, table 0x4830f0), not while he stands on river or water. The
@@ -1751,8 +1753,19 @@ stands, decided 2026-10-27; details in the sections named.
     (0x4c70e0 is built from the episode's classes); the felled woods block unless
     the episode gets flag 0x20000 (`flags`). A copied hammer needs the timber and the
     bridge 0x6e; rivers (all episodes, Junior's 0x12 is another class) and water
-    (class 82) are there. Text 285 is free elsewhere; 994 clashes. Not tried in the
-    game.
+    (class 82) are there. Text 285 is free elsewhere; 994 clashes.
+  - **The hero's frames:** the axe's state draws the hero with frames 6 and 7 of his
+    shape (tile 1; 0x4471f0), the hammer's with 8 and 9 (0x447330), by the step's
+    parity. The hero shape has 12 frames in III and IV but only 6 in Junior, I and
+    II, so there he is invisible while holding them (an index past the table). A fix
+    would give that episode's hero III's frames 6–9 (`withShapes` can write a shape
+    with more frames; the editor cannot yet; colours as for any copied shape).
+  - **Tried in the game by the user (2026-11-06), in episode I:** III's hammer,
+    timber and bridge build bridges; the hero is invisible in hammer mode, which Esc
+    ends (using the hammer again does not). The timber count is not shown in the top
+    bar as it is in III, although the code that lists it (the item bar 0x42dda0,
+    entry for class 0x9e from 20 units on; its line "%d Stck", string 40009, 0x42e0d2)
+    checks no episode; not explained yet.
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,
