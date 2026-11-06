@@ -234,11 +234,12 @@ GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, format check,
 check of `harness.py` on every push to `main` and every pull request, and publishes the
 editor's static build from `main` on GitHub Pages at https://bailli.github.io/robot-editor/
 (Settings → Pages → Source: GitHub Actions). `.github/workflows/wrapper.yml` builds the
-native Linux wrapper when `tools/linux/` changes (pushes to `main`, pull requests) and keeps
-it as the artifact `robot-linux-i386` of that run; from `main` it also replaces the rolling
-pre-release `linux-wrapper` (Releases: always the latest build). It is a 32-bit program:
-`chmod +x robot-linux-i386`; it runs where SDL2 for i386 is installed, e.g. `apt install
-libsdl2-2.0-0:i386` after `dpkg --add-architecture i386`.
+native Linux wrapper when `tools/linux/` or `package.json` changes (pushes to `main`, pull
+requests) and keeps it as the artifact `robot-linux-i386` of that run (inside it
+`robot-linux-i386.tar.gz`, the program executable); from `main` it also replaces the file
+of the rolling pre-release `linux-wrapper` (Releases: always the latest build; there
+`chmod +x robot-linux-i386` first). It is a 32-bit program; it runs where SDL2 for i386 is
+installed, e.g. `apt install libsdl2-2.0-0:i386` after `dpkg --add-architecture i386`.
 
 TypeScript is restricted to erasable syntax, so Node.js (>= 22.18) runs the sources directly
 without a build step.
