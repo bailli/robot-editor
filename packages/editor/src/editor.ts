@@ -1,6 +1,8 @@
 import {
   BACKDROP_CLASS,
   type BackdropRule,
+  CLASS_NEEDS,
+  CODE_LOOKUP_CLASSES,
   type CodeChange,
   type CopyTextsChange,
   DIRECTIONS,
@@ -8,6 +10,7 @@ import {
   DOOR_OUT_CLASS,
   type Dealer,
   type Direction,
+  ENGINE_CLASSES,
   EPISODES,
   EVENT_TEXT,
   EXIT_CELL,
@@ -87,6 +90,7 @@ import {
   roomSettings,
   roomTextLength,
   sameDealer,
+  scanScript,
   scriptPlacedObjects,
   sha256,
   spareEventEntries,
@@ -194,6 +198,51 @@ export interface TileTypeCopy {
   /** The episode and type it comes from. */
   from: number;
   of: number;
+}
+
+/**
+ * One of an episode's own tile types (a class of the exe as loaded) and what holds on to
+ * it: whether a copy of another episode's type may replace it (Editor.ownTypes).
+ */
+export interface OwnType {
+  type: number;
+  classId: number;
+  /** Rooms whose cells or records hold the type. */
+  rooms: number[];
+  /** Rooms whose script names the type (O_…) or places it (SetObj). */
+  scripts: number[];
+  /** Whether the episode's dealer (as edited) sells its class. */
+  dealer: boolean;
+  /** Copies in other episodes made from it. */
+  copiedTo: { episode: number; to: number }[];
+  /**
+   * Why the game's code needs the class where no other type of the episode has it: a
+   * fixed lookup of its type (CODE_LOOKUP_CLASSES, with the addresses) or ENGINE_CLASSES.
+   */
+  code: string | undefined;
+  /** The episode's other types whose class needs this one (CLASS_NEEDS), used by rooms or not. */
+  neededBy: { type: number; how: string; used: boolean }[];
+  /** Whether another type of the episode has the same class (it stays then). */
+  shared: boolean;
+}
+
+/**
+ * Why a copy cannot replace the own type, undefined if it can: rooms, records, scripts,
+ * the dealer, copies made from it and the code's lookups hold on to it.
+ */
+export function ownTypeProblem(own: OwnType): string | undefined {
+  const rooms = (ids: readonly number[]) =>
+    `room${ids.length > 1 ? "s" : ""} ${ids.slice(0, 6).join(", ")}${ids.length > 6 ? ", …" : ""}`;
+  const problems = [
+    own.rooms.length > 0 ? `${rooms(own.rooms)} use${own.rooms.length > 1 ? "" : "s"} it` : "",
+    own.scripts.length > 0 ? `the script of ${rooms(own.scripts)} names it` : "",
+    own.dealer ? "the dealer sells it" : "",
+    own.copiedTo.length > 0
+      ? `copied to ${own.copiedTo.map((c) => `0x${c.to.toString(16)} of episode ${c.episode}`).join(", ")}`
+      : "",
+    own.code ?? "",
+  ].filter((p) => p !== "");
+  return problems.length > 0 ? problems.join("; ") : undefined;
 }
 
 /**
@@ -612,14 +661,118 @@ export class Editor {
 
   /**
    * The types a copy can go to: those without a class in the exe as loaded that no room
-   * of the episode uses, and those that are copies already (a copy there replaces it).
+   * of the episode uses, and those that are copies already (a copy there replaces it),
+   * also where they replace one of the episode's own types (ownTypes).
    */
   freeTileTypes(episode: number): number[] {
     const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
     const used = new Set(this.rooms(episode).flatMap((room) => [...roomTypes(room)]));
-    return freeTileTypes(this.pristine.image, episode).filter(
+    const free = freeTileTypes(this.pristine.image, episode).filter(
       (type) => copied.has(type) || (!used.has(type) && !FIXED_TYPES.includes(type)),
     );
+    // the episode's own types a copy replaces
+    return [...new Set([...free, ...copied])].sort((a, b) => a - b);
+  }
+
+  /**
+   * The episode's own types (a class in the exe as loaded, not a copy) and what holds on
+   * to each, as edited: where none holds on, a copy may replace it (ownTypeProblem; the
+   * class is then gone from the episode while the copy stays, unless another type has it).
+   */
+  ownTypes(episode: number): OwnType[] {
+    const { classes, typeOfClass } = this.pristine.episode(episode).classes;
+    const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
+    const roomsOf = new Map<number, number[]>();
+    const scriptsOf = new Map<number, number[]>();
+    const add = (map: Map<number, number[]>, type: number, room: number) => {
+      const list = map.get(type) ?? [];
+      if (list.at(-1) !== room) list.push(room);
+      map.set(type, list);
+    };
+    const constants = this.game.scriptConstants(episode);
+    for (const room of this.rooms(episode)) {
+      for (const type of roomTypes(room)) add(roomsOf, type, room.id);
+      const source = roomScript(room);
+      if (!source) continue;
+      const named = new Set<number>();
+      for (const piece of scanScript(source)) {
+        if (piece.kind !== "name") continue;
+        const value = constants.get(piece.text) ?? constants.get(piece.text.toUpperCase());
+        if (value !== undefined) named.add(value & 0xff);
+      }
+      for (const cell of scriptPlacedObjects(source, constants)) named.add(cell & 0xff);
+      for (const type of named) add(scriptsOf, type, room.id);
+    }
+    const sold = new Set(this.dealer(episode)?.goods.map((g) => g.classId) ?? []);
+    const typesOf = (id: number) =>
+      [...classes].filter(([, c]) => c.id === id).map(([type]) => type);
+    return [...classes]
+      .filter(([type, c]) => c.id && !FIXED_TYPES.includes(type) && !copied.has(type))
+      .map(([type, c]) => {
+        const classId = c.id ?? 0;
+        const shared = typesOf(classId).some((t) => t !== type && !copied.has(t));
+        const lookups = CODE_LOOKUP_CLASSES.get(classId);
+        const engine = ENGINE_CLASSES.get(classId);
+        const code = shared
+          ? undefined
+          : lookups
+            ? `the game's code looks its type up (${lookups.map((a) => `0x${a.toString(16)}`).join(", ")})`
+            : engine
+              ? `the game's code needs it (${engine})`
+              : this.roomClasses().has(classId)
+                ? undefined
+                : "no room of any episode has it: the game shows or places it by itself";
+        const neededBy = CLASS_NEEDS.filter((n) => n.needs === classId && n.by !== classId)
+          .flatMap((n) => {
+            const by = typeOfClass.get(n.by);
+            if (by === undefined || copied.has(by)) return [];
+            return [{ type: by, how: n.how, used: roomsOf.has(by) || scriptsOf.has(by) }];
+          })
+          .filter((n, k, all) => all.findIndex((m) => m.type === n.type) === k);
+        return {
+          type,
+          classId,
+          rooms: roomsOf.get(type) ?? [],
+          scripts: scriptsOf.get(type) ?? [],
+          dealer: sold.has(classId) && !shared,
+          copiedTo: this.changes.copies
+            .filter((k) => k.from === episode && k.of === type)
+            .map((k) => ({ episode: k.episode, to: k.to })),
+          code,
+          neededBy: shared ? [] : neededBy,
+          shared,
+        };
+      })
+      .sort((a, b) => a.type - b.type);
+  }
+
+  /**
+   * The classes the rooms of the five episodes as loaded hold (cells, records' cells):
+   * the others the game shows or places by itself (the hero's doubles, the fireman, the
+   * dealer's pointing hand, a box's border, key caps).
+   */
+  private roomClasses(): ReadonlySet<number> {
+    if (!this.roomClassCache) {
+      const ids = new Set<number>();
+      for (const e of EPISODES) {
+        const { rooms, classes } = this.pristine.episode(e);
+        for (const room of rooms) {
+          for (const type of roomTypes(room)) ids.add(classes.classes.get(type)?.id ?? 0);
+        }
+      }
+      this.roomClassCache = ids;
+    }
+    return this.roomClassCache;
+  }
+
+  private roomClassCache: ReadonlySet<number> | undefined;
+
+  /** The episode's copies that replace one of its own types (a class in the exe as loaded). */
+  replacingCopies(episode: number): number[] {
+    const own = this.pristine.episode(episode).classes.classes;
+    return this.tileTypeCopies(episode)
+      .filter((c) => (own.get(c.to)?.id ?? 0) !== 0)
+      .map((c) => c.to);
   }
 
   /**
@@ -684,8 +837,12 @@ export class Editor {
   tileTypeProblem(copy: TileTypeCopy): string | undefined {
     const { episode, to, from, of } = copy;
     if (from === episode) return "a copy comes from another episode";
-    if (!this.freeTileTypes(episode).includes(to))
-      return `type 0x${to.toString(16)} is not free in the episode (it has a class, or rooms use it)`;
+    if (!this.freeTileTypes(episode).includes(to)) {
+      // one of the episode's own types, given up where nothing holds on to it
+      const own = this.ownTypes(episode).find((t) => t.type === to);
+      const problem = own ? ownTypeProblem(own) : "rooms use it";
+      if (problem) return `type 0x${to.toString(16)} cannot be replaced: ${problem}`;
+    }
     if (this.changes.copies.some((c) => c.episode === from && c.to === of))
       return `type 0x${of.toString(16)} of episode ${from} is a copy itself`;
     const source = this.pristine.episode(from).classes.classes.get(of);
@@ -1212,16 +1369,28 @@ export class Editor {
   /**
    * What adding `kit` to the episode does as it is now (planKit): free types are those
    * no copy has yet, spare event entries those the mod does not set, texts as edited.
-   * `events`: the lacking events to give entries (default as many as fit).
+   * `events`: the lacking events to give entries (default as many as fit); `replace`: own
+   * types to use after the free ones, those nothing holds on to (ownTypeProblem).
    */
-  kitPlan(episode: number, kit: Kit, events?: readonly number[]): KitPlan {
+  kitPlan(
+    episode: number,
+    kit: Kit,
+    events?: readonly number[],
+    replace: readonly number[] = [],
+  ): KitPlan {
     const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
+    const own = new Map(replace.length > 0 ? this.ownTypes(episode).map((t) => [t.type, t]) : []);
+    // own types given up for it, where nothing holds on to them
+    const given = replace.filter((t) => {
+      const type = own.get(t);
+      return type !== undefined && ownTypeProblem(type) === undefined;
+    });
     const set = new Set(this.eventEntries(episode).map((e) => e.entry));
     const texts = this.textEntries(textsId(episode))?.entries;
     const eventTexts = this.textEntries(eventTextsId(episode))?.entries;
     return planKit(this.game, episode, kit, {
       source: this.pristine,
-      free: this.freeTileTypes(episode).filter((t) => !copied.has(t)),
+      free: [...this.freeTileTypes(episode).filter((t) => !copied.has(t)), ...given],
       spare: spareEventEntries(episode).filter((n) => !set.has(n)),
       hasText: (n) => texts?.has(n) === true,
       hasEntry: (resource, n) => this.textEntries(resource)?.entries.has(n) === true,
@@ -1253,12 +1422,19 @@ export class Editor {
   /**
    * Adds `kit` to the episode (kitPlan: tile types, texts, events and their texts; quiet
    * events moved, or their texts removed as edits; the flags it needs) as one undo step
-   * that makes a new base (rebase); undefined if it has nothing to add. Throws a
-   * RangeError where the plan has a problem.
+   * that makes a new base (rebase); undefined if it has nothing to add. `replace`: own
+   * types the kit's copies may replace where the free ones do not suffice (ownTypes).
+   * Throws a RangeError where the plan has a problem.
    */
-  addKit(episode: number, room: number, kit: Kit, events?: readonly number[]): Edit | undefined {
+  addKit(
+    episode: number,
+    room: number,
+    kit: Kit,
+    events?: readonly number[],
+    replace: readonly number[] = [],
+  ): Edit | undefined {
     this.endStroke();
-    const plan = this.kitPlan(episode, kit, events);
+    const plan = this.kitPlan(episode, kit, events, replace);
     if (plan.problem) throw new RangeError(plan.problem);
     const { types, texts, events: given, code, textCopies, moved, silenced } = plan;
     const parts: readonly (readonly unknown[])[] = [types, texts, given, code, textCopies];

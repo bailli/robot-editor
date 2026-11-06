@@ -1774,8 +1774,49 @@ button.link {
 /* Kits tab: the kits (kits-view.ts), each folded to a line */
 .kit {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   margin-top: 6px;
+}
+
+/* the own types given up for a kit's copies (II has no free type) */
+.kit-replace {
+  display: grid;
+  gap: 4px;
+}
+
+.kit-replace .record-field.tile-type-field,
+.tile-types-view .record-field.tile-type-field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.hint.warning {
+  color: var(--error);
+}
+
+/* replacing one of the episode's own types: what it means, what needs it */
+.give-up p,
+.give-up ul {
+  margin: 4px 0 0;
+}
+
+.give-up ul,
+.held-list {
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.held-types summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.held-list {
+  max-height: 240px;
+  overflow: auto;
+  margin: 4px 0 0;
 }
 
 .kit summary {

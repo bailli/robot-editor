@@ -22,6 +22,13 @@ export {
 } from "./classes.ts";
 export type { ClassEntry, EpisodeClasses, ObjectClass } from "./classes.ts";
 export {
+  CLASS_NEEDS,
+  CODE_LOOKUP_CLASSES,
+  ENGINE_CLASSES,
+  TYPE_OF_CLASS_TABLE,
+} from "./class-links.ts";
+export type { ClassNeed } from "./class-links.ts";
+export {
   ACTOR_RECORD,
   OPEN_EXIT_CELLS,
   DIRECTIONS,

@@ -105,6 +105,7 @@ import {
   areaCells,
   clipArea,
   fillRegion,
+  ownTypeProblem,
   recordCapacity,
   wrapsRow,
 } from "./editor.ts";
@@ -761,13 +762,13 @@ export class App {
     },
   });
   readonly kitsView = new KitsView({
-    add: (kit, events) => {
+    add: (kit, events, replace) => {
       const name = EPISODE_NAMES[this.episode] ?? "";
       this.rebaseAction(
         `Adding the ${kit.name.toLowerCase()}…`,
         `add the ${kit.name.toLowerCase()}`,
         (episode, room) =>
-          this.need().addKit(episode, room, kit, events)
+          this.need().addKit(episode, room, kit, events, replace)
             ? `${kit.name} of ${EPISODE_NAMES[kit.from] ?? ""} added to ${name}`
             : undefined,
       );
@@ -3054,7 +3055,15 @@ export class App {
     this.kitsView.show({
       episode: this.episode,
       names: EPISODE_NAMES,
-      plan: (kit, events) => editor.kitPlan(this.episode, kit, events),
+      plan: (kit, events, replace) => editor.kitPlan(this.episode, kit, events, replace),
+      replaceable: editor.ownTypes(this.episode).flatMap((own) => {
+        if (ownTypeProblem(own) !== undefined) return [];
+        const { names } = this.source(this.episode);
+        const name = (t: number) =>
+          names.info(t).name ?? (names.summary(t).slice(0, 40) || "(no name)");
+        const note = own.neededBy.map((n) => `${name(n.type)} needs it`).join(", ");
+        return [{ type: own.type, name: name(own.type), note }];
+      }),
       hasExample: (kit) => editor.kitExample(this.episode, this.roomId, kit) !== undefined,
     });
     this.tileTypesView.show({
@@ -3062,6 +3071,12 @@ export class App {
       names: EPISODE_NAMES,
       copies: editor.tileTypeCopies(this.episode),
       free: editor.freeTileTypes(this.episode),
+      own: editor.ownTypes(this.episode),
+      replacing: editor.replacingCopies(this.episode),
+      ownName: (type) => {
+        const { names } = this.source(this.episode);
+        return names.info(type).name ?? (names.summary(type).slice(0, 40) || "(no name)");
+      },
       sources: (from) =>
         editor.sourceTileTypes(from).map((type) => {
           const names = this.source(from).names;

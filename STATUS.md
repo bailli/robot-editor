@@ -1579,7 +1579,8 @@ Supported:
   and III have oracles, I and II circuits: "has … already"), each at the same number
   where free, else the first free type no copy has (free: no class, and no room's map
   or record cells, `recordCellOffsets`, hold it; `Editor.freeTileTypes` and removing a
-  copy look at both too); the texts the kit's classes show
+  copy look at both too; where they do not suffice, own types the author gives up, see
+  "Replacing an episode's own types"); the texts the kit's classes show
   that the episode lacks (`classTexts`, for classes it does not have by itself, so a
   type copied by hand still gets them); the events its table lacks, in spare entries
   the mod does not set yet (`Editor.kitPlan`). Where they do not all fit (IV: four
@@ -1872,8 +1873,30 @@ stands, decided 2026-10-27; details in the sections named.
     naming them was found yet (the user noticed them; a fallback reusing all four was
     taken out again, 2026-11-06). Others are referenced by code: class 135 (the
     hero-state icons), the wizard's door, the fireman, the beam, the hero's doubles
-    (3–5), class 13. Open: room for copies in II (replacing a class of II's that a fan
-    episode does not need, chosen by the author).
+    (3–5), class 13. Room for copies in II: the author gives up own types, see
+    "Replacing an episode's own types".
+  - **Replacing an episode's own types** (2026-11-06, the editor; any episode, needed
+    in II): a copy may go to one of the episode's own types (a class in the exe as
+    loaded) that nothing holds on to (`Editor.ownTypes`, `ownTypeProblem`): no room's
+    cells or records (as edited), no room script naming it (an `O_` constant) or
+    placing it (SetObj), not the dealer's goods, no copy in another episode made from
+    it, and not needed by the game's code where no other type of the episode has the
+    class: `CODE_LOOKUP_CLASSES` (`class-links.ts`: a scan of the exe for fixed entries
+    of the class → type table 0x4c70e0, 31 classes, e.g. the dealer's hand 84 at
+    0x448759, the box border 132, the hero-state icons 135), `ENGINE_CLASSES` (actor
+    kinds, stairs, doors in and out, the backdrop cell, the wizard's door 80, the beam,
+    class 13, which the code sets at 0x434212) and every class no room of any episode
+    has (the hero's doubles 4, 5, the fireman 124, the key caps 133, the eyes 52, II's
+    97 and 130: the game shows or places them by itself). The classes that need it
+    (`CLASS_NEEDS`, from "Classes that need other classes", e.g. II's 0x5c needs the
+    skateboard 0x5d) are a warning, not a refusal. In the mod it is a plain copy (kind
+    tileTypes); removing it gives the type its own class back. As loaded, II's rooms
+    hold nearly all its types (room 99 shows most objects): only 0x10 (class 16, IV
+    has it in a room) is free to give up before the author clears others out. The
+    copy form lists the types to replace in its target list ("Replace one of this
+    episode's types", ⚠ where a class needs it) with a note on what giving it up means,
+    and folded the own types it cannot replace, each with why; a kit whose free types
+    do not suffice offers a choice per type lacking ("Give up"). Not tried in the game.
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,

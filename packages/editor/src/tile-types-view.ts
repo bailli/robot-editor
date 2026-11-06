@@ -1,7 +1,7 @@
 import { EPISODES } from "@robot/formats";
 
 import { button, element, select } from "./dom.ts";
-import type { TileTypeCopy } from "./editor.ts";
+import { type OwnType, type TileTypeCopy, ownTypeProblem } from "./editor.ts";
 import { hex2 } from "./format.ts";
 import { patchChildren } from "./patch.ts";
 
@@ -27,6 +27,12 @@ export interface TileTypesContext {
   copies: readonly TileTypeCopy[];
   /** The types a copy can go to (Editor.freeTileTypes). */
   free: readonly number[];
+  /** The episode's own types and what holds on to them (Editor.ownTypes). */
+  own: readonly OwnType[];
+  /** The copies that replace one of the episode's own types (Editor.replacingCopies). */
+  replacing: readonly number[];
+  /** The name of one of the episode's own types, as in the exe as loaded. */
+  ownName: (type: number) => string;
   /** The types of an episode that can be copied, with their names. */
   sources: (episode: number) => readonly SourceType[];
   /** The texts a copy's class shows that the episode lacks (Editor.classTextsToCopy). */
@@ -78,9 +84,14 @@ export class TileTypesView {
         "dealer-name",
         `${hex2(c.to)} ← ${short(c.from)} ${hex2(c.of)} ${source}`,
       );
-      text.title = `Type ${hex2(c.to)} is type ${hex2(c.of)} of ${name(c.from)}: its class, shape, description, sound and first take`;
+      const replaced = context.replacing.includes(c.to);
+      text.title = `Type ${hex2(c.to)} is type ${hex2(c.of)} of ${name(c.from)}: its class, shape, description, sound and first take${replaced ? `; it replaces ${name(episode)}’s ${context.ownName(c.to)}` : ""}`;
+      if (replaced) text.textContent += ` (replaces ${context.ownName(c.to)})`;
       // read when clicked: a kept button keeps its listener (patchChildren)
-      const remove = button("×", `Make type ${hex2(c.to)} free again`, () => {
+      const undo = replaced
+        ? `Give type ${hex2(c.to)} its own class back (${context.ownName(c.to)})`
+        : `Make type ${hex2(c.to)} free again`;
+      const remove = button("×", undo, () => {
         this.events.copy(Number(row.dataset["key"]), undefined);
       });
       remove.classList.add("danger");
@@ -134,7 +145,9 @@ export class TileTypesView {
     if (!sources.some((s) => s.type === choice.of)) choice.of = sources[0]?.type ?? 0;
     // the same number where it is free, else the first free one: not yet a copy, unless
     // all are
-    if (!context.free.includes(choice.to)) {
+    const replaceable = context.own.filter((t) => ownTypeProblem(t) === undefined);
+    const chosenOwn = replaceable.find((t) => t.type === choice.to);
+    if (!context.free.includes(choice.to) && !chosenOwn) {
       const copied = new Set(context.copies.map((c) => c.to));
       const unused = context.free.filter((t) => !copied.has(t));
       choice.to = unused.includes(choice.of)
@@ -160,6 +173,28 @@ export class TileTypesView {
       ]),
       String(choice.to),
     );
+    // the episode's own types nothing holds on to: given up for the copy
+    if (replaceable.length > 0) {
+      const group = element("optgroup");
+      group.label = "Replace one of this episode’s types";
+      for (const t of replaceable) {
+        const option = element(
+          "option",
+          undefined,
+          `${hex2(t.type)} ${context.ownName(t.type)}${t.neededBy.length > 0 ? " ⚠" : ""}`,
+        );
+        option.value = String(t.type);
+        group.append(option);
+      }
+      to.append(group);
+    }
+    if (choice.to < 0) {
+      const none = element("option", undefined, "— choose a type to replace —");
+      none.value = "-1";
+      none.disabled = true;
+      to.prepend(none);
+    }
+    to.value = String(choice.to);
     // a new source gets the default target again (the same number where free)
     const changed = (edit: (now: NonNullable<typeof this.choice>) => void) => () => {
       const now = this.choice;
@@ -197,8 +232,8 @@ export class TileTypesView {
         if (now && now.to >= 0) this.events.copy(now.to, { from: now.from, of: now.of });
       },
     );
-    add.disabled = context.free.length === 0 || sources.length === 0;
-    if (context.free.length === 0) add.title = "The episode has no free tile type";
+    add.disabled = choice.to < 0 || sources.length === 0;
+    if (choice.to < 0) add.title = "The episode has no free tile type and none to replace";
     const preview = this.events.preview(choice.from, choice.of);
     const rows: [string, Node[]][] = [
       ["from", [element("span", "record-label", "From"), from]],
@@ -213,7 +248,64 @@ export class TileTypesView {
     });
     const bar = element("div", "start-bar");
     bar.dataset["key"] = "add";
-    bar.append(add, element("span", "hint", `${context.free.length} free`));
-    return [...form, bar];
+    bar.append(
+      add,
+      element("span", "hint", `${context.free.length} free, ${replaceable.length} to replace`),
+    );
+    const nodes: Node[] = [...form, bar];
+    if (chosenOwn) nodes.push(this.giveUpNote(context, chosenOwn));
+    nodes.push(this.heldTypes(context));
+    return nodes;
+  }
+
+  /** What replacing one of the episode's own types means, and what needs it. */
+  private giveUpNote(context: TileTypesContext, own: OwnType): HTMLElement {
+    const episode = context.names[context.episode] ?? `episode ${context.episode}`;
+    const note = element("div", "give-up");
+    note.dataset["key"] = `give up ${own.type}`;
+    note.append(
+      element(
+        "p",
+        "hint warning",
+        `Gives up ${episode}’s ${context.ownName(own.type)} (${hex2(own.type)}, class ${own.classId}): it is gone from ${episode} for good while the copy stays; no room, record, script or dealer may use it again. Removing the copy brings it back.`,
+      ),
+    );
+    if (own.neededBy.length > 0) {
+      const list = element("ul", "give-up-needs");
+      for (const n of own.neededBy) {
+        list.append(
+          element(
+            "li",
+            undefined,
+            `${hex2(n.type)} ${context.ownName(n.type)} needs it (${n.how})${n.used ? ": rooms or scripts use it" : ""}`,
+          ),
+        );
+      }
+      note.append(element("p", "hint warning", "Classes of the episode that need it:"), list);
+    }
+    return note;
+  }
+
+  /** The episode's own types that cannot be replaced, folded, each with why. */
+  private heldTypes(context: TileTypesContext): HTMLElement {
+    const held = context.own.flatMap((t) => {
+      const problem = ownTypeProblem(t);
+      return problem ? [{ type: t.type, problem }] : [];
+    });
+    const box = element("details", "held-types");
+    box.dataset["key"] = `held ${context.episode}`;
+    box.append(
+      element(
+        "summary",
+        undefined,
+        `${held.length} own types cannot be replaced (rooms, records, scripts, the dealer or the game’s code hold on to them)`,
+      ),
+    );
+    const list = element("ul", "held-list");
+    for (const { type, problem } of held) {
+      list.append(element("li", undefined, `${hex2(type)} ${context.ownName(type)}: ${problem}`));
+    }
+    box.append(list);
+    return box;
   }
 }

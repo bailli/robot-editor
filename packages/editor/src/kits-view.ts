@@ -5,8 +5,11 @@ import { hex2 } from "./format.ts";
 import { patchChildren } from "./patch.ts";
 
 export interface KitsViewEvents {
-  /** Adds the kit to the shown episode, the events chosen (Editor.addKit). */
-  add(kit: Kit, events: readonly number[] | undefined): void;
+  /**
+   * Adds the kit to the shown episode, the events chosen, the episode's own types given
+   * up for its copies (Editor.addKit).
+   */
+  add(kit: Kit, events: readonly number[] | undefined, replace: readonly number[]): void;
   /** Starts pasting the kit's example into the shown room (Editor.kitExample). */
   example(kit: Kit): void;
 }
@@ -15,17 +18,31 @@ export interface KitsViewEvents {
 export interface KitsContext {
   episode: number;
   names: readonly string[];
-  /** What adding the kit does now, with these events chosen (Editor.kitPlan). */
-  plan: (kit: Kit, events?: readonly number[]) => KitPlan;
+  /**
+   * What adding the kit does now, with these events chosen and these own types given up
+   * (Editor.kitPlan).
+   */
+  plan: (kit: Kit, events?: readonly number[], replace?: readonly number[]) => KitPlan;
+  /** The episode's own types a copy may replace (Editor.ownTypes, no ownTypeProblem). */
+  replaceable: readonly ReplaceableType[];
   /** Whether the episode has all the kit's types, so its example can be placed. */
   hasExample: (kit: Kit) => boolean;
+}
+
+/** One of the episode's own types a kit's copy may replace. */
+export interface ReplaceableType {
+  type: number;
+  name: string;
+  /** Other classes of the episode that need it (CLASS_NEEDS), as a note. */
+  note: string;
 }
 
 /**
  * The Kits tab's kits (formats' KITS), each folded to its name and what adding it to the
  * shown episode would do; opened, per kit what it copies (tile types, texts, events,
  * music, flags) and what it cannot (events without an entry), with checkboxes for the
- * events where the spare entries do not hold them all, and "Add". Patched in place
+ * events where the spare entries do not hold them all, a choice of the episode's own types
+ * to give up where its free types do not suffice (II has none), and "Add". Patched in place
  * (patchChildren); the events chosen stay while the episode does, the kits opened while
  * the editor runs.
  */
@@ -35,6 +52,8 @@ export class KitsView {
   private context: KitsContext | undefined;
   /** The events chosen per kit, for the episode shown. */
   private chosen = new Map<string, number[]>();
+  /** The own types given up per kit, for the episode shown. */
+  private replaced = new Map<string, number[]>();
   private chosenEpisode = -1;
   /** The kits shown opened. */
   private readonly opened = new Set<string>();
@@ -47,6 +66,7 @@ export class KitsView {
   /** Forgets the choices (a newly loaded exe or mod). */
   reset(): void {
     this.chosen.clear();
+    this.replaced.clear();
     this.chosenEpisode = -1;
   }
 
@@ -54,6 +74,7 @@ export class KitsView {
     this.context = context;
     if (context.episode !== this.chosenEpisode) {
       this.chosen.clear();
+      this.replaced.clear();
       this.chosenEpisode = context.episode;
     }
     patchChildren(this.element, this.render(context));
@@ -82,11 +103,15 @@ export class KitsView {
       if (box.open) this.opened.add(kit.key);
       else this.opened.delete(kit.key);
     });
+    // own types given up: those still replaceable
+    const replace = (this.replaced.get(kit.key) ?? []).filter((t) =>
+      context.replaceable.some((r) => r.type === t),
+    );
     // the default plan holds as many events as fit: the most that can be chosen
-    const fit = context.plan(kit);
+    const fit = context.plan(kit, undefined, replace);
     // ids that are not lacking (any more) are dropped
     const chosen = this.chosen.get(kit.key)?.filter((id) => fit.lacking.includes(id));
-    const plan = chosen ? context.plan(kit, chosen) : fit;
+    const plan = chosen ? context.plan(kit, chosen, replace) : fit;
     const summary = element("summary");
     summary.append(
       element("span", "kit-name", `${kit.name} from ${name(kit.from)}`),
@@ -108,7 +133,11 @@ export class KitsView {
       box.append(this.exampleBar(context, kit));
       return box;
     }
-    const types = plan.types.map(([to, of]) => `${hex2(to)} ← ${typeName(of)}`);
+    const replacedName = (to: number) => {
+      const own = context.replaceable.find((r) => r.type === to && replace.includes(to));
+      return own ? ` (replaces ${own.name})` : "";
+    };
+    const types = plan.types.map(([to, of]) => `${hex2(to)} ← ${typeName(of)}${replacedName(to)}`);
     const present = plan.present.map(typeName);
     box.append(
       line(
@@ -116,6 +145,9 @@ export class KitsView {
         `Tile types: ${types.length > 0 ? types.join(", ") : "none to copy"}${present.length > 0 ? ` (has: ${present.join(", ")})` : ""}`,
       ),
     );
+    const short = kit.types.length - plan.present.length - plan.types.length;
+    const given = replace.filter((t) => plan.types.some(([to]) => to === t));
+    if (short > 0 || given.length > 0) box.append(this.replacePicker(context, kit, given, short));
     if (plan.texts.length > 0) {
       // the kit's own texts (Kit.texts) say when the game shows them
       const own = plan.texts.filter((n) => kit.texts?.includes(n));
@@ -220,14 +252,77 @@ export class KitsView {
     add.addEventListener("click", () => {
       // the events not chosen stay lacking: the next plan starts from its default
       const events = this.chosen.get(kit.key);
+      const replace = this.replaced.get(kit.key) ?? [];
       this.chosen.delete(kit.key);
-      this.events.add(kit, events);
+      this.replaced.delete(kit.key);
+      this.events.add(kit, events, replace);
     });
     const bar = element("div", "start-bar");
     bar.dataset["key"] = "add";
     bar.append(add);
     if (plan.problem) bar.append(element("span", "hint", plan.problem));
     box.append(bar, this.exampleBar(context, kit));
+    return box;
+  }
+
+  /**
+   * Where the episode's free types do not suffice: a choice per type still lacking of
+   * one of its own types to give up (gone from the episode while the copy stays), and
+   * the ones given up so far.
+   */
+  private replacePicker(
+    context: KitsContext,
+    kit: Kit,
+    given: readonly number[],
+    short: number,
+  ): HTMLElement {
+    const box = element("div", "kit-replace");
+    box.dataset["key"] = "replace";
+    const episode = context.names[context.episode] ?? `episode ${context.episode}`;
+    box.append(
+      element(
+        "p",
+        "hint warning",
+        `${episode} has too few free tile types: give up types of its own for the copies. A type given up is gone from ${episode} for good while the copy stays; no room, record, script or dealer may use it again.`,
+      ),
+    );
+    const slots = [...given, ...Array<number>(Math.max(0, short)).fill(-1)];
+    slots.forEach((value, k) => {
+      const choice = element("select", "record-field tile-type-field");
+      choice.setAttribute("aria-label", `Own type to give up ${k + 1}`);
+      const none = element("option", undefined, "— choose a type to give up —");
+      none.value = "-1";
+      choice.append(none);
+      for (const r of context.replaceable) {
+        if (r.type !== value && given.includes(r.type)) continue;
+        const option = element(
+          "option",
+          undefined,
+          `${hex2(r.type)} ${r.name}${r.note ? ` ⚠ ${r.note}` : ""}`,
+        );
+        option.value = String(r.type);
+        choice.append(option);
+      }
+      choice.value = String(value);
+      // the choices as shown now: a kept select keeps its listener (patchChildren)
+      choice.addEventListener("change", () => {
+        const shown = this.context;
+        if (!shown) return;
+        const now = [...box.querySelectorAll("select")].map((s) => Number(s.value));
+        this.replaced.set(
+          kit.key,
+          now.filter((t) => t >= 0),
+        );
+        this.show(shown);
+      });
+      const row = element("label", "record-row");
+      row.dataset["key"] = `slot ${k}`;
+      row.append(element("span", "record-label", "Give up"), choice);
+      box.append(row);
+    });
+    if (context.replaceable.length === 0) {
+      box.append(element("p", "hint", `None of ${episode}’s own types is unused yet.`));
+    }
     return box;
   }
 

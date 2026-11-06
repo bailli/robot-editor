@@ -552,3 +552,37 @@ test("the map's thumbnails are drawn again when the episode's flags change", () 
   thumbnail(43);
   expect(cache.get(0)?.get(43)?.key).not.toBe(key);
 });
+
+test("II's own types: replaced by a copy where nothing holds on to them, with a warning", async () => {
+  // the skateboard out of II's room 99, the only room with it
+  const editor = defined(app.editor);
+  for (const layer of ["base", "overlay"] as const) {
+    editor.beginStroke(2, 99, layer);
+    editor.room(2, 99)[layer].forEach((cell, index) => {
+      if ((cell & 0xff) === 0x5d) editor.paint(index, 0);
+    });
+    editor.endStroke();
+  }
+  app.showEpisode(2, 99);
+  await page.getByRole("tab", { name: "Kits" }).click();
+  const types = page.getByRole("region", { name: "Tile types" });
+  const to = types.getByLabelText("To type");
+  // II has no free type: nothing chosen yet
+  await expect.element(to).toHaveValue("-1");
+  await expect.element(types.getByRole("button", { name: "Copy" })).toBeDisabled();
+  const offered = [...(to.element() as HTMLSelectElement).options].map((o) => o.value);
+  expect(offered).toContain(String(0x5d));
+  // the dealer's pointing hand is the game's: listed as held, with why
+  expect(offered).not.toContain(String(0x4b));
+  await expect.element(types.getByText(/^0x4b .*looks its type up/)).toBeInTheDocument();
+  await userEvent.selectOptions(to, String(0x5d));
+  await expect.element(types.getByText(/Gives up .* it is gone from/)).toBeVisible();
+  await expect.element(types.getByText(/^0x5c .*needs it \(the skateboard\)/)).toBeVisible();
+  await types.getByRole("button", { name: "Copy" }).click();
+  await app.idle();
+  expect(app.editor?.replacingCopies(2)).toEqual([0x5d]);
+  await expect.element(types.getByText(/0x5d ← Junior .* \(replaces /)).toBeVisible();
+  await expect
+    .element(types.getByRole("button", { name: "×" }))
+    .toHaveAttribute("title", expect.stringMatching(/its own class back/));
+});

@@ -49,6 +49,7 @@ import {
   areaCells,
   clipArea,
   fillRegion,
+  ownTypeProblem,
   placedTiles,
   recordCapacity,
   shownCell,
@@ -960,7 +961,9 @@ describe("Editor and tile types from other episodes", () => {
   test("refused: no free type, no class there, a copy of a copy, a type rooms use", () => {
     const editor = new Editor(game);
     expect(editor.freeTileTypes(2)).toEqual([]);
-    expect(() => editor.setTileType(2, 43, 0x50, { from: 1, of: 0x42 })).toThrow(/not free/);
+    expect(() => editor.setTileType(2, 43, 0x50, { from: 1, of: 0x42 })).toThrow(
+      /cannot be replaced: rooms .* use it/,
+    );
     expect(() => editor.setTileType(3, 41, 0x59, { from: 3, of: 0x42 })).toThrow(/another/);
     expect(() => editor.setTileType(3, 41, 0x59, { from: 0, of: 0x50 })).toThrow(/no class/);
     editor.setTileType(0, 43, 0x50, { from: 2, of: 0x50 });
@@ -971,6 +974,81 @@ describe("Editor and tile types from other episodes", () => {
     editor.endStroke();
     expect(() => editor.setTileType(0, 43, 0x50, undefined)).toThrow(/rooms 43 use/);
     expect(editor.freeTileTypes(0)).toContain(0x50);
+  });
+});
+
+describe("Editor and an episode's own types given up", () => {
+  /** Paints over every cell of `type` in room `id` of the episode, in both layers. */
+  const clear = (editor: Editor, episode: number, id: number, type: number) => {
+    for (const layer of ["base", "overlay"] as const) {
+      editor.beginStroke(episode, id, layer);
+      editor.room(episode, id)[layer].forEach((cell, index) => {
+        if ((cell & 0xff) === type) editor.paint(index, 0);
+      });
+      editor.endStroke();
+    }
+  };
+  const own = (editor: Editor, episode: number, type: number) =>
+    defined(editor.ownTypes(episode).find((t) => t.type === type));
+
+  test("II's skateboard, out of its rooms, becomes a copy; removing it brings it back", () => {
+    const editor = new Editor(game);
+    const skateboard = own(editor, 2, 0x5d);
+    expect(skateboard.classId).toBe(108);
+    expect(ownTypeProblem(skateboard)).toBe("room 99 uses it");
+    // 0x5c (class 107) needs the skateboard, and rooms use it
+    expect(skateboard.neededBy).toEqual([{ type: 0x5c, how: "the skateboard", used: true }]);
+    expect(() => editor.setTileType(2, 99, 0x5d, { from: 1, of: 0x42 })).toThrow(
+      /0x5d cannot be replaced: room 99 uses it/,
+    );
+    clear(editor, 2, 99, 0x5d);
+    expect(ownTypeProblem(own(editor, 2, 0x5d))).toBeUndefined();
+    // episode I's GATE instead
+    editor.setTileType(2, 99, 0x5d, { from: 1, of: 0x42 });
+    expect(editor.game.episode(2).classes.classes.get(0x5d)?.id).toBe(76);
+    expect(editor.replacingCopies(2)).toEqual([0x5d]);
+    expect(editor.ownTypes(2).some((t) => t.type === 0x5d)).toBe(false);
+    expect(editor.freeTileTypes(2)).toEqual([0x5d]);
+    // the mod holds a plain copy
+    const mod = editor.saveMod();
+    expect(mod.changes.tileTypes).toEqual([{ episode: 2, from: 1, types: [[0x5d, 0x42]] }]);
+    expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
+    expect(new Editor(game, mod).replacingCopies(2)).toEqual([0x5d]);
+    editor.setTileType(2, 99, 0x5d, undefined);
+    expect(editor.game.episode(2).classes.classes.get(0x5d)?.id).toBe(108);
+    expect(editor.replacingCopies(2)).toEqual([]);
+  });
+
+  test("refused: what the game's code needs, what the dealer sells, a copy's source", () => {
+    const editor = new Editor(game);
+    // the dealer's pointing hand: the code looks its type up
+    expect(ownTypeProblem(own(editor, 2, 0x4b))).toMatch(/looks its type up \(0x448759\)/);
+    // the fireman: in no room of any episode
+    expect(ownTypeProblem(own(editor, 2, 0x6d))).toMatch(/no room of any episode/);
+    // the hero's double: an actor the game creates
+    expect(ownTypeProblem(own(editor, 2, 0x03))).toMatch(/an actor/);
+    // II's dealer sells the oxygen... the first good's class, whatever it is
+    const good = defined(editor.dealer(2)?.goods[0]);
+    const sold = editor.ownTypes(2).find((t) => t.classId === good.classId && !t.shared);
+    if (sold) expect(ownTypeProblem(sold)).toMatch(/the dealer sells it/);
+    // the skateboard copied to Junior: II keeps it
+    editor.setTileType(0, 43, 0x50, { from: 2, of: 0x5d });
+    expect(own(editor, 2, 0x5d).copiedTo).toEqual([{ episode: 0, to: 0x50 }]);
+  });
+
+  test("a kit in II with one of its own types given up", () => {
+    const editor = new Editor(game);
+    const goal = defined(KITS.find((k) => k.key === "goal"));
+    expect(editor.kitPlan(2, goal).problem).toMatch(/free tile types needed/);
+    // a type rooms still use is left out
+    expect(editor.kitPlan(2, goal, undefined, [0x5d]).problem).toMatch(/free tile types needed/);
+    clear(editor, 2, 99, 0x5d);
+    const plan = editor.kitPlan(2, goal, undefined, [0x5d]);
+    expect(plan.problem).toBeUndefined();
+    expect(plan.types.map(([to]) => to)).toEqual([0x5d]);
+    editor.addKit(2, 99, goal, undefined, [0x5d]);
+    expect(editor.replacingCopies(2)).toEqual([0x5d]);
+    expect(editor.tileTypeCopies(2).map((c) => c.from)).toEqual([goal.from]);
   });
 });
 
