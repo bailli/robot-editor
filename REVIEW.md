@@ -1,0 +1,191 @@
+# Self-review 2026-11-06: open findings
+
+Review of 40ac011..396297c (226 commits since the last review), by four reviewers (the
+native Linux wrapper with special care; formats; editor; tools, proxy and harness).
+None of these is fixed yet. "Confirmed" means a reviewer ran it or traced it in the code;
+"plausible" means it was only read. Each one needs verifying before it is fixed. Delete
+an entry once it is fixed or rejected; delete the file when it is empty.
+
+## Native Linux wrapper (tools/linux, its TS side, CI)
+
+1. **High, confirmed by running: fullscreen freezes the game.**
+   - `user32.c:261-291`: `DefWindowProcA` has no `WM_PAINT` case. `synthesize()` at
+     `user32.c:885-891` keeps a window dirty until `BeginPaint`.
+   - In DirectDraw mode the game's WM_PAINT presents through 0x437450 and calls
+     DefWindowProcA (0x405310) without BeginPaint. Windows validates the window there; the
+     wrapper does not.
+   - Alt+Enter → SetWindowPos → WM_SIZE → InvalidateRect (0x4039b8). From then on every
+     PeekMessage returns WM_PAINT and 0x4016a0 never runs. The driver reports
+     `stalled ... left=5`.
+   - Fix: `case WM_PAINT: if (w) w->dirty = FALSE; return 0;`.
+   - Related, low: `synthesize` returns WM_TIMER before WM_PAINT, but Windows gives
+     WM_PAINT priority. `InvalidateRect(NULL, …)` (0x437373) is a no-op.
+2. **Medium, confirmed by reading: the driver socket has no authentication**
+   (`driver.c` 320-335, 453-514).
+   - Any local process can connect first. `hello` hands out the token, and `poke` writes
+     into the RWX image. A squatter also locks the real driver out ("busy").
+   - Fix: require `hello TOKEN` as the first command, or use a Unix socket in the 0700
+     game dir or an inherited socketpair. `proxy.c` probably has the same design.
+3. **Medium-low, confirmed by running: `Driver.start` without the built wrapper or
+   python3** (`packages/tools/src/driver.ts` ~169-226).
+   - `spawn` emits 'error' with no listener, so Node throws, `ready` never settles, and
+     the `robot-native-*` mkdtemp dir stays behind. Seen: `/tmp/robot-native-HgL5XQ` and
+     `-RWa4YY`.
+   - `takeShot` doesn't check for the binary (`robot play` does).
+   - Fix: check `existsSync(WRAPPER_BINARY)` with the "pnpm wrapper" hint,
+     `server.once("error", reject)`, and remove gameDir on that path. The tools reviewer
+     found the same.
+4. **Low-medium: test runs inherit the user's whole environment** (`driver.ts:171`
+   spreads process.env).
+   - `ROBOT_SERVE_WINDOW` would show test windows on the desktop.
+   - `ROBOT_IMPORT_REG` imports the user's settings.
+   - `ROBOT_CONSOLE`, `ROBOT_DIALOG_OK` and `ROBOT_SHOT` change tests.
+   - Fix: drop those, and force `SDL_VIDEODRIVER=dummy` and `SDL_AUDIODRIVER=dummy` from
+     TS. In C, make `ShellExecuteA` (`misc.c:219`) a no-op returning 33 while the driver
+     is active.
+5. **Low: expose in fullscreen** (`sdl.c:435`).
+   - `SDL_WINDOWEVENT_EXPOSED` always calls `screen_present()`, which shows the GDI frame
+     during DirectDraw fullscreen, resizes the texture to 640×348 and switches the mouse
+     mapping.
+   - Fix: re-show what is shown, or skip it while `showing_rgb`.
+6. **Low, plausible: `ExitProcess`** (`kernel32.c:1796`) calls `exit()` while the sound
+   and SDL audio threads still run. Fix: `fflush(NULL); _exit(code);`.
+7. **Low: a closed handle can be freed under a waiter** (`kernel32.c:1471-1527`).
+   - `wait_objects` takes no reference. dsound's `signal_send` runs after unlocking.
+   - The game never triggers this today.
+8. **Low: the PE loader trusts header fields** (`loader.c:261-303`, `bind_imports`
+   233-259, `res_lookup` in `kernel32.c`).
+   - `e_lfanew`, `SizeOfHeaders` (the memcpy at 287), the section table, `va + n` wrap,
+     the imports and the resource offsets are unchecked.
+   - Reachable only with a malformed exe (e.g. one posted to "Test in game").
+   - Fix: validate every offset with 64-bit sums.
+9. **Low, semantics:**
+   - TranslateMessage appends WM_CHAR behind queued input (Windows reads posted messages
+     first).
+   - FOCUS_LOST (`sdl.c:438`) posts WM_KEYUP for VK 0xa0-0xa5 plus duplicates, and
+     WM_KEYUP instead of WM_SYSKEYUP for Alt.
+   - `ui_key` swallows only the key-down of a Ctrl+Shift shortcut.
+   - `LB_INSERTSTRING(-1)` (`ui.c:319`) returns -1, not the index.
+   - `serve()` spins if `accept` fails (EMFILE).
+10. **Low: `--settings` writes the registry file** (`settings.c:55`: `open_key` uses
+    RegCreateKeyExA). Fix: RegOpenKeyExA for reading.
+11. **Low: DirectX version** (`misc.c:69`). FileVersionLS 0x384 means 4.09.00.0900
+    (9.0), but STATUS and the comment say 0904 (9.0c, 0x388). Change one of them.
+12. **Low: CI `wrapper.yml`.**
+    - It has no setup-node (Node 22).
+    - The path filter lacks `package.json`.
+    - Deleting and then creating the release leaves none if create fails. Use
+      `gh release upload --clobber` and a moved tag instead.
+    - The zip drops the executable bit (the README says to chmod).
+13. **Simplification:**
+    - The CP1252 table is in five copies (kernel32, user32, sdl, ui, settings).
+    - `ddraw.c fill_vtable` is the same as `dsound.c fill`.
+    - The `dsound.c:180` comment says libm is not linked, but `-lm` is, so `powf` would
+      do.
+    - `user32.c:341 min_max` has a dead `if (!width)`.
+
+## formats
+
+1. **High, confirmed with a repro: a second growing `withShapes` corrupts the shapes an
+   earlier copy appended** (`shapes.ts:206-218`, through `withTileTypes` and the mod's
+   `build`).
+   - Cause: the grown table is written, then the new frames right behind it. The first
+     frame's far-pointer fixup sits where `parseShapes` expects a descriptor's frames
+     pointer, so it reads bogus slots after the terminator. The next call's `length` is
+     inflated, and it writes "in place" over the earlier appended frames.
+   - Repro 1: `withTileTypes(0, 1, {0x61→0x61})`, then `{0x62}`, then `{0x63}`. 0x61 is
+     no longer equal to the source.
+   - Repro 2, as a mod: `tileTypes [{episode 0, from 1, [[0x61,0x61]]}, {episode 0, from
+2, [[0x63,0x63]]}]` corrupts 0x61. Kits from different episodes into one episode
+     trigger it.
+   - Fix: a hard stop after the terminator, or append frames first and the table last,
+     or track the extent instead of `parseShapes().length`.
+   - Add a test with two sequential growing calls.
+2. **Plausible: `movedRecord` wraps coordinates** (`records.ts:145-153`).
+   - `out[4] + dx`, `out[5] + dy` and `y + dy` wrap in the Uint8Array.
+   - For types 12 and 13, `(x + dx) << 10` can go negative or past 6 bits, and `to.room`
+     past 10 bits.
+   - A clip pasted over a room edge, or into a room id above 0x3ff, retargets stairs,
+     oracles or teleporters.
+   - Fix: refuse or leave the record unchanged.
+3. **Low, plausible: `withHeroStates` silently leaves an icon at 0** (`game.ts:286`
+   `continue` cases). An icon of 0 crashes IV. The same applies when the source hero has
+   too few frames. Fix: report it as a problem (KitPlan.problem or a throw).
+4. **Low: text variants lose leading and trailing whitespace on a round trip.**
+   `parseTexts` trims (`texts.ts:41`), but `textEntryProblem`/`withTextEntry` accept the
+   spaces. Fix: refuse or trim in `textEntryProblem`.
+5. **Low: `checkMod` doesn't guard music copies of copies** the way it does for
+   tileTypes. `withMusicPieces` reads `from` as earlier changes left it. Fix: forbid it,
+   or read from the pristine exe.
+6. **Low: `kitChanges` from plans against the pristine exe collide** (the goal kit for
+   two episodes: the same code change at 0x41f45f and copyTexts target 1700). The editor
+   avoids it; it matters only for other consumers.
+
+## editor
+
+1. **Confirmed by reading: undoing a room removal makes the loaded exe's own Room
+   editable** (`editor.ts` removeRoom ~1975 stores `removed: this.room(...)`; `apply()`
+   at ~2572/2621 does `owned.add(present)`).
+   - Remove an untouched room, undo, paint: the paint writes into
+     `game.episode(e).rooms[...]`, the pristine data.
+   - `isEdited` and `roomChanges` then diff the room against itself, so asMod and save
+     lose the edits. Reset starts from the mutated exe.
+   - Fix: store an owned copy, or clone before `owned.add`. The same hazard applies to
+     any added/removed pristine Room.
+2. **Confirmed by reading: the "Test in game" queue can wedge the dev server**
+   (`vite.config.ts:121-130`).
+   - `playNative` throwing synchronously (mkdir, write, spawn) rejects `queue` for good:
+     that request hangs, an unhandled rejection follows, and every later POST hangs.
+   - Fix: `queue = queue.then(() => playNative(...)).catch(e => message(e)).then(respond)`.
+   - Also: no `req.on("error")`; `createReadStream(REFERENCE_EXE).pipe(res)` has no
+     error handler; the Wine path times out as 202.
+3. **Confirmed by reading: going to a room that doesn't exist breaks the editor**
+   (`app.ts:1489-1493` showRoom sets `roomId` before `editor.room()` throws).
+   - Callers without a `hasRoom` check: the ExitsView `go` (~496), the arrow keys and
+     PgUp/PgDn (2480-2489).
+   - Remove room N, then press an arrow towards it: every paint, undo or refresh throws
+     until another room is picked.
+   - Fix: check in showRoom first, or assign last, and guard the callers.
+4. **Arrow keys and PgUp/PgDn are always `preventDefault`ed** (`app.ts:2476-2490`), even
+   when nothing navigates. Keyboard scrolling of panels and arrow keys between
+   `role=tab`s don't work. Fix: prevent only when a room changes; skip tabs, lists and
+   scroll areas.
+5. **Smaller:**
+   - `save()` (`app.ts:2247`) marks the editor saved before `modJson(asMod())`, which can
+     throw.
+   - When `keepExe` fails (`app.ts:1374`), later `keepWork` still writes work for the new
+     exe, so a reload pairs it with the old exe.
+   - `work-store.ts`: no onblocked/onversionchange.
+   - `cell-data-field.ts` ~170: "New" opens the text editor even when `set()` refused the
+     value.
+   - `side-panel.ts`: the resize handle is mouse-only; tabs lack aria-controls and
+     aria-labelledby.
+   - Escape (`app.ts:2441`) closes the texts view and drops a draft without asking.
+   - Not read by the reviewer: record-view, room-view, kits-view, events-view,
+     music-view, settings-view, code-view, circuit-view, dealer-view, episode-view,
+     tile-types-view, help-dialog, script-view.
+
+## tools, proxy, harness
+
+1. `Driver.start`: no 'error' listener on spawn. See wrapper finding 3.
+2. **Confirmed: opt-in game tests pass without running.** `driver.test.ts` ~395 and
+   `backends.test.ts` use `describe.skipIf(!enabled || !built)`, so with
+   `ROBOT_GAME_TESTS=1` and no wrapper or ddraw.dll the run is green. Fix: when enabled
+   and not built, fail with the hint.
+3. **Plausible: `proxy.c:341-347` (`patch_game`, `call_at`) reads 0x405bde in DllMain
+   of any process that loads the proxy** (DxDiag loads ddraw). That is an access
+   violation if it isn't mapped. Fix: check that the module is GameOfRobot.exe first.
+4. **Plausible: a race in `harness.py start_xvfb`** (~126-141) when two harnesses run.
+   The socket of another display can be taken for ours. Fix: `-displayfd`, or re-check
+   `poll()`.
+5. **Confirmed by reading: `harness.py shot`.** `xdo search --sync` has no timeout (and
+   the TS `spawnSync` has none either). There are no SIGTERM/SIGINT handlers, so Xvfb and
+   wine stay behind.
+6. **Plausible: `driver.ts close()`/`command()` have no timeout.** There is no SIGKILL
+   fallback, and after a vitest timeout `finally { close() }` never runs.
+7. `proxy.c:491-496 button`: any name other than "left" counts as the right button.
+8. `proxy.c:481 key`: VK `& 0xff` instead of a range check.
+9. **Plausible: real time leaks.** `hook_SetTimer` passes `hwnd == NULL` timers to the
+   real SetTimer. Sleep, WaitFor* and waveOut aren't virtual. Unverified.
+10. `driver.ts press/click/hold`: a throw between down and up leaves the key or button
+    held (benign while `withGame` closes the driver).
