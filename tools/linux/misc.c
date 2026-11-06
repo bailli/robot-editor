@@ -1,6 +1,6 @@
-/* The small imports: WINMM, VERSION, ole32, SHELL32, COMCTL32, DSOUND (ADVAPI32 is
-   registry.c, DDRAW is ddraw.c). Some of them report "not available", which the game
-   handles: no DirectSound (silent), no COM. */
+/* The small imports: WINMM, VERSION, ole32, SHELL32, COMCTL32 (ADVAPI32 is registry.c,
+   DDRAW is ddraw.c, DSOUND is dsound.c). Some of them report "not available", which the
+   game handles: no COM. */
 #define _GNU_SOURCE
 #include <ctype.h>
 #include <signal.h>
@@ -23,9 +23,18 @@ static DWORD WINAPI timeGetTime(void) {
 
 #define MMSYSERR_NODRIVER 6
 
+int dsound_audio_available(void); /* dsound.c */
+
+/* WAVEOUTCAPSA (52 bytes), asked for the sound card's name in the game's system information
+   (0x42d549; without a card that line stays out): the card is SDL's audio. */
 static UINT WINAPI waveOutGetDevCapsA(UINT_PTR device, void *caps, UINT size) {
-  (void)device, (void)caps, (void)size;
-  return MMSYSERR_NODRIVER;
+  (void)device;
+  if (!dsound_audio_available() || size < 52) return MMSYSERR_NODRIVER;
+  BYTE *c = caps; /* ids, driver version, szPname[32] at 8, formats, channels at 44, support */
+  memset(c, 0, 52);
+  strcpy((char *)c + 8, "SDL audio");
+  c[44] = 2;
+  return 0;
 }
 
 const struct export misc_winmm_exports[] = {
@@ -248,27 +257,5 @@ static void WINAPI InitCommonControls(void) {}
 
 const struct export misc_comctl32_exports[] = {
     {"#17", InitCommonControls}, /* InitCommonControls */
-    {NULL, NULL},
-};
-
-/* ---- DSOUND: no device yet ---- */
-
-#define DSERR_NODRIVER ((HRESULT)0x88780078)
-
-static HRESULT WINAPI DirectSoundCreate(const BYTE *guid, void **out, void *outer) {
-  (void)guid, (void)outer;
-  trace("DirectSoundCreate: no sound yet");
-  *out = NULL;
-  return DSERR_NODRIVER;
-}
-
-static HRESULT WINAPI DirectSoundEnumerateA(void *callback, void *context) {
-  (void)callback, (void)context;
-  return 0; /* no devices */
-}
-
-const struct export misc_dsound_exports[] = {
-    {"#1", DirectSoundCreate},
-    {"#2", DirectSoundEnumerateA},
     {NULL, NULL},
 };

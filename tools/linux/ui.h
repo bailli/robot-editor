@@ -20,6 +20,14 @@
    ui.c took it. Called by sdl.c for every key press before it becomes a window message. */
 BOOL ui_key(const SDL_KeyboardEvent *e);
 
+/* ---- dsound.c ---- */
+
+/* The wrapper's master volume in percent (0–100), over the game's own: set (clamped) and
+   kept in the settings file; -1 only asks. Returns the volume now. */
+int sound_volume(int percent);
+/* Mute on (1), off (0) or toggled (-1); kept like the volume. Returns the state now. */
+int sound_mute(int on);
+
 /* ---- sdl.c ---- */
 
 /* Shows the game's last frame (GDI's, 640 × 348 palette indices). */

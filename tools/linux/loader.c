@@ -337,16 +337,26 @@ static void on_stop(int sig) {
 /* ---- Main ---- */
 
 int main(int argc, char **argv) {
-  int a = 1;
+  int a = 1, list = 0, set = 0;
   if (getenv("ROBOT_TRACE")) tracing = 1;
   for (; a < argc && argv[a][0] == '-'; a++) {
-    if (!strcmp(argv[a], "--trace"))
+    if (!strcmp(argv[a], "--trace")) {
       tracing = 1;
-    else
-      fatal("unknown option %s", argv[a]);
+    } else if (!strcmp(argv[a], "--settings")) {
+      list = 1;
+    } else if (!strcmp(argv[a], "--set") && a + 1 < argc) {
+      if (settings_set(argv[++a])) return 64;
+      set = 1;
+    } else {
+      fprintf(stderr, "robot: unknown option %s\n", argv[a]);
+      return 64;
+    }
   }
+  if (list) return settings_list();
   if (a >= argc) {
-    fprintf(stderr, "usage: robot [--trace] GameOfRobot.exe [ARGS...]\n");
+    if (set) return 0; /* only settings written */
+    fprintf(stderr, "usage: robot [--trace] [--set NAME=VALUE]... GameOfRobot.exe [ARGS...]\n"
+                    "       robot --settings          the game's settings and what they do\n");
     return 64;
   }
   static char exe[PATH_MAX], root[PATH_MAX];

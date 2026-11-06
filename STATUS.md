@@ -2119,14 +2119,16 @@ with `C:\` = the exe's directory and names matched without regard to case, code 
 1252/437, events, mutexes, threads, resources), `user32.c` (classes, windows, the message
 queue with timers and WM_PAINT, key state, accelerators, menus as data, string tables,
 clipboard, wsprintf), `gdi32.c`, `ddraw.c` (DirectDraw objects: surfaces in memory, 32-bit
-XRGB, display modes), `registry.c` (the registry in a `.reg` file), `misc.c` (the rest);
-`sdl.c` is the screen and input, `ui.c` what stands in for Windows' own UI (headless
-dialogs, SDL message boxes, the wrapper's shortcuts).
+XRGB, display modes), `dsound.c` (DirectSound on SDL audio), `registry.c` (the registry in
+a `.reg` file), `misc.c` (the rest); `sdl.c` is the screen and input, `ui.c` what stands in
+for Windows' own UI (headless dialogs, SDL message boxes, the wrapper's shortcuts),
+`settings.c` the command line's `--settings`/`--set` and the wrapper's own settings.
 
-**Milestones 1–3 reached** (2026-11-06): the game runs in an SDL window and plays
-(checked under Xvfb with xdotool: episode chosen by key and by mouse, the game started, the
-hero walked, the accelerators, fullscreen on and off, the shortcuts, the dialogs, the
-screenshot, quitting). Not there yet: sound (DirectSound), the tray, the driver's protocol.
+**Milestones 1–3 and sound reached** (2026-11-06): the game runs in an SDL window, plays
+and sounds (checked under Xvfb with xdotool: episode chosen by key and by mouse, the game
+started, the hero walked, the accelerators, fullscreen on and off, the shortcuts, the
+dialogs, the screenshot, quitting; the sound recorded with SDL's `disk` driver). Not there
+yet: the tray, the driver's protocol.
 
 - **Picture:** in a window the game presents with GDI (WM_PAINT's `StretchDIBits`, 640 ×
   348 palette indices), shown scaled; Alt+Enter (command 4007, only once an episode runs)
@@ -2177,7 +2179,31 @@ CentralProcessor\0` ≥ 650; an invalid value is rewritten, 0x42cbe0), `DisableO
 - **Registry file:** `~/.config/robot/registry.reg` (or `ROBOT_REGISTRY`), Wine's `.reg`
   style, written whole after each change. At its start the game writes the save and
   screenshot paths (`FilePathSV1` … `FilePathSVJScreen`, relative: `.\ROBOT I\Saves\`), and
-  reads `Licensee` and `RessourcePath` again and again while it runs.
+  reads `Licensee` and `RessourcePath` again and again while it runs. The Alt+letter
+  options are `NoSound` (S, walking sounds), `NoEffects` (E), `NoMusic` (M), `DoorNumbers`
+  (T), `GoldWarn` (W, default on), `AltShapes` (G), `AltBeam` (B, default on), `NestWarn`
+  (V, default on); `FullScreen` (Alt+Enter), `CurrentEpisode`. `robot --settings` lists
+  all with their meanings, `--set NAME=VALUE` writes them; the wrapper's own `Volume` and
+  `Mute` are under `HKCU\Software\robot-wrapper` in the same file.
+- **Sound** (`dsound.c`): the game mixes everything itself (OPL2 emulation, effects,
+  `AudioVolume`) into 16-bit stereo PCM and streams it through one DirectSound buffer. Its
+  start 0x442490(hwnd, guid or −1, `SampleRate`, …) first shuts down (0x442380);
+  `SampleRate` 0 returns before any DirectSound call (no sound, no thread). It enumerates
+  devices (callback 0x4421e0 takes the first with a non-NULL GUID and a module name; none
+  found: silent, no message), `DirectSoundCreate` (IDirectSound at 0x51c020),
+  `SetCooperativeLevel(DSSCL_PRIORITY)`, a primary buffer only for `SetFormat` (PCM, 2
+  channels, `SampleRate`, 16 bits) and `GetFormat`, then a secondary buffer of `SampleRate`
+  / 15 × 8 bytes (1/7.5 s; flags 0x10128, no volume control: volume is the game's mixer's)
+  with IDirectSoundNotify (IID at 0x46d9f0) at offsets 0 and half, three auto-reset events
+  (0x51c044, the third stops the thread), `Play(LOOPING)`. Its thread (`CreateThread` at
+  0x442759, function 0x442270) waits on the events and refills the half just played
+  (`Lock`, the mixer 0x444160, `Unlock`); stop flag 0x51c058. Not used: SetVolume, SetPan,
+  SetFrequency, GetCurrentPosition. `waveOutGetDevCapsA` only feeds the system information.
+  The wrapper mixes the playing buffers on SDL's audio thread (stereo S16 at the primary's
+  rate, 1024-frame periods), signals the events as the play cursor passes them (one at the
+  start position at once on `Play`, as Windows does), and applies its own master volume
+  (Ctrl+Shift+Up/Down/M). Recorded: 11.8 s of audio in 12.1 s, 98.5 % of samples non-zero,
+  no jumps at the buffer's halves, at 22050, 32000 and 44100 Hz.
 
 What the start needs, found on the way to milestone 1:
 
@@ -2202,10 +2228,9 @@ What the start needs, found on the way to milestone 1:
   `AltBeam`, `MinimizeToTray`, `NestWarn`, `GoldWarn`, `CurrentEpisode`; written
   `FilePathSV1`… (save paths, after `SHGetFolderPathA` is not found in shell32).
 
-**Next:** DirectSound on SDL audio (the game's OPL2 emulation only needs a sound buffer;
-`SampleRate`, `DisableOpl`, `AudioVolume` above), then the driver's protocol so that
-`pnpm test:game` can run without Wine. The player-name prompt is the game's own (drawn,
-not a dialog).
+**Next:** the driver's protocol so that `pnpm test:game` can run without Wine. Untested:
+restarting the sound after a changed `SampleRate`/`DisableOpl` (the release path). The
+player-name prompt is the game's own (drawn, not a dialog).
 
 ## Open items and leads
 

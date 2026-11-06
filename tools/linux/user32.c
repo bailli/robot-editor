@@ -451,6 +451,28 @@ static BOOL WINAPI EnumDisplaySettingsA(LPCSTR device, DWORD mode, DEVMODEA *out
   return TRUE;
 }
 
+typedef struct {
+  DWORD cb;
+  char DeviceName[32], DeviceString[128];
+  DWORD StateFlags;
+  char DeviceID[128], DeviceKey[128];
+} DISPLAY_DEVICEA;
+_Static_assert(sizeof(DISPLAY_DEVICEA) == 424, "DISPLAY_DEVICEA");
+
+/* One display, named after SDL's video driver (the system information shows it). Not an
+   import: the game finds it with GetProcAddress. */
+static BOOL WINAPI EnumDisplayDevicesA(LPCSTR device, DWORD index, DISPLAY_DEVICEA *out,
+                                       DWORD flags) {
+  (void)flags;
+  if (device || index > 0 || !out || out->cb < sizeof *out) return FALSE;
+  memset((BYTE *)out + 4, 0, sizeof *out - 4);
+  snprintf(out->DeviceName, sizeof out->DeviceName, "\\\\.\\DISPLAY1");
+  const char *driver = SDL_GetCurrentVideoDriver();
+  snprintf(out->DeviceString, sizeof out->DeviceString, "SDL %s", driver ? driver : "display");
+  out->StateFlags = 1 | 4; /* DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, _PRIMARY_DEVICE */
+  return TRUE;
+}
+
 /* ---- Painting: a DC per window (GDI fills in what drawing needs) ---- */
 
 typedef struct {
@@ -1131,6 +1153,7 @@ const struct export user32_exports[] = {
     {"DrawMenuBar", DrawMenuBar},
     {"EmptyClipboard", EmptyClipboard},
     {"EndPaint", EndPaint},
+    {"EnumDisplayDevicesA", EnumDisplayDevicesA},
     {"EnumDisplaySettingsA", EnumDisplaySettingsA},
     {"FillRect", FillRect},
     {"GetAsyncKeyState", GetAsyncKeyState},

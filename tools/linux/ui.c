@@ -699,6 +699,15 @@ BOOL ui_key(const SDL_KeyboardEvent *e) {
   if (e->type != SDL_KEYDOWN) return FALSE;
   SDL_Keymod mod = (SDL_Keymod)e->keysym.mod;
   if (!(mod & KMOD_CTRL) || !(mod & KMOD_SHIFT) || (mod & (KMOD_ALT | KMOD_GUI))) return FALSE;
+  /* The wrapper's own volume (dsound.c): Up and Down in steps of 10 %, M mutes. */
+  switch (e->keysym.sym) {
+  case SDLK_UP: sound_volume(sound_volume(-1) + 10); return TRUE;
+  case SDLK_DOWN: sound_volume(sound_volume(-1) - 10); return TRUE;
+  case SDLK_m:
+    if (!e->repeat) sound_mute(-1);
+    return TRUE;
+  default: break;
+  }
   for (size_t i = 0; i < sizeof shortcuts / sizeof *shortcuts; i++) {
     if (shortcuts[i].key != e->keysym.sym) continue;
     if (!e->repeat && main_window()) {

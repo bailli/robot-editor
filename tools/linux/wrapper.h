@@ -84,6 +84,20 @@ void thread_enter(void);
    regard to case when the exact name does not exist. Returns a malloc'd string. */
 char *host_path(const char *windows_path);
 
+/* The registry file (registry.c): ROBOT_REGISTRY, else ~/.config/robot/registry.reg;
+   malloc'd. */
+char *registry_path(void);
+
+/* The command line's --settings and --set NAME=VALUE (settings.c): they list or write the
+   game's settings in the registry file; 0 on success. */
+int settings_list(void);
+int settings_set(const char *assignment);
+
+/* The wrapper's own settings (settings.c), as DWORDs under HKCU\Software\robot-wrapper in the
+   same file: read with a fallback, written. */
+DWORD wrapper_setting(const char *name, DWORD fallback);
+void wrapper_setting_set(const char *name, DWORD value);
+
 /* A resource of the game's exe (kernel32.c): `type` and `name` as FindResourceA takes them
    (an integer id below 0x10000, "#123", or a name, any case); the first language found.
    Returns its data in the mapped image and its size, or NULL. */

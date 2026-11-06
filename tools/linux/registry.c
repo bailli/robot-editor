@@ -104,7 +104,7 @@ static void store_value(struct key *k, const char *name, DWORD type, const BYTE 
 
 /* ---- the file ---- */
 
-static char *registry_file(void) {
+char *registry_path(void) {
   const char *env = getenv("ROBOT_REGISTRY");
   char *p;
   if (env && *env) return strdup(env);
@@ -175,7 +175,7 @@ static void write_keys(FILE *f) {
 
 /* Whole file to a temp file, then renamed over it: a crash leaves the old one. */
 static void save(void) {
-  char *path = registry_file(), *tmp;
+  char *path = registry_path(), *tmp;
   if (asprintf(&tmp, "%s.tmp", path) < 0) fatal("out of memory");
   make_dirs(path);
   FILE *f = fopen(tmp, "wb");
@@ -348,7 +348,7 @@ static int read_reg(const char *file, const char *only) {
 static void load(void) {
   if (loaded) return;
   loaded = 1;
-  char *file = registry_file();
+  char *file = registry_path();
   if (!read_reg(file, NULL)) {
     const char *imp = getenv("ROBOT_IMPORT_REG");
     if (imp && *imp && read_reg(imp, IMPORT_PREFIX))
