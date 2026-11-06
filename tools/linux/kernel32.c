@@ -1793,9 +1793,11 @@ static DWORD WINAPI SizeofResource(HMODULE module, HRSRC res) {
 
 /* ---- Process end and exceptions ---- */
 
+/* As Windows ends the other threads first: no exit handlers while the game's sound thread
+   and SDL's audio thread still run (the registry is written on every change already). */
 __attribute__((noreturn)) static void WINAPI ExitProcess(UINT code) {
   fflush(NULL);
-  exit((int)code);
+  _exit((int)code);
 }
 
 static BOOL WINAPI TerminateProcess(HANDLE process, UINT code) {

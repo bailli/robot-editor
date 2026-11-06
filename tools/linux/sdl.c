@@ -87,6 +87,16 @@ void screen_write(const char *path) {
   fclose(f);
 }
 
+/* The texture as it is, e.g. when the window was uncovered: GDI's frame or DirectDraw's
+   primary surface, whichever was shown last. */
+static void redraw(void) {
+  if (!renderer || !texture) return;
+  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+  SDL_RenderClear(renderer);
+  SDL_RenderCopy(renderer, texture, NULL, NULL);
+  SDL_RenderPresent(renderer);
+}
+
 static void show(const DWORD *rgb, int width, int height, int pitch) {
   if (width != shown_width || height != shown_height) {
     SDL_DestroyTexture(texture);
@@ -106,10 +116,7 @@ static void show(const DWORD *rgb, int width, int height, int pitch) {
   for (int y = 0; y < height; y++) memcpy(shown + y * width, rgb + y * pitch, (size_t)width * 4);
   shown_count++;
   SDL_UpdateTexture(texture, NULL, rgb, pitch * 4);
-  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-  SDL_RenderClear(renderer);
-  SDL_RenderCopy(renderer, texture, NULL, NULL);
-  SDL_RenderPresent(renderer);
+  redraw();
 }
 
 void screen_present(void) {
@@ -432,13 +439,17 @@ void screen_poll(void) {
       break;
     case SDL_WINDOWEVENT:
       switch (e.window.event) {
-      case SDL_WINDOWEVENT_EXPOSED: screen_present(); break;
+      /* what is shown, not GDI's frame: in full screen that is DirectDraw's */
+      case SDL_WINDOWEVENT_EXPOSED: redraw(); break;
       case SDL_WINDOWEVENT_FOCUS_LOST:
         /* Keys held when the focus goes would stay down: let them go. */
         for (int vk = 0; vk < 256; vk++)
           if (key_state[vk] & 0x80) {
             key_state[vk] &= 1;
-            if (main && vk > VK_MBUTTON) post_message(main, WM_KEYUP, (WPARAM)vk, (LPARAM)0xc0000001u);
+            /* one key-up per key: the left and right Shift, Ctrl and Alt (0xa0-0xa5) only
+               mirror the generic ones; Alt's goes up as a system key */
+            if (!main || vk <= VK_MBUTTON || (vk >= 0xa0 && vk <= 0xa5)) continue;
+            post_message(main, vk == VK_MENU ? WM_SYSKEYUP : WM_KEYUP, (WPARAM)vk, (LPARAM)0xc0000001u);
           }
         if (main) post_message(main, WM_ACTIVATEAPP, FALSE, 0);
         break;

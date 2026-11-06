@@ -2259,7 +2259,7 @@ What the start needs, found on the way to milestone 1:
 - **The DirectX check** (the SDK's GetDXVersion): DxDiag over COM (CLSID a65b8071…), else
   the file versions of `ddraw.dll`, `d3d8.dll`, `d3d9.dll`, `dpnet.dll` and others in
   `C:\WINDOWS\SYSTEM32`; none found means "No DirectX detected" and the end. The wrapper
-  answers 4.09.00.0904 (9.0c). The footer's version (`V0.99 RC46`) is the exe's own
+  answers 4.09.00.0900 (DirectX 9.0). The footer's version (`V0.99 RC46`) is the exe's own
   version resource, `\StringFileInfo\<translation>\FileVersion`.
 - **Frames** come from WM_PAINT's `StretchDIBits` with `DIB_PAL_COLORS`: the colour table
   holds indices into the palette selected into the DC (`CreatePalette`, `SelectPalette`).

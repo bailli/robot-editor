@@ -316,7 +316,8 @@ static LRESULT WINAPI ctl_proc(HWND h, UINT msg, WPARAM wparam, LPARAM lparam) {
   case CB_INSERTSTRING:
     if (c->kind != K_LIST && c->kind != K_COMBO) break;
     items_insert(c, (int)wparam, (const char *)lparam);
-    return (int)wparam > c->count - 1 ? c->count - 1 : (int)wparam;
+    /* -1 (or past the end) appends: the index it got */
+    return (int)wparam < 0 || (int)wparam > c->count - 1 ? c->count - 1 : (int)wparam;
   case LB_DELETESTRING:
   case CB_DELETESTRING:
     if (c->kind != K_LIST && c->kind != K_COMBO) break;
@@ -695,8 +696,32 @@ static const struct {
     {SDLK_i, 0x10d1}, /* Info > System-Informationen (a dialog that is not shown) */
 };
 
+static BOOL ui_shortcut(const SDL_KeyboardEvent *e);
+
 BOOL ui_key(const SDL_KeyboardEvent *e) {
+  /* a shortcut's key going up is the wrapper's too: the game never saw it go down */
+  static SDL_Keycode taken[8];
+  if (e->type == SDL_KEYUP) {
+    for (size_t i = 0; i < sizeof taken / sizeof *taken; i++)
+      if (taken[i] == e->keysym.sym) {
+        taken[i] = 0;
+        return TRUE;
+      }
+    return FALSE;
+  }
   if (e->type != SDL_KEYDOWN) return FALSE;
+  BOOL mine = ui_shortcut(e);
+  if (mine)
+    for (size_t i = 0; i < sizeof taken / sizeof *taken; i++)
+      if (!taken[i] || taken[i] == e->keysym.sym) {
+        taken[i] = e->keysym.sym;
+        break;
+      }
+  return mine;
+}
+
+/* The wrapper's Ctrl+Shift shortcuts (a key-down): whether it took the key. */
+static BOOL ui_shortcut(const SDL_KeyboardEvent *e) {
   SDL_Keymod mod = (SDL_Keymod)e->keysym.mod;
   if (!(mod & KMOD_CTRL) || !(mod & KMOD_SHIFT) || (mod & (KMOD_ALT | KMOD_GUI))) return FALSE;
   /* The wrapper's own volume (dsound.c): Up and Down in steps of 10 %, M mutes. */

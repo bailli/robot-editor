@@ -61,6 +61,14 @@ static HKEY open_key(const char *path) {
   return key;
 }
 
+/* The key for reading, NULL where it does not exist yet (reading creates nothing). */
+typedef LONG(WINAPI *open_fn)(HKEY, LPCSTR, DWORD, DWORD, HKEY *);
+static HKEY read_key(const char *path) {
+  open_fn open = (open_fn)find_export("advapi32.dll", "RegOpenKeyExA");
+  HKEY key = NULL;
+  return open(HKEY_CURRENT_USER, path, 0, 0x20019 /* KEY_READ */, &key) == 0 ? key : NULL;
+}
+
 static void close_key(HKEY key) { ((close_fn)find_export("advapi32.dll", "RegCloseKey"))(key); }
 
 /* Code page 1252 to UTF-8 for the terminal (Latin-1 is enough for names). */
@@ -82,10 +90,9 @@ int settings_list(void) {
     const struct setting *s = &settings[i];
     BYTE data[512];
     DWORD type = 0, size = sizeof data - 1;
-    HKEY key = open_key(s->key ? s->key : ROBOT_KEY);
-    if (!key) return 1;
-    LONG found = query(key, s->name, NULL, &type, data, &size);
-    close_key(key);
+    HKEY key = read_key(s->key ? s->key : ROBOT_KEY);
+    LONG found = key ? query(key, s->name, NULL, &type, data, &size) : 2;
+    if (key) close_key(key);
     if (s->key && (i == 0 || !settings[i - 1].key))
       printf("\nThe wrapper's own (HKEY_CURRENT_USER\\%s):\n\n", s->key);
     printf("  %-15s ", s->name);
@@ -165,7 +172,7 @@ int settings_set(const char *assignment) {
 }
 
 DWORD wrapper_setting(const char *name, DWORD fallback) {
-  HKEY key = open_key(WRAPPER_KEY);
+  HKEY key = read_key(WRAPPER_KEY);
   if (!key) return fallback;
   DWORD type = 0, value = fallback, size = 4;
   query_fn query = (query_fn)find_export("advapi32.dll", "RegQueryValueExA");

@@ -573,6 +573,15 @@ static void invalidate(struct window *w, const RECT *rect) {
 
 static BOOL WINAPI InvalidateRect(HWND hwnd, const RECT *rect, BOOL erase) {
   (void)erase;
+  if (!hwnd) {
+    /* all windows (0x437373, back from full screen); the rectangle is the screen's, so
+       each window is repainted whole */
+    for (int i = 0; i < MAX_WINDOWS; i++) {
+      struct window *w = windows[i] ? win(windows[i]) : NULL;
+      if (w) invalidate(w, NULL);
+    }
+    return TRUE;
+  }
   struct window *w = win(hwnd);
   if (w) invalidate(w, rect);
   return TRUE;
@@ -868,11 +877,19 @@ static UINT_PTR WINAPI SetTimer(HWND hwnd, UINT_PTR id, UINT interval, void *pro
   return id;
 }
 
-/* A due timer's WM_TIMER, or a dirty window's WM_PAINT, when the queue has nothing else;
+/* A dirty window's WM_PAINT, or a due timer's WM_TIMER, when the queue has nothing else;
    call with queue_lock held. Sets *wait_ms to the time to the next timer. */
 static BOOL synthesize(MSG *out, HWND hwnd, UINT first, UINT last, BOOL remove, DWORD *wait_ms) {
   DWORD now = clock_ms();
   *wait_ms = 0xffffffff;
+  /* WM_PAINT before WM_TIMER, as Windows orders them */
+  for (int i = 0; i < MAX_WINDOWS; i++) {
+    struct window *w = windows[i] ? win(windows[i]) : NULL;
+    MSG m = {windows[i], WM_PAINT, 0, 0, now, {0, 0}};
+    if (!w || !w->dirty || !matches(&m, hwnd, first, last)) continue;
+    *out = m; /* stays dirty until BeginPaint, as on Windows */
+    return TRUE;
+  }
   for (int i = 0; i < timer_count; i++) {
     MSG m = {timers[i].hwnd, WM_TIMER, timers[i].id, (LPARAM)(uintptr_t)timers[i].proc, now,
              {0, 0}};
@@ -888,13 +905,6 @@ static BOOL synthesize(MSG *out, HWND hwnd, UINT first, UINT last, BOOL remove, 
     DWORD left = timers[i].due - now;
     if (left < *wait_ms) *wait_ms = left;
   }
-  for (int i = 0; i < MAX_WINDOWS; i++) {
-    struct window *w = windows[i] ? win(windows[i]) : NULL;
-    MSG m = {windows[i], WM_PAINT, 0, 0, now, {0, 0}};
-    if (!w || !w->dirty || !matches(&m, hwnd, first, last)) continue;
-    *out = m; /* stays dirty until BeginPaint, as on Windows */
-    return TRUE;
-  }
   return FALSE;
 }
 
@@ -907,6 +917,22 @@ BOOL post_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
   }
   queue[(queue_head + queue_count++) % QUEUE_SIZE] =
       (MSG){hwnd, msg, wparam, lparam, clock_ms(), {mouse_client.x, mouse_client.y}};
+  pthread_mutex_unlock(&queue_lock);
+  return TRUE;
+}
+
+/* At the queue's front: TranslateMessage's characters, which Windows posts to the thread's
+   posted messages, read before the input that came after the key (its key-up). */
+static BOOL post_first(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+  pthread_mutex_lock(&queue_lock);
+  if (queue_count == QUEUE_SIZE) {
+    pthread_mutex_unlock(&queue_lock);
+    say("robot: message queue full, 0x%x dropped", msg);
+    return FALSE;
+  }
+  queue_head = (queue_head + QUEUE_SIZE - 1) % QUEUE_SIZE;
+  queue_count++;
+  queue[queue_head] = (MSG){hwnd, msg, wparam, lparam, clock_ms(), {mouse_client.x, mouse_client.y}};
   pthread_mutex_unlock(&queue_lock);
   return TRUE;
 }
@@ -1028,11 +1054,11 @@ static BOOL WINAPI TranslateMessage(const MSG *msg) {
     else if (key_state[VK_CONTROL] & 0x80 && vk >= 'A' && vk <= 'Z') c = (int)(vk - 'A' + 1);
     else if (driver_active()) c = typed_char(vk);
     if (c < 0) return FALSE;
-    post_message(msg->hwnd, WM_CHAR, (WPARAM)c, msg->lParam);
+    post_first(msg->hwnd, WM_CHAR, (WPARAM)c, msg->lParam);
     return TRUE;
   }
   if (msg->message == WM_SYSKEYDOWN && ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9'))) {
-    post_message(msg->hwnd, WM_SYSCHAR, vk >= 'A' ? vk + 32 : vk, msg->lParam);
+    post_first(msg->hwnd, WM_SYSCHAR, vk >= 'A' ? vk + 32 : vk, msg->lParam);
     return TRUE;
   }
   return FALSE;

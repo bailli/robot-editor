@@ -43,8 +43,8 @@ const struct export misc_winmm_exports[] = {
 
 /* ---- VERSION ----
    The game's DirectX check (the DirectX SDK's GetDXVersion: DxDiag over COM, else the file
-   versions of the system's DirectX DLLs) must find DirectX: those DLLs report 4.09.00.0904,
-   DirectX 9.0c. The exe gives its own version resource. */
+   versions of the system's DirectX DLLs) must find DirectX: those DLLs report 4.09.00.0900
+   (FileVersionLS 0x384), DirectX 9.0. The exe gives its own version resource. */
 
 /* VS_VERSIONINFO with just the fixed part: header, L"VS_VERSION_INFO", padding, the 52-byte
    VS_FIXEDFILEINFO at offset 40. */
