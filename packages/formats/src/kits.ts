@@ -1,10 +1,11 @@
 import { classTexts, freeTileTypes } from "./classes.ts";
+import { roomTileTypes } from "./describe.ts";
 import { WOODS_CUT_THROUGH, readEpisodeFlags } from "./episode-flags.ts";
 import { EVENT_TEXT, FIRST_EVENT_ENTRY, readEventTable, spareEventEntries } from "./events.ts";
 import { type Game, eventTextsId, textsId } from "./game.ts";
 import type { CodeChange, CopyTextsChange, ModChanges, TextChange } from "./mod.ts";
 import { readVa } from "./pe.ts";
-import { readOracleSymbols, recordCellOffsets } from "./records.ts";
+import { readOracleSymbols } from "./records.ts";
 import { LOGIC_CELL } from "./scene.ts";
 
 /**
@@ -380,17 +381,13 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
 }
 
 /**
- * Types without a class that no room of the episode uses: in its maps or in the cells its
- * logic records hold (an oracle's object, what a teleporter or a circuit node shows).
+ * Types without a class that no room of the episode uses: in its maps, in the cells its
+ * logic records hold (an oracle's object, what a teleporter or a circuit node shows, a
+ * buried object) or inside a package (roomTileTypes).
  */
 function unusedFreeTypes(game: Game, episode: number): number[] {
-  const used = new Set<number>();
-  for (const room of game.episode(episode).rooms) {
-    for (const layer of [room.base, room.overlay]) for (const cell of layer) used.add(cell & 0xff);
-    for (const { data } of room.records) {
-      for (const at of recordCellOffsets(data[0])) used.add(data[at]);
-    }
-  }
+  const { rooms, classes } = game.episode(episode);
+  const used = new Set(rooms.flatMap((room) => [...roomTileTypes(room, classes)]));
   return freeTileTypes(game.image, episode).filter(
     (t) => t !== 0 && t !== LOGIC_CELL && !used.has(t),
   );

@@ -702,6 +702,24 @@ export class App {
         },
       );
     },
+    clearType: (type, replacement) => {
+      const editor = this.need();
+      let edit: Edit | undefined;
+      try {
+        edit = editor.clearType(this.episode, this.roomId, type, replacement);
+      } catch (error) {
+        this.setStatus(`Cannot clear type ${hex(type)}: ${message(error)}`, true);
+        return;
+      }
+      if (!edit) return;
+      const cells = (edit.parts ?? [edit]).reduce((n, p) => n + p.changes.length, 0);
+      const rooms = new Set((edit.parts ?? [edit]).map((p) => p.room));
+      // the shown room may be among them: drawn anew with the tab (as after an undo)
+      this.revisit({ ...edit, room: this.roomId, episode: this.episode });
+      this.setStatus(
+        `Type ${hex(type)} cleared out of ${cells} cell${cells === 1 ? "" : "s"} in ${rooms.size} room${rooms.size === 1 ? "" : "s"}${replacement ? ` (now ${hex(replacement)})` : ""}`,
+      );
+    },
     copyTexts: (copy, entries) => {
       this.copyTexts(
         entries.map((n) => ({ to: n, source: { from: copy.from, of: n } })),
@@ -3447,6 +3465,7 @@ export class App {
     } else if (edit.episode !== this.episode) this.showEpisode(edit.episode, edit.room);
     else if (edit.room !== this.roomId) this.showRoom(edit.room);
     else if (
+      edit.parts ||
       edit.records ||
       edit.tags ||
       edit.text ||

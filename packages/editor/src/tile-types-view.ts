@@ -1,13 +1,18 @@
 import { EPISODES } from "@robot/formats";
 
 import { button, element, select } from "./dom.ts";
-import { type OwnType, type TileTypeCopy, ownTypeProblem } from "./editor.ts";
+import { type OwnType, type TileTypeCopy, ownTypeProblem, roomsOnly } from "./editor.ts";
 import { hex2 } from "./format.ts";
 import { patchChildren } from "./patch.ts";
 
 export interface TileTypesViewEvents {
   /** Makes `to` a copy of `of` from episode `from`, or removes it (Editor.setTileType). */
   copy(to: number, source: { from: number; of: number } | undefined): void;
+  /**
+   * Replaces the type's cells in every room of the episode with `replacement` (0: empty),
+   * one undo step (Editor.clearType).
+   */
+  clearType(type: number, replacement: number): void;
   /** Copies texts of the copy's source episode its class shows (Editor.setTextCopies). */
   copyTexts(copy: TileTypeCopy, entries: readonly number[]): void;
   /** A canvas showing tile type `type` of episode `episode` (state 0), in its palette. */
@@ -54,10 +59,13 @@ export class TileTypesView {
   private context: TileTypesContext | undefined;
   /** The form's choices: source episode, source type, target type. */
   private choice: { episode: number; from: number; of: number; to: number } | undefined;
+  /** What cleared cells become (clearType), for the episode shown. */
+  private replacement: { episode: number; value: number } | undefined;
 
   /** Forgets the choices (a newly loaded exe or mod). */
   reset(): void {
     this.choice = undefined;
+    this.replacement = undefined;
   }
 
   constructor(events: TileTypesViewEvents) {
@@ -297,24 +305,89 @@ export class TileTypesView {
     return note;
   }
 
-  /** The episode's own types that cannot be replaced, folded, each with why. */
+  /**
+   * The episode's own types only rooms hold on to (roomsOnly), folded, the cheapest
+   * first (records last), each with a button that clears its cells out of all rooms (one undo step);
+   * the others (scripts, the dealer, copies, the game's code) only counted.
+   */
   private heldTypes(context: TileTypesContext): HTMLElement {
-    const held = context.own.flatMap((t) => {
-      const problem = ownTypeProblem(t);
-      return problem ? [{ type: t.type, problem }] : [];
-    });
+    const { episode } = context;
+    const held = context.own.filter((t) => ownTypeProblem(t) !== undefined);
+    const clearable = held.filter(roomsOnly).sort(
+      (a, b) =>
+        // records are changed by hand, packages need a replacement: those last
+        Number(a.records.length > 0) - Number(b.records.length > 0) ||
+        Number(a.packages.length > 0) - Number(b.packages.length > 0) ||
+        a.cells - b.cells ||
+        a.rooms.length - b.rooms.length ||
+        a.type - b.type,
+    );
+    if (this.replacement?.episode !== episode) this.replacement = { episode, value: 0 };
+    const replacement = this.replacement.value;
     const box = element("details", "held-types");
-    box.dataset["key"] = `held ${context.episode}`;
+    box.dataset["key"] = `held ${episode}`;
     box.append(
       element(
         "summary",
         undefined,
-        `${held.length} own types cannot be replaced (rooms, records, scripts, the dealer or the game’s code hold on to them)`,
+        `${clearable.length} own types only rooms hold: clear one out of them to replace it`,
       ),
     );
+    const others = held.length - clearable.length;
+    box.append(
+      element(
+        "p",
+        "hint",
+        `Clearing replaces the type’s cells in every room (both layers, any state) in one undo step; records that show it stay, change those in their rooms. Packages that hold it get the type the cells become inside; while that is “empty” they keep it. Room 99 is the debug room, which the game never enters. ${others} other own types are held by scripts, the dealer, copies in other episodes or the game’s code and are left out.`,
+      ),
+    );
+    const name = (t: number) => `${hex2(t)} ${context.ownName(t)}`;
+    const into = select(
+      "Cleared cells become",
+      [["0", "empty"], ...context.own.map((t): [string, string] => [String(t.type), name(t.type)])],
+      String(replacement),
+    );
+    into.addEventListener("change", () => {
+      this.replacement = { episode, value: Number(into.value) };
+      if (this.context) this.show(this.context);
+    });
+    const row = element("label", "record-row");
+    row.dataset["key"] = "into";
+    row.append(element("span", "record-label", "Cleared cells become"), into);
+    box.append(row);
     const list = element("ul", "held-list");
-    for (const { type, problem } of held) {
-      list.append(element("li", undefined, `${hex2(type)} ${context.ownName(type)}: ${problem}`));
+    for (const t of clearable) {
+      const item = element("li", "held-type");
+      item.dataset["key"] = String(t.type);
+      const rooms = t.cellRooms;
+      const where =
+        t.cells > 0
+          ? `${t.cells} cell${t.cells === 1 ? "" : "s"} in ${rooms.length === 1 && rooms[0] === 99 ? "the debug room 99" : `room${rooms.length > 1 ? "s" : ""} ${rooms.join(", ")}`}`
+          : "no cells";
+      const text = element("span", "held-name", `${name(t.type)}: ${where}`);
+      if (t.records.length > 0) text.textContent += `; records in ${t.records.join(", ")} show it`;
+      if (t.packages.length > 0) {
+        text.textContent += `; packages in ${t.packages.join(", ")} hold it`;
+      }
+      if (t.neededBy.length > 0) {
+        text.textContent += ` ⚠ ${t.neededBy.map((n) => `${hex2(n.type)} needs it`).join(", ")}`;
+      }
+      const label = `Clear type ${hex2(t.type)} out of all rooms`;
+      const clear = button(
+        "Clear",
+        `${label}: its cells become ${replacement === 0 ? "empty" : name(replacement)}`,
+        () => {
+          // read when clicked: a kept button keeps its listener (patchChildren)
+          const now = this.replacement?.value ?? 0;
+          this.events.clearType(Number(item.dataset["key"]), now);
+        },
+      );
+      clear.dataset["key"] = "clear";
+      clear.setAttribute("aria-label", label);
+      clear.disabled =
+        replacement === t.type || (t.cells === 0 && (replacement === 0 || t.packages.length === 0));
+      item.append(this.events.preview(episode, t.type), text, clear);
+      list.append(item);
     }
     box.append(list);
     return box;

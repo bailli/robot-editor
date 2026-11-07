@@ -1598,7 +1598,8 @@ Supported:
   new base; the parts then show in the lists of tile types, events and texts, each
   removable there. **Verified under Wine** (`pnpm test:game`, the circuit and oracle
   game tests now build their mods with `planKit` and `kitChanges`): circuits in III
-  (types 0x0e, 0x0f, 0x43), IV and Junior, oracles in Junior, I and IV. "Place example"
+  (types 0x0e, 0x0f, 0x43; since package contents count, 2026-11-07, 0x0e, 0x40, 0x43,
+  not rerun), IV and Junior, oracles in Junior, I and IV. "Place example"
   (once the episode has the kit's types, by copy or its own; `kitExample`) pastes a
   working setup like Ctrl+V: circuits (7 × 3) letters 1 and 0 into an OR gate, a wire
   on to a node with its stairs two cells east, the wire missing and lying below its gap;
@@ -1712,8 +1713,10 @@ stands, decided 2026-10-27; details in the sections named.
 - **Cross-episode classes in general:** free tile types per episode (no class): Junior
   69 (0x39–0x7d), I 47, II **none**, III 18, IV 15. Some of them lie in rooms anyway
   (cells without a class): Junior 0x39 (room 51, 12 cells), I 0x53 (room 14), III 0x11
-  (room 99, one cell), IV 0x03 (room 2), so a copy should not go there (the editor
-  leaves them out). II would need a type that none of its rooms uses. Copied shapes keep their colour indices, and palettes
+  (room 99, one cell), IV 0x03 (room 2), and packages hold some (III 0x0f, a chest in
+  room 99), so a copy should not go there (the editor and the kits leave them out:
+  `roomTileTypes` counts map cells, records' cells, buried objects among them, and
+  package contents). II would need a type that none of its rooms uses. Copied shapes keep their colour indices, and palettes
   differ per episode (I's BULB uses colours 1 and 6, which differ in III: the game draws
   them with III's colours, as we do; remap if it matters). Some class code checks the
   episode number (e.g. describe method 0x4145b0): every class needs a try in its new
@@ -1896,12 +1899,25 @@ stands, decided 2026-10-27; details in the sections named.
     (`CLASS_NEEDS`, from "Classes that need other classes", e.g. II's 0x5c needs the
     skateboard 0x5d) are a warning, not a refusal. In the mod it is a plain copy (kind
     tileTypes); removing it gives the type its own class back. As loaded, II's rooms
-    hold nearly all its types (room 99 shows most objects): only 0x10 (class 16, IV
-    has it in a room) is free to give up before the author clears others out. The
-    copy form lists the types to replace in its target list ("Replace one of this
-    episode's types", ⚠ where a class needs it) with a note on what giving it up means,
-    and folded the own types it cannot replace, each with why; a kit whose free types
-    do not suffice offers a choice per type lacking ("Give up"). Not tried in the game.
+    hold all its types (room 99 shows most objects; packages count, II's presents hold
+    e.g. the skateboard and the fins). 0x10 was offered until 2026-11-07, but it is the
+    **open exit** (class 16, the arrows): the room task 0x433a60 opens closed exits
+    (class 23, 0x17) into it and closes them again through 0x433c30 (→ 0x4332a0),
+    which the needs scan missed (it took constants given to the setters directly);
+    given up, opened exits were drawn empty (the user). Both are ENGINE_CLASSES now. A
+    second-level scan (constants given to functions that pass an argument on to the
+    setters: 0x42c540, 0x433580, 0x433c30, 0x42c2e0, …) found no other class outside
+    CLASS_NEEDS that shared code sets (0x433580 turns class 54 state 1 into 0 in the
+    same task: its own class). The copy form lists the types to replace in its target
+    list ("Replace one of this episode's types", ⚠ where a class needs it) with a note
+    on what giving it up means, and folded the own types **only rooms hold** (`roomsOnly`;
+    those held by scripts, the dealer, copies or the code are only counted), fewest
+    cells first, records last, each with its cells, rooms (room 99: the debug room),
+    the records and packages holding it and a **Clear** button (`Editor.clearType`):
+    every cell of it in every room becomes empty or a chosen type in one undo step,
+    packages get the chosen type inside (with "empty" they keep it), records stay. A
+    kit whose free types do not suffice offers a choice per type lacking ("Give up").
+    Not tried in the game.
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,

@@ -66,6 +66,7 @@ import {
   kitExample,
   movedRecord,
   nameRoom,
+  packageTypes,
   parsePe,
   parseTexts,
   planKit,
@@ -80,6 +81,7 @@ import {
   recordCell,
   recordCellOffsets,
   renderCell,
+  roomCells,
   roomChanges,
   roomCircuitStairs,
   roomDescriptionText,
@@ -89,6 +91,7 @@ import {
   roomScript,
   roomSettings,
   roomTextLength,
+  roomTileTypes,
   sameDealer,
   scanScript,
   scriptPlacedObjects,
@@ -209,6 +212,13 @@ export interface OwnType {
   classId: number;
   /** Rooms whose cells or records hold the type. */
   rooms: number[];
+  /** How many cells of the rooms (both layers) hold it, and in which rooms. */
+  cells: number;
+  cellRooms: number[];
+  /** Rooms whose records show it (a record's cells). */
+  records: number[];
+  /** Rooms whose packages (map cells or records) hold it inside. */
+  packages: number[];
   /** Rooms whose script names the type (O_…) or places it (SetObj). */
   scripts: number[];
   /** Whether the episode's dealer (as edited) sells its class. */
@@ -243,6 +253,20 @@ export function ownTypeProblem(own: OwnType): string | undefined {
     own.code ?? "",
   ].filter((p) => p !== "");
   return problems.length > 0 ? problems.join("; ") : undefined;
+}
+
+/**
+ * Whether only rooms hold on to the own type (cells or records): clearing it out of them
+ * (Editor.clearType, records by hand) lets a copy replace it.
+ */
+export function roomsOnly(own: OwnType): boolean {
+  return (
+    own.rooms.length > 0 &&
+    own.scripts.length === 0 &&
+    !own.dealer &&
+    own.copiedTo.length === 0 &&
+    own.code === undefined
+  );
 }
 
 /**
@@ -666,7 +690,8 @@ export class Editor {
    */
   freeTileTypes(episode: number): number[] {
     const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
-    const used = new Set(this.rooms(episode).flatMap((room) => [...roomTypes(room)]));
+    const { classes } = this.game.episode(episode);
+    const used = new Set(this.rooms(episode).flatMap((room) => [...roomTileTypes(room, classes)]));
     const free = freeTileTypes(this.pristine.image, episode).filter(
       (type) => copied.has(type) || (!used.has(type) && !FIXED_TYPES.includes(type)),
     );
@@ -683,6 +708,12 @@ export class Editor {
     const { classes, typeOfClass } = this.pristine.episode(episode).classes;
     const copied = new Set(this.tileTypeCopies(episode).map((c) => c.to));
     const roomsOf = new Map<number, number[]>();
+    const recordsOf = new Map<number, number[]>();
+    const packagesOf = new Map<number, number[]>();
+    const edited = this.game.episode(episode).classes;
+    const packages = packageTypes(edited);
+    const cellsOf = new Map<number, number>();
+    const cellRoomsOf = new Map<number, number[]>();
     const scriptsOf = new Map<number, number[]>();
     const add = (map: Map<number, number[]>, type: number, room: number) => {
       const list = map.get(type) ?? [];
@@ -691,7 +722,19 @@ export class Editor {
     };
     const constants = this.game.scriptConstants(episode);
     for (const room of this.rooms(episode)) {
-      for (const type of roomTypes(room)) add(roomsOf, type, room.id);
+      for (const type of roomTileTypes(room, edited)) add(roomsOf, type, room.id);
+      for (const cell of roomCells(room)) {
+        if (packages.has(cell & 0xff) && cell >> 8) add(packagesOf, cell >> 8, room.id);
+      }
+      for (const layer of [room.base, room.overlay]) {
+        for (const cell of layer) {
+          cellsOf.set(cell & 0xff, (cellsOf.get(cell & 0xff) ?? 0) + 1);
+          add(cellRoomsOf, cell & 0xff, room.id);
+        }
+      }
+      for (const { data } of room.records) {
+        for (const at of recordCellOffsets(data[0])) add(recordsOf, data[at] ?? 0, room.id);
+      }
       const source = roomScript(room);
       if (!source) continue;
       const named = new Set<number>();
@@ -700,7 +743,10 @@ export class Editor {
         const value = constants.get(piece.text) ?? constants.get(piece.text.toUpperCase());
         if (value !== undefined) named.add(value & 0xff);
       }
-      for (const cell of scriptPlacedObjects(source, constants)) named.add(cell & 0xff);
+      for (const cell of scriptPlacedObjects(source, constants)) {
+        named.add(cell & 0xff);
+        if (packages.has(cell & 0xff) && cell >> 8) named.add(cell >> 8);
+      }
       for (const type of named) add(scriptsOf, type, room.id);
     }
     const sold = new Set(this.dealer(episode)?.goods.map((g) => g.classId) ?? []);
@@ -733,6 +779,10 @@ export class Editor {
           type,
           classId,
           rooms: roomsOf.get(type) ?? [],
+          cells: cellsOf.get(type) ?? 0,
+          cellRooms: cellRoomsOf.get(type) ?? [],
+          records: recordsOf.get(type) ?? [],
+          packages: packagesOf.get(type) ?? [],
           scripts: scriptsOf.get(type) ?? [],
           dealer: sold.has(classId) && !shared,
           copiedTo: this.changes.copies
@@ -757,7 +807,8 @@ export class Editor {
       for (const e of EPISODES) {
         const { rooms, classes } = this.pristine.episode(e);
         for (const room of rooms) {
-          for (const type of roomTypes(room)) ids.add(classes.classes.get(type)?.id ?? 0);
+          for (const type of roomTileTypes(room, classes))
+            ids.add(classes.classes.get(type)?.id ?? 0);
         }
       }
       this.roomClassCache = ids;
@@ -875,7 +926,7 @@ export class Editor {
     if (source === undefined) {
       if (!old) return undefined;
       const rooms = this.rooms(episode)
-        .filter((r) => roomTypes(r).has(to))
+        .filter((r) => roomTileTypes(r, this.game.episode(episode).classes).has(to))
         .map((r) => r.id);
       if (rooms.length > 0)
         throw new RangeError(`rooms ${rooms.join(", ")} use type 0x${to.toString(16)}`);
@@ -2205,6 +2256,59 @@ export class Editor {
     return true;
   }
 
+  /**
+   * Replaces every cell of `type` (any state) in the episode's rooms, both layers, with
+   * `replacement` (0: empty), in one undo step that starts in room `shown` where it has
+   * some: an own type only rooms hold is then free to give up (ownTypes), unless records
+   * show it, which stay. Packages holding it (map cells and records) get the replacement
+   * inside; with none they keep it. Undefined if nothing changes.
+   */
+  clearType(episode: number, shown: number, type: number, replacement = 0): Edit | undefined {
+    this.endStroke();
+    if (isLogicCell(type) || isLogicCell(replacement)) throw new RangeError("not a logic cell");
+    if ((replacement & 0xff) === type) throw new RangeError("the same type");
+    const packages = packageTypes(this.game.episode(episode).classes);
+    const into = replacement & 0xff;
+    // a package holding the type: the replacement inside
+    const repacked = (cell: number) =>
+      into && packages.has(cell & 0xff) && cell >> 8 === type ? (cell & 0xff) | (into << 8) : cell;
+    const parts: Edit[] = [];
+    for (const room of this.rooms(episode)) {
+      for (const layer of ["base", "overlay"] as const) {
+        const changes: CellChange[] = [];
+        room[layer].forEach((cell, index) => {
+          const now = (cell & 0xff) === type ? replacement : repacked(cell);
+          if (now !== cell) changes.push({ index, before: cell, after: now });
+        });
+        if (changes.length > 0) parts.push({ episode, room: room.id, layer, changes });
+      }
+      const records = room.records.map((record) => {
+        const offsets = recordCellOffsets(record.data[0]);
+        const data = record.data.slice();
+        for (const at of offsets) {
+          const cell = repacked((data[at] ?? 0) | ((data[at + 1] ?? 0) << 8));
+          data[at + 1] = cell >> 8;
+        }
+        return data.some((b, k) => b !== record.data[k]) ? { ...record, data } : record;
+      });
+      if (records.some((r, k) => r !== room.records[k])) {
+        parts.push({
+          episode,
+          room: room.id,
+          layer: "base",
+          changes: [],
+          records: { before: room.records, after: records },
+        });
+      }
+    }
+    const first = parts.find((p) => p.room === shown) ?? parts.at(0);
+    if (!first) return undefined;
+    const edit: Edit = { ...first, parts: [first, ...parts.filter((p) => p !== first)] };
+    this.apply(edit, after);
+    this.push(edit);
+    return edit;
+  }
+
   endStroke(): Edit | undefined {
     const stroke = this.stroke;
     this.stroke = undefined;
@@ -2807,16 +2911,6 @@ export class Editor {
     rooms[i] = copy;
     return copy;
   }
-}
-
-/** The tile types a room holds: in its map and in its records' cells (recordCellOffsets). */
-function roomTypes(room: Room): Set<number> {
-  const types = new Set<number>();
-  for (const layer of [room.base, room.overlay]) for (const cell of layer) types.add(cell & 0xff);
-  for (const { data } of room.records) {
-    for (const at of recordCellOffsets(data[0])) types.add(data[at]);
-  }
-  return types;
 }
 
 const before = (change: CellChange) => change.before;

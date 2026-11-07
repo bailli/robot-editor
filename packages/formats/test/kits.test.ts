@@ -100,11 +100,12 @@ test("circuits: I's pieces, stairs only where the episode has none; event 293 wh
     [0x43, 0x43],
     [0x3d, 0x3d],
   ]);
-  // III has stairs and no spare entry: its nodes give no points
+  // III has stairs and no spare entry: its nodes give no points; 0x0f is inside a chest
+  // of room 99
   expect(planKit(game, 3, circuits)).toMatchObject({
     types: [
       [0x0e, 0x25],
-      [0x0f, 0x42],
+      [0x40, 0x42],
       [0x43, 0x43],
     ],
     present: [0x3d],

@@ -290,6 +290,9 @@ export {
   knowsDescribeMethod,
   noteText,
   packageContents,
+  packageTypes,
+  roomCells,
+  roomTileTypes,
   requiredPoints,
   withCellData,
 } from "./describe.ts";

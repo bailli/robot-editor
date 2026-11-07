@@ -5,7 +5,13 @@
  * copy of another episode's (Editor.replaceableTypes).
  */
 import { ACTOR_KIND_CLASSES } from "./actors.ts";
-import { DOOR_IN_CLASS, DOOR_OUT_CLASS, STAIRS_CLASS } from "./exits.ts";
+import {
+  DOOR_IN_CLASS,
+  DOOR_OUT_CLASS,
+  EXIT_CLASS,
+  OPEN_EXIT_CLASS,
+  STAIRS_CLASS,
+} from "./exits.ts";
 import { BACKDROP_CLASS } from "./render.ts";
 
 /** The class → tile type table (0x43b46a fills it, 4 bytes per class id). */
@@ -54,14 +60,18 @@ export const CODE_LOOKUP_CLASSES: ReadonlyMap<number, readonly number[]> = new M
 /**
  * Classes the engine creates or places by number, besides CODE_LOOKUP_CLASSES: the
  * actor kinds (0x47ec98), stairs (a lit circuit node places them), doors in and out, the
- * backdrop cell, the wizard's door (class 80), the beam, class 13. Classes no room of any episode
- * has (the hero's doubles, the fireman, the game's pictures) are left to the caller.
+ * exit tiles (task 0x433a60 turns closed ones into open ones and back through 0x433c30,
+ * which the scan of the setters' callers missed), the backdrop cell, the wizard's door
+ * (class 80), the beam, class 13. Classes no room of any episode has (the hero's doubles,
+ * the fireman, the game's pictures) are left to the caller.
  */
 export const ENGINE_CLASSES: ReadonlyMap<number, string> = new Map([
   ...ACTOR_KIND_CLASSES.map((id) => [id, "an actor the game creates"] as const),
   [STAIRS_CLASS, "stairs: a lit circuit node places them"],
   [DOOR_IN_CLASS, "a door in: room changes"],
   [DOOR_OUT_CLASS, "a door out: room changes"],
+  [EXIT_CLASS, "closed exit tiles: the game closes open ones on edges that lead nowhere"],
+  [OPEN_EXIT_CLASS, "open exit tiles (the arrows): the game opens closed ones without robots"],
   [BACKDROP_CLASS, "the backdrop cell"],
   [80, "the wizard's door"],
   [35, "the beam: the code places it"],

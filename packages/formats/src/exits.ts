@@ -65,6 +65,13 @@ export const OPEN_EXIT_CELLS: Readonly<Record<"vertical" | "horizontal", number>
   horizontal: 0x0010,
 };
 
+/**
+ * Class ids of the exit tiles (EXIT_CELL, OPEN_EXIT_CELLS): the room task 0x433a60 sets
+ * them by class (0x433c30 → 0x4332a0), so their types must keep them.
+ */
+export const EXIT_CLASS = 0x17;
+export const OPEN_EXIT_CLASS = 0x10;
+
 /** Class ids of passages to room +/- 100 (see above). */
 export const DOOR_IN_CLASS = 98;
 export const DOOR_OUT_CLASS = 105;

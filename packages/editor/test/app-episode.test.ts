@@ -563,29 +563,34 @@ test("the map's thumbnails are drawn again when the episode's flags change", () 
 });
 
 test("II's own types: replaced by a copy where nothing holds on to them, with a warning", async () => {
-  // the skateboard out of II's room 99, the only room with it
-  const editor = defined(app.editor);
-  for (const layer of ["base", "overlay"] as const) {
-    editor.beginStroke(2, 99, layer);
-    editor.room(2, 99)[layer].forEach((cell, index) => {
-      if ((cell & 0xff) === 0x5d) editor.paint(index, 0);
-    });
-    editor.endStroke();
-  }
   app.showEpisode(2, 99);
   await page.getByRole("tab", { name: "Kits" }).click();
   const types = page.getByRole("region", { name: "Tile types" });
   const to = types.getByLabelText("To type");
-  // II has no free type: nothing chosen yet
+  // II has no free type and none to replace (the exit arrows 0x10 are the game's)
   await expect.element(to).toHaveValue("-1");
   await expect.element(types.getByRole("button", { name: "Copy" })).toBeDisabled();
-  const offered = [...(to.element() as HTMLSelectElement).options].map((o) => o.value);
-  expect(offered).toContain(String(0x5d));
-  // the dealer's pointing hand is the game's: listed as held, with why
-  expect(offered).not.toContain(String(0x4b));
-  await expect.element(types.getByText(/^0x4b .*looks its type up/)).toBeInTheDocument();
-  // the list of those held stays open while the form changes
-  await types.getByText(/own types cannot be replaced/).click();
+  const offered = () => [...(to.element() as HTMLSelectElement).options].map((o) => o.value);
+  expect(offered()).not.toContain(String(0x10));
+  // types only rooms hold are listed, the cheapest first; the game's are not
+  await types.getByText(/own types only rooms hold/).click();
+  const held = [...document.querySelectorAll(".held-type")].map((li) => li.textContent);
+  expect(held.some((t) => t.startsWith("0x4b"))).toBe(false);
+  expect(held[0]).toMatch(/^0x62 .*1 cell in the debug room 99/);
+  expect(held.find((t) => t.startsWith("0x51"))).toMatch(
+    /no cells; records in 1, 42, 43, 106 show it/,
+  );
+  expect(held.find((t) => t.startsWith("0x5d"))).toMatch(
+    /1 cell in the debug room 99; packages in 103 hold it ⚠ 0x5c needs it/,
+  );
+  // the skateboard cleared out of II's rooms, one undo step: room 99's cell, room 103's
+  // present (which then holds 0x0b)
+  await userEvent.selectOptions(types.getByLabelText("Cleared cells become"), String(0x0b));
+  await types.getByRole("button", { name: "Clear type 0x5d out of all rooms" }).click();
+  expect(app.editor?.ownTypes(2).find((t) => t.type === 0x0b)?.packages).toContain(103);
+  expect(app.editor?.room(2, 99).base.some((cell) => (cell & 0xff) === 0x5d)).toBe(false);
+  expect(offered()).toContain(String(0x5d));
+  // the list stays open while the form changes
   expect(document.querySelector<HTMLDetailsElement>("details.held-types")?.open).toBe(true);
   await userEvent.selectOptions(to, String(0x5d));
   expect(document.querySelector<HTMLDetailsElement>("details.held-types")?.open).toBe(true);

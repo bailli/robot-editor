@@ -1806,8 +1806,7 @@ button.link {
   margin: 4px 0 0;
 }
 
-.give-up ul,
-.held-list {
+.give-up ul {
   padding-left: 18px;
   font-size: 12px;
 }
@@ -1818,10 +1817,24 @@ button.link {
   font-size: 12px;
 }
 
+.held-type {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+}
+
+.held-name {
+  flex: 1;
+}
+
 .held-list {
-  max-height: 240px;
+  max-height: 320px;
   overflow: auto;
   margin: 4px 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 12px;
 }
 
 .kit summary {

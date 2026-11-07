@@ -52,6 +52,7 @@ import {
   ownTypeProblem,
   placedTiles,
   recordCapacity,
+  roomsOnly,
   shownCell,
   tilesOf,
 } from "../src/editor.ts";
@@ -897,9 +898,10 @@ describe("Editor and the start", () => {
 describe("Editor and tile types from other episodes", () => {
   test("a copy makes a new base, one undo step; saved into exe and mod", () => {
     const editor = new Editor(game);
-    // III has 18 types without a class; room 99 uses 0x11
-    expect(editor.freeTileTypes(3)).toHaveLength(17);
+    // III has 18 types without a class; room 99 uses 0x11 and has a chest holding 0x0f
+    expect(editor.freeTileTypes(3)).toHaveLength(16);
     expect(editor.freeTileTypes(3)).not.toContain(0x11);
+    expect(editor.freeTileTypes(3)).not.toContain(0x0f);
     expect(editor.game.episode(3).classes.classes.get(0x59)?.id).toBe(0);
     // episode I's GATE (class 76) at III's free type 0x59
     const edit = editor.setTileType(3, 41, 0x59, { from: 1, of: 0x42 });
@@ -1008,13 +1010,18 @@ describe("Editor and an episode's own types given up", () => {
     const editor = new Editor(game);
     const skateboard = own(editor, 2, 0x5d);
     expect(skateboard.classId).toBe(108);
-    expect(ownTypeProblem(skateboard)).toBe("room 99 uses it");
+    // room 103's present holds one
+    expect(ownTypeProblem(skateboard)).toBe("rooms 99, 103 use it");
+    expect([skateboard.cellRooms, skateboard.packages]).toEqual([[99], [103]]);
     // 0x5c (class 107) needs the skateboard, and rooms use it
     expect(skateboard.neededBy).toEqual([{ type: 0x5c, how: "the skateboard", used: true }]);
     expect(() => editor.setTileType(2, 99, 0x5d, { from: 1, of: 0x42 })).toThrow(
-      /0x5d cannot be replaced: room 99 uses it/,
+      /0x5d cannot be replaced: rooms 99, 103 use it/,
     );
     clear(editor, 2, 99, 0x5d);
+    expect(ownTypeProblem(own(editor, 2, 0x5d))).toBe("room 103 uses it");
+    // with a replacement the present holds that instead
+    expect(editor.clearType(2, 99, 0x5d, 0x0b)?.parts?.map((p) => p.room)).toEqual([103]);
     expect(ownTypeProblem(own(editor, 2, 0x5d))).toBeUndefined();
     // episode I's GATE instead
     editor.setTileType(2, 99, 0x5d, { from: 1, of: 0x42 });
@@ -1030,6 +1037,35 @@ describe("Editor and an episode's own types given up", () => {
     editor.setTileType(2, 99, 0x5d, undefined);
     expect(editor.game.episode(2).classes.classes.get(0x5d)?.id).toBe(108);
     expect(editor.replacingCopies(2)).toEqual([]);
+  });
+
+  test("II's types cleared out of its rooms in one undo step; the exit tiles are the game's", () => {
+    const editor = new Editor(game);
+    // the open exit (arrows): the game turns closed exits (0x17) into it
+    expect(ownTypeProblem(own(editor, 2, 0x10))).toMatch(/open exit tiles/);
+    expect(ownTypeProblem(own(editor, 2, 0x17))).toMatch(/closed exit tiles/);
+    const hook = own(editor, 2, 0x11);
+    expect(roomsOnly(hook)).toBe(true);
+    expect([hook.cells, hook.cellRooms, hook.records, hook.packages]).toEqual([
+      14,
+      [44, 53, 99, 114],
+      [],
+      [104],
+    ]);
+    const before = editor.room(2, 44).base.slice();
+    const edit = defined(editor.clearType(2, 53, 0x11, 0x07));
+    // the shown room first, where undo shows it
+    expect(edit.room).toBe(53);
+    // room 104's present now holds 0x07
+    expect(edit.parts?.map((p) => p.room)).toEqual([53, 44, 99, 104, 114]);
+    expect(ownTypeProblem(own(editor, 2, 0x11))).toBeUndefined();
+    expect(own(editor, 2, 0x07).packages).toEqual([104]);
+    expect(own(editor, 2, 0x07).cells).toBe(own(new Editor(game), 2, 0x07).cells + 14);
+    expect(editor.clearType(2, 53, 0x11)).toBeUndefined();
+    editor.undo();
+    expect(editor.room(2, 44).base).toEqual(before);
+    expect(own(editor, 2, 0x11).cells).toBe(14);
+    expect(() => editor.clearType(2, 53, 0x11, 0x11)).toThrow(/the same type/);
   });
 
   test("refused: what the game's code needs, what the dealer sells, a copy's source", () => {
@@ -1054,13 +1090,13 @@ describe("Editor and an episode's own types given up", () => {
     const goal = defined(KITS.find((k) => k.key === "goal"));
     expect(editor.kitPlan(2, goal).problem).toMatch(/free tile types needed/);
     // a type rooms still use is left out
-    expect(editor.kitPlan(2, goal, undefined, [0x5d]).problem).toMatch(/free tile types needed/);
-    clear(editor, 2, 99, 0x5d);
-    const plan = editor.kitPlan(2, goal, undefined, [0x5d]);
+    expect(editor.kitPlan(2, goal, undefined, [0x62]).problem).toMatch(/free tile types needed/);
+    clear(editor, 2, 99, 0x62);
+    const plan = editor.kitPlan(2, goal, undefined, [0x62]);
     expect(plan.problem).toBeUndefined();
-    expect(plan.types.map(([to]) => to)).toEqual([0x5d]);
-    editor.addKit(2, 99, goal, undefined, [0x5d]);
-    expect(editor.replacingCopies(2)).toEqual([0x5d]);
+    expect(plan.types.map(([to]) => to)).toEqual([0x62]);
+    editor.addKit(2, 99, goal, undefined, [0x62]);
+    expect(editor.replacingCopies(2)).toEqual([0x62]);
     expect(editor.tileTypeCopies(2).map((c) => c.from)).toEqual([goal.from]);
   });
 });
@@ -1605,14 +1641,15 @@ describe("Editor and kits", () => {
   test("copied types offer the states their episode's rooms use: letters 0 and 1", () => {
     const editor = new Editor(game);
     editor.addKit(3, 41, kit("circuits"));
-    // episode I's letter 0x25 is III's 0x0e, its gate 0x42 III's 0x0f
+    // episode I's letter 0x25 is III's 0x0e, its gate 0x42 III's 0x40 (room 99's chest
+    // holds 0x0f)
     const tiles = editor.tiles(3, "base");
     expect(tiles).toContain(0x0e | (0x30 << 8));
     expect(tiles).toContain(0x0e | (0x31 << 8));
     const gates = (cells: readonly number[], type: number) =>
       cells.filter((c) => (c & 0xff) === type).map((c) => c >> 8);
     for (const state of gates(tilesOf(game.episode(1).rooms, "base"), 0x42))
-      expect(gates(tiles, 0x0f)).toContain(state);
+      expect(gates(tiles, 0x40)).toContain(state);
   });
 
   test("refused: a plan with a problem; nothing to add where the episode has the feature", () => {
@@ -1650,7 +1687,7 @@ describe("Editor and kit examples", () => {
     expect(editor.room(3, 41).base[at(23, 12)]).toBe(0);
     // the wire lies below its gap; put there, the node is lit
     const wire = defined(editor.room(3, 41).overlay[at(23, 12)]);
-    expect(wire & 0xff).toBe(0x0f);
+    expect(wire & 0xff).toBe(0x40);
     editor.beginStroke(3, 41, "overlay");
     editor.paint(at(23, 11), wire);
     editor.endStroke();

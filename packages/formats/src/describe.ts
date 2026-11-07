@@ -1,6 +1,7 @@
 import { LETTER_CLASS } from "./circuits.ts";
 import type { EpisodeClasses } from "./classes.ts";
 import { TELEPORTER_RECORD } from "./exits.ts";
+import { recordCellOffsets } from "./records.ts";
 import { LOGIC_CELL, type Room } from "./scene.ts";
 
 /**
@@ -174,6 +175,41 @@ export function noteText(cell: number, classes: EpisodeClasses): NoteText | unde
 export function packageContents(cell: number, classes: EpisodeClasses): number | undefined {
   const data = cellData(cell, classes);
   return data?.kind === "package" ? data.type : undefined;
+}
+
+/**
+ * The cells a room holds: its map's and its records' (recordCellOffsets: a stacked or
+ * buried object, an oracle's), as maps store them (type | state << 8).
+ */
+export function roomCells(room: Room): number[] {
+  const cells = [...room.base, ...room.overlay];
+  for (const { data } of room.records) {
+    for (const at of recordCellOffsets(data[0])) {
+      cells.push((data[at] ?? 0) | ((data[at + 1] ?? 0) << 8));
+    }
+  }
+  return cells;
+}
+
+/** The types of the episode's packages (PACKAGE_CLASS), whose state is the type inside. */
+export function packageTypes(classes: EpisodeClasses): Set<number> {
+  return new Set(
+    [...classes.classes].filter(([, c]) => c.id === PACKAGE_CLASS).map(([type]) => type),
+  );
+}
+
+/**
+ * The tile types a room holds (the episode's `classes`): in its map, in its records'
+ * cells and inside its packages (packageContents; 0 is an empty one).
+ */
+export function roomTileTypes(room: Room, classes: EpisodeClasses): Set<number> {
+  const packages = packageTypes(classes);
+  const types = new Set<number>();
+  for (const cell of roomCells(room)) {
+    types.add(cell & 0xff);
+    if (packages.has(cell & 0xff) && cell >> 8) types.add(cell >> 8);
+  }
+  return types;
 }
 
 type Rule = (state: number, episode: number) => number | readonly number[] | "random";
