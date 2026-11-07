@@ -408,7 +408,7 @@ test("sliding doors: the code by room, state and place; the terminal's word for 
 test("the network's cells: a door's code where it lies, a card's key, the addresses", () => {
   const { classes } = game.episode(4);
   // room 63's door at (5, 14), its punch cards and readers (IV's types 0x61, 0x59, 0x5c, 0x62)
-  expect(networkNote(0x0061, classes, 63, 5, 14)).toMatch(/^door code 52 = ADBA \(“MSG 7 ADBA”/);
+  expect(networkNote(0x0061, classes, 63, 5, 14)).toBe("door code 52 = ADBA (MSG 7 ADBA)");
   expect(networkNote(0x0061, classes, 43, 35, 8)).toBe("door code 0 here: no word opens it");
   expect(networkNote(0x3859, classes, 163, 16, 5)).toBe("card key 56 = ADCA");
   expect(networkNote(0x0059, classes, 163, 16, 5)).toBe("blank card");

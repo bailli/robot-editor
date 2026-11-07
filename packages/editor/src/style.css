@@ -591,7 +591,9 @@ h2 {
   color: var(--muted);
 }
 
+/* the description takes the room the cell info leaves: it is cut first */
 .cell-text {
+  flex: 1 1 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -287,7 +287,7 @@ export function networkNote(
     const code = slidingDoorCode(room, x, y, state);
     if (code === 0) return "door code 0 here: no word opens it";
     const word = networkWord(code);
-    return `door code ${String(code)} = ${word} (“MSG 7 ${word}”, or a card with it at a reader of address 7)`;
+    return `door code ${String(code)} = ${word} (MSG 7 ${word})`;
   }
   if (id === PUNCH_CARD_CLASS)
     return state === 0 ? "blank card" : `card key ${String(state)} = ${networkWord(state)}`;
