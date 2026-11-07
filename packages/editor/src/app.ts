@@ -2232,6 +2232,8 @@ export class App {
     }
     if (!again) this.stopPasting();
     this.setArea({ x, y, w: clip.w, h: clip.h });
+    // a kit's example: what is left to do, with the positions it now has
+    if (clip.placed) this.setStatus(clip.placed(x, y));
     if (again) this.showPaste(index);
   }
 

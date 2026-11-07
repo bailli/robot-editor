@@ -2,7 +2,14 @@ import { expect, test } from "vitest";
 
 import { readEpisodeFlags } from "../src/episode-flags.ts";
 import { Game } from "../src/game.ts";
-import { KITS, kitChanges, kitExample, planKit } from "../src/kits.ts";
+import {
+  KITS,
+  kitChanges,
+  kitExample,
+  networkWord,
+  planKit,
+  slidingDoorCode,
+} from "../src/kits.ts";
 import { NO_CHANGES, applyMod, emptyMod } from "../src/mod.ts";
 import { exe } from "./data.ts";
 
@@ -353,7 +360,7 @@ test("computer: I's computer and interface, their texts; events where the table 
   ]);
 });
 
-test("punch cards: card, reader, punch and terminal from IV; their texts; II has no room", () => {
+test("punch cards: card, reader, punch, terminal, sliding door from IV; texts; II has no room", () => {
   const punchcards = kit("punchcards");
   expect(planKit(game, 1, punchcards)).toMatchObject({
     types: [
@@ -361,13 +368,14 @@ test("punch cards: card, reader, punch and terminal from IV; their texts; II has
       [0x62, 0x62],
       [0x5c, 0x5c],
       [0x5b, 0x5b],
+      [0x61, 0x61],
     ],
-    texts: [532, 520, 521, 522, 523, 524, 965],
+    texts: [532, 520, 521, 522, 523, 524, 965, 533],
     // one spare entry: the square turned
     events: [{ entry: 190, of: 137, id: 352 }],
-    without: [353, 351],
+    without: [353, 350, 351, 370],
   });
-  expect(planKit(game, 2, punchcards).problem).toMatch(/4 free tile types needed, 0 left/);
+  expect(planKit(game, 2, punchcards).problem).toMatch(/5 free tile types needed, 0 left/);
   expect(planKit(game, 4, punchcards)).toMatchObject({ types: [], texts: [], events: [] });
 });
 
@@ -383,4 +391,30 @@ test("train & tracks: IV's train and rails, no texts or events", () => {
   });
   expect(planKit(game, 1, train).problem).toBeUndefined();
   expect(planKit(game, 4, train).present).toEqual([0x4a, 0x39]);
+});
+
+test("sliding doors: the code by room, state and place; the terminal's word for it", () => {
+  // IV's room 63: the door at (5, 14) in state 0
+  expect(slidingDoorCode(63, 5, 14, 0)).toBe(52);
+  expect(networkWord(52)).toBe("ADBA");
+  expect(networkWord(1)).toBe("AAAB");
+  expect(networkWord(0xff)).toBe("DDDD");
+  // the state's high nibble counts, its low one (closed, opening, open) does not
+  expect(slidingDoorCode(61, 21, 17, 0x30)).toBe(61 ^ 0x30 ^ (21 ^ 17));
+  expect(slidingDoorCode(63, 5, 14, 2)).toBe(52);
+});
+
+test("the punch cards' example says what is left where it lies: the Area, the door's word", () => {
+  const punchcards = kit("punchcards");
+  const changes = kitChanges(game, 1, punchcards, planKit(game, 1, punchcards));
+  const added = new Game(
+    applyMod(game.image, { ...emptyMod(game.image.data), changes: { ...NO_CHANGES, ...changes } }),
+  );
+  const placed = kitExample(added, 1, punchcards, 43)?.placed;
+  // top left at (6, 14): the square at (10, 14), the door at (9, 17), code 43 ^ 9 ^ 17
+  const word = networkWord(slidingDoorCode(43, 9, 17, 0));
+  expect(placed?.(6, 14)).toMatch("“Area(10, 14, 3, 1);”");
+  expect(placed?.(6, 14)).toMatch(`“MSG 7 ${word}”`);
+  // the door at (35, 8): 43 ^ 35 ^ 8 = 0, which no word sends
+  expect(placed?.(32, 5)).toMatch("code is 0");
 });

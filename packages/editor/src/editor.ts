@@ -151,6 +151,8 @@ export interface Clip {
    * the clip (a node's stairs, a target in the room) move with it when pasted (movedRecord).
    */
   origin?: RoomCell;
+  /** What is left to do once pasted with its top left at (x, y) (a kit's example). */
+  placed?: (x: number, y: number) => string;
 }
 
 /** One step to undo: a stroke's cells in one layer of one room, and record changes. */
@@ -1470,7 +1472,9 @@ export class Editor {
       return { slot, data };
     });
     const overlay = Uint16Array.from(example.overlay);
-    return { episode, w, h, base, overlay, records, origin: { room, x: 0, y: 0 } };
+    const clip: Clip = { episode, w, h, base, overlay, records, origin: { room, x: 0, y: 0 } };
+    if (example.placed) clip.placed = example.placed;
+    return clip;
   }
 
   /**

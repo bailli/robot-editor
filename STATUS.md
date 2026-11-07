@@ -1583,7 +1583,8 @@ Supported:
   `classTexts`), swimming (flippers 0x60, river, water; `Kit.texts`: 230). See "Kits
   from III" under Fan episodes. From I and IV (2026-11-07): computer (I's 0x08 and
   interface 0x41; texts 550–555; events 289, 290), punch cards (IV's card 0x59, reader
-  0x62, punch 0x5c, terminal 0x5b; texts 532, 520–524, 965; events 352, 353, 351),
+  0x62, punch 0x5c, terminal 0x5b, sliding door 0x61; texts 532, 520–524, 965, 533;
+  events 352, 353, 350, 351, 370),
   train & tracks (IV's train 0x4a, rails 0x39); see "Kits from I and IV". Per kit what
   adding it to the shown
   episode copies: the types whose class the episode lacks (stairs only to Junior; II
@@ -1617,7 +1618,12 @@ Supported:
   cell). **Verified under Wine**: in III, IV and Junior the wire taken and
   used in the gap ("Benutzen") lights the node and places its stairs (with the wire's
   first take and, but in III, 4000 points); in IV and Junior the laid symbol is found and
-  walked into northwards the oracle sends the hero below it (3500 points)
+  walked into northwards the oracle sends the hero below it (3500 points). An opened
+  kit shows `Kit.note` (what it does) and, below "Place example", `Kit.example` as text
+  (before 2026-11-07 only tooltips); an example whose next steps depend on where it
+  lies (`KitExample.placed`, carried by the clip as `Clip.placed`) says them in the
+  status line once pasted: the punch cards' `Area(x, y, 3, 1);` line for its square and
+  the sliding door's code word there
 - copying tile types, events and texts and adding kits make a new base (applyMod over
   the whole exe: 0.3–0.6 s, then the redraw): meanwhile the side panel is locked (inert,
   dimmed) with what runs in the status line ("Adding the circuits…"); clicks made
@@ -1958,8 +1964,34 @@ stands, decided 2026-10-27; details in the sections named.
     and it holds a card, sets bit 0 (event 353); walked into, the punch then hands out
     the card with the word as key, and the word is used up (0x41a8b0); empty, it shows
     its sign. The terminal shows 965 instead while 0x4fe4e8 is set (a power station
-    off). Not in the kit: sliding doors (class 231, text 533, events 347, 350, 370).
-    **Verified** in I: blank card into the punch (2000), at the terminal `MSG 2 AAAB`,
+    off). **Sliding doors** (0x61, class 231, in the kit since 2026-11-07; states 0–2 in
+    an east–west wall, 3–5 in a north–south one, by state & 0xf mod 3 closed, opening,
+    open; the hero passes in the open state, 0x41a9e0, else the sign 533 with the code)
+    are devices with address 7 ("Tür 7" in 524). The code (0x42fc00, `slidingDoorCode`)
+    is (room id & 0xff) ^ (state & 0xf0) ^ ((x ^ y) & 0xff); the word for it,
+    `networkWord`. The door's task (0x4307a2) opens it a step per run while a word equal
+    to its code waits at 7 (event 350 as it starts), else closes it a step unless the
+    hero stands in it; the hero through it (vtable +0x10, handler 0x41aaa0) uses the
+    word up (event 370), so it closes behind him. Words reach 7 from readers with state
+    0x70 (a card whose key no Area has), the terminal's `MSG 7 word`, MsgSend, SEND,
+    and the remote control. **Area squares** are devices too: task kind 0xff at address
+    5 + slot (0x43083f; "Drehkr. 5"): a word equal to the slot's key turns it clockwise
+    (event 352), its complement anticlockwise; IV's readers with state 0x50 send there.
+    **IV's remote control** (0x64, class 234, use 0x41ab70; not in a kit): its state's
+    top two bits are charges (a use takes 0x40; none left, nothing happens), and a use
+    raises event 347 and does effect state & 7 or (state >> 3) & 7, on a coin flip
+    (0x436890), by the table at 0x41ad08: 0 the exits and barriers open (0x4fe308, the
+    "enemies about" byte, set to −100, which counts back up to 0; unless it is below 0
+    already), 1 the cylinders stop blinking (their tasks, kind 0x8c, ended, 0x408ba0),
+    2 every sliding door in the room gets its code at 7 (all open), 3 nothing, 4 the
+    exits and barriers close (0x4fe308 = 127, counting down), 5 the robots stop for
+    120–350 runs (0x4fe35c, as the console's ROBOTOFF), 6 the room's ShiftArea shifts
+    once (0x42fdc0), 7 every arrow (class 24) and revolving door (class 194) turns a
+    step (0x422bb0). IV's own: room 62's (state 0xd2, effects 2 and 2: doors, three
+    uses), room 341's (0xf6: 6 and 6, the shift, three uses). **Verified** (doors) in I:
+    a card with the door's code (room 43, the door at (9, 17): 51) used at the example's
+    reader opens it (state 2), the hero walks through, and it is closed again after.
+    **Verified** (punch) in I: blank card into the punch (2000), at the terminal `MSG 2 AAAB`,
     the punch punched (state 3), the card taken with key 1, used by the reader with
     `Area(10, 14, 3, 1)` in the script: 4000 + 3500 points and the square's card a
     quarter clockwise.
@@ -2043,7 +2075,7 @@ stands, decided 2026-10-27; details in the sections named.
     which every episode has, but only II and III have the text. The first survey also
     named II's money, phone card, credit card, telephone, skateboard, road and traffic,
     III's bridle, pipes and timber, and IV's punch card and cylinders; those came from
-    neighbouring vtables and tables and were wrong. Event 110 is Junior's 0x32. The editor's copy of a type offers only `classTexts` (oracle, goal, timber, hammer, fire, computer, terminal, punch), in the
+    neighbouring vtables and tables and were wrong. Event 110 is Junior's 0x32. The editor's copy of a type offers only `classTexts` (oracle, goal, timber, hammer, fire, computer, terminal, punch, sliding door), in the
     first language only, and skips a number the episode already uses for another text
     (III's 991).
 - **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").
@@ -2182,7 +2214,7 @@ event copied with its sound, and one with a MUSIC piece IV lacked (IV); robots' 
 episode rules as changed (Junior's oracles vanishing, robots' own colours, doors without
 the key, Teleport() points kept, house cells, diagonal moves, the backdrop rule); class 99
 cases against our render; the rucksack's capacity (III); room 255 ending IV; the goal
-kit in I; the computer kit in IV, punch cards and train & tracks in I. There is no game test for the
+kit in I; the computer kit in IV, punch cards (with the sliding door) and train & tracks in I. There is no game test for the
 dealer. Tests of what the originals do by themselves (the rules unchanged, sand heaps,
 notes, a cassette, diary pages, packages, the thief) ran up to 10e727d and are recorded
 here only: the exe does not change, so they cannot fail again; `git show

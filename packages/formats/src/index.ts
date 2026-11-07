@@ -415,7 +415,7 @@ export type {
   TileTypesChange,
 } from "./mod.ts";
 export { sha256 } from "./sha256.ts";
-export { KITS, kitChanges, kitExample, planKit } from "./kits.ts";
+export { KITS, kitChanges, kitExample, networkWord, planKit, slidingDoorCode } from "./kits.ts";
 export type { Kit, KitExample, KitOptions, KitPlan } from "./kits.ts";
 export { heroSteps } from "./walkable.ts";
 export type { HeroStep } from "./walkable.ts";

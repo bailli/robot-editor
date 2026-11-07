@@ -504,6 +504,29 @@ test("a kit's example is placed like a paste, once the episode has the kit", asy
   expect(app.editor?.game).toBe(app.editor?.pristine);
 });
 
+test("a kit shows what it does and its example; placed, the example says what is left", async () => {
+  app.showEpisode(1, 43);
+  await page.getByRole("tab", { name: "Kits" }).click();
+  const kits = page.getByRole("region", { name: "Kits" });
+  await kits.getByText("Punch cards from Robot IV").click();
+  const box = kits.getByRole("group").filter({ hasText: "Punch cards from Robot IV" });
+  await expect.element(box.getByText(/^IV's punch cards: a card's state is its key/)).toBeVisible();
+  await expect.element(box.getByText(/^Example: The punch \(address 2\)/)).toBeVisible();
+  await page.getByRole("button", { name: "Add punch cards" }).click();
+  await app.idle();
+  await box.getByRole("button", { name: "Place example" }).click();
+  const target = 14 * ROOM_WIDTH + 6;
+  fireAt("mousemove", target);
+  fireAt("mousedown", target);
+  expect(app.area).toEqual({ x: 6, y: 14, w: 7, h: 4 });
+  // the square at (10, 14); the door at (9, 17) of room 43: 43 ^ (9 ^ 17) = 51, ADAD
+  expect(status()).toMatch("“Area(10, 14, 3, 1);”");
+  expect(status()).toMatch("“MSG 7 ADAD”");
+  app.undo();
+  app.undo();
+  expect(app.editor?.game).toBe(app.editor?.pristine);
+});
+
 test("slow copies lock the side panel until they are done, saying what runs", async () => {
   app.showEpisode(0, 43);
   await page.getByRole("tab", { name: "Kits" }).click();

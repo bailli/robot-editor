@@ -126,6 +126,10 @@ export class KitsView {
       p.dataset["key"] = key;
       return p;
     };
+    // what the feature does, shown, not only as the Add button's tooltip
+    const note = element("p", "hint", kit.note);
+    note.dataset["key"] = "note";
+    box.append(note);
     const typeName = (of: number) => kit.types.find(([t]) => t === of)?.[1] ?? hex2(of);
     const label = (id: number) => (kit.eventLabel ? `${kit.eventLabel(id)} (${id})` : String(id));
     const own = plan.present.length === kit.types.length && plan.lacking.length === 0;
@@ -251,7 +255,8 @@ export class KitsView {
     const add = element("button", undefined, `Add ${kit.name.toLowerCase()}`);
     add.type = "button";
     add.disabled = empty || plan.problem !== undefined;
-    add.title = plan.problem ?? (empty ? "Nothing left to add" : kit.note);
+    const why = plan.problem ?? (empty ? "Nothing left to add" : undefined);
+    if (why !== undefined) add.title = why;
     add.addEventListener("click", () => {
       // the events not chosen stay lacking: the next plan starts from its default
       const events = this.chosen.get(kit.key);
@@ -334,14 +339,18 @@ export class KitsView {
     const place = element("button", undefined, "Place example");
     place.type = "button";
     place.disabled = !context.hasExample(kit);
-    place.title = place.disabled ? `Add the ${kit.name.toLowerCase()} first` : kit.example;
+    if (place.disabled) place.title = `Add the ${kit.name.toLowerCase()} first`;
     place.addEventListener("click", () => {
       this.events.example(kit);
     });
     const bar = element("div", "start-bar");
-    bar.dataset["key"] = "example";
     bar.append(place);
-    return bar;
+    // what the example holds and how to try it, shown below its button
+    const text = element("p", "hint", `Example: ${kit.example}`);
+    const block = element("div");
+    block.dataset["key"] = "example";
+    block.append(bar, text);
+    return block;
   }
 }
 

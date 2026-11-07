@@ -229,6 +229,9 @@ export const TERMINAL_CLASS = 227;
 /** IV's punch (tile 0x5c), which punches a blank card with a word sent to it. */
 export const PUNCH_CLASS = 228;
 
+/** IV's sliding door (tile 0x61), which opens while its code waits at address 7. */
+export const SLIDING_DOOR_CLASS = 231;
+
 /**
  * Entries of the episode's texts (textsId) a class shows beyond its description and
  * first take, by class id: the oracle its hints (message 330 + n, n from its record,
@@ -238,7 +241,8 @@ export const PUNCH_CLASS = 228;
  * cannot build (0x447370, hero state 11); fire (class 117) its death message 947 (the
  * hero's death handler 0x41ecf0 by class); the portable computer its programs and
  * replies 550-555 (0x4524e0 and on); IV's terminal its dialog 520-524 and, while a
- * power station is off (0x4fe4e8), 965 (0x41a790); the punch its sign 532 (0x41a8b0).
+ * power station is off (0x4fe4e8), 965 (0x41a790); the punch its sign 532 (0x41a8b0); the sliding door
+ * its sign 533 with its code (0x41a9e0).
  * Known from the code and tried in the game; other classes' messages exist in every
  * episode or are not traced. Junior's, I's and II's 994 is other text (Junior's goal, a
  * joke), which the timber shows there.
@@ -252,6 +256,7 @@ const CLASS_TEXTS: ReadonlyMap<number, readonly number[]> = new Map([
   [COMPUTER_CLASS, [550, 551, 552, 553, 554, 555]],
   [TERMINAL_CLASS, [520, 521, 522, 523, 524, 965]],
   [PUNCH_CLASS, [532]],
+  [SLIDING_DOOR_CLASS, [533]],
 ]);
 
 /** The text entries class `id` shows beyond its description and first take (CLASS_TEXTS). */

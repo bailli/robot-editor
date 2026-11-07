@@ -49,6 +49,7 @@ import {
   roomActors,
   roomCircuit,
   shapePixels,
+  slidingDoorCode,
   withConsole,
   withExitMode,
   withRoomScript,
@@ -1478,6 +1479,39 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
       // the square's ring a quarter clockwise: the card from its top middle to the right
       square: [0, 226],
     });
+  }, 120_000);
+
+  test("episode I: the punch cards kit's sliding door opens for its code at the reader", async () => {
+    // the example at (6, 14): a card (7, 15), the reader (9, 15) with address 7, the
+    // door (9, 17) in state 0; the card punched with the door's code here
+    const at = { x: 6, y: 14 };
+    const mod = exampleMod(game, 1, "punchcards", at, { x: 8, y: 15 });
+    const [change] = mod.changes.rooms;
+    assert.ok(change.room);
+    const room = change.room;
+    const code = slidingDoorCode(room.id, 9, 17, 0);
+    const card = room.overlay[7 + 15 * ROOM_WIDTH] ?? 0;
+    room.overlay[7 + 15 * ROOM_WIDTH] = (card & 0xff) | (code << 8);
+    const seen = await withModExe(game, mod, (exe) =>
+      withGame(exe, async (d) => {
+        const door = async () => (await topAt(d, 9, 17)) >> 8;
+        await d.startEpisode(1);
+        await d.pickUp("left", (h) => h.x <= 7);
+        await d.walk("right", (h) => h.x >= 8);
+        const closed = await door();
+        await d.putDown("use"); // by the reader: the code sent to address 7
+        await d.run(100);
+        const opened = await door();
+        // down through the door
+        await d.walk("down", (h) => h.y >= 16);
+        await d.walk("right", (h) => h.x >= 9);
+        const through = await d.walk("down", (h) => h.y >= 18);
+        await d.run(200);
+        await d.closeBoxes();
+        return { closed, opened, through: through.y, after: await door() };
+      }),
+    );
+    assert.deepEqual(seen, { closed: 0, opened: 2, through: 18, after: 0 });
   }, 120_000);
 
   test("episode I: the train kit's train takes the hero on at its station", async () => {
