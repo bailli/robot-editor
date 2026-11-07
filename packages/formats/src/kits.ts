@@ -1,4 +1,12 @@
-import { classTexts, freeTileTypes } from "./classes.ts";
+import {
+  CARD_READER_CLASS,
+  type EpisodeClasses,
+  PUNCH_CARD_CLASS,
+  PUNCH_CLASS,
+  SLIDING_DOOR_CLASS,
+  classTexts,
+  freeTileTypes,
+} from "./classes.ts";
 import { roomTileTypes } from "./describe.ts";
 import { WOODS_CUT_THROUGH, readEpisodeFlags } from "./episode-flags.ts";
 import { EVENT_TEXT, FIRST_EVENT_ENTRY, readEventTable, spareEventEntries } from "./events.ts";
@@ -259,6 +267,36 @@ export function slidingDoorCode(room: number, x: number, y: number, state: numbe
  */
 export function networkWord(byte: number): string {
   return [6, 4, 2, 0].map((shift) => "ABCD"[(byte >> shift) & 3]).join("");
+}
+
+/**
+ * What IV's network (the punch cards kit) makes of the cell value at (x, y) of room
+ * `room`, for the editor's cell info: a sliding door's code there and the word for it, a
+ * card's key, a punch's or a reader's address; undefined for other classes.
+ */
+export function networkNote(
+  value: number,
+  classes: EpisodeClasses,
+  room: number,
+  x: number,
+  y: number,
+): string | undefined {
+  const id = classes.classes.get(value & 0xff)?.id;
+  const state = value >> 8;
+  if (id === SLIDING_DOOR_CLASS) {
+    const code = slidingDoorCode(room, x, y, state);
+    if (code === 0) return "door code 0 here: no word opens it";
+    const word = networkWord(code);
+    return `door code ${String(code)} = ${word} (“MSG 7 ${word}”, or a card with it at a reader of address 7)`;
+  }
+  if (id === PUNCH_CARD_CLASS)
+    return state === 0 ? "blank card" : `card key ${String(state)} = ${networkWord(state)}`;
+  if (id === PUNCH_CLASS) return `punch (printer) address ${String((state & 0xf0) + 2)}`;
+  if (id === CARD_READER_CLASS) {
+    const address = state >> 4;
+    return `reader address ${String(address)}${address === DOORS_ADDRESS ? " (the doors)" : ""}`;
+  }
+  return undefined;
 }
 
 /** What adding a kit to an episode does (planKit). */

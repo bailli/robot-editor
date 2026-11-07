@@ -6,6 +6,7 @@ import {
   KITS,
   kitChanges,
   kitExample,
+  networkNote,
   networkWord,
   planKit,
   slidingDoorCode,
@@ -402,6 +403,23 @@ test("sliding doors: the code by room, state and place; the terminal's word for 
   // the state's high nibble counts, its low one (closed, opening, open) does not
   expect(slidingDoorCode(61, 21, 17, 0x30)).toBe(61 ^ 0x30 ^ (21 ^ 17));
   expect(slidingDoorCode(63, 5, 14, 2)).toBe(52);
+});
+
+test("the network's cells: a door's code where it lies, a card's key, the addresses", () => {
+  const { classes } = game.episode(4);
+  // room 63's door at (5, 14), its punch cards and readers (IV's types 0x61, 0x59, 0x5c, 0x62)
+  expect(networkNote(0x0061, classes, 63, 5, 14)).toMatch(/^door code 52 = ADBA \(“MSG 7 ADBA”/);
+  expect(networkNote(0x0061, classes, 43, 35, 8)).toBe("door code 0 here: no word opens it");
+  expect(networkNote(0x3859, classes, 163, 16, 5)).toBe("card key 56 = ADCA");
+  expect(networkNote(0x0059, classes, 163, 16, 5)).toBe("blank card");
+  expect(networkNote(0x905c, classes, 54, 30, 13)).toBe("punch (printer) address 146");
+  expect(networkNote((0x705c & 0xff00) | 0x62, classes, 61, 17, 14)).toBe(
+    "reader address 7 (the doors)",
+  );
+  expect(networkNote(0x5062, classes, 163, 38, 2)).toBe("reader address 5");
+  // other classes: nothing; in another episode the type is another class
+  expect(networkNote(0x0026, classes, 63, 5, 14)).toBeUndefined();
+  expect(networkNote(0x0061, game.episode(1).classes, 43, 5, 14)).toBeUndefined();
 });
 
 test("the punch cards' example says what is left where it lies: the Area, the door's word", () => {

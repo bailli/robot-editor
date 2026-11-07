@@ -49,6 +49,7 @@ import {
   goodTile,
   heroSteps,
   modJson,
+  networkNote,
   nodeBulb,
   parseCompiledScript,
   parseMod,
@@ -3683,6 +3684,12 @@ export class App {
     // actors from a record: the record's summary above says what they do
     const actor = this.actors.find((a) => a.cell === index && !a.record);
     if (actor) this.cellInfo.textContent += `  · actor: ${actorOrigin(actor)}`;
+    // IV's network (the punch cards kit): a door's code here, a card's key, an address
+    const classes = this.editor.game.episode(this.episode).classes;
+    const network = [overlay, base]
+      .map((v) => networkNote(v, classes, this.roomId, x, y))
+      .find((note) => note !== undefined);
+    if (network) this.cellInfo.textContent += `  · ${network}`;
     const start = this.editor.start(this.episode);
     if (start.room === this.roomId && start.x === x && start.y === y)
       this.cellInfo.textContent += "  · the hero starts here";

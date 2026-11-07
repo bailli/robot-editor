@@ -1977,6 +1977,19 @@ stands, decided 2026-10-27; details in the sections named.
     and the remote control. **Area squares** are devices too: task kind 0xff at address
     5 + slot (0x43083f; "Drehkr. 5"): a word equal to the slot's key turns it clockwise
     (event 352), its complement anticlockwise; IV's readers with state 0x50 send there.
+    The editor's cell info (`networkNote`) shows a door's code and word where it lies,
+    a card's key and word, a punch's and a reader's address. The **printer** of the
+    terminal's help (522, 523 "PRINTER": "Lochkarten-Stanzer") is the punch: its address
+    is (state & 0xf0) + 2 (the scan 0x419fc0 `or 2`, the sign 0x41a8b0 `add 2`), so 2,
+    18, 34, … 242 by the state's high nibble, and only its sign (532) tells it: the
+    server list (524) says "Drucker entfällt". IV's punches: 0x00 → 2 (rooms 1, 2, 51,
+    193, 252), 0x10 → 18, 0x20 → 34, 0x30 → 50, 0x50 → 82, 0x60 → 98, 0x70 → 114,
+    0x80 → 130, 0x90 → 146, 0xa0 → 162, 0xb0 → 178, 0xc0 → 194, 0xd0 → 210, 0xe0 → 226.
+    A **reader's** state: the high nibble is its address (a card whose key no Area has
+    is sent there, 0x419cc3), the low nibble its frame, whose bit 0 its task flips
+    (0x430835; so it blinks, not seen); IV's readers are 0x70 (by the doors, address 7)
+    and 0x50 (address 5, the first Area's device); other addresses reach only a script's
+    MsgPoll.
     **IV's remote control** (0x64, class 234, use 0x41ab70; not in a kit): its state's
     top two bits are charges (a use takes 0x40; none left, nothing happens), and a use
     raises event 347 and does effect state & 7 or (state >> 3) & 7, on a coin flip

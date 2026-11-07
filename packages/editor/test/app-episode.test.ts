@@ -522,6 +522,12 @@ test("a kit shows what it does and its example; placed, the example says what is
   // the square at (10, 14); the door at (9, 17) of room 43: 43 ^ (9 ^ 17) = 51, ADAD
   expect(status()).toMatch("“Area(10, 14, 3, 1);”");
   expect(status()).toMatch("“MSG 7 ADAD”");
+  // the cell info says the door's code, the reader's address
+  const info = () => document.querySelector(".cell-info")?.textContent ?? "";
+  fireAt("mousemove", 17 * ROOM_WIDTH + 9);
+  expect(info()).toMatch("· door code 51 = ADAD (“MSG 7 ADAD”");
+  fireAt("mousemove", 15 * ROOM_WIDTH + 9);
+  expect(info()).toMatch("· reader address 7 (the doors)");
   app.undo();
   app.undo();
   expect(app.editor?.game).toBe(app.editor?.pristine);

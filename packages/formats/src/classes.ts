@@ -232,6 +232,12 @@ export const PUNCH_CLASS = 228;
 /** IV's sliding door (tile 0x61), which opens while its code waits at address 7. */
 export const SLIDING_DOOR_CLASS = 231;
 
+/** IV's punch card (tile 0x59): its state is its key (0: blank). */
+export const PUNCH_CARD_CLASS = 226;
+
+/** IV's card reader (tile 0x62): it sends a card's key to its address, state >> 4. */
+export const CARD_READER_CLASS = 232;
+
 /**
  * Entries of the episode's texts (textsId) a class shows beyond its description and
  * first take, by class id: the oracle its hints (message 330 + n, n from its record,
