@@ -1,6 +1,7 @@
 /* The screen: an SDL window showing the game's frames, and SDL's input turned into the
    window messages the game expects. Options (environment): ROBOT_SCALE (window size as a
-   multiple of 640 × 348, default 2), ROBOT_FULLSCREEN (start in fullscreen). Without a video
+   multiple of 640 × 348, default 2; with the command console on the game's picture is
+   640 × 360), ROBOT_FULLSCREEN (start in fullscreen). Without a video
    device (or SDL_VIDEODRIVER=dummy) everything still runs, with nothing shown. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,7 +20,7 @@ static int state; /* 0 not tried, 1 video works, -1 no video */
 static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture;
-static DWORD pixels[GAME_WIDTH * GAME_HEIGHT];
+static DWORD pixels[640 * 480]; /* as large as gdi32.c's frame_pixels */
 
 static BOOL video(void) {
   if (!state) {
@@ -119,16 +120,34 @@ static void show(const DWORD *rgb, int width, int height, int pitch) {
   redraw();
 }
 
+/* A window in its normal state keeps its width and takes the height of a GDI picture of
+   width × height, so that pixels stay square (the window was made for 640 × 348). */
+static void fit_window(int width, int height) {
+  static int fitted_width = GAME_WIDTH, fitted_height = GAME_HEIGHT;
+  if (width == fitted_width && height == fitted_height) return;
+  /* in full screen or maximized: again with the next picture after it */
+  if (SDL_GetWindowFlags(window) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED))
+    return;
+  int ww;
+  SDL_GetWindowSize(window, &ww, NULL);
+  int wh = (ww * height + width / 2) / width;
+  SDL_SetWindowSize(window, ww, wh);
+  trace("screen: picture %dx%d, window %dx%d", width, height, ww, wh);
+  fitted_width = width;
+  fitted_height = height;
+}
+
+/* GDI's frame as the game paints it: 640 × 348, or 640 × 360 when the command console is on —
+   the game makes its window one text row taller (0x403070) and paints the console's line
+   there (0x402146, drawn by 0x43c130). */
 void screen_present(void) {
   if (!window) create_window();
   if (!window) return;
   showing_rgb = FALSE;
-  int w = frame_width < GAME_WIDTH ? frame_width : GAME_WIDTH;
-  int h = frame_height < GAME_HEIGHT ? frame_height : GAME_HEIGHT;
-  for (int y = 0; y < h; y++)
-    for (int x = 0; x < w; x++)
-      pixels[y * GAME_WIDTH + x] = frame_colours[frame_pixels[y * frame_width + x]];
-  show(pixels, GAME_WIDTH, GAME_HEIGHT, GAME_WIDTH);
+  int w = frame_width, h = frame_height;
+  for (int i = 0; i < w * h; i++) pixels[i] = frame_colours[frame_pixels[i]];
+  fit_window(w, h);
+  show(pixels, w, h, w);
 }
 
 void screen_present_rgb(const DWORD *rgb, int width, int height, int pitch) {

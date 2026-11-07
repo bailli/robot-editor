@@ -312,7 +312,9 @@ Files in `packages/formats/src`:
   variable on). Without the mutex: `withConsole` (`console.ts`) drops the check's jump
   (0x43c304 `75 23` → `90 90`), as the editor's Console chip does for "Test in game"
   (also on Windows and in the static build's download). Printable characters (WM_CHAR, 0x404508) go into an 80-character line
-  in the bottom row (`>`, a message after `!!`), Backspace edits, Return runs it
+  in a row of its own below the picture (`>`, a message after `!!`; the game makes its
+  window one text row taller for it, 0x403070, and paints 640 × 360 instead of 348,
+  0x402146), Backspace edits, Return runs it
   (0x43c620), Esc clears it; while it is on, no letter reaches the game (an Esc after a
   message opened the game's menu). The first word is compared (`_stricmp`) with strings
   obfuscated by 0x431d60: a 0x06 lead byte, then each byte XORed with Borland
@@ -2337,6 +2339,10 @@ removes it on `close` (`gameDir`: there the game keeps its screenshots).
   exe). The dev server runs one game at a time, ends the one it started before, answers
   after a second unless the wrapper has ended (its log's last lines then). Without any
   video driver the wrapper ends at once ("no video"), unless `SDL_VIDEODRIVER=dummy`.
+  With the console on, the game's GDI picture is 640 × 360 (its line below the room):
+  the wrapper shows frames at their size and makes the window that much taller, keeping
+  its width (until 2026-11-07 it cut them to 640 × 348, so the console ran but the line
+  typed was never seen, and clicks were 360/348 off vertically).
 - **Wrapper against Wine** (`pnpm test:game:cross`, the same input on both): the hero, the
   game tick, the virtual time and every frame are the same in all five episodes
   (2026-11-06; the colours compared are those a frame uses). Sprites' colour cycling
