@@ -1581,7 +1581,11 @@ Supported:
   set in the same undo step as an episode edit), fire & bucket (bucket 0x67, fire
   0x66, ash 0x4f, river 0x12 and water 0x25 where missing; fire's 947 by
   `classTexts`), swimming (flippers 0x60, river, water; `Kit.texts`: 230). See "Kits
-  from III" under Fan episodes. Per kit what adding it to the shown
+  from III" under Fan episodes. From I and IV (2026-11-07): computer (I's 0x08 and
+  interface 0x41; texts 550–555; events 289, 290), punch cards (IV's card 0x59, reader
+  0x62, punch 0x5c, terminal 0x5b; texts 532, 520–524, 965; events 352, 353, 351),
+  train & tracks (IV's train 0x4a, rails 0x39); see "Kits from I and IV". Per kit what
+  adding it to the shown
   episode copies: the types whose class the episode lacks (stairs only to Junior; II
   and III have oracles, I and II circuits: "has … already"), each at the same number
   where free, else the first free type no copy has (free: no class, and no room's map
@@ -1920,6 +1924,57 @@ stands, decided 2026-10-27; details in the sections named.
     packages get the chosen type inside (with "empty" they keep it), records stay. A
     kit whose free types do not suffice offers a choice per type lacking ("Give up").
     Not tried in the game.
+- **Kits from I and IV** (2026-11-07; `kits.ts`, code read, verified with the native
+  wrapper, `pnpm test:game`, each kit's example):
+  - **Computer** (I's 0x08, class 53, use 0x40e800; the interface 0x41, class 75, which
+    only blocks): used, it opens its dialog (0x4524e0: event 289, 1000 points; DOS-like
+    commands, the games STERNCHEN, SUPERHIRN, MEMORY; texts 550–555). Its RCP connects
+    when an interface is next to the hero (0x451577, table 0x483498: dx, dy and the map
+    word, class 75 with state 1 west of him, 3 east, 2 north, 0 south), by class, so in
+    any episode; the password TOBOR (551 variant 10) raises event 290 (5000 points),
+    then commands switch the room's doors, beam and arrows and show the hero (555). It
+    sends nothing to the network below: the send routine 0x42fb20 is called by MsgSend
+    (0x407e56), the card at a reader (0x419cc3), IV's terminal (0x41a3d9, 0x41ac67), the
+    device tasks (0x430582) and the console's SEND (0x43cdb2), not from 0x450000 on.
+    **Verified:** in IV the copied computer used gives 1000 points from spare entry 197.
+  - **Punch cards** (IV): a card (0x59, class 226) holds its key as its state (0:
+    blank). Used (0x419b30) it looks at its cell and the eight around it (0x47e6d8) and
+    stops at the first punch or reader: next to the punch (0x5c, class 228), blank and
+    the punch empty (state bit 1 clear), the card goes into it (bit 1, event 228, the
+    punch's first use); next to a reader (0x62, class 232), punched, event 232 and, if
+    one of the four `Area(x, y, size, key)` slots (0x4fe45b: x, y, size, key; set by the
+    script) has its key, event 352 (3500) and the square's rings turn a quarter
+    clockwise (0x4302f0), else the reader sends (its state >> 4, the key), which a
+    script's MsgPoll hears; next to a train, event 351 and the key as its driving program
+    (actor +0x13). The **network**: words (address, byte) in 32 pairs at 0x4fe46b, sent
+    by the terminal's `MSG <dev> <msg>` (texts 520–524; the word up to four letters,
+    each (c − 1) & 3, so A–D = 0–3, AAAB = 1, either case; 0x42fae0), a script's
+    `MsgSend(address, word)` or the console's SEND. **Device tasks** (0x4304d0) for
+    punches (address (state & 0xf0) + 2, the number on its sign, text 532), sliding doors
+    (7) and readers are made by the scan 0x419fc0, which the terminal class's
+    room-entered method (vtable +0x20; every class of the episode gets it after a room
+    loads, 0x42b90e) runs: so the punch works only where the terminal's class is in the
+    episode (in the room or not). A punch's task, while a word for its address waits
+    and it holds a card, sets bit 0 (event 353); walked into, the punch then hands out
+    the card with the word as key, and the word is used up (0x41a8b0); empty, it shows
+    its sign. The terminal shows 965 instead while 0x4fe4e8 is set (a power station
+    off). Not in the kit: sliding doors (class 231, text 533, events 347, 350, 370).
+    **Verified** in I: blank card into the punch (2000), at the terminal `MSG 2 AAAB`,
+    the punch punched (state 3), the card taken with key 1, used by the reader with
+    `Area(10, 14, 3, 1)` in the script: 4000 + 3500 points and the square's card a
+    quarter clockwise.
+  - **Train & tracks** (IV): the train (0x4a, class 221) is an actor (room-load
+    0x41c570: kind 0xdd, direction state >> 1: 0 north, 1 east, 2 south, 3 west; its
+    factory registered for every episode) running on rails (0x39, class 208; ways per
+    state at 0x483150: N 1, E 2, S 4, W 8, 0x10 a crossing, 0x20 a station: 0 north–
+    south, 1 east–west, 2 crossing, 3 and 4 stations, 5–8 bends east–south, south–west,
+    north–east, north–west, 9–15 again); off the rails it leaves the room (0x44da70). At
+    a station it waits a while (+0x12 counts down, 15–25 or 20–40); the hero walks only
+    on stations (0x4196f0) and gets on by walking into a waiting train (0x4199b0: hero
+    state 9, the train's place kept in 0x4fe455/6), steps off at a station with an
+    arrow key, and the rails' room-entered method (0x419620) puts the train back under
+    him in the next room. **Verified** in I: the hero walks into the waiting train at
+    the example's station and rides it round the loop (hero state 9).
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,
@@ -1988,7 +2043,7 @@ stands, decided 2026-10-27; details in the sections named.
     which every episode has, but only II and III have the text. The first survey also
     named II's money, phone card, credit card, telephone, skateboard, road and traffic,
     III's bridle, pipes and timber, and IV's punch card and cylinders; those came from
-    neighbouring vtables and tables and were wrong. Event 110 is Junior's 0x32. The editor's copy of a type offers only `classTexts` (oracle, goal, timber, hammer), in the
+    neighbouring vtables and tables and were wrong. Event 110 is Junior's 0x32. The editor's copy of a type offers only `classTexts` (oracle, goal, timber, hammer, fire, computer, terminal, punch), in the
     first language only, and skips a number the episode already uses for another text
     (III's 991).
 - **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").
@@ -2127,7 +2182,7 @@ event copied with its sound, and one with a MUSIC piece IV lacked (IV); robots' 
 episode rules as changed (Junior's oracles vanishing, robots' own colours, doors without
 the key, Teleport() points kept, house cells, diagonal moves, the backdrop rule); class 99
 cases against our render; the rucksack's capacity (III); room 255 ending IV; the goal
-kit in I. There is no game test for the
+kit in I; the computer kit in IV, punch cards and train & tracks in I. There is no game test for the
 dealer. Tests of what the originals do by themselves (the rules unchanged, sand heaps,
 notes, a cassette, diary pages, packages, the thief) ran up to 10e727d and are recorded
 here only: the exe does not change, so they cannot fail again; `git show

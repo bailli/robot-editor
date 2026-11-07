@@ -311,7 +311,7 @@ test("fire & bucket, swimming: a river and water where the episode has none, the
 });
 
 test("the new kits' examples in Junior, with the kits' types", () => {
-  for (const key of ["woods", "axe", "fire", "swimming"]) {
+  for (const key of ["woods", "axe", "fire", "swimming", "computer", "punchcards", "train"]) {
     const chosen = kit(key);
     const changes = kitChanges(game, 0, chosen, planKit(game, 0, chosen));
     const added = new Game(
@@ -330,4 +330,57 @@ test("the new kits' examples in Junior, with the kits' types", () => {
     for (const c of [...example.base, ...example.overlay])
       expect(c === 0 || types.has(c & 0xff), `${key}: 0x${c.toString(16)}`).toBe(true);
   }
+});
+
+test("computer: I's computer and interface, their texts; events where the table lacks them", () => {
+  const computer = kit("computer");
+  // Junior: the types, its own events 289 and 290 (no points without them)
+  expect(planKit(game, 0, computer)).toMatchObject({
+    types: [
+      [0x3a, 0x08],
+      [0x41, 0x41],
+    ],
+    texts: [550, 551, 552, 553, 554, 555],
+    events: [],
+    lacking: [],
+  });
+  for (const e of [1, 2]) expect(planKit(game, e, computer).present).toEqual([0x08, 0x41]);
+  // III: no spare entry; IV: two of its four
+  expect(planKit(game, 3, computer)).toMatchObject({ events: [], without: [289, 290] });
+  expect(planKit(game, 4, computer).events).toEqual([
+    { entry: 197, of: 161, id: 289 },
+    { entry: 198, of: 162, id: 290 },
+  ]);
+});
+
+test("punch cards: card, reader, punch and terminal from IV; their texts; II has no room", () => {
+  const punchcards = kit("punchcards");
+  expect(planKit(game, 1, punchcards)).toMatchObject({
+    types: [
+      [0x59, 0x59],
+      [0x62, 0x62],
+      [0x5c, 0x5c],
+      [0x5b, 0x5b],
+    ],
+    texts: [532, 520, 521, 522, 523, 524, 965],
+    // one spare entry: the square turned
+    events: [{ entry: 190, of: 137, id: 352 }],
+    without: [353, 351],
+  });
+  expect(planKit(game, 2, punchcards).problem).toMatch(/4 free tile types needed, 0 left/);
+  expect(planKit(game, 4, punchcards)).toMatchObject({ types: [], texts: [], events: [] });
+});
+
+test("train & tracks: IV's train and rails, no texts or events", () => {
+  const train = kit("train");
+  expect(planKit(game, 1, train)).toMatchObject({
+    types: [
+      [0x4c, 0x4a],
+      [0x4d, 0x39],
+    ],
+    texts: [],
+    events: [],
+  });
+  expect(planKit(game, 1, train).problem).toBeUndefined();
+  expect(planKit(game, 4, train).present).toEqual([0x4a, 0x39]);
 });

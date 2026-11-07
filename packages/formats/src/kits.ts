@@ -182,6 +182,54 @@ export const KITS: readonly Kit[] = [
       "A river two rows high with a current east (a water cell, state 2), the flippers south of it: the current carries the hero east, with the flippers he swims against it.",
     note: "Rivers carry the hero along their current, which water cells set (direction by the state's low nibble, strength by its high one; 0x427f90); the flippers make him swim stronger (0x427450). Brings a river and water where the episode has none, and text 230, which water and rivers show while a room's script sets NoSwim.",
   },
+  {
+    key: "computer",
+    name: "Computer",
+    from: 1,
+    types: [
+      [0x08, "portable computer"],
+      [0x41, "interface"],
+    ],
+    // the computer used (0x4524e0): 1000 points; the central computer's password (0x451508):
+    // 5000 points, in Junior, I and II
+    events: [289, 290],
+    eventLabel: (id) => (id === 289 ? "computer used" : "password"),
+    example:
+      "An interface in the wall north of the cell east of the computer: the computer taken and used there (rucksack, “Benutzen”) connects to the central computer (RCP, password TOBOR).",
+    note: "I's portable computer, used (rucksack, “Benutzen”), runs its programs (games, a directory, RCP; texts 550–555). Its RCP connects where an interface (tile 0x41) is next to the hero, by state: 0 south of him, 1 west, 2 north, 3 east (0x451577); with the password TOBOR it switches the room's doors, beam and arrows. It sends nothing to IV's punches.",
+  },
+  {
+    key: "punchcards",
+    name: "Punch cards",
+    from: 4,
+    types: [
+      [0x59, "punch card"],
+      [0x62, "card reader"],
+      [0x5c, "punch"],
+      [0x5b, "terminal"],
+    ],
+    // 0x419b30, a card used: next to a reader with an Area of its key, 352 (the square
+    // turned); next to a train, 351 (its driving program); 0x430739, a card punched: 353
+    events: [352, 353, 351],
+    eventLabel: (id) =>
+      id === 352 ? "square turned" : id === 353 ? "card punched" : "train program",
+    example:
+      "The punch (address 2) with a blank card south-east of it, the terminal below, a card reader and, east of it, a square with a card in its top row: the card used where it lies goes into the punch; at the terminal “MSG 2 AAAB” punches it with key 1; taken from the punch (walk into it) and used next to the reader, it turns the square a quarter with “Area(x, y, 3, 1);” in the room's script, (x, y) the square's top left. A card used stops at the first punch or reader next to it.",
+    note: "IV's punch cards: a card's state is its key (0: blank). Used next to a card reader it turns the square of a script's Area(x, y, size, key) with its key (0x4302f0), else the reader sends the key to its address (state >> 4; a script's MsgPoll hears it). A blank card used next to the punch goes into it; a word sent to the punch's address (state & 0xf0 + 2, on its sign, text 532) punches it, by the terminal's “MSG address word” (word: four letters A–D, two bits each, AAAB = 1) or a script's MsgSend(address, key). The punches work only in an episode with the terminal's class, whose room-entered method starts them (0x419fc0). Brings the terminal's texts 520–524 and 965, which name IV's devices.",
+  },
+  {
+    key: "train",
+    name: "Train & tracks",
+    from: 4,
+    types: [
+      [0x4a, "train"],
+      [0x39, "rails"],
+    ],
+    events: [],
+    example:
+      "A loop of rails with a station on its west side, the train on the top row heading east: it goes round, waits at the station, and the hero walking onto the station from the west gets on.",
+    note: "IV's train (an actor, direction = state >> 1: 0 north, 1 east, 2 south, 3 west) runs along rails (state: 0 north–south, 1 east–west, 2 a crossing, 3 and 4 stations, 5–8 bends: east–south, south–west, north–east, north–west; 0x483150) and waits at stations, the only rails the hero walks on. Off the rails it is gone. The hero rides it (hero state 9), steps off at a station with an arrow key, and takes it along into the next room on rails. A punch card used next to it gives it a driving program (event 351, the punch cards kit).",
+  },
 ];
 
 /** What adding a kit to an episode does (planKit). */
@@ -482,6 +530,14 @@ const WOODS_WAY = 4;
 const RIVER_OPEN = 2;
 /** A water cell's current: direction east (0x481054: 2), strength 1 (high nibble 0). */
 const CURRENT_EAST = 2;
+/** The interface's state when it lies north of the computer's user (0x48349c). */
+const INTERFACE_NORTH = 2;
+/** Rail states (their ways at 0x483150: N 1, E 2, S 4, W 8, a station 0x20). */
+const [RAIL_NS, RAIL_EW, RAIL_STATION_NS, RAIL_ES, RAIL_SW, RAIL_NE, RAIL_NW] = [
+  0, 1, 3, 5, 6, 7, 8,
+];
+/** A train heading east (its direction is state >> 1, 0x41c570). */
+const TRAIN_EAST = 2;
 
 /**
  * The example of `kit` for the episode as `game` has it (its types found by their class,
@@ -503,6 +559,12 @@ const CURRENT_EAST = 2;
  *   east), the bucket at (0, 2), fires at (5, 1) and (5, 2).
  * - swimming (6 × 3): a river two rows high with a water cell at (2, 0) (a current
  *   east), the flippers at (0, 2).
+ * - computer (3 × 2): the interface at (1, 0) (state 2: north of its user), the
+ *   computer at (0, 1).
+ * - punch cards (7 × 3): the punch (0, 0) with address 2, a blank card (1, 1), the
+ *   reader (3, 1), the terminal (0, 2); another blank card at (5, 0), in the square
+ *   (4..6, 0..2) a script's Area turns.
+ * - train (6 × 3): a loop of rails, a station at (0, 1), the train at (2, 0) heading east.
  */
 export function kitExample(
   game: Game,
@@ -582,6 +644,44 @@ export function kitExample(
     );
     const overlay = base.map(() => 0);
     overlay[2 * w] = cell(0, 0);
+    return { w, h: 3, base, overlay, records: [] };
+  }
+  if (kit.key === "computer") {
+    const [computer, iface] = types;
+    if (computer === undefined || iface === undefined) return undefined;
+    const w = 3;
+    const base = Array.from({ length: 2 * w }, () => 0);
+    base[1] = cell(1, INTERFACE_NORTH);
+    const overlay = base.map(() => 0);
+    overlay[w] = cell(0, 0);
+    return { w, h: 2, base, overlay, records: [] };
+  }
+  if (kit.key === "punchcards") {
+    if (types.some((t) => t === undefined)) return undefined;
+    const w = 7;
+    const base = Array.from({ length: 3 * w }, () => 0);
+    const overlay = base.slice();
+    // a card used stops at the first punch or reader around it (0x419b30), so the
+    // blank card's cell has the punch, not the reader, next to it
+    overlay[0] = cell(2, 0); // the punch, address 2
+    overlay[1 + w] = cell(0, 0); // a blank card
+    overlay[3 + w] = cell(1, 0); // the reader
+    overlay[2 * w] = cell(3, 0); // the terminal
+    overlay[5] = cell(0, 0); // in the square (4..6, 0..2): shows the turn
+    return { w, h: 3, base, overlay, records: [] };
+  }
+  if (kit.key === "train") {
+    const [train, rails] = types;
+    if (train === undefined || rails === undefined) return undefined;
+    const w = 6;
+    const loop = [
+      [RAIL_ES, RAIL_EW, RAIL_EW, RAIL_EW, RAIL_EW, RAIL_SW],
+      [RAIL_STATION_NS, -1, -1, -1, -1, RAIL_NS],
+      [RAIL_NE, RAIL_EW, RAIL_EW, RAIL_EW, RAIL_EW, RAIL_NW],
+    ];
+    const base = loop.flat().map((state) => (state < 0 ? 0 : rails | (state << 8)));
+    const overlay = base.map(() => 0);
+    overlay[2] = train | (TRAIN_EAST << 8);
     return { w, h: 3, base, overlay, records: [] };
   }
   if (kit.key === "oracles") {

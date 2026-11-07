@@ -220,6 +220,15 @@ export const HAMMER_CLASS = 180;
 /** Junior's goal, class 50 (tile 0x32 in Junior; in I, II and IV that tile is the expert field). */
 export const GOAL_CLASS = 0x32;
 
+/** I's and II's portable computer (tile 0x08), used next to an interface (class 75). */
+export const COMPUTER_CLASS = 53;
+
+/** IV's terminal (tile 0x5b): its network sends words to punches and doors. */
+export const TERMINAL_CLASS = 227;
+
+/** IV's punch (tile 0x5c), which punches a blank card with a word sent to it. */
+export const PUNCH_CLASS = 228;
+
 /**
  * Entries of the episode's texts (textsId) a class shows beyond its description and
  * first take, by class id: the oracle its hints (message 330 + n, n from its record,
@@ -227,9 +236,12 @@ export const GOAL_CLASS = 0x32;
  * (0x41f450), whose closing ends the game; III's timber (class 158) its message 994 when
  * the hero carries enough (0x415b00); III's hammer (class 180) text 285 where its state
  * cannot build (0x447370, hero state 11); fire (class 117) its death message 947 (the
- * hero's death handler 0x41ecf0 by class). Known from the code and tried in the game;
- * other classes' messages exist in every episode or are not traced. Junior's, I's and
- * II's 994 is other text (Junior's goal, a joke), which the timber shows there.
+ * hero's death handler 0x41ecf0 by class); the portable computer its programs and
+ * replies 550-555 (0x4524e0 and on); IV's terminal its dialog 520-524 and, while a
+ * power station is off (0x4fe4e8), 965 (0x41a790); the punch its sign 532 (0x41a8b0).
+ * Known from the code and tried in the game; other classes' messages exist in every
+ * episode or are not traced. Junior's, I's and II's 994 is other text (Junior's goal, a
+ * joke), which the timber shows there.
  */
 const CLASS_TEXTS: ReadonlyMap<number, readonly number[]> = new Map([
   [ORACLE_CLASS, [...Array.from({ length: 16 }, (_, n) => 330 + n), 945]],
@@ -237,6 +249,9 @@ const CLASS_TEXTS: ReadonlyMap<number, readonly number[]> = new Map([
   [TIMBER_CLASS, [994]],
   [HAMMER_CLASS, [285]],
   [FIRE_CLASS, [947]],
+  [COMPUTER_CLASS, [550, 551, 552, 553, 554, 555]],
+  [TERMINAL_CLASS, [520, 521, 522, 523, 524, 965]],
+  [PUNCH_CLASS, [532]],
 ]);
 
 /** The text entries class `id` shows beyond its description and first take (CLASS_TEXTS). */
