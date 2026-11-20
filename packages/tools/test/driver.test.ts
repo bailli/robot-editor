@@ -1277,61 +1277,63 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     return d.hero();
   };
 
-  test("episode IV: the axe & bridges kit fells woods, takes timber, builds a bridge", async () => {
-    // the example at (6, 14): axe (6, 14), hammer (6, 16), woods x = 8, river x = 11
-    const mod = exampleMod(game, 4, "axe", { x: 6, y: 14 }, { x: 4, y: 14 });
-    const WOOD = 0x4fe3c6;
-    const seen = await withModExe(game, mod, (exe) =>
-      withGame(exe, async (d) => {
-        await d.startEpisode(4);
-        await d.pickUp("right", (h) => h.x >= 6);
-        await d.pickUp("down", (h) => h.y >= 16);
-        // the rucksack's first item, "Benutzen": the axe
-        await d.press("return", 100);
-        await d.press("return", 100);
-        const axe = await heroState(d);
-        // into the woods: felled (event 335's bonus box), then onto them with the flag,
-        // a step on a coin flip, which takes the timber
-        await reach(d, "right", (h) => h.x >= 7);
-        await d.hold("right", 20);
-        await d.run(20);
-        const boxes = await d.closeBoxes();
-        await reach(d, "right", (h) => h.x >= 8);
-        const wood = (await d.peek(WOOD, 1))[0];
-        const felled = await cellAt(d, 8, 16);
-        // Esc ends the axe's state; the rucksack now lists the wood first, then axe, hammer
-        await d.press("escape", 50);
-        const after = await heroState(d);
-        await d.press("return", 100);
-        await d.press("right", 100);
-        await d.press("right", 100);
-        await d.press("return", 100);
-        const hammer = await heroState(d);
-        // five hits finish the bridge (a unit of wood each), then the hero walks over it
-        await reach(d, "right", (h) => h.x >= 12, 20);
-        return {
-          axe,
-          boxes,
-          wood,
-          felled,
-          after,
-          hammer,
-          hero: await d.hero(),
-          left: (await d.peek(WOOD, 1))[0],
-        };
-      }),
-    );
-    assert.deepEqual(seen, {
-      axe: 10,
-      boxes: 1,
-      wood: 20,
-      felled: 0x0a5b,
-      after: 0,
-      hammer: 11,
-      hero: { room: seen.hero?.room, x: 12, y: 16 },
-      left: 15,
-    });
-  }, 120_000);
+  for (const episode of [4, 0]) {
+    test(`episode ${String(episode)}: the axe & bridges kit fells woods, takes timber, builds a bridge`, async () => {
+      // the example at (6, 14): axe (6, 14), hammer (6, 16), woods x = 8, river x = 11
+      const mod = exampleMod(game, episode, "axe", { x: 6, y: 14 }, { x: 4, y: 14 });
+      const WOOD = 0x4fe3c6;
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(episode);
+          await d.pickUp("right", (h) => h.x >= 6);
+          await d.pickUp("down", (h) => h.y >= 16);
+          // the rucksack's first item, "Benutzen": the axe
+          await d.press("return", 100);
+          await d.press("return", 100);
+          const axe = await heroState(d);
+          // into the woods: felled (event 335's bonus box), then onto them with the flag,
+          // a step on a coin flip, which takes the timber
+          await reach(d, "right", (h) => h.x >= 7);
+          await d.hold("right", 20);
+          await d.run(20);
+          const boxes = await d.closeBoxes();
+          await reach(d, "right", (h) => h.x >= 8);
+          const wood = (await d.peek(WOOD, 1))[0];
+          const felled = await cellAt(d, 8, 16);
+          // Esc ends the axe's state; the rucksack now lists the wood first, then axe, hammer
+          await d.press("escape", 50);
+          const after = await heroState(d);
+          await d.press("return", 100);
+          await d.press("right", 100);
+          await d.press("right", 100);
+          await d.press("return", 100);
+          const hammer = await heroState(d);
+          // five hits finish the bridge (a unit of wood each), then the hero walks over it
+          await reach(d, "right", (h) => h.x >= 12, 20);
+          return {
+            axe,
+            boxes,
+            wood,
+            felled,
+            after,
+            hammer,
+            hero: await d.hero(),
+            left: (await d.peek(WOOD, 1))[0],
+          };
+        }),
+      );
+      assert.deepEqual(seen, {
+        axe: 10,
+        boxes: 1,
+        wood: 20,
+        felled: 0x0a5b,
+        after: 0,
+        hammer: 11,
+        hero: { room: seen.hero?.room, x: 12, y: 16 },
+        left: 15,
+      });
+    }, 120_000);
+  }
 
   test("episode I: the woods & boots kit, the boots take the hero through the way", async () => {
     // the example at (6, 14): boots (6, 15), woods x = 7..10, its way in row 15
@@ -1400,164 +1402,173 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     assert.ok((seen.carried?.x ?? 0) > 6, JSON.stringify(seen));
   }, 120_000);
 
-  test("episode IV: the computer kit's computer, used, gives event 289 from a free entry", async () => {
-    // the example at (6, 14): the interface (7, 14), the computer (6, 15)
-    const mod = exampleMod(game, 4, "computer", { x: 6, y: 14 }, { x: 4, y: 15 });
-    const seen = await withModExe(game, mod, (exe) =>
-      withGame(exe, async (d) => {
-        await d.startEpisode(4);
-        await d.pickUp("right", (h) => h.x >= 6);
-        await d.walk("right", (h) => h.x >= 7);
-        const before = await d.score();
-        // the rucksack's only item, "Benutzen": the computer starts, event 289's box
-        await d.press("return", 100);
-        await d.press("return", 100);
-        await d.run(100);
-        const boxes = await d.closeBoxes();
-        return { boxes, points: (await d.score()) - before };
-      }),
-    );
-    // I's 1000 points, in a free entry of IV (154), with I's text
-    assert.deepEqual(seen, { boxes: 1, points: 1000 });
-  }, 120_000);
+  for (const episode of [4, 0]) {
+    test(`episode ${String(episode)}: the computer kit's computer, used, gives event 289`, async () => {
+      // the example at (6, 14): the interface (7, 14), the computer (6, 15)
+      const mod = exampleMod(game, episode, "computer", { x: 6, y: 14 }, { x: 4, y: 15 });
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(episode);
+          await d.pickUp("right", (h) => h.x >= 6);
+          await d.walk("right", (h) => h.x >= 7);
+          const before = await d.score();
+          // the rucksack's only item, "Benutzen": the computer starts, event 289
+          await d.press("return", 100);
+          await d.press("return", 100);
+          await d.run(100);
+          const boxes = await d.closeBoxes();
+          return { boxes, points: (await d.score()) - before };
+        }),
+      );
+      // I's 1000 points: in IV from a free entry (154) with I's text, a bonus box; Junior
+      // has the event itself (entry 161) without a text, so no box
+      assert.deepEqual(seen, { boxes: episode === 4 ? 1 : 0, points: 1000 });
+    }, 120_000);
+  }
 
-  test("episode I: the punch cards kit, a card punched at the terminal turns an Area", async () => {
-    // the example at (6, 14): the punch (6, 14), a blank card (7, 15), the reader
-    // (9, 15), the terminal (6, 16), the square (10..12, 14..16) with a card at (11, 14)
-    const mod = exampleMod(game, 1, "punchcards", { x: 6, y: 14 }, { x: 8, y: 15 });
-    const options = { constants: game.scriptConstants(1), keywords: game.scriptKeywords() };
-    const [change] = mod.changes.rooms;
-    assert.ok(change.room);
-    change.room = withRoomScript(change.room, "Area(10, 14, 3, 1);", options);
-    const seen = await withModExe(game, mod, (exe) =>
-      withGame(exe, async (d) => {
-        const punch = async () => (await topAt(d, 6, 14)) >> 8;
-        await d.startEpisode(1);
-        await d.pickUp("left", (h) => h.x <= 7);
-        const before = await d.score();
-        await d.putDown("use"); // next to the punch: into it
-        const loaded = { punch: await punch(), points: (await d.score()) - before };
-        // the terminal, south-west: MSG 2 AAAB (the punch's address, key 1)
-        await d.walk("down", (h) => h.y >= 16);
-        await d.hold("left", 20);
-        await d.run(60);
-        for (const ch of "MSG 2 AAAB") await d.press(ch.charCodeAt(0), 60);
-        await d.press("return", 100);
-        // the card punched: event 353 (a free entry of I, IV's text), its box over the
-        // terminal; then the terminal closes
-        await d.closeBoxes();
-        await d.press("escape", 100);
-        await d.run(60);
-        const punched = await punch();
-        // the card from the punch, north-west; walked into again, the empty punch's sign
-        await d.walk("up", (h) => h.y <= 14);
-        await d.hold("left", 20);
-        await d.run(60);
-        await d.press("return", 100);
-        const item = await d.peek(0x4fe0c2, 2);
-        // by the reader (9, 15), south-east
-        await d.walk("right", (h) => h.x >= 8);
-        const read = await d.score();
-        await d.putDown("use");
-        return {
-          loaded,
-          punched,
-          after: await punch(),
-          card: [item[0], item[1]],
-          points: (await d.score()) - read,
-          square: [await topAt(d, 11, 14), (await topAt(d, 12, 15)) & 0xff],
-        };
-      }),
-    );
-    assert.deepEqual(seen, {
-      // the card in the punch (state bit 1), the punch's first use: 2000
-      loaded: { punch: 2, points: 2000 },
-      // the word for its address punched it (bit 0), and taking the card empties it
-      punched: 3,
-      after: 0,
-      // the card with key 1
-      card: [226, 1],
-      // the reader's first use (4000) and event 352 in a free entry of I (131, 3500)
-      points: 7500,
-      // the square's ring a quarter clockwise: the card from its top middle to the right
-      square: [0, 226],
-    });
-  }, 120_000);
+  for (const episode of [1, 0]) {
+    test(`episode ${String(episode)}: the punch cards kit, a card punched at the terminal turns an Area`, async () => {
+      // the example at (6, 14): the punch (6, 14), a blank card (7, 15), the reader
+      // (9, 15), the terminal (6, 16), the square (10..12, 14..16) with a card at (11, 14)
+      const mod = exampleMod(game, episode, "punchcards", { x: 6, y: 14 }, { x: 8, y: 15 });
+      const options = { constants: game.scriptConstants(episode), keywords: game.scriptKeywords() };
+      const [change] = mod.changes.rooms;
+      assert.ok(change.room);
+      change.room = withRoomScript(change.room, "Area(10, 14, 3, 1);", options);
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          const punch = async () => (await topAt(d, 6, 14)) >> 8;
+          await d.startEpisode(episode);
+          await d.pickUp("left", (h) => h.x <= 7);
+          const before = await d.score();
+          await d.putDown("use"); // next to the punch: into it
+          const loaded = { punch: await punch(), points: (await d.score()) - before };
+          // the terminal, south-west: MSG 2 AAAB (the punch's address, key 1)
+          await d.walk("down", (h) => h.y >= 16);
+          await d.hold("left", 20);
+          await d.run(60);
+          for (const ch of "MSG 2 AAAB") await d.press(ch.charCodeAt(0), 60);
+          await d.press("return", 100);
+          // the card punched: event 353 (a free entry of I, IV's text), its box over the
+          // terminal; then the terminal closes
+          await d.closeBoxes();
+          await d.press("escape", 100);
+          await d.run(60);
+          const punched = await punch();
+          // the card from the punch, north-west; walked into again, the empty punch's sign
+          await d.walk("up", (h) => h.y <= 14);
+          await d.hold("left", 20);
+          await d.run(60);
+          await d.press("return", 100);
+          const item = await d.peek(0x4fe0c2, 2);
+          // by the reader (9, 15), south-east
+          await d.walk("right", (h) => h.x >= 8);
+          const read = await d.score();
+          await d.putDown("use");
+          return {
+            loaded,
+            punched,
+            after: await punch(),
+            card: [item[0], item[1]],
+            points: (await d.score()) - read,
+            square: [await topAt(d, 11, 14), (await topAt(d, 12, 15)) & 0xff],
+          };
+        }),
+      );
+      assert.deepEqual(seen, {
+        // the card in the punch (state bit 1), the punch's first use: 2000
+        loaded: { punch: 2, points: 2000 },
+        // the word for its address punched it (bit 0), and taking the card empties it
+        punched: 3,
+        after: 0,
+        // the card with key 1
+        card: [226, 1],
+        // the reader's first use (4000) and event 352 in a free entry of I (131, 3500)
+        points: 7500,
+        // the square's ring a quarter clockwise: the card from its top middle to the right
+        square: [0, 226],
+      });
+    }, 120_000);
+  }
 
-  test("episode I: the punch cards kit's sliding door opens for its code at the reader", async () => {
-    // the example at (6, 14): a card (7, 15), the reader (9, 15) with address 7, the
-    // door (9, 17) in state 0; the card punched with the door's code here
-    const at = { x: 6, y: 14 };
-    const mod = exampleMod(game, 1, "punchcards", at, { x: 8, y: 15 });
-    const [change] = mod.changes.rooms;
-    assert.ok(change.room);
-    const room = change.room;
-    const code = slidingDoorCode(room.id, 9, 17, 0);
-    const card = room.overlay[7 + 15 * ROOM_WIDTH] ?? 0;
-    room.overlay[7 + 15 * ROOM_WIDTH] = (card & 0xff) | (code << 8);
-    const seen = await withModExe(game, mod, (exe) =>
-      withGame(exe, async (d) => {
-        const door = async () => (await topAt(d, 9, 17)) >> 8;
-        await d.startEpisode(1);
-        await d.pickUp("left", (h) => h.x <= 7);
-        await d.walk("right", (h) => h.x >= 8);
-        const closed = await door();
-        await d.putDown("use"); // by the reader: the code sent to address 7
-        await d.run(100);
-        // the door opened: event 350 in a free entry of I, with IV's text
-        await d.closeBoxes();
-        const opened = await door();
-        // down through the door
-        await d.walk("down", (h) => h.y >= 16);
-        await d.walk("right", (h) => h.x >= 9);
-        // in the door the hero has passed it: event 370 (the door closed behind)
-        await d.walk("down", (h) => h.y >= 17);
-        await d.run(100);
-        await d.closeBoxes();
-        const through = await d.walk("down", (h) => h.y >= 18);
-        await d.run(200);
-        await d.closeBoxes();
-        return { closed, opened, through: through.y, after: await door() };
-      }),
-    );
-    assert.deepEqual(seen, { closed: 0, opened: 2, through: 18, after: 0 });
-  }, 120_000);
+  for (const episode of [1, 0]) {
+    test(`episode ${String(episode)}: the punch cards kit's sliding door opens for its code at the reader`, async () => {
+      // the example at (6, 14): a card (7, 15), the reader (9, 15) with address 7, the
+      // door (9, 17) in state 0; the card punched with the door's code here
+      const at = { x: 6, y: 14 };
+      const mod = exampleMod(game, episode, "punchcards", at, { x: 8, y: 15 });
+      const [change] = mod.changes.rooms;
+      assert.ok(change.room);
+      const room = change.room;
+      const code = slidingDoorCode(room.id, 9, 17, 0);
+      const card = room.overlay[7 + 15 * ROOM_WIDTH] ?? 0;
+      room.overlay[7 + 15 * ROOM_WIDTH] = (card & 0xff) | (code << 8);
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          const door = async () => (await topAt(d, 9, 17)) >> 8;
+          await d.startEpisode(episode);
+          await d.pickUp("left", (h) => h.x <= 7);
+          await d.walk("right", (h) => h.x >= 8);
+          const closed = await door();
+          await d.putDown("use"); // by the reader: the code sent to address 7
+          await d.run(100);
+          // the door opened: event 350 in a free entry of I, with IV's text
+          await d.closeBoxes();
+          const opened = await door();
+          // down through the door
+          await d.walk("down", (h) => h.y >= 16);
+          await d.walk("right", (h) => h.x >= 9);
+          // in the door the hero has passed it: event 370 (the door closed behind)
+          await d.walk("down", (h) => h.y >= 17);
+          await d.run(100);
+          await d.closeBoxes();
+          const through = await d.walk("down", (h) => h.y >= 18);
+          await d.run(200);
+          await d.closeBoxes();
+          return { closed, opened, through: through.y, after: await door() };
+        }),
+      );
+      assert.deepEqual(seen, { closed: 0, opened: 2, through: 18, after: 0 });
+    }, 120_000);
+  }
 
-  test("episode I: the train kit's train takes the hero on at its station", async () => {
-    // the example at (6, 13): a loop of rails (6..11, 13..15), the station (6, 14), the
-    // train at (8, 13) heading east; the hero west of the station
-    const mod = exampleMod(game, 1, "train", { x: 6, y: 13 }, { x: 5, y: 14 });
-    const seen = await withModExe(game, mod, (exe) =>
-      withGame(exe, async (d) => {
-        await d.startEpisode(1);
-        /** The train actor's cell and its wait at a station (+0x12), if it is in the room. */
-        const train = async () => {
-          for (let p = await d.u32(0x53e9a8); p !== 0;) {
-            const b = await d.peek(p, 0x18);
-            const view = new DataView(b.buffer, b.byteOffset);
-            if (view.getUint16(0x14, true) === 0xdd) return { x: b[9], y: b[10], wait: b[0x12] };
-            p = view.getUint32(4, true);
-          }
-          return undefined;
-        };
-        // round the loop to the station, where it waits a while: then the hero walks in
-        await d.until(async () => {
-          const t = await train();
-          return t?.x === 6 && t.y === 14 && t.wait > 0;
-        }, 3000);
-        await d.hold("right", 10);
-        await d.run(20);
-        const on = { hero: await d.hero(), state: await heroState(d) };
-        // carried: north out of the station, then east along the top
-        await d.until(async () => ((await d.hero())?.x ?? 0) >= 9, 3000);
-        return { on, carried: await d.hero(), state: await heroState(d), train: await train() };
-      }),
-    );
-    assert.deepEqual(seen.on, { hero: { room: seen.on.hero?.room, x: 6, y: 14 }, state: 9 });
-    assert.equal(seen.state, 9);
-    // the hero on the top row, where the train is
-    const { carried, train } = seen;
-    assert.ok(carried && train);
-    assert.deepEqual([carried.y, train.x, train.y], [13, carried.x, 13]);
-  }, 120_000);
+  for (const episode of [1, 0]) {
+    test(`episode ${String(episode)}: the train kit's train takes the hero on at its station`, async () => {
+      // the example at (6, 13): a loop of rails (6..11, 13..15), the station (6, 14), the
+      // train at (8, 13) heading east; the hero west of the station
+      const mod = exampleMod(game, episode, "train", { x: 6, y: 13 }, { x: 5, y: 14 });
+      const seen = await withModExe(game, mod, (exe) =>
+        withGame(exe, async (d) => {
+          await d.startEpisode(episode);
+          /** The train actor's cell and its wait at a station (+0x12), if it is in the room. */
+          const train = async () => {
+            for (let p = await d.u32(0x53e9a8); p !== 0;) {
+              const b = await d.peek(p, 0x18);
+              const view = new DataView(b.buffer, b.byteOffset);
+              if (view.getUint16(0x14, true) === 0xdd) return { x: b[9], y: b[10], wait: b[0x12] };
+              p = view.getUint32(4, true);
+            }
+            return undefined;
+          };
+          // round the loop to the station, where it waits a while: then the hero walks in
+          await d.until(async () => {
+            const t = await train();
+            return t?.x === 6 && t.y === 14 && t.wait > 0;
+          }, 3000);
+          await d.hold("right", 10);
+          await d.run(20);
+          const on = { hero: await d.hero(), state: await heroState(d) };
+          // carried: north out of the station, then east along the top
+          await d.until(async () => ((await d.hero())?.x ?? 0) >= 9, 3000);
+          return { on, carried: await d.hero(), state: await heroState(d), train: await train() };
+        }),
+      );
+      assert.deepEqual(seen.on, { hero: { room: seen.on.hero?.room, x: 6, y: 14 }, state: 9 });
+      assert.equal(seen.state, 9);
+      // the hero on the top row, where the train is
+      const { carried, train } = seen;
+      assert.ok(carried && train);
+      assert.deepEqual([carried.y, train.x, train.y], [13, carried.x, 13]);
+    }, 120_000);
+  }
 });
