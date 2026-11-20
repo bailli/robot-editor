@@ -46,6 +46,14 @@ test("an episode whose backdrop methods are unknown loads; its backdrop checkbox
   expect(app.editor?.setBackdropRule(0, 1, "minus100")).toBeUndefined();
 });
 
+test("IV's fires burn until put out by a path of their own: the checkbox is fixed", async () => {
+  app.showEpisode(4, app.editor?.start(4).room ?? 0);
+  await page.getByRole("tab", { name: "Episode" }).click();
+  const fires = page.getByRole("checkbox", { name: /Fires burn until put out/ });
+  await expect.element(fires).toBeDisabled();
+  await expect.element(fires).toBeChecked();
+});
+
 test("the Episode tab edits the dealer's goods, undoably; the mod keeps them", async () => {
   const original = defined(readDealer(game.image, 1));
   app.showEpisode(1, 43);
@@ -193,6 +201,13 @@ test("the Episode tab sets the rucksack and the oracles' flags, undoably; the mo
   await ending.getByRole("checkbox", { name: /Room 255 ends the episode/ }).click();
   expect(app.editor?.endsAtRoom255(0)).toBe(true);
   await expect.element(ending.getByText("Room 255 ends the episode (edited)")).toBeVisible();
+  app.undo();
+  // Junior's fires burn out; IV's have a path of their own (checked below)
+  await oracles.getByRole("checkbox", { name: /Fires burn until put out/ }).click();
+  expect(app.editor?.firesLast(0)).toBe(true);
+  await expect
+    .element(oracles.getByRole("checkbox", { name: "Fires burn until put out (edited)" }))
+    .toBeChecked();
   app.undo();
   await oracles.getByRole("checkbox", { name: /room 100 below/ }).click();
   expect(app.editor?.backdropRule(0)).toBe("minus100");

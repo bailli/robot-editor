@@ -268,6 +268,7 @@ export {
   withEpisodeFlags,
 } from "./episode-flags.ts";
 export { endsAtRoom255, readRoom255Endings, withRoom255Ending } from "./endings.ts";
+export { hasLastingFires, readLastingFires, withLastingFires } from "./fires.ts";
 export {
   type ConsoleObject,
   decodeConsoleString,
@@ -405,6 +406,7 @@ export type {
   DealerChange,
   EndingChange,
   EventChange,
+  FiresChange,
   Mod,
   ModChanges,
   ModPatch,

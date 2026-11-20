@@ -17,6 +17,7 @@ import {
   emptyMod,
   endsAtRoom255,
   findResource,
+  hasLastingFires,
   kitChanges,
   modJson,
   movedRecord,
@@ -1840,6 +1841,34 @@ describe("Editor and the episode's settings", () => {
     editor.undo();
     expect(editor.isEndingEdited(3)).toBe(false);
     expect(editor.saveMod().changes.ending).toEqual([]);
+    expect(firstDifference(editor.save(), game.image.data)).toBe(-1);
+  });
+
+  test("fires burn until put out or not as one step, saved into exe and mod", () => {
+    const editor = new Editor(game);
+    expect([0, 1, 2, 3, 4].map((e) => editor.firesLast(e))).toEqual([
+      false,
+      false,
+      false,
+      true,
+      true,
+    ]);
+    editor.setLastingFires(0, 43, true);
+    editor.setLastingFires(3, 41, false);
+    expect(editor.setLastingFires(0, 43, true)).toBeUndefined();
+    expect(() => editor.setLastingFires(4, 41, false)).toThrow(RangeError);
+    const exe = parsePe(editor.save());
+    expect([0, 3].map((e) => hasLastingFires(exe, e))).toEqual([true, false]);
+    const mod = editor.saveMod();
+    expect(mod.changes.fires).toEqual([
+      { episode: 0, lasting: true },
+      { episode: 3, lasting: false },
+    ]);
+    expect(new Editor(game, mod).firesLast(0)).toBe(true);
+    editor.undo();
+    editor.undo();
+    expect(editor.isFiresEdited(0)).toBe(false);
+    expect(editor.saveMod().changes.fires).toEqual([]);
     expect(firstDifference(editor.save(), game.image.data)).toBe(-1);
   });
 

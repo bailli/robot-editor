@@ -30,6 +30,8 @@ export interface EpisodeViewEvents {
   diagonal(diagonal: boolean): void;
   /** Room 255 ends the episode or not (Editor.setRoom255Ending). */
   ending(ends: boolean): void;
+  /** Fires burn until put out or burn out (Editor.setLastingFires; not IV). */
+  fires(lasting: boolean): void;
 }
 
 /** What the view shows of the episode: its start, rucksack and flags. */
@@ -53,6 +55,9 @@ export interface EpisodeContext {
   originalEnding: boolean;
   /** Whether the episode has a room 255, which the ending makes unreachable. */
   hasRoom255: boolean;
+  /** Whether fires burn until put out (IV's always do: a path of their own). */
+  fires: boolean;
+  originalFires: boolean;
   /** The shown room. */
   room: number;
   /** "Go to room 43 – DER START" */
@@ -294,15 +299,29 @@ export class EpisodeView {
       // the episode's methods are none of the known pairs (a code change): nothing to toggle
       context.backdrop === undefined,
     );
+    const iv = context.episodeNumber === 4;
+    const fires = ruleRow(
+      "fires",
+      "Fires burn until put out",
+      iv
+        ? "Episode IV’s fires have a path of their own (0x435025): each flickers to a random state 0–10 now and then and never burns out nor lights its neighbours."
+        : "Only episode III’s do (the fire task 0x435010 steps them by III’s path, 0x4350c4): a fire in state 0 or 128 and up never burns out, so it stays until the bucket puts it out; fires in states 1–127 burn out, each neighbour catching on a third of them. Without it (Junior’s path, 0x435300) every fire burns out within minutes, about 8 s a cell, lighting its four neighbours (floor, water, items; not walls, sand, river, ash), and kills the hero there. The fire kit lays fires in state 0.",
+      [context.fires, context.originalFires],
+      (on) => {
+        this.events.fires(on);
+      },
+      iv,
+    );
     return [
       element("h3", undefined, "Rules"),
       diagonal,
       backdrop,
+      fires,
       ...rows,
       element(
         "p",
         "hint",
-        "What the episode’s code sets (its constructor’s flags, the methods it points to; each box’s tooltip says more). Only III and IV walk diagonally, only IV’s backdrops show the room 100 below. Only II’s oracles vanish once used; oracles that stay can be used again and again, to be sent or hear the hint once more, before the hero turns one into its object (west). Only III’s doors open without the key, its robots keep their colours, its caves’ void blocks and its Teleport() points last beyond their room.",
+        "What the episode’s code sets (its constructor’s flags, the methods it points to; each box’s tooltip says more). Only III and IV walk diagonally, only IV’s backdrops show the room 100 below. Only III’s and IV’s fires burn until put out, elsewhere they burn out and spread. Only II’s oracles vanish once used; oracles that stay can be used again and again, to be sent or hear the hint once more, before the hero turns one into its object (west). Only III’s doors open without the key, its robots keep their colours, its caves’ void blocks and its Teleport() points last beyond their room.",
       ),
     ];
   }

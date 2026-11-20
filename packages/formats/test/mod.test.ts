@@ -18,6 +18,7 @@ import {
   withDiagonalMoves,
 } from "../src/episode-methods.ts";
 import { readEventTable, withEventEntries } from "../src/events.ts";
+import { hasLastingFires, withLastingFires } from "../src/fires.ts";
 import { Game } from "../src/game.ts";
 import {
   type Mod,
@@ -115,6 +116,8 @@ const changes: ModChanges = {
   moves: [{ episode: 0, diagonal: true }],
   // room 255 ends episode II too
   ending: [{ episode: 2, room255: true }],
+  // Junior's fires burn until put out, as III's do
+  fires: [{ episode: 0, lasting: true }],
 };
 
 /** Same resources (by type, name, language) and same bytes outside them. */
@@ -169,6 +172,7 @@ test("a mod applies its changes as the editing functions do, in the order of kin
   direct = new Game(withBackdropRule(direct.image, 3, "minus100"));
   direct = new Game(withDiagonalMoves(direct.image, 0, true));
   direct = new Game(withRoom255Ending(direct.image, 2, true));
+  direct = new Game(withLastingFires(direct.image, 0, true));
   sameContent(modded.image, direct.image);
 
   expect(modded.episode(3).classes.typeOfClass.get(76)).toBe(0x59);
@@ -199,6 +203,13 @@ test("a mod applies its changes as the editing functions do, in the order of kin
     false,
     false,
   ]);
+  expect([0, 1, 2, 3, 4].map((e) => hasLastingFires(modded.image, e))).toEqual([
+    true,
+    false,
+    false,
+    true,
+    true,
+  ]);
   expect(readDealer(modded.image, 1)).toEqual(dealer1);
   for (const e of [0, 1, 2, 4]) {
     expect(modded.episode(e).rooms).toEqual(game.episode(e).rooms);
@@ -222,6 +233,8 @@ test("compiled: byte writes in the tables and the start method, whole resources"
       [0x475730, 4 * 27], // I's goods
       [0x40283f, 10], // the room 255 check
       [0x465e60, 0x20], // its stub in the padding of .text
+      [0x4350bb, 9], // the fire task's episode check
+      [0x465e80, 0x16], // its stub, after the room 255 one
     ] as const;
     assert.ok(
       tables.some(([start, length]) => within(va, start, length) && within(end, start, length)),
@@ -363,6 +376,8 @@ test("refused: another exe, keys changed twice, bad values, broken files", () =>
     { rucksack: [{ episode: 3, capacity: 251 }] },
     { flags: [{ episode: 3, flags: 2 ** 32 }] },
     { backdrop: [{ episode: 3, rule: "plus100" as "mod100" }] },
+    // IV's fires have a path of their own
+    { fires: [{ episode: 4, lasting: false }] },
     // no entry 201 in IV; from 128 on ids are 0 or 256-391; IV's entry 128 has id 256
     { events: [{ episode: 4, entry: 201, id: 0, points: 0 }] },
     { events: [{ episode: 4, entry: 197, id: 100, points: 0 }] },

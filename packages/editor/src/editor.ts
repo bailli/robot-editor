@@ -63,6 +63,7 @@ import {
   exitMode,
   freeEventEntries,
   freeTileTypes,
+  hasLastingFires,
   kitChanges,
   kitExample,
   movedRecord,
@@ -107,6 +108,7 @@ import {
   withEpisodeFlags,
   withEpisodeStart,
   withExitMode,
+  withLastingFires,
   withRoom255Ending,
   withRoomChanges,
   withRoomScript,
@@ -185,6 +187,8 @@ export interface Edit {
   diagonal?: { before: boolean; after: boolean };
   /** Whether room 255 ends the episode, before and after. */
   ending?: { before: boolean; after: boolean };
+  /** Whether the episode's fires burn until put out, before and after. */
+  fires?: { before: boolean; after: boolean };
   /** What the base adds to the exe as loaded, and the edited texts, before and after. */
   base?: {
     before: BaseChanges;
@@ -579,6 +583,7 @@ export class Editor {
   private readonly backdropRules = new Map<number, BackdropRule>();
   private readonly diagonals = new Map<number, boolean>();
   private readonly endings = new Map<number, boolean>();
+  private readonly lastingFires = new Map<number, boolean>();
   private readonly undoStack: Edit[] = [];
   private readonly redoStack: Edit[] = [];
   private stroke: Edit | undefined;
@@ -615,7 +620,7 @@ export class Editor {
       return;
     }
     const { music, tileTypes, events, code, copyTexts, start, rooms, texts, dealer } = mod.changes;
-    const { rucksack, flags, backdrop, moves, ending } = mod.changes;
+    const { rucksack, flags, backdrop, moves, ending, fires } = mod.changes;
     if (mod.base !== this.pristineHash) throw new ModError("base: the mod is for another exe");
     this.mod = { name: mod.name, author: mod.author, description: mod.description };
     this.modded = true;
@@ -649,6 +654,7 @@ export class Editor {
     for (const c of backdrop) this.backdropRules.set(c.episode, c.rule);
     for (const c of moves) this.diagonals.set(c.episode, c.diagonal);
     for (const c of ending) this.endings.set(c.episode, c.room255);
+    for (const c of fires) this.lastingFires.set(c.episode, c.lasting);
     // pieces nothing plays were copied by themselves: they stay (copyMusic)
     const kept = music.flatMap(({ episode, pieces }) => {
       const named = new Set(this.musicUses(episode, this.changes).map(([piece]) => piece));
@@ -1875,6 +1881,28 @@ export class Editor {
     return ends !== undefined && ends !== endsAtRoom255(this.game.image, episode);
   }
 
+  /** Whether the episode's fires burn until put out, as edited (fires.ts; IV's always do). */
+  firesLast(episode: number): boolean {
+    return this.lastingFires.get(episode) ?? hasLastingFires(this.game.image, episode);
+  }
+
+  /**
+   * Lets the episode's fires (Junior to III) burn until put out, by III's path, or burn out
+   * and spread, by Junior's; one undo step (shown in room `room`).
+   */
+  setLastingFires(episode: number, room: number, lasting: boolean): Edit | undefined {
+    this.endStroke();
+    if (episode === 4) throw new RangeError("episode IV's fires have a path of their own");
+    const before = this.firesLast(episode);
+    if (before === lasting) return undefined;
+    return this.commitEpisode({ episode, room, fires: { before, after: lasting } });
+  }
+
+  isFiresEdited(episode: number): boolean {
+    const lasting = this.lastingFires.get(episode);
+    return lasting !== undefined && lasting !== hasLastingFires(this.game.image, episode);
+  }
+
   /** The room drawn behind a room of the episode (backdropRoom, by the edited rule). */
   backdropOf(episode: number, room: Room): Room | undefined {
     const classes = this.game.episode(episode).classes;
@@ -1886,7 +1914,7 @@ export class Editor {
   private commitEpisode(
     edit: Pick<
       Edit,
-      "episode" | "room" | "rucksack" | "flags" | "backdrop" | "diagonal" | "ending"
+      "episode" | "room" | "rucksack" | "flags" | "backdrop" | "diagonal" | "ending" | "fires"
     >,
   ): Edit {
     const step: Edit = { ...edit, layer: "base", changes: [] };
@@ -2700,6 +2728,9 @@ export class Editor {
     const ending = [...this.endings]
       .filter(([episode]) => this.isEndingEdited(episode))
       .map(([episode, room255]) => ({ episode, room255 }));
+    const fires = [...this.lastingFires]
+      .filter(([episode]) => this.isFiresEdited(episode))
+      .map(([episode, lasting]) => ({ episode, lasting }));
     const mod: Mod = {
       ...this.mod,
       base: this.pristineHash,
@@ -2718,6 +2749,7 @@ export class Editor {
         backdrop,
         moves,
         ending,
+        fires,
       },
     };
     checkMod(mod);
@@ -2762,8 +2794,8 @@ export class Editor {
   }
 
   /**
-   * `exe` with the edited dealers, starts, rucksacks, flags, backdrop rules, moves and
-   * endings.
+   * `exe` with the edited dealers, starts, rucksacks, flags, backdrop rules, moves,
+   * endings and fires.
    */
   private withSettings(exe: Uint8Array): Uint8Array {
     for (const [episode, dealer] of this.dealers) {
@@ -2786,6 +2818,9 @@ export class Editor {
     }
     for (const [episode, ends] of this.endings) {
       if (this.isEndingEdited(episode)) exe = withRoom255Ending(parsePe(exe), episode, ends);
+    }
+    for (const [episode, lasting] of this.lastingFires) {
+      if (this.isFiresEdited(episode)) exe = withLastingFires(parsePe(exe), episode, lasting);
     }
     return exe;
   }
@@ -2874,6 +2909,11 @@ export class Editor {
     if (edit.ending) {
       const { before: old, after: now } = edit.ending;
       this.endings.set(edit.episode, value === before ? old : now);
+      return;
+    }
+    if (edit.fires) {
+      const { before: old, after: now } = edit.fires;
+      this.lastingFires.set(edit.episode, value === before ? old : now);
       return;
     }
     if (edit.backdrop) {

@@ -1385,6 +1385,78 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     });
   }, 120_000);
 
+  // the fire kit's example (fires in state 0 at (11, 14) and (11, 15)), with and without the
+  // episode rule (fires.ts): Junior's path rekindles a fire of state 0 to 5..12 and burns it
+  // out within seconds (about 1,200 ticks); III's makes state 0 a lasting 0xff
+  test("Junior: with the rule, fires burn until the bucket puts them out; without, they burn out", async () => {
+    const fires = [
+      [11, 14],
+      [11, 15],
+    ] as const;
+    const around = [
+      [10, 14],
+      [12, 14],
+      [10, 15],
+      [12, 15],
+      [11, 16],
+    ] as const;
+    const seen = [];
+    for (const lasting of [false, true]) {
+      const kitMod = exampleMod(game, 0, "fire", { x: 6, y: 13 }, { x: 4, y: 15 });
+      const mod = { ...kitMod, changes: { ...kitMod.changes, fires: [{ episode: 0, lasting }] } };
+      seen.push(
+        await withModExe(game, mod, (exe) =>
+          withGame(exe, async (d) => {
+            await d.startEpisode(0);
+            const cells = (list: readonly (readonly [number, number])[]) =>
+              Promise.all(list.map(([x, y]) => cellAt(d, x, y)));
+            const before = await cells(around);
+            // 4,500 ticks (about 30 s): well past a burn-down, short of fire spreading the
+            // seven cells to the hero
+            for (let k = 0; k < 15; k++) {
+              await d.run(300);
+              await d.closeBoxes();
+            }
+            const burning = await cells(fires);
+            const untouched = (await cells(around)).every((w, k) => w === before[k]);
+            if (!lasting) return { burning: burning.map((w) => w & 0xff), untouched };
+            // the bucket as in the kit's test: filled against the current (slot 0x176), used
+            // next to the fires
+            await d.pickUp("right", (h) => h.x >= 6);
+            await reach(d, "up", (h) => h.y <= 13);
+            await d.hold("left", 60);
+            const slot = new DataView((await d.peek(0x4fe0c2, 2)).buffer).getUint16(0, true);
+            // row 14 or 15 (a step may overshoot by one): its 3 x 3 holds both fires
+            await reach(d, "down", (h) => h.y >= 14);
+            await reach(d, "right", (h) => h.x >= 10);
+            await d.putDown("use");
+            const out = (await cells(fires)).map((w) => w & 0xff);
+            return {
+              burning: burning.map((w) => [w & 0xff, w >> 8 >= 0x80]),
+              untouched,
+              slot,
+              out,
+            };
+          }),
+        ),
+      );
+    }
+    assert.deepEqual(seen, [
+      // burnt out to ash, the floor around lit
+      { burning: [136, 136], untouched: false },
+      // still fire in a lasting state, nothing around lit; put out, ash
+      {
+        burning: [
+          [117, true],
+          [117, true],
+        ],
+        untouched: true,
+        slot: 0x176,
+        out: [136, 136],
+      },
+    ]);
+  }, 300_000);
+
   test("Junior: the swimming kit's river carries the hero along its current", async () => {
     // the example at (6, 13): a river in rows 13 and 14, the current east (water at
     // (8, 13)), the flippers at (6, 15)

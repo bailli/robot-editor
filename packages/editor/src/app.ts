@@ -47,6 +47,7 @@ import {
   eventTextsId,
   exitMode,
   goodTile,
+  hasLastingFires,
   heroSteps,
   modJson,
   networkNote,
@@ -683,6 +684,9 @@ export class App {
     },
     ending: (ends) => {
       this.editEpisode(() => this.need().setRoom255Ending(this.episode, this.roomId, ends));
+    },
+    fires: (lasting) => {
+      this.editEpisode(() => this.need().setLastingFires(this.episode, this.roomId, lasting));
     },
     backdrop: (rule) => {
       this.editEpisode(() => this.need().setBackdropRule(this.episode, this.roomId, rule));
@@ -3125,6 +3129,8 @@ export class App {
       ending: editor.endsAtRoom255(this.episode),
       originalEnding: endsAtRoom255(image, this.episode),
       hasRoom255: editor.hasRoom(this.episode, 255),
+      fires: editor.firesLast(this.episode),
+      originalFires: hasLastingFires(image, this.episode),
       originalBackdrop: readBackdropRule(image, this.episode),
       room: this.roomId,
       label: (room) => `Go to ${this.roomLabel(this.episode, room)}`,
@@ -3204,7 +3210,8 @@ export class App {
       editor.isFlagsEdited(this.episode) ||
       editor.isBackdropEdited(this.episode) ||
       editor.isDiagonalEdited(this.episode) ||
-      editor.isEndingEdited(this.episode);
+      editor.isEndingEdited(this.episode) ||
+      editor.isFiresEdited(this.episode);
     const edited = dealerEdited || settingsEdited || editor.isStartEdited(this.episode);
     this.dealerView.show({
       episode: EPISODE_NAMES[this.episode] ?? `episode ${this.episode}`,
@@ -3478,7 +3485,8 @@ export class App {
       edit.flags ||
       edit.backdrop ||
       edit.diagonal ||
-      edit.ending
+      edit.ending ||
+      edit.fires
     ) {
       // records change what logic cells show and where things lead: redraw everything
       this.showRoom(this.roomId);
