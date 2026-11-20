@@ -257,6 +257,7 @@ export {
   withDiagonalMoves,
 } from "./episode-methods.ts";
 export {
+  ARRIVAL_ON_EDGE,
   DOORS_NEED_NO_KEY,
   HOUSE_EDGES_BLOCK_INSIDE,
   ORACLE_VANISHES_EAST,

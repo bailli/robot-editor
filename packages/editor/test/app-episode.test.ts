@@ -188,6 +188,12 @@ test("the Episode tab sets the rucksack and the oracles' flags, undoably; the mo
   await oracles.getByRole("checkbox", { name: /without the key/ }).click();
   await oracles.getByRole("checkbox", { name: /sprite's colours/ }).click();
   expect(app.editor?.episodeFlags(0)).toBe(0x4809e966);
+  // Junior's hero arrives one cell further in, II's to IV's on the edge cell
+  const arrival = oracles.getByRole("checkbox", { name: /stays on the edge cell/ });
+  await expect.element(arrival).not.toBeChecked();
+  await arrival.click();
+  expect(app.editor?.episodeFlags(0)).toBe(0x4809ed66);
+  app.undo();
   // Junior's Teleport() points: cleared on entering a room, as everywhere but in III
   await expect.element(oracles.getByRole("checkbox", { name: /only in their room/ })).toBeChecked();
   await expect

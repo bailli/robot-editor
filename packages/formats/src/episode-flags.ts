@@ -23,6 +23,12 @@ import { type PeImage, readVa } from "./pe.ts";
 
 /** Robots keep their `_Aliens` sprite's colours instead of three random ones (0x445c4b). */
 export const ROBOTS_KEEP_COLOURS = 0x20;
+/**
+ * Arriving from a room's edge, the hero stays on the edge cell (0x44c5a0); without it he
+ * arrives one cell further in, past the exit tiles of Junior's and I's walled rooms (only
+ * II, III and IV set it).
+ */
+export const ARRIVAL_ON_EDGE = 0x400;
 /** The Teleport() point is cleared (room 0) on entering a room (0x439426). */
 export const TELEPORT_POINT_CLEARED = 0x2000;
 /** An oracle walked into northwards vanishes once it has sent the hero. */

@@ -1,4 +1,5 @@
 import {
+  ARRIVAL_ON_EDGE,
   type BackdropRule,
   DOORS_NEED_NO_KEY,
   type EpisodeStart,
@@ -119,6 +120,11 @@ const FLAGS = [
     ROBOTS_KEEP_COLOURS,
     "Robots keep their sprite's colours",
     "Only episode III's do; in Junior, I and II each robot gets three random colours on every visit. Episode IV's robots keep theirs either way.",
+  ],
+  [
+    ARRIVAL_ON_EDGE,
+    "Arriving from an edge, the hero stays on the edge cell",
+    "Episodes II, III and IV: the hero walking in from a neighbour arrives on the edge cell. Without it (Junior, I) he arrives one cell further in, past the exit tiles of their walled rooms, which looks odd in open rooms.",
   ],
   [
     TELEPORT_POINT_CLEARED,
@@ -321,7 +327,7 @@ export class EpisodeView {
       element(
         "p",
         "hint",
-        "What the episode’s code sets (its constructor’s flags, the methods it points to; each box’s tooltip says more). Only III and IV walk diagonally, only IV’s backdrops show the room 100 below. Only III’s and IV’s fires burn until put out, elsewhere they burn out and spread. Only II’s oracles vanish once used; oracles that stay can be used again and again, to be sent or hear the hint once more, before the hero turns one into its object (west). Only III’s doors open without the key, its robots keep their colours, its caves’ void blocks and its Teleport() points last beyond their room.",
+        "What the episode’s code sets (its constructor’s flags, the methods it points to; each box’s tooltip says more). Only III and IV walk diagonally, only IV’s backdrops show the room 100 below. Only III’s and IV’s fires burn until put out, elsewhere they burn out and spread. Only II’s oracles vanish once used; oracles that stay can be used again and again, to be sent or hear the hint once more, before the hero turns one into its object (west). Only III’s doors open without the key, its robots keep their colours, its caves’ void blocks and its Teleport() points last beyond their room. Only II, III and IV keep the hero on the edge cell he arrives on.",
       ),
     ];
   }
