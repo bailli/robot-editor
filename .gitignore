@@ -24,3 +24,4 @@ tools/wine/proxy/ddraw.dll
 tools/linux/robot
 # Native game for "Test in game" / robot play: its exe, saves, screenshots, wrapper.log
 .native/
+research/event-entries/out/

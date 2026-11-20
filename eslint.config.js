@@ -16,6 +16,7 @@ export default defineConfig(
     "shots/",
     "shapes/",
     "texts/",
+    "research/",
   ]),
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
