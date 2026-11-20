@@ -83,8 +83,11 @@ savegames by entry number.
 **Script Enigma calls** (only II and IV have any; sources and compiled scripts agree): II
 rooms 53 → 181, 683 → 112; IV: 180–185, 188, 191–196. IV's 186, 187, 189, 190 have texts
 ("Dieses Terminal hier solltest Du Dir merken", the punch, a machine starting) but no
-room awards them: cut content, like IV's 348 (the little train), 358 (the recorder) and
-the banks' 296, 297 (Junior, I, II), which no code raises either.
+room awards them: cut content, like IV's 348 (the little train) and 358 (the recorder),
+which no code raises either. The bank's 296 and 297 (Junior, I, II: "Zum Glück gibt es
+Banken…", 1000 points, CHGOLD; "…kann man welches bei der nächsten Bank eintauschen",
+GOLD) are not cut content: the bank (tile 0x14, class 20) works and is in many rooms,
+but its code (0x422090, 0x422150) never awards them; only the bonus boxes are unused.
 
 **Owners resolved by hand**:
 - 287 (0x410050): a magic-word handler (word table 0x481acc, handler 0x42c820 checks
