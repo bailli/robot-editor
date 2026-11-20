@@ -61,6 +61,7 @@ import {
   eventTableLength,
   eventTextsId,
   exitMode,
+  freeEventEntries,
   freeTileTypes,
   kitChanges,
   kitExample,
@@ -96,7 +97,6 @@ import {
   scanScript,
   scriptPlacedObjects,
   sha256,
-  spareEventEntries,
   textChanges,
   textEntryProblem,
   textsId,
@@ -1155,18 +1155,40 @@ export class Editor {
     return undefined;
   }
 
-  /** The entries an event can be copied to: those the game never uses (spareEventEntries). */
+  /**
+   * The entries an event can be copied to: those whose original event nothing in the
+   * episode as edited uses (its classes, copies included, and rooms; freeEventEntries),
+   * those without a text or sound of their own first.
+   */
   eventTargets(episode: number): readonly number[] {
-    return spareEventEntries(episode);
+    const texts = this.pristine.texts(eventTextsId(episode))?.entries;
+    const free = freeEventEntries(
+      this.game.image,
+      episode,
+      this.rooms(episode),
+      this.pristine.image,
+    );
+    const residue = new Map(
+      free.map((n) => [
+        n,
+        (texts?.has(EVENT_TEXT + n) === true ? 2 : 0) + (this.pristine.sound(episode, n) ? 1 : 0),
+      ]),
+    );
+    return free.sort((a, b) => (residue.get(a) ?? 0) - (residue.get(b) ?? 0));
+  }
+
+  /** The entries of episode `from` as loaded that hold no event it uses. */
+  private unusedEvents(from: number): readonly number[] {
+    return freeEventEntries(this.pristine.image, from, this.pristine.episode(from).rooms);
   }
 
   /**
-   * The events of episode `from` (as loaded, from entry 128 on, not its spare entries)
+   * The events of episode `from` (as loaded, from entry 128 on, not its unused entries)
    * that can be copied into `episode`: those whose id its table lacks.
    */
   sourceEvents(from: number, episode: number): number[] {
     const held = new Set(readEventTable(this.game.image, episode).map((e) => e.id));
-    const spare = spareEventEntries(from);
+    const spare = this.unusedEvents(from);
     return readEventTable(this.pristine.image, from)
       .map((e, n) => ({ ...e, n }))
       .filter((e) => e.n >= FIRST_EVENT_ENTRY && e.id !== 0 && !spare.includes(e.n))
@@ -1178,12 +1200,12 @@ export class Editor {
   eventProblem(episode: number, entry: number, source: EventSource): string | undefined {
     const { from, of } = source;
     if (from === episode) return "a copy comes from another episode";
-    if (!spareEventEntries(episode).includes(entry))
-      return `entry ${entry} is not one the game never uses`;
+    if (!this.eventTargets(episode).includes(entry))
+      return `entry ${entry} holds an event the episode uses`;
     const event =
       of >= FIRST_EVENT_ENTRY &&
       of < eventTableLength(from) &&
-      !spareEventEntries(from).includes(of)
+      !this.unusedEvents(from).includes(of)
         ? readEventTable(this.pristine.image, from)[of]
         : undefined;
     if (!event?.id) return `episode ${from} has no event at entry ${of}`;
@@ -1191,6 +1213,12 @@ export class Editor {
       (e, n) => n !== entry && e.id === event.id,
     );
     if (held >= 0) return `the episode has event ${event.id} already (entry ${held})`;
+    // what the entry has of its own and the event does not replace would stay
+    const own = this.pristine.texts(eventTextsId(episode))?.entries.has(EVENT_TEXT + entry);
+    if (own && this.pristine.texts(eventTextsId(from))?.entries.has(EVENT_TEXT + of) !== true)
+      return `entry ${entry} has a text of its own, which event ${event.id} (without one) would show`;
+    if (this.pristine.sound(episode, entry) && !this.pristine.sound(from, of))
+      return `entry ${entry} has a sound of its own, which event ${event.id} (without one) would play`;
     return undefined;
   }
 
@@ -1447,7 +1475,8 @@ export class Editor {
     return planKit(this.game, episode, kit, {
       source: this.pristine,
       free: [...this.freeTileTypes(episode).filter((t) => !copied.has(t)), ...given],
-      spare: spareEventEntries(episode).filter((n) => !set.has(n)),
+      rooms: this.rooms(episode),
+      taken: [...set],
       hasText: (n) => texts?.has(n) === true,
       hasEntry: (resource, n) => this.textEntries(resource)?.entries.has(n) === true,
       hasEventText: (n) => eventTexts?.has(n) === true,

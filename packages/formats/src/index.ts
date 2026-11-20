@@ -15,6 +15,7 @@ export {
   SCORPION_SAND_TOUCH_METHODS,
   TILE_TYPES,
   classTexts,
+  classVtables,
   freeTileTypes,
   readClassTable,
   readEpisodeClasses,
@@ -313,8 +314,9 @@ export {
   FIRST_EVENT_ENTRY,
   FIRST_EVENT_ID,
   eventTableLength,
+  freeEventEntries,
   readEventTable,
-  spareEventEntries,
+  scriptEnigmaEntries,
   withEventEntries,
 } from "./events.ts";
 export type { GameEvent } from "./events.ts";

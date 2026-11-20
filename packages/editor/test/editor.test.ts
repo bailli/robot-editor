@@ -1105,9 +1105,13 @@ describe("Editor and events from other episodes", () => {
   /** Episode IV's room the tests show (any: it is where undo goes). */
   const shown = readEpisodeStart(game.image, 4).room;
 
-  test("II's oracle events in IV's spare entries: a new base, saved as the driver test's mod", () => {
+  test("II's oracle events in IV's free entries: a new base, saved as the driver test's mod", () => {
     const editor = new Editor(game);
-    expect(editor.eventTargets(4)).toEqual([197, 198, 199, 200]);
+    // entries whose events nothing in IV uses (freeEventEntries), those without a text
+    // or sound of their own first
+    expect(editor.eventTargets(4)).toEqual([
+      154, 171, 189, 197, 198, 199, 200, 134, 169, 174, 131, 147, 170, 186, 187, 190,
+    ]);
     // II's entries 134-143 are the oracles' events 262-271, which IV lacks; II's 128
     // (event 256) IV has
     const sources = editor.sourceEvents(2, 4);
@@ -1160,9 +1164,11 @@ describe("Editor and events from other episodes", () => {
   test("a copy replaces the entry's copy, text and all; × takes it back", () => {
     const editor = new Editor(game);
     editor.copyEvent(4, shown, 197, { from: 2, of: 135 });
-    // episode I's 262 has no text: the entry keeps none
-    editor.copyEvent(4, shown, 197, { from: 1, of: 134 });
-    expect(editor.eventEntries(4)).toEqual([{ episode: 4, entry: 197, id: 262, points: 3500 }]);
+    // episode I's 310 (a computer program's) has no text: the entry keeps none
+    editor.copyEvent(4, shown, 197, { from: 1, of: 182 });
+    expect(editor.eventEntries(4)).toEqual([
+      { episode: 4, entry: 197, id: 310, points: 0, sound: "!FANFA1" },
+    ]);
     expect(editor.saveMod().changes.copyTexts).toEqual([]);
     expect(editor.game.texts(1410)?.entries.has(1997)).toBe(false);
     editor.copyEvent(4, shown, 197, undefined);
@@ -1306,13 +1312,14 @@ describe("Editor and events from other episodes", () => {
     expect(editor.roomName(4, shown)?.name).toBe("DER ANFANG");
   });
 
-  test("refused: the same episode, no spare entry, no event there, an id the table has", () => {
+  test("refused: the same episode, a used entry, no event there, an id the table has", () => {
     const editor = new Editor(game);
-    expect(editor.eventTargets(2)).toEqual([]);
+    expect(editor.eventTargets(2)).toEqual([188, 170, 168, 169]);
     expect(() => editor.copyEvent(4, shown, 197, { from: 4, of: 135 })).toThrow(/another/);
-    expect(() => editor.copyEvent(2, 43, 190, { from: 1, of: 134 })).toThrow(/never uses/);
-    expect(() => editor.copyEvent(4, shown, 196, { from: 2, of: 134 })).toThrow(/never uses/);
-    // Junior's 190 is spare (id 0), entries below 128 are tile types
+    // II's class 6 raises 320 (entry 190); IV's script Enigma(196) takes entry 196
+    expect(() => editor.copyEvent(2, 43, 190, { from: 1, of: 165 })).toThrow(/the episode uses/);
+    expect(() => editor.copyEvent(4, shown, 196, { from: 2, of: 134 })).toThrow(/the episode uses/);
+    // Junior's 190 is unused (id 0), entries below 128 are tile types
     expect(() => editor.copyEvent(4, shown, 197, { from: 0, of: 190 })).toThrow(/no event/);
     expect(() => editor.copyEvent(4, shown, 197, { from: 2, of: 21 })).toThrow(/no event/);
     expect(() => editor.copyEvent(4, shown, 197, { from: 2, of: 128 })).toThrow(
@@ -1567,9 +1574,10 @@ describe("Editor and kits", () => {
       [0x48, 0x50],
       [0x6d, 0x51],
     ]);
+    // the free entries without a text or sound come first
     expect(editor.eventEntries(4).map((e) => [e.entry, e.id, e.points])).toEqual([
-      [197, 263, 3500],
-      [198, 266, 3500],
+      [154, 263, 3500],
+      [171, 266, 3500],
     ]);
     expect(editor.textCopies(4).map((c) => c.to)).toEqual([331, 332, 334, 339, 945]);
     const mod = editor.saveMod();
@@ -1577,14 +1585,20 @@ describe("Editor and kits", () => {
       kitChanges(game, 4, oracles, planKit(game, 4, oracles, { events: [263, 266] })),
     );
     expect(firstDifference(applyMod(game.image, parseMod(modJson(mod))), editor.save())).toBe(-1);
-    // nothing left but events without an entry: two spare entries remain
+    // nothing left but the other eight events, for the next free entries
     const after = editor.kitPlan(4, oracles);
     expect(after).toMatchObject({ types: [], texts: [], present: [0x50, 0x51] });
-    expect(after.events.map((e) => e.entry)).toEqual([199, 200]);
-    // the circuits take the next spare entry for their event 293
+    expect(after.events.map((e) => e.entry)).toEqual([189, 197, 198, 199, 200, 134, 169, 174]);
+    // the circuits take the next free entry for their event 293
     editor.addKit(4, ivRoom, kit("circuits"));
-    expect(editor.eventEntries(4).map((e) => e.id)).toEqual([263, 266, 293]);
-    expect(editor.kitPlan(4, oracles).events.map((e) => e.entry)).toEqual([200]);
+    expect(editor.eventEntries(4).map((e) => [e.entry, e.id])).toEqual([
+      [154, 263],
+      [171, 266],
+      [189, 293],
+    ]);
+    expect(editor.kitPlan(4, oracles).events.map((e) => e.entry)).toEqual([
+      197, 198, 199, 200, 134, 169, 174, 131,
+    ]);
     editor.undo();
     editor.undo();
     expect(editor.game).toBe(game);
@@ -1619,23 +1633,23 @@ describe("Editor and kits", () => {
       [1011, 1011, [[1700, 994]]],
       [1111, 1011, [[1700, 994]]],
     ]);
+    // 298 to the first free entry without a text, I's unused 259 to its entry 170
     expect(mod.changes.events).toEqual([
-      { episode: 1, entry: 190, id: 298, points: 10000, sound: "FINALE" },
-      { episode: 1, entry: 170, id: 0, points: 0 },
+      { episode: 1, entry: 131, id: 298, points: 10000, sound: "FINALE" },
+      { episode: 1, entry: 170, id: 259, points: 4000 },
     ]);
     expect(mod.changes.texts).toEqual([]);
     expect(editor.addKit(1, 43, kit("goal"))).toBeUndefined();
     editor.undo();
-    // the spare entry taken by another event: "Das war's" goes, in the same undo step
+    // entry 131 taken by another event: 298 goes to the next one (silenced where none is
+    // left, see the formats test for II)
     const other = editor.sourceEvents(2, 1)[0] ?? -1;
-    editor.copyEvent(1, 43, 190, { from: 2, of: other });
+    editor.copyEvent(1, 43, 131, { from: 2, of: other });
     editor.addKit(1, 43, kit("goal"));
-    expect(editor.textEntry(1110, 1970)).toBeUndefined();
     mod = editor.saveMod();
-    expect(mod.changes.texts).toEqual([{ resource: 1110, entry: 1970, variants: null }]);
-    expect(editor.addKit(1, 43, kit("goal"))).toBeUndefined();
-    editor.undo();
+    expect(mod.changes.events.filter((e) => e.id === 298).map((e) => e.entry)).toEqual([134]);
     expect(editor.textEntry(1110, 1970)).toEqual(["Das war's"]);
+    expect(editor.addKit(1, 43, kit("goal"))).toBeUndefined();
   });
 
   test("copied types offer the states their episode's rooms use: letters 0 and 1", () => {
@@ -1654,9 +1668,7 @@ describe("Editor and kits", () => {
 
   test("refused: a plan with a problem; nothing to add where the episode has the feature", () => {
     const editor = new Editor(game);
-    expect(() => editor.addKit(4, ivRoom, kit("oracles"), [262, 263, 264, 265, 266])).toThrow(
-      /spare entries/,
-    );
+    expect(() => editor.addKit(0, 43, kit("oracles"), [262])).toThrow(/has event 262 already/);
     expect(editor.addKit(2, 43, kit("oracles"))).toBeUndefined();
     expect(editor.addKit(1, 43, kit("circuits"))).toBeUndefined();
     expect(editor.dirty).toBe(false);

@@ -145,7 +145,9 @@ def classify_data(addr):
 def owners(f, depth=0, seen=None):
     """Roots reaching function f: class vtables, touch tables, episode vtables, other."""
     seen = seen or set()
-    if f in seen or depth > 6:
+    if f in seen:
+        return set()  # a cycle adds no roots
+    if depth > 6:
         return {("deep", f)}
     seen = seen | {f}
     out = set()
@@ -178,15 +180,16 @@ def owners(f, depth=0, seen=None):
     return out
 
 
-def arg_of(i):
-    """The last push before the call at ins[i], within its block."""
+def arg_of(i, nth=1):
+    """The nth last push before the call at ins[i] (argument nth), within its block."""
     for j in range(i - 1, max(0, i - 25), -1):
         a, t = ins[j]
         if t.startswith("call"):
             return "?call"
         if t.startswith("push"):
-            v = t.split(None, 1)[1]
-            return v
+            nth -= 1
+            if nth == 0:
+                return t.split(None, 1)[1]
         if ins[j + 1][0] in jtargets and j + 1 != i:
             pass
     return "?"
@@ -206,7 +209,9 @@ def fmt_owner(o):
 
 
 def print_table():
-    rows = site_table()
+    # the awards (0x42bef0, id in argument 1) and the sound by id (0x43a780, argument 3)
+    rows = [dict(r, kind="award") for r in site_table()]
+    rows += [dict(r, kind="sound") for r in site_table(0x43A780, 3)]
     def key(r):
         try:
             return (0, int(r["arg"], 16))
@@ -216,10 +221,10 @@ def print_table():
         k = key(r)
         if k[0] == 0 and k[1] < 0x100:
             continue  # class keys: first takes, never an event id
-        print(f"{r['arg']:>6} {k[1] if k[0] == 0 else '':>4} {r['site']:#x} f={r['func']:#x} eps={''.join(map(str, r['eps'])) or '-'} classes={r['classes'][:10]} {r['unknown'][:4]}")
+        print(f"{r['kind']} {r['arg']:>6} {k[1] if k[0] == 0 else '':>4} {r['site']:#x} f={r['func']:#x} eps={''.join(map(str, r['eps'])) or '-'} classes={r['classes'][:10]} {r['unknown'][:4]}")
 
 
-def site_table(target=0x42bef0):
+def site_table(target=0x42BEF0, nth=1):
     rows = []
     for i, (a, t) in enumerate(ins):
         if t == f"call   0x{target:x}":
@@ -237,11 +242,73 @@ def site_table(target=0x42bef0):
                 else:
                     unknown.append(f"{o[0]}:{o[1]:#x}" if isinstance(o[1], int) else str(o))
             classes = sorted({c for o in own if o[0] in ("class", "touch") for _, _, c in vt_info[o[1]]}, key=str)
-            rows.append(dict(site=a, func=f, arg=arg_of(i), eps=sorted(eps, key=str), classes=classes, unknown=unknown if len(own) < 40 else ["WIDE"]))
+            vts = sorted({o[1] for o in own if o[0] in ("class", "touch")})
+            epm = sorted({o[1] for o in own if o[0] == "episode"})
+            rows.append(dict(site=a, func=f, arg=arg_of(i, nth), vtables=vts, methods=epm, eps=sorted(eps, key=str), classes=classes, unknown=unknown if len(own) < 40 else ["WIDE"]))
     return rows
 
 
-if __name__ == "__main__" and sys.argv[1] == "table":
+# Owners resolved by hand (README.md, "Owners resolved by hand"): function -> class ids
+MANUAL = {
+    0x42E6E0: [73], 0x42EC30: [73],  # 276: the rucksack's joker action
+    0x410050: [78],  # 287: the magic words (letters) open the wizard's door
+    0x4514A0: [53], 0x44F690: [53], 0x44F150: [53],  # 290, 310-313, 317: computer programs
+    0x447370: [180], 0x447230: [179], 0x4475E0: [166],  # 331, 335, 337: hero states 11, 10, 12
+}
+
+
+# Ids pushed on a second path into a call (joins.py): id -> the function's owners, or classes
+JOINED = {
+    315: ("func", 0x40F420),  # 0x40f511: the slot machine's jump table, then 0x40f4ee
+    # 0x42c1a1: the take function raises 0x141 + state for class 239, III's gems (states 0-3)
+    321: ("classes", [239]), 322: ("classes", [239]), 323: ("classes", [239]), 324: ("classes", [239]),
+}
+# 0x412c14: an oracle's use raises 0x106 + (state & 15), 262-277, wherever the oracle runs
+ORACLE = ("func", 0x412AE0)
+
+
+def uses():
+    """Per event id: the class vtables, episode methods or engine code that use it."""
+    out = {}
+    for i, (how, what) in [*JOINED.items(), *((i, ORACLE) for i in range(262, 278))]:
+        u = out.setdefault(i, {"vtables": set(), "episodes": set(), "engine": False, "sites": []})
+        u["sites"].append("oracle" if (how, what) == ORACLE else "joined")
+        if how == "classes":
+            u["vtables"] |= {vt for vt, s in vt_info.items() if any(c in what for _, _, c in s)}
+        else:
+            own = owners(what)
+            u["vtables"] |= {o[1] for o in own if o[0] in ("class", "touch")}
+    for target, nth, kind in ((0x42BEF0, 1, "award"), (0x43A780, 3, "sound")):
+        for r in site_table(target, nth):
+            try:
+                i = int(r["arg"], 16)
+            except ValueError:
+                continue
+            if i < 0x100:
+                continue
+            u = out.setdefault(i, {"vtables": set(), "episodes": set(), "engine": False, "sites": []})
+            u["sites"].append(f"{kind} {r['site']:#x}")
+            if r["func"] in MANUAL:
+                u["vtables"] |= {vt for vt, s in vt_info.items() if any(c in MANUAL[r["func"]] for _, _, c in s)}
+            elif r["unknown"] or "epbase" in r["methods"]:
+                u["engine"] = True
+            else:
+                u["vtables"] |= set(r["vtables"])
+                u["episodes"] |= {int(m[2:]) for m in r["methods"]}
+    return out
+
+
+if __name__ == "__main__" and sys.argv[1] == "uses":
+    u = uses()
+    print(json.dumps({i: {"engine": v["engine"], "vtables": [hex(x) for x in sorted(v["vtables"])], "episodes": sorted(v["episodes"]), "sites": v["sites"]} for i, v in sorted(u.items())}, indent=0))
+elif __name__ == "__main__" and sys.argv[1] == "owners":
+    # the roots reaching the function at each address, and its direct references
+    for x in sys.argv[2:]:
+        f = func_of(int(x, 16))
+        print(f"{f:#x}", sorted(str(o) for o in owners(f)))
+        print("   calls", [hex(c) for c in calls.get(f, [])], "jumps", [hex(c) for c in jumps.get(f, [])],
+              "imms", [hex(c) for c in imms.get(f, [])], "data", [hex(c) for c in dataref.get(f, [])])
+elif __name__ == "__main__" and sys.argv[1] == "table":
     print_table()
 elif __name__ == "__main__":
     target = int(sys.argv[1], 16)

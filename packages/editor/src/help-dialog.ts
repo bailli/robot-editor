@@ -125,7 +125,7 @@ const CONSOLE: readonly HelpGroup[] = [
     rows: [
       ["SCORE n", "Points + n"],
       ["NIGHT n", "Darkness n (0: light, up to 100)"],
-      ["ENIGMA n", "Event n as for the first time (points, sound, text)"],
+      ["ENIGMA n", "The event with id n as for the first time (points, sound, text)"],
       ["CLRENIGMA", "Every event can happen again"],
       ["UNSTORE n", "Room n as at the start when next entered"],
       ["BIRNBAUM", "Every diary page read"],

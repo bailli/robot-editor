@@ -172,8 +172,9 @@ const FUNCTIONS: Readonly<Partial<Record<string, ScriptFunctionDoc>>> = {
     args: ["n"],
     kinds: ["enigma"],
     doc:
-      "the first time in a game: plays entry n's sound, adds its points and shows text " +
-      "1800 + n with the bonus (text 516); returns 1 then, else 0. Entries of the episode's " +
+      "the first time in a game (once per entry n's id): plays entry n's sound, adds its " +
+      "points and shows text 1800 + n with the bonus (text 516); returns 1 then, else 0. " +
+      "Entries of the episode's " +
       "event table (episode +0x1cc): 0–127 are the first takes of tile types, the higher " +
       "ones game events (0x407aa0, 0x42bef0).",
   },

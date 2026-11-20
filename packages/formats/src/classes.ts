@@ -169,9 +169,18 @@ function u32(exe: PeImage, va: number): number {
   return u32le(readVa(exe, va, 4));
 }
 
-/** Class object -> vtable, from every `mov dword ptr [object], vtable` in the image. */
-function vtables(exe: PeImage): Map<number, number> {
+/** vtables per image's bytes: a scan of the whole exe, asked for by every kit plan. */
+const VTABLES = new WeakMap<Uint8Array, ReadonlyMap<number, number>>();
+
+/**
+ * Class object -> vtable, from every `mov dword ptr [object], vtable` in the image (cached
+ * per image's bytes; patches make new ones).
+ */
+function vtables(exe: PeImage): ReadonlyMap<number, number> {
+  const cached = VTABLES.get(exe.data);
+  if (cached) return cached;
   const out = new Map<number, number>();
+  VTABLES.set(exe.data, out);
   const d = exe.data;
   const view = new DataView(d.buffer, d.byteOffset, d.byteLength);
   for (let i = 0; i + 10 <= d.length; i++) {
@@ -277,6 +286,26 @@ const EMPTY_EXTRA = 0x33;
 
 function classTable(episode: number): number {
   return forEpisode(CLASS_TABLES, episode);
+}
+
+/**
+ * The vtables of the classes in the episode's class table as `exe` holds it (copied
+ * types included), of all its types or of `types`: whose code runs in the episode, e.g.
+ * for the events it uses (events.ts).
+ */
+export function classVtables(
+  exe: PeImage,
+  episode: number,
+  types: Iterable<number> = Array.from({ length: TILE_TYPES }, (_, type) => type),
+): Set<number> {
+  const table = classTable(episode);
+  const vts = vtables(exe);
+  const out = new Set<number>();
+  for (const type of types) {
+    const vtable = vts.get(u32(exe, table + 8 * type));
+    if (vtable !== undefined) out.add(vtable);
+  }
+  return out;
 }
 
 /** The episode's class table, entry t for tile type t (128 entries). */

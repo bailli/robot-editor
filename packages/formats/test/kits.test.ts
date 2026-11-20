@@ -22,7 +22,7 @@ const kit = (key: string) => {
 };
 const [oracles, circuits, goal] = [kit("oracles"), kit("circuits"), kit("goal")];
 
-test("oracles: II's tangram and oracle, their texts; IV's events in its spare entries", () => {
+test("oracles: II's tangram and oracle, their texts; IV's events in its free entries", () => {
   // Junior has the oracles' events 262-271, not their texts
   expect(planKit(game, 0, oracles)).toEqual({
     types: [
@@ -40,22 +40,30 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
     textCopies: [],
     moved: [],
     silenced: [],
+    cleared: [],
   });
   // II and III have them
   expect(planKit(game, 3, oracles)).toMatchObject({ types: [], present: [0x50, 0x51] });
-  // IV lacks all ten events and has four spare entries: the first four, or those chosen
+  // IV lacks all ten events and has 16 free entries (freeEventEntries): those without a
+  // text or sound first (154, 171, 189, 197-200), then 134, 169 and 174 (a sound)
   const iv = planKit(game, 4, oracles);
   expect(iv.types).toEqual([
     [0x48, 0x50],
     [0x6d, 0x51],
   ]);
   expect(iv.events.map((e) => [e.entry, e.id])).toEqual([
-    [197, 262],
-    [198, 263],
-    [199, 264],
-    [200, 265],
+    [154, 262],
+    [171, 263],
+    [189, 264],
+    [197, 265],
+    [198, 266],
+    [199, 267],
+    [200, 268],
+    [134, 269],
+    [169, 270],
+    [174, 271],
   ]);
-  expect(iv.without).toEqual([266, 267, 268, 269, 270, 271]);
+  expect(iv.without).toEqual([]);
   expect(iv.music).toEqual(["ORACLE"]);
   const chosen = planKit(game, 4, oracles, { events: [263, 266] });
   // as the game test's mod, which gave 3500 points and II's texts under Wine; IV lacks
@@ -73,8 +81,8 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
       },
     ],
     events: [
-      { episode: 4, entry: 197, id: 263, points: 3500, sound: "!ORACLE" },
-      { episode: 4, entry: 198, id: 266, points: 3500, sound: "!ORACLE" },
+      { episode: 4, entry: 154, id: 263, points: 3500, sound: "!ORACLE" },
+      { episode: 4, entry: 171, id: 266, points: 3500, sound: "!ORACLE" },
     ],
     copyTexts: [
       {
@@ -86,8 +94,8 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
           [334, 334],
           [339, 339],
           [945, 945],
-          [1997, 1935],
-          [1998, 1938],
+          [1954, 1935],
+          [1971, 1938],
         ],
       },
     ],
@@ -95,8 +103,8 @@ test("oracles: II's tangram and oracle, their texts; IV's events in its spare en
     texts: [],
     flags: [],
   });
-  expect(planKit(game, 4, oracles, { events: [262, 263, 264, 265, 266] }).problem).toMatch(
-    /5 events chosen, 4 spare entries left/,
+  expect(planKit(game, 4, oracles, { events: [262, 263], spare: [197] }).problem).toMatch(
+    /2 events chosen, 1 free entries left/,
   );
   expect(planKit(game, 0, oracles, { events: [262] }).problem).toMatch(/has event 262 already/);
 });
@@ -108,8 +116,8 @@ test("circuits: I's pieces, stairs only where the episode has none; event 293 wh
     [0x43, 0x43],
     [0x3d, 0x3d],
   ]);
-  // III has stairs and no spare entry: its nodes give no points; 0x0f is inside a chest
-  // of room 99
+  // III has stairs; its one free entry (186) takes the nodes' event; 0x0f is inside a
+  // chest of room 99
   expect(planKit(game, 3, circuits)).toMatchObject({
     types: [
       [0x0e, 0x25],
@@ -117,17 +125,17 @@ test("circuits: I's pieces, stairs only where the episode has none; event 293 wh
       [0x43, 0x43],
     ],
     present: [0x3d],
-    events: [],
-    without: [293],
+    events: [{ entry: 186, id: 293 }],
+    without: [],
   });
   const iv = planKit(game, 4, circuits);
   expect(kitChanges(game, 4, circuits, iv)).toMatchObject({
     // the gate's and bulb's FANFA2 and the lit node's BULBON, which IV lacks
     music: [{ episode: 4, from: 1, pieces: ["FANFA2", "BULBON"] }],
-    events: [{ episode: 4, entry: 197, id: 293, points: 4000, sound: "!BULBON" }],
+    events: [{ episode: 4, entry: 154, id: 293, points: 4000, sound: "!BULBON" }],
   });
   expect(kitChanges(game, 3, circuits, planKit(game, 3, circuits)).music).toEqual([
-    { episode: 3, from: 1, pieces: ["FANFA2"] },
+    { episode: 3, from: 1, pieces: ["FANFA2", "BULBON"] },
   ]);
   // I and II have circuits
   for (const e of [1, 2]) expect(planKit(game, e, circuits).types).toEqual([]);
@@ -170,18 +178,26 @@ test("goal: Junior's, its text moved to 1700 (a code patch); event 298 without a
     moved: [],
     silenced: [],
   });
-  // I: English too; 298 in entry 170 with text 1970 ("Das war's"), moved to entry 190
+  // I: English too; 298 in entry 170 with text 1970 ("Das war's"), moved to entry 131 (the
+  // first free one without a text; its unused event 259 goes to 170)
   const i = planKit(game, 1, goal);
   expect(i).toMatchObject({ texts: [], silenced: [] });
   expect(i.types.map(([, of]) => of)).toEqual([0x32]);
   expect(i.moved).toEqual([
     // FINALE: the music of I's ending (0x4095e0 plays event 298's sound), which follows
-    { entry: 190, from: 170, id: 298, points: 10000, sound: "FINALE", freed: { id: 0, points: 0 } },
+    {
+      entry: 131,
+      from: 170,
+      id: 298,
+      points: 10000,
+      sound: "FINALE",
+      freed: { id: 259, points: 4000 },
+    },
   ]);
   const changes = kitChanges(game, 1, goal, i);
   expect(changes.events).toEqual([
-    { episode: 1, entry: 190, id: 298, points: 10000, sound: "FINALE" },
-    { episode: 1, entry: 170, id: 0, points: 0 },
+    { episode: 1, entry: 131, id: 298, points: 10000, sound: "FINALE" },
+    { episode: 1, entry: 170, id: 259, points: 4000 },
   ]);
   expect(changes.code).toEqual([jump]);
   expect(changes.copyTexts).toEqual([
@@ -190,15 +206,16 @@ test("goal: Junior's, its text moved to 1700 (a code patch); event 298 without a
     { resource: 1011, from: 1011, entries: [[1700, 994]] },
     { resource: 1111, from: 1011, entries: [[1700, 994]] },
   ]);
-  // II has no spare entry: its text 1970 would go (II has no free type either)
+  // II's free entries all have a text or a sound, and 298 brings none: its text 1970
+  // would go (II has no free type either)
   const ii = planKit(game, 2, goal);
   expect(ii).toMatchObject({ moved: [], silenced: [170], problem: /free tile types/ });
   expect(kitChanges(game, 2, goal, ii).texts).toEqual([
     { resource: 1210, entry: 1970, variants: null },
   ]);
-  // IV: 1970 is the helicopter's text too, so 298 moves to 197 (id 388 goes to 170)
+  // IV: 1970 is the helicopter's text too, so 298 moves to 154 (its 282 goes to 170)
   expect(planKit(game, 4, goal).moved).toMatchObject([
-    { entry: 197, from: 170, id: 298, freed: { id: 388, points: 0 } },
+    { entry: 154, from: 170, id: 298, freed: { id: 282, points: 500 } },
   ]);
   // once added, the episodes keep their own 994; then nothing is left to do, and IV
   // takes only its copy and the event
@@ -238,7 +255,7 @@ test("axe & bridges: tools, timber, bridge; the timber's text moved; flag 0x2000
     expect: Uint8Array.of(0xe2, 3, 0, 0),
     bytes: Uint8Array.of(0xa5, 6, 0, 0),
   };
-  // IV has woods and a river, two of its four spare entries take the events
+  // IV has woods and a river, two of its free entries take the events
   const iv = planKit(game, 4, axe);
   expect(iv).toMatchObject({
     types: [
@@ -250,8 +267,8 @@ test("axe & bridges: tools, timber, bridge; the timber's text moved; flag 0x2000
     present: [0x4c, 0x12],
     texts: [285],
     events: [
-      { entry: 197, id: 335 },
-      { entry: 198, id: 331 },
+      { entry: 154, id: 335 },
+      { entry: 171, id: 331 },
     ],
     code: [move],
     textCopies: [
@@ -353,11 +370,14 @@ test("computer: I's computer and interface, their texts; events where the table 
     lacking: [],
   });
   for (const e of [1, 2]) expect(planKit(game, e, computer).present).toEqual([0x08, 0x41]);
-  // III: no spare entry; IV: two of its four
-  expect(planKit(game, 3, computer)).toMatchObject({ events: [], without: [289, 290] });
+  // III: one free entry; IV: two of its 16
+  expect(planKit(game, 3, computer)).toMatchObject({
+    events: [{ entry: 186, of: 161, id: 289 }],
+    without: [290],
+  });
   expect(planKit(game, 4, computer).events).toEqual([
-    { entry: 197, of: 161, id: 289 },
-    { entry: 198, of: 162, id: 290 },
+    { entry: 154, of: 161, id: 289 },
+    { entry: 171, of: 162, id: 290 },
   ]);
 });
 
@@ -372,9 +392,15 @@ test("punch cards: card, reader, punch, terminal, sliding door from IV; texts; I
       [0x61, 0x61],
     ],
     texts: [532, 520, 521, 522, 523, 524, 965, 533],
-    // one spare entry: the square turned
-    events: [{ entry: 190, of: 137, id: 352 }],
-    without: [353, 350, 351, 370],
+    // the free entries without a text or sound, from 131 on
+    events: [
+      { entry: 131, of: 137, id: 352 },
+      { entry: 134, of: 138, id: 353 },
+      { entry: 135, of: 135, id: 350 },
+      { entry: 136, of: 136, id: 351 },
+      { entry: 137, of: 139, id: 370 },
+    ],
+    without: [],
   });
   expect(planKit(game, 2, punchcards).problem).toMatch(/5 free tile types needed, 0 left/);
   expect(planKit(game, 4, punchcards)).toMatchObject({ types: [], texts: [], events: [] });

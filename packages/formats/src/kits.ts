@@ -5,23 +5,24 @@ import {
   PUNCH_CLASS,
   SLIDING_DOOR_CLASS,
   classTexts,
+  classVtables,
   freeTileTypes,
 } from "./classes.ts";
 import { roomTileTypes } from "./describe.ts";
 import { WOODS_CUT_THROUGH, readEpisodeFlags } from "./episode-flags.ts";
-import { EVENT_TEXT, FIRST_EVENT_ENTRY, readEventTable, spareEventEntries } from "./events.ts";
+import { EVENT_TEXT, FIRST_EVENT_ENTRY, freeEventEntries, readEventTable } from "./events.ts";
 import { type Game, eventTextsId, textsId } from "./game.ts";
 import type { CodeChange, CopyTextsChange, ModChanges, TextChange } from "./mod.ts";
 import { readVa } from "./pe.ts";
 import { readOracleSymbols } from "./records.ts";
-import { LOGIC_CELL } from "./scene.ts";
+import { LOGIC_CELL, type Room } from "./scene.ts";
 
 /**
  * Kits: what makes a feature of one episode work in another, copied in one step (the
  * editor's Episode tab, Editor.addKit): its tile types (withTileTypes: class, shape,
  * description, sound, first take, the hero states' icons and frames), the texts their
  * classes show (classTexts), the events their code raises, in entries the episode never
- * uses (spareEventEntries), and the MUSIC pieces the types' and events' sounds name
+ * uses (freeEventEntries), and the MUSIC pieces the types' and events' sounds name
  * that the episode lacks. A type whose class the episode has already is not copied: the
  * circuits' stairs only go to Junior, and a kit in the episode it comes from has
  * nothing to do. See STATUS, "Fan episodes", for the pilots they come from, and
@@ -49,7 +50,7 @@ export interface Kit {
   textMove?: { va: number; from: number; to: number };
   /**
    * Events (ids) whose bonus box must not show: where the episode's entry for one has a
-   * text, the id moves to a spare entry without one, else that text is removed. (The
+   * text, the id moves to a free entry without one, else that text is removed. (The
    * goal's box would come first, and closing its text then does not end the game.)
    */
   quietEvents?: readonly number[];
@@ -307,7 +308,7 @@ export interface KitPlan {
   present: number[];
   /** Entries of the episode's texts copied from the kit's episode, at the same numbers. */
   texts: number[];
-  /** Event entries: a spare entry, the kit episode's entry it copies, its id. */
+  /** Event entries: a free entry (freeEventEntries), the kit episode's entry it copies, its id. */
   events: { entry: number; of: number; id: number }[];
   /** The kit's events the episode's table lacks (`events` and `without` share them out). */
   lacking: number[];
@@ -320,8 +321,8 @@ export interface KitPlan {
   /** Texts copied to other numbers (textMove), into the episode and the kit episode. */
   textCopies: CopyTextsChange[];
   /**
-   * Quiet events moved from an entry with a text to a spare one without: the entry's
-   * points and sound go along, the old entry gets the spare's id and points.
+   * Quiet events moved from an entry with a text to a free one without: the entry's
+   * points and sound go along, the old entry gets the free one's unused event.
    */
   moved: {
     entry: number;
@@ -331,8 +332,13 @@ export interface KitPlan {
     sound: string;
     freed: { id: number; points: number };
   }[];
-  /** Entries of quiet events whose text (1800 + n) is removed: no spare entry was left. */
+  /** Entries of quiet events whose text (1800 + n) is removed: no free entry was left. */
   silenced: number[];
+  /**
+   * Entries given an event without a text of its own whose text (1800 + n, the unused
+   * event's) is removed, so the new event's bonus box does not show it.
+   */
+  cleared: number[];
   /** The episode's flags with the kit's (Kit.flags), where they lack some. */
   flags?: number;
   /** Why the kit cannot be added, if it cannot. */
@@ -345,8 +351,15 @@ export interface KitOptions {
   source?: Game;
   /** Types a copy can go to (default: no class and no room uses them). */
   free?: readonly number[];
-  /** Event entries a copy can go to (default spareEventEntries). */
+  /**
+   * Event entries a copy can go to (default: freeEventEntries with `rooms`, the kit's
+   * classes counted as present, without `taken`).
+   */
   spare?: readonly number[];
+  /** The episode's rooms as they are now (default: as in `game`). */
+  rooms?: readonly Room[];
+  /** Entries already given another event (default none). */
+  taken?: readonly number[];
   /** Whether the episode's texts (textsId) have entry n (default: as in `game`). */
   hasText?: (n: number) => boolean;
   /** Whether text resource `resource` has entry n (default: as in `game`), for textMove. */
@@ -364,7 +377,7 @@ export interface KitOptions {
  * lacks, each at the same number where that is free, else at the first free type left;
  * the texts the kit's classes show (classTexts) that the episode lacks, for classes it
  * does not have by itself in `source`; the events the
- * episode's table lacks, in its spare entries. A problem where the free types do not
+ * episode's table lacks, in its free entries. A problem where the free types do not
  * suffice, where chosen events are not lacking or do not fit.
  */
 export function planKit(game: Game, episode: number, kit: Kit, options: KitOptions = {}): KitPlan {
@@ -442,37 +455,78 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
   const held = new Set(readEventTable(game.image, episode).map((e) => e.id));
   const entryOf = (id: number) => table.findIndex((e, n) => n >= FIRST_EVENT_ENTRY && e.id === id);
   const lacking = kit.events.filter((id) => !held.has(id) && entryOf(id) >= 0);
-  const spareEntries = [...(options.spare ?? spareEventEntries(episode))];
+  const eventTexts = game.texts(eventTextsId(episode))?.entries;
+  const hasEventText = options.hasEventText ?? ((n) => eventTexts?.has(n) === true);
+  const taken = new Set(options.taken);
+  // the episode's sound lines, each read once (Game.sound parses the whole table)
+  const lines = new Map<number, string>();
+  const lineSound = (n: number) => {
+    let sound = lines.get(n);
+    if (sound === undefined) {
+      sound = game.sound(episode, n);
+      lines.set(n, sound);
+    }
+    return sound;
+  };
+  const residue = (n: number) => (hasEventText(EVENT_TEXT + n) ? 2 : 0) + (lineSound(n) ? 1 : 0);
+  // entries without a text or sound first: a text has to go, a sound stays when the
+  // copied event has none
+  const spareEntries =
+    options.spare ??
+    freeEventEntries(
+      game.image,
+      episode,
+      options.rooms ?? game.episode(episode).rooms,
+      source.image,
+      classVtables(source.image, kit.from, wanted),
+    )
+      .filter((n) => !taken.has(n))
+      .sort((a, b) => residue(a) - residue(b));
   let chosen = options.events ?? lacking.slice(0, spareEntries.length);
   const notLacking = chosen.filter((id) => !lacking.includes(id));
   if (notLacking.length > 0)
     problems.push(`the episode has event ${notLacking.join(", ")} already or the kit has none`);
   if (chosen.length > spareEntries.length) {
-    problems.push(`${chosen.length} events chosen, ${spareEntries.length} spare entries left`);
+    problems.push(`${chosen.length} events chosen, ${spareEntries.length} free entries left`);
     chosen = chosen.slice(0, spareEntries.length);
   }
-  const events = chosen
-    .filter((id) => lacking.includes(id))
-    .map((id, k) => ({ entry: spareEntries[k] ?? -1, of: entryOf(id), id }));
+  // an event without a sound only to an entry without one (its line would stay)
+  const open = [...spareEntries];
+  const events: KitPlan["events"] = [];
+  for (const id of chosen.filter((id) => lacking.includes(id))) {
+    const of = entryOf(id);
+    const silent = source.sound(kit.from, of) === "";
+    const at = open.findIndex((n) => !silent || !lineSound(n));
+    if (at >= 0) events.push({ entry: open.splice(at, 1)[0] ?? -1, of, id });
+  }
   const given = new Set(events.map((e) => e.id));
-  // quiet events: off entries with a text, to spare entries without one left by `events`
-  const eventTexts = game.texts(eventTextsId(episode))?.entries;
-  const hasEventText = options.hasEventText ?? ((n) => eventTexts?.has(n) === true);
+  // events without a text of their own in entries that have one: the text goes
+  const sourceEventTexts = source.texts(eventTextsId(kit.from))?.entries;
+  const cleared = events
+    .filter(
+      (e) =>
+        sourceEventTexts?.has(EVENT_TEXT + e.of) !== true && hasEventText(EVENT_TEXT + e.entry),
+    )
+    .map((e) => e.entry);
+  // quiet events: off entries with a text, to free entries without one left by `events`
   const own = readEventTable(game.image, episode);
-  const quietSpare = spareEntries.slice(events.length).filter((n) => !hasEventText(EVENT_TEXT + n));
+  const quietSpare = open.filter((n) => !hasEventText(EVENT_TEXT + n));
   const moved: KitPlan["moved"] = [];
   const silenced: number[] = [];
   for (const id of kit.quietEvents ?? []) {
     const from = own.findIndex((e, n) => n >= FIRST_EVENT_ENTRY && e.id === id);
     if (from < 0 || !hasEventText(EVENT_TEXT + from)) continue;
-    const entry = quietSpare.shift();
+    // a sound line stays where the event brings none: only to an entry without one
+    const sound = game.sound(episode, from);
+    const at = quietSpare.findIndex((n) => sound !== "" || !lineSound(n));
+    const entry = at < 0 ? undefined : quietSpare.splice(at, 1)[0];
     if (entry === undefined) {
       silenced.push(from);
       continue;
     }
     const { points } = own[from] ?? { points: 0 };
     const freed = own[entry] ?? { id: 0, points: 0 };
-    moved.push({ entry, from, id, points, sound: game.sound(episode, from), freed });
+    moved.push({ entry, from, id, points, sound, freed });
   }
   const sounds = [...types.map(([, of]) => of), ...events.map((e) => e.of)].map((n) =>
     source.sound(kit.from, n),
@@ -489,6 +543,7 @@ export function planKit(game: Game, episode: number, kit: Kit, options: KitOptio
     textCopies,
     moved,
     silenced,
+    cleared,
   };
   if (flags !== undefined) plan.flags = flags;
   if (problems.length > 0) plan.problem = problems.join("; ");
@@ -564,7 +619,7 @@ export function kitChanges(
     ],
     code: plan.code,
     copyTexts,
-    texts: plan.silenced.map((n): TextChange => ({
+    texts: [...plan.silenced, ...plan.cleared].map((n): TextChange => ({
       resource: eventTextsId(episode),
       entry: EVENT_TEXT + n,
       variants: null,

@@ -1,5 +1,5 @@
 """Research script (event entries): per episode, its entries from 128 on by who raises
-their id, from out/table.txt (trace.py table) and out/dump.json (dump.ts). Code only:
+their id or plays their sound, from out/table.txt (trace.py table) and out/dump.json (dump.ts). Code only:
 the scripts' Enigma calls (entries, see README.md) are not included here."""
 import json, os
 
@@ -7,12 +7,12 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 dump = json.load(open(os.path.join(OUT, "dump.json")))
 raised = {}
 for line in open(os.path.join(OUT, "table.txt")):
-    r = line.split()
+    kind, *r = line.split()
     if not r[0].startswith("0x"):
         continue  # computed ids: Enigma, oracle 262 + n, console
     eps = r[4].split("=")[1]
     unresolved = not line.rstrip().endswith("[]")
-    raised.setdefault(int(r[0], 16), []).append((eps, unresolved, r[3][2:]))
+    raised.setdefault(int(r[0], 16), []).append((eps, unresolved, r[3][2:] + ("(sound)" if kind == "sound" else "")))
 for ep in dump:
     e = ep["episode"]
     events = ep["events"]

@@ -192,7 +192,8 @@ export class EventsView {
       },
     );
     add.disabled = context.targets.length === 0 || sources.length === 0;
-    if (context.targets.length === 0) add.title = "The episode has no entry the game never uses";
+    if (context.targets.length === 0)
+      add.title = "The episode has no entry holding an unused event";
     const rows: [string, Node[]][] = [
       ["from", [element("span", "record-label", "From"), from]],
       ["of", [element("span", "record-label", "Event"), of]],
@@ -206,7 +207,7 @@ export class EventsView {
     });
     const bar = element("div", "start-bar");
     bar.dataset["key"] = "add";
-    bar.append(add, element("span", "hint", `${context.targets.length} spare`));
+    bar.append(add, element("span", "hint", `${context.targets.length} free`));
     return [...form, bar];
   }
 }

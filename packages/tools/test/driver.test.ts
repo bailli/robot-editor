@@ -482,10 +482,10 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     }
   }, 60_000);
 
-  // the circuits kit; a lit node is event 293: 4000 points in Junior (its own entry)
-  // and IV (a spare entry the kit gives it), none in III (no entry left)
+  // the circuits kit; a lit node is event 293: 4000 points in Junior (its own entry),
+  // IV and III (a free entry the kit gives it; III's only one, 186)
   const CIRCUITS = [
-    { episode: 3, nodePoints: 0 },
+    { episode: 3, nodePoints: 4000 },
     { episode: 4, nodePoints: 4000 },
     // Junior has no stairs: they come along from episode I
     { episode: 0, nodePoints: 4000 },
@@ -628,7 +628,7 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
   }, 60_000);
 
   test("episode IV: events copied with their sounds, a piece IV lacked among them", async () => {
-    // I's thief bribe (entry 130, event 258) into IV's spare entry 197, as copyEvent does;
+    // I's thief bribe (entry 130, event 258) into IV's free entry 197, as copyEvent does;
     // II's oracle event 263 (entry 135) into 198, with its !ORACLE, which IV lacks
     const bribe = game.sound(1, 130);
     const oracle = game.sound(2, 135);
@@ -1400,7 +1400,7 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
     assert.ok((seen.carried?.x ?? 0) > 6, JSON.stringify(seen));
   }, 120_000);
 
-  test("episode IV: the computer kit's computer, used, gives event 289 from a spare entry", async () => {
+  test("episode IV: the computer kit's computer, used, gives event 289 from a free entry", async () => {
     // the example at (6, 14): the interface (7, 14), the computer (6, 15)
     const mod = exampleMod(game, 4, "computer", { x: 6, y: 14 }, { x: 4, y: 15 });
     const seen = await withModExe(game, mod, (exe) =>
@@ -1417,7 +1417,7 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
         return { boxes, points: (await d.score()) - before };
       }),
     );
-    // I's 1000 points, in IV's spare entry 197, with I's text
+    // I's 1000 points, in a free entry of IV (154), with I's text
     assert.deepEqual(seen, { boxes: 1, points: 1000 });
   }, 120_000);
 
@@ -1443,6 +1443,9 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
         await d.run(60);
         for (const ch of "MSG 2 AAAB") await d.press(ch.charCodeAt(0), 60);
         await d.press("return", 100);
+        // the card punched: event 353 (a free entry of I, IV's text), its box over the
+        // terminal; then the terminal closes
+        await d.closeBoxes();
         await d.press("escape", 100);
         await d.run(60);
         const punched = await punch();
@@ -1474,7 +1477,7 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
       after: 0,
       // the card with key 1
       card: [226, 1],
-      // the reader's first use (4000) and event 352 in I's spare entry 190 (3500)
+      // the reader's first use (4000) and event 352 in a free entry of I (131, 3500)
       points: 7500,
       // the square's ring a quarter clockwise: the card from its top middle to the right
       square: [0, 226],
@@ -1501,10 +1504,16 @@ describe.skipIf(!enabled || !built)(`the game through the proxy (${HINT})`, () =
         const closed = await door();
         await d.putDown("use"); // by the reader: the code sent to address 7
         await d.run(100);
+        // the door opened: event 350 in a free entry of I, with IV's text
+        await d.closeBoxes();
         const opened = await door();
         // down through the door
         await d.walk("down", (h) => h.y >= 16);
         await d.walk("right", (h) => h.x >= 9);
+        // in the door the hero has passed it: event 370 (the door closed behind)
+        await d.walk("down", (h) => h.y >= 17);
+        await d.run(100);
+        await d.closeBoxes();
         const through = await d.walk("down", (h) => h.y >= 18);
         await d.run(200);
         await d.closeBoxes();

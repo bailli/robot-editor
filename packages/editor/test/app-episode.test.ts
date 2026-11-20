@@ -290,7 +290,7 @@ test("the Kits tab lists the music copied along; × takes a piece out, undoably"
   await userEvent.selectOptions(events.getByLabelText("Event"), "135");
   await events.getByRole("button", { name: "Copy" }).click();
   await app.idle();
-  await expect.element(music.getByText("ORACLE ← II: entry 197")).toBeVisible();
+  await expect.element(music.getByText("ORACLE ← II: entry 154")).toBeVisible();
   await music.getByRole("button", { name: "Remove ORACLE" }).click();
   await app.idle();
   expect(status()).toMatch(/ORACLE taken out of Robot IV/);
@@ -299,7 +299,7 @@ test("the Kits tab lists the music copied along; × takes a piece out, undoably"
   expect(app.editor?.eventEntries(4)[0]?.sound).toBeUndefined();
   expect(app.editor?.game.musicPieces(4)).not.toContain("ORACLE");
   app.undo();
-  await expect.element(music.getByText("ORACLE ← II: entry 197")).toBeVisible();
+  await expect.element(music.getByText("ORACLE ← II: entry 154")).toBeVisible();
   expect(app.editor?.eventEntries(4)[0]?.sound).toBe("!ORACLE");
 });
 
@@ -333,7 +333,7 @@ test("the Kits tab copies a piece of another episode's music; a room can play it
   expect(app.editor?.game.musicPieces(4)).not.toContain("ORACLE");
 });
 
-test("the Kits tab copies events of other episodes to spare entries, undoably", async () => {
+test("the Kits tab copies events of other episodes to free entries, undoably", async () => {
   const start = app.editor?.start(4).room ?? 0;
   app.showEpisode(4, start);
   await page.getByRole("tab", { name: "Kits" }).click();
@@ -342,29 +342,30 @@ test("the Kits tab copies events of other episodes to spare entries, undoably", 
   await userEvent.selectOptions(events.getByLabelText("From episode"), "II");
   // II's entry 135: an oracle's event 263, with its text
   await userEvent.selectOptions(events.getByLabelText("Event"), "135");
-  await expect.element(events.getByLabelText("To entry")).toHaveValue("197");
+  // the free entries without a text or sound of their own come first
+  await expect.element(events.getByLabelText("To entry")).toHaveValue("154");
   await events.getByRole("button", { name: "Copy" }).click();
   await app.idle();
   // its sound, with the piece IV lacks
   const sound = "!ORACLE";
   expect(app.editor?.eventEntries(4)).toEqual([
-    { episode: 4, entry: 197, id: 263, points: 3500, sound, text: { from: 2, of: 135 } },
+    { episode: 4, entry: 154, id: 263, points: 3500, sound, text: { from: 2, of: 135 } },
   ]);
   await expect
-    .element(events.getByText("197 ← II 135: event 263, 3500 points, !ORACLE"))
+    .element(events.getByText("154 ← II 135: event 263, 3500 points, !ORACLE"))
     .toBeVisible();
-  expect(status()).toMatch(/Entry 197 is now entry 135 of/);
-  // the copied event is no longer offered; the next copy goes to the next spare entry
+  expect(status()).toMatch(/Entry 154 is now entry 135 of/);
+  // the copied event is no longer offered; the next copy goes to the next free entry
   const offered = [...(events.getByLabelText("Event").element() as HTMLSelectElement).options].map(
     (o) => o.value,
   );
   expect(offered).not.toContain("135");
-  await expect.element(events.getByLabelText("To entry")).toHaveValue("198");
+  await expect.element(events.getByLabelText("To entry")).toHaveValue("171");
   const saved = parseMod(app.saveMod() ?? "");
-  expect(saved.changes.events).toEqual([{ episode: 4, entry: 197, id: 263, points: 3500, sound }]);
+  expect(saved.changes.events).toEqual([{ episode: 4, entry: 154, id: 263, points: 3500, sound }]);
   expect(saved.changes.music).toEqual([{ episode: 4, from: 2, pieces: ["ORACLE"] }]);
   expect(saved.changes.copyTexts).toEqual([
-    { resource: 1410, from: 1210, entries: [[1997, 1935]] },
+    { resource: 1410, from: 1210, entries: [[1954, 1935]] },
   ]);
   // removed with ×, back with undo, gone with another
   await events.getByRole("button", { name: "×" }).click();
@@ -375,10 +376,9 @@ test("the Kits tab copies events of other episodes to spare entries, undoably", 
   app.undo();
   expect(app.editor?.eventEntries(4)).toEqual([]);
   expect(app.editor?.game).toBe(app.editor?.pristine);
-  // II has no entry the game never uses
-  app.showEpisode(2, 43);
-  await expect.element(events.getByRole("button", { name: "Copy" })).toBeDisabled();
-  await expect.element(events.getByText("0 spare")).toBeVisible();
+  // III has one entry holding an unused event
+  app.showEpisode(3, 41);
+  await expect.element(events.getByText("1 free")).toBeVisible();
 });
 
 test("the Texts tab copies texts of other episodes, a copied class's in one go", async () => {
@@ -434,39 +434,61 @@ test("the Texts tab copies texts of other episodes, a copied class's in one go",
   expect(app.editor?.game).toBe(app.editor?.pristine);
 });
 
-test("the Kits tab adds kits: oracles with the symbols picked, then circuits", async () => {
+test("the Kits tab adds kits: oracles, then circuits; the player picks where entries run short", async () => {
   const start = app.editor?.start(4).room ?? 0;
   app.showEpisode(4, start);
   await page.getByRole("tab", { name: "Kits" }).click();
   const kits = page.getByRole("region", { name: "Kits" });
   // folded to a line each; opened they stay open
-  await expect.element(kits.getByText("adds 2 types, 5 texts, 4 events")).toBeVisible();
+  await expect.element(kits.getByText("adds 2 types, 5 texts, 10 events")).toBeVisible();
   await kits.getByText("Oracles from Robot II").click();
   await kits.getByText("Circuits from Robot I").click();
-  // four spare entries for ten symbols: the first four are ticked, a fifth cannot be
-  const symbol = (n: number) => kits.getByRole("checkbox", { name: `symbol ${n} (${262 + n})` });
-  await expect.element(symbol(3)).toBeChecked();
-  await expect.element(symbol(4)).toBeDisabled();
-  for (const n of [0, 2, 3]) await symbol(n).click();
-  await symbol(4).click();
+  // IV's free entries take all ten symbols' events, those without a text or sound first
+  await expect
+    .element(
+      kits.getByText(/^Events: symbol 0 \(262\) in entry 154, symbol 1 \(263\) in entry 171,/),
+    )
+    .toBeVisible();
   await kits.getByRole("button", { name: "Add oracles" }).click();
   await app.idle();
   expect(app.editor?.eventEntries(4).map((e) => [e.entry, e.id])).toEqual([
-    [197, 263],
+    [134, 269],
+    [154, 262],
+    [169, 270],
+    [171, 263],
+    [174, 271],
+    [189, 264],
+    [197, 265],
     [198, 266],
+    [199, 267],
+    [200, 268],
   ]);
   expect(app.editor?.tileTypeCopies(4).map((c) => c.of)).toEqual([0x50, 0x51]);
   expect(status()).toMatch(/Oracles of .* added to/);
   // the parts are in the lists below
   const types = page.getByRole("region", { name: "Tile types" });
   await expect.element(types.getByText(/0x6d ← II 0x51/)).toBeVisible();
-  // circuits take the next spare entry
-  await expect.element(kits.getByText("Events: 293 in entry 199")).toBeVisible();
+  // circuits take the next free entry (its text and sound replaced by the event's)
+  await expect.element(kits.getByText("Events: 293 in entry 131")).toBeVisible();
   await kits.getByRole("button", { name: "Add circuits" }).click();
   await app.idle();
-  expect(app.editor?.eventEntries(4).map((e) => e.id)).toEqual([263, 266, 293]);
+  expect(app.editor?.eventEntries(4).find((e) => e.id === 293)?.entry).toBe(131);
   // one undo step each
   app.undo();
+  app.undo();
+  expect(app.editor?.game).toBe(app.editor?.pristine);
+  // III has one free entry for the punch cards' five events: the first is ticked, a
+  // second cannot be
+  app.showEpisode(3, 41);
+  await kits.getByText("Punch cards from Robot IV").click();
+  const event = (label: string) => kits.getByRole("checkbox", { name: label });
+  await expect.element(event("square turned (352)")).toBeChecked();
+  await expect.element(event("door opened (350)")).toBeDisabled();
+  await event("square turned (352)").click();
+  await event("door opened (350)").click();
+  await kits.getByRole("button", { name: "Add punch cards" }).click();
+  await app.idle();
+  expect(app.editor?.eventEntries(3).map((e) => [e.entry, e.id])).toEqual([[186, 350]]);
   app.undo();
   expect(app.editor?.game).toBe(app.editor?.pristine);
   // II has both

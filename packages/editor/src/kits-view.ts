@@ -41,7 +41,7 @@ export interface ReplaceableType {
  * The Kits tab's kits (formats' KITS), each folded to its name and what adding it to the
  * shown episode would do; opened, per kit what it copies (tile types, texts, events,
  * music, flags) and what it cannot (events without an entry), with checkboxes for the
- * events where the spare entries do not hold them all, a choice of the episode's own types
+ * events where the free entries do not hold them all, a choice of the episode's own types
  * to give up where its free types do not suffice (II has none), and "Add". Patched in place
  * (patchChildren); the events chosen stay while the episode does, the kits opened while
  * the editor runs.
@@ -87,7 +87,7 @@ export class KitsView {
       element(
         "p",
         "hint",
-        "A kit copies what a feature of another episode needs in one undo step: its tile types (to free types), the episode flags it needs, the texts its classes show, the events its code raises (to entries the game never uses) and the pieces of music their sounds need. Kits share the spare entries (IV has four: oracles and circuits together). The parts show below, each removable on its own.",
+        "A kit copies what a feature of another episode needs in one undo step: its tile types (to free types), the episode flags it needs, the texts its classes show, the events its code raises (to entries whose events the episode never uses, those without a text or sound first) and the pieces of music their sounds need. Kits share the free entries. The parts show below, each removable on its own.",
       ),
     ];
   }
@@ -193,8 +193,12 @@ export class KitsView {
       const texts = plan.silenced.map((n) => EVENT_TEXT + n).join(", ");
       box.append(line("silenced", `Removes text ${texts} (a bonus box that would come first)`));
     }
+    if (plan.cleared.length > 0) {
+      const texts = plan.cleared.map((n) => EVENT_TEXT + n).join(", ");
+      box.append(line("cleared", `Removes text ${texts} (the unused event's, now the kit's)`));
+    }
     if (plan.music.length > 0) box.append(line("music", `Music: ${plan.music.join(", ")}`));
-    // more events than spare entries: the player picks
+    // more events than free entries: the player picks
     const picking = plan.lacking.length > fit.events.length && fit.events.length > 0;
     if (picking) {
       const picked = chosen ?? fit.events.map((e) => e.id);
@@ -204,7 +208,7 @@ export class KitsView {
         element(
           "span",
           "record-label",
-          `Events: ${fit.events.length} spare entries; those not ticked give no points`,
+          `Events: ${fit.events.length} free entries; those not ticked give no points`,
         ),
       );
       for (const id of plan.lacking) {
