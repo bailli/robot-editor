@@ -2,7 +2,7 @@
 
 Where the reverse engineering of `GameOfRobot.exe` and the level editor stand: what is
 decoded and verified, what the editor supports, what is still open and where to pick it up.
-Setup and commands are in the [README](README.md). Last updated: 2026-11-07.
+Setup and commands are in the [README](README.md). Last updated: 2026-11-08.
 
 ## Goal and approach
 
@@ -95,6 +95,7 @@ Files in `packages/formats/src`:
 | `episode-flags.ts`           | the flags each episode's constructor sets (oracles that vanish, …), and patching them           |
 | `episode-methods.ts`         | rules by the episode vtable's methods: the backdrop room (mod 100, − 100), diagonal moves       |
 | `endings.ts`                 | which episodes room 255 ends (episode I's check made a mask), and patching it                   |
+| `fires.ts`                   | which episodes' fires burn until put out (the fire task's III check made a mask), and patching  |
 | `console.ts`                 | the game's command console always on (two bytes), for "Test in game"; its objects' names        |
 | `script.ts`                  | compiled room scripts: reader, disassembler, compiler, the game's keywords and constants        |
 | `script-docs.ts`             | what the script functions and variables do, how scripts and events run                          |
@@ -339,7 +340,8 @@ Files in `packages/formats/src`:
   moves meanwhile), `GO dx dy` the hero moved by (dx, dy) within the map (0x44c300),
   `KILL n` the room's n-th actor (list 0x53e9a8, 0x44da70), `SPEED n` food + n
   (0x4fe300, 1…0x7fff; below 1000 text 986, hunger), `DIGEST n` + n towards the
-  toilet (0x4fe302, ≤ 127; from 64 text 985), `ENIGMA n` event n (0x42bef0),
+  toilet (0x4fe302, ≤ 127; from 64 text 985), `ENIGMA n` the event with id n (0x42bef0;
+  an id, unlike the script's Enigma, which takes an entry),
   `CLRENIGMA` every event new again (the 13 dwords at 0x4fe324), `SCENE n [x y]`
   NxtRoom n, arriving at (x, y), `LASTSCENE` the previous room (0x4fe2f8), `UP`/`DOWN`
   the room id − 100 (only above 100) / + 100, `PLAY name` (0x43a950, probably a MUSIC
@@ -480,6 +482,16 @@ Files in `packages/formats/src`:
   and another start cell). The hero tile (type 1) in the map is cleared, not used. In
   a `robot patch` exe the hero lands at the episode's position in whatever room was put
   into the start slot (possibly in a wall or water).
+- **The bank** (tile 0x14, class 20, Junior, I and II; in 5, 22 and 11 rooms; text 20
+  "… der Papierkram braucht seine Zeit"; code read, 2026-11-09): walked into with gold
+  (0x422090, the class's second dispatch table 0x47faec), it holds the hero (state 2)
+  in a timed object (vtable 0x46b680, 0x422150): 13 points each run, one gold every 7
+  runs, until the gold is gone or 40 are exchanged; then the bank cell is cleared and
+  the hero walks again. Without gold the bank goes at once and gives 10 gold
+  (0x422126). Its events 296 ("Zum Glück gibt es Banken…", 1000 points) and 297
+  ("…bei der nächsten Bank eintauschen") are never awarded: no code raises them.
+  **Tried by the user (2026-11-09)** in Junior: the bank with or without gold gives
+  no bonus points; the mechanic is there, its events are unused.
 - **The rucksack's capacity** is the word at 0x4fe0c0 (Junior 38, I 50, II 60, III 200,
   IV 120), set by the start method's fourth `mov` (`readRucksack`, `withRucksack`). It
   is both the number of slots (words class | state << 8 from 0x4fe0c2; the letters'
@@ -813,9 +825,11 @@ Wine** (`pnpm test:game` and tries with the driver).
   but event 298's text 1800 + 170 = 1970 ("Das war's" in I and II, the helicopter's
   ending text in IV, none in Junior) shows as a bonus box together with text 994, and
   closing 994 then leaves the game running (the end comes on the second touch, the
-  event being spent). So the kit moves id 298 to a spare entry without text (I 190, IV
-  197; I's FINALE goes along, the old entry gets the spare's id) or, where none is left
-  (II), removes text 1970; III has no entry for 298, which then gives entry 0 (no
+  event being spent). So the kit moves id 298 to a free entry without text
+  (`freeEventEntries`; I 131, IV 154; I's FINALE goes along, the old entry gets the free
+  one's unused event; an event without a sound only to an entry without one, since its
+  line would stay) or, where none is left (II: its free entries all have a text or a
+  sound, and 298 brings none), removes text 1970; III has no entry for 298, which then gives entry 0 (no
   points, no text). The episodes' own 994 stay (in I and II the joke shown for
   README.TXT, 0x451f2d; in III the message for carrying too much wood, 0x415b1f): the
   goal's code is shared, so a code change makes its push (0x41f45e) show text 1700,
@@ -906,6 +920,34 @@ Wine** (`pnpm test:game` and tries with the driver).
   action "Auswählen" lists the pages read by date and title. Only some states have a page
   (the originals use 1, 2, 4, 6, …, 146, mostly even); a state without one is taken
   silently and marks nothing.
+- **Junior's own objects** (as the user knows them from playing, 2026-11-09; not traced
+  in the code unless said; several descriptions mislead):
+  garlic eaten starts a timer (about a minute) during which robots still chase the hero
+  but back off a little when a cell away; the trap 0x1c, entered by the hero, fills the
+  8 cells around him with electric fence, so a chasing robot dies in it; electric fences
+  kill the hero, but with the suit 0x28 worn they push like blocks; the barrier 0x2b
+  cannot be entered, but ammunition flies over it; ammunition hitting an insulator 0x09
+  moves it a cell, and insulators push fences without the suit; 0x0c lets out an
+  erratic hero clone that confuses the robots (they kill it, never it them); 0x2f lets
+  out one robot when the hero or a robot enters it (an empty cell stays); the bomb 0x13
+  blows after about 15 s (leaving the room does not reset the fuse) and makes a robot
+  on every empty cell of the 8 around it, so cells filled with dropped items make it
+  harmless (leaving the room at the blast also avoids them, likely unintended); 0x0e
+  freezes the robots for about 20 s, when they can be pushed (perhaps at a risk);
+  tunnels 0x2a connect to a tunnel facing them, else do nothing; the fly 0x11 floats
+  the hero diagonally, reflected by most solid objects (not Junior's water), for a
+  random time (saving in flight stores the position but not the flight); a bottle,
+  used, makes every wall among the 8 cells around the hero brittle, and they dissolve
+  into empty cells a moment later (one bottle, one use); sling and ammunition kill
+  robots, androids, android eggs, electric fences and other hostile actors; the puzzle
+  0x1a, completed, rings every robot of the room with electric fence after a few
+  seconds; stepping on a tree 0x0b opens the exits even while robots live; the hatchery
+  0x22 is a robot in the wall that comes out when the hero is near (its high byte not
+  known). **The magnet** (0x1d, class 29; code 0x422dd0, 0x422bb0; game test
+  2026-11-09): laid with "Benutzen", it turns the arrows orthogonally next to it to
+  point away from it (state low nibble 0) or towards it (1) and gives 5000 points once
+  (event 256); picking it up turns them a quarter clockwise; "Ablegen" does neither.
+  Laid on an arrow cell the code stores it with state | 0x10 (not tried).
 - **Packages** (class 109, tile 94: episode II's presents, III's chests, IV's crates;
   `packageContents`): the state is the tile type inside. "Benutzen" from the rucksack
   (0x414150) turns it into that class (0x43a5f0) on the hero's cell (0x433420: as an
@@ -1127,7 +1169,11 @@ Wine** (`pnpm test:game` and tries with the driver).
   room 43 for north). Vanishing sets the cell the logic cell shows to 0 (0x4332a0 →
   0x4331a0): the record stays, showing an empty cell, which the hero walks onto.
   Oracles that stay can be used again and again (sent once more, the hint again)
-  before the hero turns one into its object, which changes how an episode plays. Every use is event 262 + n (0x42bef0: 3500 points
+  before the hero turns one into its object, which changes how an episode plays.
+  **West into a copied type** (Junior, game test 2026-11-09): with the swimming kit's
+  flippers (class 111) as its object the oracle turns into them (3500 points, no box);
+  the hero walks through the cell during the turn and takes them on stepping off and on
+  again. The laid tangram pieces can still be picked up afterwards. Every use is event 262 + n (0x42bef0: 3500 points
   once per game; **verified:** a use gives 3500 points). Byte 7 is never read (III's hold 0,
   6, 7); byte 1 only for what every record type has: bits 6–7 a level (the step-on
   check's default case 0x44c8d2), bit 5 dissolves the record into its cell when the
@@ -1494,7 +1540,10 @@ Supported:
   copy already, which it then replaces); "Copy". Each one undo step, which makes a new
   base (`Editor.setTileType`): text entries edited before stay as they are, the copied
   description comes along; refused: a copy of a copy, a type without a class, a type
-  an edited dealer then lacks. The tiles, names and drawings follow at once; the tile
+  an edited dealer then lacks. Warned (not refused): a type whose class the episode has
+  already by another type, own or copied (`Editor.classTakenBy`; the form says so, the
+  list marks such a copy ⚠): the game's map holds classes, so in the game the copy is
+  that other type (see "Cross-episode classes in general"). The tiles, names and drawings follow at once; the tile
   list offers a copy in each state its shape has a frame for and each state its type has
   in the source episode's rooms (a letter's state is its character: I's 0 and 1, A–Z). A copy
   whose class shows texts of its own (`classTexts`: the oracle's hints 330 + n and 945, III's timber 994 and hammer 285) that the episode lacks gets "Texts", which copies those its source has (II's
@@ -1505,11 +1554,13 @@ Supported:
   `copyTexts`): the entries the mod sets (entry ← episode and entry whose text it
   copies: event id, points), each removable (×: the entry as the exe has it, its text
   copy gone too); a form: the episode, one of its events (entries from 128 on, not its
-  spare ones, as loaded) whose id this episode's table lacks, the spare entry it goes to
-  (`spareEventEntries`: Junior and I 190, IV 197–200, II and III none; the first no
-  copy has); "Copy" sets the entry's id and points and copies text 1800 + n
+  unused ones, as loaded) whose id this episode's table lacks, the free entry it goes to
+  (`Editor.eventTargets`, `freeEventEntries` for the episode as edited: Junior 37, I
+  22, II 4, III 1, IV 16; those without a text or sound of their own first, the first
+  no copy has); "Copy" sets the entry's id and points and copies text 1800 + n
   (`Editor.copyEvent`). Each one undo step, which makes a new base like a tile type
-  copy; refused: an id the table has already, an entry that is not spare. The sound
+  copy; refused: an id the table has already, an entry that is not free, an event
+  without a text (or sound) into an entry with one of its own, which would stay. The sound
   (its sound table line, `Game.sound`) comes along, and its MUSIC piece where the
   episode lacks it (mod kind `music`, `Game.lackedPieces`; II's oracle event into IV
   brings ORACLE); I's thief bribe `!THIEFIRI` into IV (**verified under Wine**: the
@@ -1561,7 +1612,7 @@ Supported:
   while the mod has none, it opens when the first comes): the byte writes by address
   (`Editor.codePatches`): section, the bytes the exe holds there and those written, and
   a warning where edits made here write over some of them (the start, rucksack, flags,
-  backdrop rule, moves, ending and dealer come later, kinds 5 and 8–13; they are settings of
+  backdrop rule, moves, ending, fires and dealer come later, kinds 5 and 8–14; they are settings of
   their own, never patches); each removable (× → `Editor.removeCode`). A form writes
   one: address and bytes in hex, what the exe holds there shown while typing
   (`Editor.codeBytes`: the base, kinds 1–3 applied, which `expect` gets); refused
@@ -1573,7 +1624,7 @@ Supported:
   gate 0x42, bulb 0x43, stairs 0x3d; event 293) and the goal (Junior's 0x32, its text
   994 moved to 1700, `Kit.textMove`: a code change, `KitPlan.code`, and copies into
   the episode and Junior, `KitPlan.textCopies`; event 298 kept quiet,
-  `Kit.quietEvents`: moved to a spare entry without text, `KitPlan.moved`, or its text
+  `Kit.quietEvents`: moved to a free entry without text, `KitPlan.moved`, or its text
   removed, `KitPlan.silenced`, as text edits in the same undo step; see Endings), and
   from III (2026-11-06): woods & boots (0x4c, 0x4b), axe & bridges (axe 0x61, hammer
   0x62, timber 0x2b, bridge 0x6e, woods and river where missing; events 335, 331; the
@@ -1594,11 +1645,13 @@ Supported:
   copy look at both too; where they do not suffice, own types the author gives up, see
   "Replacing an episode's own types"); the texts the kit's classes show
   that the episode lacks (`classTexts`, for classes it does not have by itself, so a
-  type copied by hand still gets them); the events its table lacks, in spare entries
-  the mod does not set yet (`Editor.kitPlan`). Where they do not all fit (IV: four
-  entries for ten oracle symbols) checkboxes pick which (the first ones by default),
-  the rest give no points; kits share the spare entries (IV's oracles and circuits
-  together). Types and events take their sounds as copies do, with the pieces the
+  type copied by hand still gets them); the events its table lacks, in free entries
+  the mod does not set yet (`Editor.kitPlan`, `freeEventEntries` with the kit's own
+  classes counted as present; those without a text or sound first; an event without a
+  sound only where the line has none; an entry's old text goes where the event brings
+  none, `KitPlan.cleared`). Where they do not all fit (III: one entry for the punch
+  cards' five events) checkboxes pick which (the first ones by default), the rest give
+  no points; kits share the free entries (IV's oracles and circuits together). Types and events take their sounds as copies do, with the pieces the
   episode lacks (`KitPlan.music`, listed as "Music"): oracles into IV bring ORACLE
   (II and III have it), circuits FANFA2 (the gate's and bulb's) into Junior and III,
   FANFA2 and the lit node's BULBON into IV. "Add oracles" / "Add circuits" (`Editor.addKit`) is one undo step making a
@@ -1633,11 +1686,15 @@ Supported:
   (1–250); the rules, episode flags as checkboxes: oracles vanish after north, after
   east (0x4000, 0x8000), doors into buildings open without the key (0x80000), robots
   keep their sprite's colours (0x20), Teleport() points last only in their room
-  (0x2000), house cells in states 9+ block from room 100 on (0x40000); diagonal moves;
+  (0x2000), house cells in states 9+ block from room 100 on (0x40000), the hero stays
+  on the edge cell he arrives on (0x400, II–IV; since 2026-11-10: Junior's and I's
+  arrive a cell further in, which looks odd in rooms without walls);
+  diagonal moves;
   backdrops show the room 100 below (else id mod 100; the room and the map draw by it
-  at once); "Ending": room 255 ends the episode, with what its ending method does and,
+  at once); fires burn until put out (`fires.ts`; Junior to III, IV's fixed: its own
+  path); "Ending": room 255 ends the episode, with what its ending method does and,
   for IV, that its own room 255 can then not be entered; one undo step each, saved
-  into the exe and the mod (`rucksack`, `flags`, `backdrop`, `moves`, `ending`)
+  into the exe and the mod (`rucksack`, `flags`, `backdrop`, `moves`, `ending`, `fires`)
 - the episode's start (tab Episode, `episode-view.ts`): the room and the hero's cell
   there; "Start here" sets the shown room and the picked cell (Select tool, one cell,
   or Inspect; else the start's cell), "Original start" goes back to the exe's; one undo
@@ -1730,12 +1787,24 @@ stands, decided 2026-10-27; details in the sections named.
   `roomTileTypes` counts map cells, records' cells, buried objects among them, and
   package contents). II would need a type that none of its rooms uses. Copied shapes keep their colour indices, and palettes
   differ per episode (I's BULB uses colours 1 and 6, which differ in III: the game draws
-  them with III's colours, as we do; remap if it matters). Some class code checks the
-  episode number (e.g. describe method 0x4145b0): every class needs a try in its new
-  episode. **Circuits** need 3 free types and stairs (a lit node places class 71):
-  Junior has **no stairs class** (I's 0x3d as a fourth type works), IV has them. Their
-  code checks no episode. Lighting nodes is event 293 (0x125): 4000 points and "Na also,
-  wieder etwas gelernt…" in I and II, 4000 points without a text in Junior, nothing in
+  them with III's colours, as we do; remap if it matters). Junior, I, II and IV share
+  the 16 base colours; III differs in 1, 2, 4 and 6 (2026-11-09). Of the kits
+  copied into Junior (oracles, circuits, swimming, fire, axe, punch cards, train), only III's woods 0x4c (20 pixels in 11 frames) and ash 0x4f
+  (11 in 5) use one of them: colour 2, III's dark red (136, 14, 25), Junior's dark blue
+  (0, 0, 82); scattered pixels that read as shadow, left as they are (the nearest
+  Junior colour would be 10). Some class code checks the episode number (e.g. describe
+  method 0x4145b0): every class needs a try in its new episode. **A copy whose class
+  the episode has already** (by another type) is that other type in the game: the map
+  holds classes, and drawing and behaviour go by class (class → type, 0x4c70e0). **Seen
+  in the game** (2026-11-10, in Junior): II's forest 0x4c (class 91) drew as III's woods, which the axe kit had brought with the same class, and IV's
+  path 0x31 (class 39) as Junior's sand, which slows the hero; our renderer drew the
+  copies by type, so only the game showed it. The kits skip such classes ("has …
+  already"); the editor's copy form warns (`Editor.classTakenBy`, 2026-11-10).
+  **Circuits** need 3
+  free types and stairs (a lit node places class 71): Junior has **no stairs class**
+  (I's 0x3d as a fourth type works), IV has them. Their code checks no episode.
+  Lighting nodes is event 293 (0x125): 4000 points and "Na also, wieder etwas
+  gelernt…" in I and II, 4000 points without a text in Junior, nothing in
   III and IV (no entry; seen in the game: the event's bit is set, no points); with I's
   entry copied to IV's spare entry 197 (the circuits kit) IV gives the 4000 points too
   (**verified under Wine**: taking the piece adds its first take and 4000). **Oracles**
@@ -1777,6 +1846,9 @@ stands, decided 2026-10-27; details in the sections named.
     in **state 0** (the impenetrable stretch), not the trees 0x0b (their hero
     handler 0x424f90 just blocks, in every episode): the cell becomes state 10,
     timber (class 158, III's 0x2b) is put on it (0x433300) and event 335 is raised.
+    III's own woods are only a quarter state 0 (3463 of 14264 cells; states 1-3, round
+    trees and palms, 6197; edges 6-9 1341): the rest blocks for good, axe or not, so
+    room borders that must hold use those states.
     Woods in state 10 are a way only with episode flag 0x20000 (only III's; 0x413c50),
     and then each step on a coin flip, boots or not; elsewhere a felled stretch blocks,
     so the timber on it cannot be taken (the user, IV, 2026-11-06). The flag has no
@@ -1855,18 +1927,21 @@ stands, decided 2026-10-27; details in the sections named.
 - **Kits from III** (2026-11-06; `kits.ts`, verified under Wine, `pnpm test:game`):
   - **Woods & boots** (I): with the boots the hero gets through the woods' way (state
     4), each step on a coin flip; without them he stops in front of it.
-  - **Axe & bridges** (IV): the axe used (state 10) fells woods in state 0 (bonus box
-    of event 335, 6000 points), the hero then gets onto the felled cell (flag 0x20000,
-    coin flips) and takes the timber (counter 20, then 0x0a5b on the map); Esc ends the
-    axe's state; with the hammer (state 11) five hits finish a bridge on the river
-    (state 2), a unit of wood each (20 → 15; event 331, 12000 points), and the hero
-    walks over it. The rucksack (Return) lists the wood first (from 20 units), then the
-    items; Right moves to the next, Return "Benutzen". The timber's message shows
-    only with the registry option **`GoldWarn`** (bit 0x40 of 0x4c5d88, set from the
-    registry at 0x403765; 0x42c320 checks it for gold, class 10, and timber, class
-    158): then, at 80 units, the timber stays and its message (now text 1701, III's
-    994 copied: "Du schleppst schon genug Bauholz…") shows in a box that lets the clock
-    run but takes the keys; without the option the timber silently stays.
+  - **Axe & bridges** (IV and Junior): the axe used (state 10) fells woods in state 0
+    (bonus box of event 335, 6000 points), the hero then gets onto the felled cell
+    (flag 0x20000, coin flips) and takes the timber (counter 20, then 0x0a5b on the
+    map); Esc ends the axe's state; with the hammer (state 11) five hits finish a
+    bridge on the river (state 2), a unit of wood each (20 → 15; event 331, 12000
+    points), and the hero walks over it. The rucksack (Return) lists the wood first
+    (from 20 units), then the items; Right moves to the next, Return "Benutzen". The
+    timber's message shows only with the registry option **`GoldWarn`** (bit 0x40 of
+    0x4c5d88, set from the registry at 0x403765; 0x42c320 checks it for gold, class
+    10, and timber, class 158): then, at 80 units, the timber stays and its message
+    (now text 1701, III's 994 copied: "Du schleppst schon genug Bauholz…") shows in a
+    box that lets the clock run but takes the keys; without the option the timber
+    silently stays. **On water** (class 82, Junior, game test 2026-11-09) the hammer
+    builds in any state (0, 5, 0x23 tried) as on the river's state 2: five hits a cell,
+    one unit each, so a piece of timber (20 units) makes four bridge cells.
   - **Fire & bucket** (Junior, with III's river and water): the bucket fills while the
     hero swims against the current (0x4276e7: slot word 0x76 → 0x176 when a drift
     component and his swimming have opposite signs; always with flag 0x2000000), and
@@ -1875,6 +1950,45 @@ stands, decided 2026-10-27; details in the sections named.
     136, set with state 0), the bucket empty. At a tap (class 238) with event 325 new
     it fills instead. Fire's hero touch lets him on, and the hero's death handler
     0x41ecf0 (by class, table 0x41ee44/0x41ee28) gives text 947.
+    **Filling** (game tests 2026-11-10): only on a pressed key's axis is the stroke
+    compared with the summed drift, so the bucket fills while the hero pushes against
+    the current, with or without flippers (within one 20-step slice), and never while he
+    drifts with it, pressed key or none (60 s at the east edge: still empty); no timer.
+    **Spreading** (code and game tests, Junior, 2026-11-10): the fire class has no task
+    of its own; a room task (0x435010, Junior's else path 0x435300) scans 25 cells a
+    tick (about 45 ticks a pass), and each pass a fire cell steps with chance 1/3: state
+    0 is rekindled to 5–12, else it drops by 1, and at 0 the fire **burns out**: the cell
+    becomes ash (class 136, state 0) and its four orthogonal neighbours are lit (0x4343e0;
+    new fire in state 4–15). About 8 s a cell (measured: 22 cells in a row, about 1,200
+    ticks a cell). It burns floor, items (the hero's items lying there included: keys,
+    flippers, timber), water (class 82) and the fences; it does not take classes 6, 16,
+    23, 25, 34, 35, 39 (sand), 55 (river), 57, 92, 93, 98, 99, 105, 117, 123, 136 (ash)
+    or 199, so it ends at them; woods (91) get the fire stacked on top. Fire lit on the
+    hero's cell, or burning out there, kills him (947, a life). No spreading while the
+    hero is in another room. Episode flag 0x10 (only III's) is read only where a
+    neighbour is lit (0x4343e0, its default case): with it, only woods (91) and timber
+    (158) catch fire; the countdown and burning out stay. On woods the fire is stacked
+    (woods state 0 under it) and burns out like any other, leaving plain ash: the woods
+    are consumed, never a fuel; the bucket instead leaves ash on top of the woods, which
+    stay (event 261, 2000 points in Junior). **Persistent fire is III's alone:** the
+    task's path is chosen by the episode number (+4), and III's (0x4350bb–0x435288)
+    lets a fire of state 0x80 and up fall a step on about half the passes and jump back
+    from 0x81 to 0xfe, so it never burns out (seen: room 114's fires, state 128, 160 s in
+    the game). In Junior such a fire still burns out after 128–255 steps, about 2–4
+    minutes of the hero's time in the room (code only). Game tests: flag 0x10 clear and
+    set, III's persistent fire, the bucket on a fire on woods (2026-11-10).
+    **The rule "Fires burn until put out"** (`fires.ts`, `withLastingFires`; Episode
+    tab, mod kind `fires`, 2026-11-10): the 9 bytes at 0x4350bb (`cmp eax, 3; jne
+0x4352d9`) jump to a stub at 0x465e80 (after the room 255 one) that tests the
+    episode's bit in a mask after it (`bt`) and goes on to III's path (0x4350c4) or
+    Junior's (0x4352d9); with III's bit alone the exe's own bytes are written back. III's
+    path also turns state 0 into 0xff, so the fire kit's fires (state 0) last; states
+    1–0x7f still burn out, each neighbour then catching on a third of the burn-outs
+    (Junior's lights all four). IV checks its own path first (0x43501c: on a third of the
+    passes a random state 0–10; never burns out nor spreads), so it has no bit. **Game
+    test** (Junior, the kit's example): without the rule both fires are ash after
+    4,500 ticks and their neighbours lit; with it both still burn (states 0x80+), nothing
+    around them is lit, and the bucket puts them out.
   - **Swimming** (Junior): the copied river carries the hero east along a water cell's
     current. **Currents**: entering a room (0x427f90) lists up to 40 water cells (class 82) as current points (0x4c78b8: x, y, the state's low nibble, its high nibble + 1);
     the swim task (0x427450) sums each point's strength × direction / distance (low
@@ -1931,7 +2045,8 @@ stands, decided 2026-10-27; details in the sections named.
     kit whose free types do not suffice offers a choice per type lacking ("Give up").
     Not tried in the game.
 - **Kits from I and IV** (2026-11-07; `kits.ts`, code read, verified with the native
-  wrapper, `pnpm test:game`, each kit's example):
+  wrapper, `pnpm test:game`, each kit's example; since 2026-11-09 each also in
+  Junior):
   - **Computer** (I's 0x08, class 53, use 0x40e800; the interface 0x41, class 75, which
     only blocks): used, it opens its dialog (0x4524e0: event 289, 1000 points; DOS-like
     commands, the games STERNCHEN, SUPERHIRN, MEMORY; texts 550–555). Its RCP connects
@@ -1942,7 +2057,9 @@ stands, decided 2026-10-27; details in the sections named.
     sends nothing to the network below: the send routine 0x42fb20 is called by MsgSend
     (0x407e56), the card at a reader (0x419cc3), IV's terminal (0x41a3d9, 0x41ac67), the
     device tasks (0x430582) and the console's SEND (0x43cdb2), not from 0x450000 on.
-    **Verified:** in IV the copied computer used gives 1000 points from spare entry 197.
+    **Verified:** in IV the copied computer used gives 1000 points from free entry 154
+    (with I's text, a bonus box); Junior has events 289 and 290 itself, in entries
+    161 and 162 without texts, so there the same 1000 points come without a box.
   - **Punch cards** (IV): a card (0x59, class 226) holds its key as its state (0:
     blank). Used (0x419b30) it looks at its cell and the eight around it (0x47e6d8) and
     stops at the first punch or reader: next to the punch (0x5c, class 228), blank and
@@ -1974,7 +2091,10 @@ stands, decided 2026-10-27; details in the sections named.
     hero stands in it; the hero through it (vtable +0x10, handler 0x41aaa0) uses the
     word up (event 370), so it closes behind him. Words reach 7 from readers with state
     0x70 (a card whose key no Area has), the terminal's `MSG 7 word`, MsgSend, SEND,
-    and the remote control. **Area squares** are devices too: task kind 0xff at address
+    and the remote control. **Words wait across rooms** (Junior, game test 2026-11-09):
+    a word sent at a terminal in one room stays in the network (0x4fe46b, unchanged by
+    the room change) and opens a sliding door with that code in another room as soon as
+    the hero enters it; it stays until he walks through. **Area squares** are devices too: task kind 0xff at address
     5 + slot (0x43083f; "Drehkr. 5"): a word equal to the slot's key turns it clockwise
     (event 352), its complement anticlockwise; IV's readers with state 0x50 send there.
     The editor's cell info (`networkNote`) shows a door's code and word where it lies,
@@ -2001,13 +2121,13 @@ stands, decided 2026-10-27; details in the sections named.
     120–350 runs (0x4fe35c, as the console's ROBOTOFF), 6 the room's ShiftArea shifts
     once (0x42fdc0), 7 every arrow (class 24) and revolving door (class 194) turns a
     step (0x422bb0). IV's own: room 62's (state 0xd2, effects 2 and 2: doors, three
-    uses), room 341's (0xf6: 6 and 6, the shift, three uses). **Verified** (doors) in I:
-    a card with the door's code (room 43, the door at (9, 17): 51) used at the example's
-    reader opens it (state 2), the hero walks through, and it is closed again after.
-    **Verified** (punch) in I: blank card into the punch (2000), at the terminal `MSG 2 AAAB`,
-    the punch punched (state 3), the card taken with key 1, used by the reader with
-    `Area(10, 14, 3, 1)` in the script: 4000 + 3500 points and the square's card a
-    quarter clockwise.
+    uses), room 341's (0xf6: 6 and 6, the shift, three uses). **Verified** (doors) in I
+    and Junior: a card with the door's code (room 43, the door at (9, 17): 51) used at
+    the example's reader opens it (state 2), the hero walks through, and it is closed
+    again after. **Verified** (punch) in I and Junior: blank card into the punch (2000),
+    at the terminal `MSG 2 AAAB`, the punch punched (state 3), the card taken with key
+    1, used by the reader with `Area(10, 14, 3, 1)` in the script: 4000 + 3500 points
+    and the square's card a quarter clockwise.
   - **Train & tracks** (IV): the train (0x4a, class 221) is an actor (room-load
     0x41c570: kind 0xdd, direction state >> 1: 0 north, 1 east, 2 south, 3 west; its
     factory registered for every episode) running on rails (0x39, class 208; ways per
@@ -2018,8 +2138,38 @@ stands, decided 2026-10-27; details in the sections named.
     on stations (0x4196f0) and gets on by walking into a waiting train (0x4199b0: hero
     state 9, the train's place kept in 0x4fe455/6), steps off at a station with an
     arrow key, and the rails' room-entered method (0x419620) puts the train back under
-    him in the next room. **Verified** in I: the hero walks into the waiting train at
-    the example's station and rides it round the loop (hero state 9).
+    him in the next room. **Verified** in I and Junior: the hero walks into the waiting
+    train at the example's station and rides it round the loop (hero state 9).
+    **Across rooms** (Junior, 2026-11-09, game tests with a second room): the hero rides
+    off the edge into the neighbour (still state 9) and steps off at its station (the
+    first arrow press is sometimes missed). The train goes **with him**: 0x419620 takes
+    the train at his cell in the new room, or makes one, so the room he left has no train
+    any more (only the rail) when he walks back. Rails that end at an edge with no room
+    beyond leave him stuck in state 9 off the map (x = 40): no dead ends at edges. A
+    train **without** the hero does not leave: it waits just off the edge (x = 40) for
+    100 or more ticks, turns and drives back; a room's actors keep their places while
+    the hero is away. A room's own train and the hero's share a station cell and both run
+    on (no collision); a train placed on a station leaves at once, one that arrives
+    waits (20–40 counts, 15–25 with the hero aboard). Riding, the hero is safe from
+    robots beside or on the rails; at a station, where the train stops, a robot catches
+    him (state 0, a box, back at the room's entry cell).
+    **Driving program** (0x44b9b0, seen in the game): a punch card used within the 8
+    cells around a train (waiting or moving) sets its program (+0x13) to the card's key
+    (event 351). Only crossings (rail state 2) read it, two bits at a time from the top:
+    0 straight on, 1 left, 2 right, 3 back; after each crossing the key shifts up two
+    bits. So the words `BAAA` (0x40) turn left, `CAAA` (0x80) right, `DAAA` (0xc0) back
+    at the first crossing, `BBAA` (0x50) left at the first and left again at the second;
+    no program (0) goes straight on. Stations ignore it. It travels with the hero into
+    the next room (0x4fe458). Only in room id 1 (`[0x5197f8] == 1`) a new train gets a
+    random program 1–10 and the key acts as a start delay.
+    **A train made by a room script** (game tests 2026-11-10): on entering,
+    `if (Exist(T) == 0) SetObj(T | 2 << 8, 28, 14, 0);` (T the train's tile type, on a
+    rail cell) puts a new train there that runs, waits at the station and takes the hero on, every
+    time he comes back on foot after riding the old one away; mode 1 alike (the rail
+    stays under it), mode 2 clears the cell first, so the rail is gone and the train
+    leaves the room. `Exist` scans the map cells (0x407650), and on entering it counts
+    the room's train wherever it is (parked, running, waiting off the edge at x = 40),
+    so the trains never pile up; it is 0 only once the train left with the hero.
 - **Classes that need texts beyond their own** (survey, code only, 2026-11-05, corrected
   2026-11-06: every call that shows text n or raises event n with a constant, traced
   to the one class whose vtable (0x60 bytes) or 12-entry touch table reaches it,
@@ -2091,6 +2241,48 @@ stands, decided 2026-10-27; details in the sections named.
     neighbouring vtables and tables and were wrong. Event 110 is Junior's 0x32. The editor's copy of a type offers only `classTexts` (oracle, goal, timber, hammer, fire, computer, terminal, punch, sliding door), in the
     first language only, and skips a number the episode already uses for another text
     (III's 991).
+- **A fan episode** built from these kits (design, a playable slice, its build) is on
+  the branch `fan-episode`.
+- **Free event entries** (done 2026-11-08; `freeEventEntries` in `events.ts`, details,
+  scripts and the per-id table's source in
+  [research/event-entries/README.md](research/event-entries/README.md)): an entry from
+  128 on is free when nothing the episode runs uses the event it holds (in the pristine
+  table, so an entry a mod refilled stays free): no code of its classes (copies
+  included), its own methods or engine code raises the id (0x42bef0) or plays its sound
+  (0x43a780: 298, 304, 317, 318), and no room's script awards the entry (`Enigma(n)`
+  takes entry n, 0x407aa0 → 0x43a750, then its id; a non-constant n takes all). The
+  oracle's 262–277 count where the oracle class is. Free in the originals: Junior 37
+  (168, 169, 181, 188, 190 nothing uses; 32 whose events only classes it lacks use,
+  the oracle's 134–143 among them), I 22, II 4 (168, 169, 170, 188), III 1 (186),
+  IV 16 (186, 187, 189, 190 have texts no room awards; 197–200 are empty), against 1, 1,
+  0, 0, 4 before. Found on the way: the take function raises III's gems' 321 + state
+  (0x42c1a1), the slot machine 315 on a second path (0x40f511); 276 is the rucksack's
+  joker (class 73: used on an item, it doubles it); saving keeps raised events by entry
+  number (0x438ca0, loading 0x438bc5), so an event without an entry loses its
+  once-only state, and a mod that changes entry ids reads old savegames by entry; the
+  console's `ENIGMA n` takes an id. The fallback below is not needed.
+  The plan as it was (2026-11-07): an episode's game events can only live in its entries from 128 on
+  (the constructor maps id → entry only from there, 0x43b4b1; entries below are reached
+  only through a class's first take), and `SPARE_ENTRIES` lists only the entries no
+  original uses (Junior and I: 190). Junior's entries 128–191 hold ids 256–318 (190: id
+  0); the kits need seven more there (331, 335 for Axe & bridges; 350–353, 370 for Punch
+  cards). Every award goes through 0x42bef0 with an id (bit `id` of 0x4fe324, entry by
+  0x4c70e0[id], ids below 0x188); an entry is free for an episode when nothing that
+  episode runs raises its id. Found so far: 117 calls of 0x42bef0, 97 with the id as an
+  immediate. Of Junior's ids, no call pushes 262–271 (the oracles compute theirs), 296,
+  297, 304, 309, 315, 316 or 318. Plan: trace the other 20 calls, map each call to
+  the class (vtable) or episode method it belongs to, add the ids each episode's rooms
+  award (`Enigma` in scripts, records), and compute per episode and set of rooms and
+  kits the entries no class, method or room of it raises (`freeEventEntries`, replacing
+  `SPARE_ENTRIES` in the kit planner and the editor). For a mod that replaces all of an
+  episode's rooms, as a fan episode in its slot would, entries raised only by the old rooms are
+  free too. Check on the way whether `Enigma(n)` (0x407aa0) hands 0x42bef0 an entry or
+  an id: the docs say entry, 0x42bef0 takes an id. **Fallback** if that frees too
+  little: a larger table in a new section (writable, initialised; the game writes the
+  sound into +8), its address and count patched where the constructor and two other
+  places push them (Junior: 0x40e011 count 0xc0, address 0x479ef8 at 0x40e016,
+  0x40e25e, 0x40e40e; probably saving and loading, so old savegames of that episode no
+  longer load), and a mod kind for it.
 - **Next:** the proxy as an in-memory loader ("The mod format", "Two forms").
 - **Deferred:** English texts for classes from episodes II–IV. Those episodes have no
   English texts (`1E11` exists only for Junior and I), so there is nothing to copy:
@@ -2129,10 +2321,8 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
      256, 0x188 long, no bounds check); a tile type's entry (below 128) has an id of 0–255 in all
      originals (mostly its class id) and the mod format takes only those, so it never shares
      a key with an event; applying refuses two entries with one id from 256 on. The
-     tables are full (Junior and I: entry 190 free, nothing else), so a new event takes
-     over an entry the episode never uses: IV's 197–200 (ids 388–391, no note, text or
-     points; IV's scripts award 180–196, no code raises those ids). III has no such
-     spare entry.
+     tables are full, so a new event takes over an entry holding an event the episode
+     never uses (`freeEventEntries`, see "Free event entries" under Fan episodes).
   4. `code` (key: address): `{ va, expect, bytes }` (hex) → bytes written at `va` only
      if the exe holds `expect` there (e.g. the oracle flags in Junior).
   5. `dealer` (key: episode): `{ episode, most, goods: [[class, state, price], …] }` →
@@ -2159,9 +2349,11 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
   12. `moves` (key: episode): `{ episode, diagonal }` → `withDiagonalMoves`.
   13. `ending` (key: episode): `{ episode, room255 }` → `withRoom255Ending` (see
       Endings; the episodes share one mask).
+  14. `fires` (key: episode, Junior to III): `{ episode, lasting }` → `withLastingFires`
+      (see Fire & bucket; the episodes share one mask, IV is refused: its own path).
 - **File:** one JSON file (`*.robotmod.json`) with `format` (1), `name`, `author`,
   `description`, `base` (`{ sha256 }`) and `changes` (`music`, `tileTypes`, `events`, `code`,
-  `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`, `backdrop`, `moves`, `ending`: arrays of the
+  `dealer`, `copyTexts`, `texts`, `rooms`, `start`, `rucksack`, `flags`, `backdrop`, `moves`, `ending`, `fires`: arrays of the
   changes above; a kind left out is empty). `base` is the sha256 of the whole
   pristine exe (the Windows version 2018, `reference/GameOfRobot.exe`); applying
   refuses any other exe. A changed room carries the original content it keeps (a fan
@@ -2193,11 +2385,11 @@ with a mod, `saveMod`; "Open mod…", "Save mod"); **not yet** the proxy loader.
 - **The editor** works on two images: the **base** (pristine + kinds 1–4 and the text
   copies: the music, tile types, events, code and text copies, which it edits by making a new
   base (`BaseChanges`; events copied with their texts and pieces)) and
-  the **edited** state on top (kinds 5–13: the dealers, rooms, texts, the start, the
-  rucksack, the flags, the backdrop rule, diagonal moves and the ending). Opening takes an exe and, optionally, a
+  the **edited** state on top (kinds 5–14: the dealers, rooms, texts, the start, the
+  rucksack, the flags, the backdrop rule, diagonal moves, the ending and the fires). Opening takes an exe and, optionally, a
   mod; "Save mod" writes the music, tile types, events, code and text copies as edited plus kinds
-  5–13 as the difference between the edited state and the base (dealers, starts,
-  rucksacks, flags, backdrop rules, moves and endings that differ, rooms that
+  5–14 as the difference between the edited state and the base (dealers, starts,
+  rucksacks, flags, backdrop rules, moves, endings and fire rules that differ, rooms that
   differ byte for byte, text entries that differ), so text copied by `tileTypes` never shows up as an edit; a text entry
   written in the editor replaces its copy in `copyTexts`. "Save exe" and "Test in
   game" stay, built from the base and the edits. Undo/redo, dirty state (either save
@@ -2226,12 +2418,20 @@ circuit model; the circuits and oracles kits (examples too) in III, IV, Junior a
 event copied with its sound, and one with a MUSIC piece IV lacked (IV); robots' sprites (III) against `robotSprite`; the
 episode rules as changed (Junior's oracles vanishing, robots' own colours, doors without
 the key, Teleport() points kept, house cells, diagonal moves, the backdrop rule); class 99
-cases against our render; the rucksack's capacity (III); room 255 ending IV; the goal
+cases against our render; the rucksack's capacity (III); room 255 ending IV; fires
+burning until put out (Junior, the fire kit's example with and without the rule); the goal
 kit in I; the computer kit in IV, punch cards (with the sliding door) and train & tracks in I. There is no game test for the
 dealer. Tests of what the originals do by themselves (the rules unchanged, sand heaps,
 notes, a cassette, diary pages, packages, the thief) ran up to 10e727d and are recorded
 here only: the exe does not change, so they cannot fail again; `git show
-10e727d:packages/tools/test/driver.test.ts` has them.
+10e727d:packages/tools/test/driver.test.ts` has them. Likewise what copied classes do
+in Junior (2026-11-09/10: trains across rooms, their driving program, robots and
+a second train at a station, a train made by a room script, network words across rooms,
+the magnet and arrows, an oracle west into a copied type, the hammer on water, the
+bucket in a stream, fire spreading, flag 0x10, fire on woods, III's persistent fire),
+28 tests with the helpers `kitsMod` and `addRoom` (a kit set and a second room in one
+mod): in the history of the branch `fan-episode` (`git log fan-episode --
+packages/tools/test/driver.test.ts`).
 By hand or with the screenshot harness:
 
 - Build the exe (`Game.withScene`, or the editor's "Save exe"), put the change next to
@@ -2577,6 +2777,7 @@ Roughly by value for the editor.
 | 0x413d30, 0x4140d0, 0x426880 | door in, door out, stairs                                                      |
 | 0x412ae0, 0x44cc30           | oracle, teleporter (step-on handler 0x44cb60)                                  |
 | 0x40281a, 0x465e60           | NxtRoom 255 ends episode I (the check at 0x402844); the stub of `endings.ts`   |
+| 0x435010, 0x4350bb, 0x465e80 | the fire task; its III check; the stub of `fires.ts`                           |
 | 0x41f450, 0x406360           | the goal's +0x10 handler (push 994 at 0x41f45e); a text window (mode 2: ends)  |
 | 0x43be71, 0x43b560           | message 0x500: the lives to 0, the end of the game (rank, high scores)         |
 | 0x44c6f0, 0x42bd40           | may an actor step on a cell (teleporter conditions); count a class carried     |
@@ -2606,6 +2807,7 @@ Roughly by value for the editor.
 | 0x4314b0, 0x438710, 0x431300 | CRUNCHED: next character; load a text resource; parse an entry header          |
 | 0x432560, 0x4327c4, 0x432e06 | room load: convert records; overlay objects → type 1 records; allocate one     |
 | 0x42bef0, 0x407aa0           | an event's first time (sound, points, text 1800 + n); script Enigma            |
+| 0x43a780, 0x438ca0           | play an event's sound by id; save the raised events by entry (load 0x438bc5)   |
 | 0x4389b0, 0x43a710           | read the sound table into the event table; a class's event table entry         |
 | 0x4447d0, 0x444490, 0x444820 | MUSIC: load (episode +0x1d0); parse the MUC1 block; find a piece by name       |
 | 0x443d30, 0x4440f8           | MUSIC: a piece's next MIDI event; its jump table by status (C0 does nothing)   |
