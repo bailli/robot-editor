@@ -926,6 +926,19 @@ describe("Editor and tile types from other episodes", () => {
     expect(editor.game.episode(3).classes.classes.get(0x59)?.id).toBe(76);
   });
 
+  test("classTakenBy: a copy whose class the episode has already, by its own type or a copy", () => {
+    const editor = new Editor(game);
+    // IV's path 0x31 is class 39, Junior's sand 0x27
+    expect(editor.classTakenBy(0, 4, 0x31)).toEqual({ type: 0x27, classId: 39 });
+    // II's oracle (class 0x60): Junior has none
+    expect(editor.classTakenBy(0, 2, 0x51, 0x51)).toBeUndefined();
+    // a copy of III's woods (class 91), then II's forest of the same class
+    editor.setTileType(0, 43, 0x4c, { from: 3, of: 0x4c });
+    expect(editor.classTakenBy(0, 2, 0x4c, 0x4d)).toEqual({ type: 0x4c, classId: 91 });
+    // the copy itself, made again at its own type, is no clash
+    expect(editor.classTakenBy(0, 3, 0x4c, 0x4c)).toBeUndefined();
+  });
+
   test("rooms painted after a copy are copies too: the loaded game stays, the mod keeps them", () => {
     const editor = new Editor(game);
     const cell = (id: number) => game.room(3, id).base[100];

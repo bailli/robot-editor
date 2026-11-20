@@ -42,6 +42,20 @@ export interface TileTypesContext {
   sources: (episode: number) => readonly SourceType[];
   /** The texts a copy's class shows that the episode lacks (Editor.classTextsToCopy). */
   classTexts: (copy: TileTypeCopy) => readonly number[];
+  /**
+   * The episode's type other than `to` that has the class of `from`'s `of` already
+   * (Editor.classTakenBy): in the game a copy there would be that type.
+   */
+  sameClass: (
+    from: number,
+    of: number,
+    to: number,
+  ) => { type: number; classId: number } | undefined;
+}
+
+/** Why a copy of a class the episode has already is not what it seems. */
+function sameClassWarning(clash: { type: number; classId: number }): string {
+  return `Class ${clash.classId} is type ${hex2(clash.type)} here already: the game’s map holds classes, not types, so in the game this copy draws and acts as ${hex2(clash.type)}.`;
 }
 
 /** The episodes in the form and the list, short. */
@@ -95,6 +109,11 @@ export class TileTypesView {
       const replaced = context.replacing.includes(c.to);
       text.title = `Type ${hex2(c.to)} is type ${hex2(c.of)} of ${name(c.from)}: its class, shape, description, sound and first take${replaced ? `; it replaces ${name(episode)}’s ${context.ownName(c.to)}` : ""}`;
       if (replaced) text.textContent += ` (replaces ${context.ownName(c.to)})`;
+      const clash = context.sameClass(c.from, c.of, c.to);
+      if (clash) {
+        text.textContent += " ⚠";
+        text.title += `. ${sameClassWarning(clash)}`;
+      }
       // read when clicked: a kept button keeps its listener (patchChildren)
       const undo = replaced
         ? `Give type ${hex2(c.to)} its own class back (${context.ownName(c.to)})`
@@ -264,8 +283,13 @@ export class TileTypesView {
       element("span", "hint", `${context.free.length} free, ${replaceable.length} to replace`),
     );
     const nodes: Node[] = [...form, bar];
-    // the note's place is always there: the list after it keeps its element (and whether
-    // it is open; patchChildren matches by position)
+    // the warnings' places are always there: the list after them keeps its element (and
+    // whether it is open; patchChildren matches by position)
+    const clash = choice.to < 0 ? undefined : context.sameClass(choice.from, choice.of, choice.to);
+    const classNote = element("p", "hint warning", clash ? sameClassWarning(clash) : "");
+    classNote.dataset["key"] = "same class";
+    classNote.hidden = !clash;
+    nodes.push(classNote);
     if (chosenOwn) nodes.push(this.giveUpNote(context, chosenOwn));
     else {
       const none = element("div", "give-up");

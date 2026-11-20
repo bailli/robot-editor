@@ -3166,6 +3166,7 @@ export class App {
           return { type, name: names.info(type).name ?? names.summary(type).slice(0, 40) };
         }),
       classTexts: (copy) => editor.classTextsToCopy(copy),
+      sameClass: (from, of, to) => editor.classTakenBy(this.episode, from, of, to),
     });
     this.refreshTextsTab();
     this.eventsView.show({

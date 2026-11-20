@@ -267,6 +267,27 @@ test("the Kits tab copies tile types of other episodes, undoably; the mod keeps 
   expect(document.querySelector('.tile-grid [data-tile="81"]')).toBeNull();
 });
 
+test("the copy form warns of a class the episode has already; the list marks such a copy", async () => {
+  app.showEpisode(0, 43);
+  await page.getByRole("tab", { name: "Kits" }).click();
+  const types = page.getByRole("region", { name: "Tile types" });
+  const warning = types.getByText(/^Class 39 is type 0x27 here already/);
+  await userEvent.selectOptions(types.getByLabelText("From episode"), "IV");
+  await userEvent.selectOptions(types.getByLabelText("Type"), String(0x31));
+  await expect.element(warning).toBeVisible();
+  await types.getByRole("button", { name: "Copy" }).click();
+  await app.idle();
+  const copy = app.editor?.tileTypeCopies(0)[0];
+  expect(copy).toMatchObject({ from: 4, of: 0x31 });
+  await expect
+    .element(types.getByText(new RegExp(`^0x${(copy?.to ?? 0).toString(16)} ← IV 0x31.* ⚠$`)))
+    .toBeVisible();
+  await userEvent.selectOptions(types.getByLabelText("From episode"), "II");
+  await userEvent.selectOptions(types.getByLabelText("Type"), String(0x51));
+  await expect.element(warning).not.toBeInTheDocument();
+  app.undo();
+});
+
 test("the copy form's target: the same number where free, else the first type no copy has", async () => {
   app.showEpisode(0, 43);
   await page.getByRole("tab", { name: "Kits" }).click();

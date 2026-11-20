@@ -892,6 +892,28 @@ export class Editor {
 
   private readonly sourceTileCache = new Map<string, readonly number[]>();
 
+  /**
+   * The episode's tile type, other than `to`, that has the class of episode `from`'s type
+   * `of` already (the episode as edited, copies included), with that class; undefined if
+   * none. A copy of such a class is that other type in the game: its map holds classes,
+   * and drawing and behaviour go by class (class → type, 0x4c70e0). Seen in the game: II's
+   * forest (class 91) copied into Junior after the axe kit drew as III's woods; IV's path
+   * (class 39) acted as Junior's sand.
+   */
+  classTakenBy(
+    episode: number,
+    from: number,
+    of: number,
+    to?: number,
+  ): { type: number; classId: number } | undefined {
+    const classId = this.pristine.episode(from).classes.classes.get(of)?.id;
+    if (!classId) return undefined;
+    for (const [type, c] of this.game.episode(episode).classes.classes) {
+      if (type !== to && c.id === classId) return { type, classId };
+    }
+    return undefined;
+  }
+
   /** Why `copy` cannot be made, undefined if it can. */
   tileTypeProblem(copy: TileTypeCopy): string | undefined {
     const { episode, to, from, of } = copy;
