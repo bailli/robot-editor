@@ -4,6 +4,9 @@
   "private": true,
   "description": "Level editor for The Game of Robot in the browser",
   "type": "module",
+  "exports": {
+    ".": "./src/editor.ts"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
